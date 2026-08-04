@@ -4,9 +4,11 @@ Evie is a local-first personal AI assistant for macOS, pronounced **"ee-vee"**
 ("ívi"). It is intended to be available by voice or a global shortcut without
 behaving like a permanent chat window.
 
-The project is currently in **Phase 0: feasibility and architecture**. No model,
-agent runtime, messaging bridge, workflow engine, or background service is
-installed by this repository yet.
+The project now has its first **source-implemented vertical slice**: a native
+menu-bar/overlay shell can send quick text to a separately started local
+TurboFieldfare server and stream Gemma's response into a glass result card. Target
+Mac acceptance is deliberately deferred; no model, agent runtime, messaging
+bridge, workflow engine, or background service is installed by this repository.
 
 ## Product intent
 
@@ -36,6 +38,37 @@ Evie should eventually provide:
 The architecture is intentionally replaceable: Hermes, TurboFieldfare, the VLM,
 the retrieval engine, and the TTS engine remain behind local adapters.
 
+## Implemented now
+
+VS-001 contains:
+
+- a Swift 6 package with backend-neutral `EvieCore` contracts;
+- a loopback-only streaming client for TurboFieldfare Chat Completions;
+- a native SwiftUI/AppKit menu-bar utility and transparent floating `NSPanel`;
+- `Option-Space` summon/dismiss and `Option-Shift-Space` quick text;
+- native vibrancy, compact state pill, data-driven waveform component, and
+  expandable artifact cards inspired by CLUI CC's interaction grammar;
+- cancellation and explicit unavailable/malformed-server states;
+- an honest system prompt that cannot claim tools or integrations that do not yet
+  exist.
+
+The slice does not yet contain voice capture, STT/TTS, tools, web search, RAG,
+Hermes, supervisor lifecycle, automations, personal integrations, or persistent
+memory. See the [VS-001 implementation guide](docs/implementation/VS_001.md) for
+the exact boundary and deferred manual acceptance checklist.
+
+## Development build
+
+Building the shell does not install or launch a model:
+
+```bash
+swift build -Xswiftc -warnings-as-errors
+```
+
+When a compatible TurboFieldfare server has been prepared manually, the shell can
+be launched with `swift run evie-shell`. The server must remain on loopback and be
+started with `--max-context 65536` to match Evie's current 64K expectation.
+
 ## Documentation map
 
 - [Current status](docs/PROJECT_STATUS.md)
@@ -51,6 +84,8 @@ the retrieval engine, and the TTS engine remain behind local adapters.
 - [Security model](docs/SECURITY.md)
 - [Testing and evaluation](evals/README.md)
 - [Agent handoff protocol](docs/HANDOFF.md)
+- [Implementation task ledger](docs/implementation/TASKS.md)
+- [VS-001 implementation and run guide](docs/implementation/VS_001.md)
 - [Work log](docs/WORKLOG.md)
 - [Decision records](docs/adr/README.md)
 - [Research sources](docs/RESEARCH_SOURCES.md)
@@ -73,5 +108,6 @@ integration.
 
 ## Status
 
-Planning only. The first implementation milestone begins only after the Phase 0
-research gates in the roadmap are accepted.
+VS-001 is implemented and compiles, while target-hardware behavior remains
+unvalidated under `QA-001`. Phase 1 inference benchmarks and the Phase 2
+supervisor/lifecycle gates are still open; estimates are not measurements.

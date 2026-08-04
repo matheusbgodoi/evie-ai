@@ -8,7 +8,7 @@ documentation for capability discovery. Revalidate unstable claims before coding
 ## TurboFieldfare and Gemma
 
 - [TurboFieldfare repository](https://github.com/drumih/turbo-fieldfare)
-- [Local server documentation](https://github.com/drumih/turbo-fieldfare/blob/main/docs/OPENAI_SERVER.md)
+- [Pinned local server documentation](https://github.com/drumih/turbo-fieldfare/blob/7a99f2a635e3adf7ed0720b882d2edb600f2f0da/docs/OPENAI_SERVER.md)
 - [Pinned runtime KV cache manager](https://github.com/drumih/turbo-fieldfare/blob/7a99f2a635e3adf7ed0720b882d2edb600f2f0da/Sources/TurboFieldfare/Runtime/KVCache/KVCacheManager.swift)
 - [Pinned architecture constants](https://github.com/drumih/turbo-fieldfare/blob/7a99f2a635e3adf7ed0720b882d2edb600f2f0da/Sources/TurboFieldfare/Infrastructure/ModelIO/ModelTypes.swift)
 - [Pinned context-memory UI calculation](https://github.com/drumih/turbo-fieldfare/blob/7a99f2a635e3adf7ed0720b882d2edb600f2f0da/Sources/TurboFieldfareApp/Core/Configuration/AppContextLengthOption.swift)

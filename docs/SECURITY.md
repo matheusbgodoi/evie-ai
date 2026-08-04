@@ -77,6 +77,20 @@ tools must not inherit Accessibility.
 Avoid Full Disk Access. Use user-selected roots/bookmarks or an explicit local
 allowlist. Consider a separate macOS user for high-risk autonomous experiments.
 
+### VS-001 boundary
+
+The first native executable has no account, filesystem, Accessibility, microphone,
+automation, or tool capability. Its direct TurboFieldfare adapter rejects
+non-loopback hosts, sends no credential, logs no prompt/result body, and retains
+conversation text only in process memory. The system prompt accurately describes
+those limitations, but remains presentation guidance rather than a security
+boundary.
+
+The loopback server itself has no authentication or TLS and must never be exposed
+through a proxy, tunnel, wildcard bind, or remote interface. Future tools cannot be
+added to the direct UI adapter; they require the supervisor/policy boundary and
+separate read/propose/commit capabilities.
+
 ## Secrets
 
 Preferred order:

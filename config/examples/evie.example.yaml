@@ -1,4 +1,5 @@
-# Planning example only. The runtime schema will be defined during implementation.
+# Planning example only. VS-001 does not load this file; the runtime schema and
+# configuration precedence will be defined by FND-003.
 # Do not copy secrets into this tracked file.
 
 identity:

@@ -25,6 +25,19 @@ KV format is a separate concern.
 Sixteen thousand tokens is acceptable for isolated text or bounded subworker tasks,
 but it is not the target Hermes agent window.
 
+### VS-001 context behavior
+
+The source-implemented direct client declares 65,536 tokens and reserves up to
+4,096 completion tokens. It sends the complete bounded in-memory conversation on
+each request so TurboFieldfare can reuse a matching retained prefix. Because the
+lightweight shell deliberately does not link Gemma's tokenizer, it trims older
+complete user/assistant turns with a conservative character budget.
+
+The OpenAI-compatible request cannot change server capacity. TurboFieldfare must be
+started separately with `--max-context 65536`; its upstream default is 16K. This
+configuration is not yet proof that 64K is performant or reliable on the target
+Mac.
+
 ## What is already quantized
 
 TurboFieldfare uses 4-bit MLX-affine weights for embeddings, attention, shared

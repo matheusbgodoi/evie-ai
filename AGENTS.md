@@ -10,9 +10,10 @@ Read, in order:
 1. `README.md`
 2. `docs/PROJECT_STATUS.md`
 3. `docs/ROADMAP.md`
-4. `docs/ARCHITECTURE.md`
-5. all ADRs referenced by the area being changed
-6. the latest entries in `docs/WORKLOG.md` and `CHANGELOG.md`
+4. `docs/implementation/TASKS.md`
+5. `docs/ARCHITECTURE.md`
+6. all ADRs referenced by the area being changed
+7. the latest entries in `docs/WORKLOG.md` and `CHANGELOG.md`
 
 Inspect the working tree before editing. Existing changes belong to the user or a
 previous agent unless proven otherwise.

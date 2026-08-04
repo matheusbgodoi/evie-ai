@@ -1,6 +1,7 @@
 # Native interface and interaction model
 
-Status: proposed. CLUI CC is a UX reference, not a runtime dependency.
+Status: VS-001 visual/native shell source implemented; target interaction acceptance
+pending. CLUI CC is a UX reference, not a runtime dependency.
 
 ## Product stance
 
@@ -54,6 +55,31 @@ The overlay should be capable of remaining visible on relevant Spaces, avoiding
 focus theft, and allowing click-through outside its actual surfaces. Exact window
 levels and activation behavior require a Phase 2 prototype.
 
+### VS-001 implementation
+
+The current development shell uses:
+
+- an accessory-policy application and AppKit status item, with no ordinary chat
+  window or Dock-oriented main window;
+- a transparent, borderless, nonactivating floating `NSPanel` placed at the bottom
+  center of the display under the pointer;
+- a native `NSVisualEffectView` bridge with opaque accessibility fallback for
+  Reduce Transparency;
+- a compact capsule, honest status glyphs, a data-driven waveform, and expandable
+  cards that stack upward;
+- dynamic panel height to reduce the transparent region that can intercept input;
+- Carbon global hotkeys, avoiding a broad keyboard event monitor;
+- SwiftUI accessibility labels, Reduce Motion behavior, text selection, sensitive
+  card previews, and keyboard-driven quick entry.
+
+The implementation is visually original and reuses no CLUI CC Electron/React code.
+It adapts only the bottom-anchored transient interaction grammar.
+
+Target testing is still required for focus restoration, click-through behavior,
+shortcut conflicts, full-screen apps, Spaces, multiple displays, VoiceOver order,
+and all accessibility appearances. A successful source build is not evidence that
+those behaviors are operational.
+
 ## Interaction surfaces
 
 ### Voice pill
@@ -73,7 +99,8 @@ needed for the current state:
 A separate configurable shortcut opens a single-line or short multiline command
 field. It submits without opening history. Representative defaults for prototyping:
 
-- `Option-Space`: summon/push-to-talk behavior;
+- `Option-Space`: show or dismiss the passive overlay in VS-001; it is reserved for
+  push-to-talk after the voice phase;
 - `Option-Shift-Space`: quick text;
 - `Escape`: cancel or dismiss;
 - `Command-Enter`: approve/commit the selected action;
@@ -81,6 +108,10 @@ field. It submits without opening history. Representative defaults for prototypi
 
 All shortcuts remain configurable and must be tested against Spotlight, input
 methods, editors, and accessibility tools.
+
+VS-001 currently submits quick text with `Return`, closes that entry with `Escape`,
+and exposes stream cancellation in the capsule. Shortcuts are fixed in source for
+the prototype; persistence and conflict preferences belong to `UI-009`.
 
 ### Artifact cards
 
@@ -100,6 +131,10 @@ bubbles. Types include:
 Cards support dismiss, pin, expand, open in source application, copy, and explicit
 approve/deny when relevant. Multiple active tasks may appear as compact tabs or a
 stack with unread and permission states.
+
+VS-001 implements expand, dismiss, text selection, and copy for text/error cards.
+Pinning, source-app opening, task tabs, sensitive integration previews, and approval
+actions remain later tasks.
 
 ### Optional control center
 
@@ -154,10 +189,12 @@ confirmed by its target.
 
 ## Prototype sequence
 
-1. Static overlay with real materials and card layout.
-2. Global quick-text shortcut and no-focus-steal behavior.
-3. Simulated backend event stream and state machine.
-4. Local microphone metering and push-to-talk.
+1. Static overlay with real materials and card layout. **Source implemented.**
+2. Global quick-text shortcut and no-focus-steal behavior. **Source implemented;
+   target behavior pending `QA-001`.**
+3. Backend-neutral state machine and real local text stream. **Implemented through
+   the temporary TurboFieldfare adapter; target inference pending.**
+4. Local microphone metering and push-to-talk. **Not started.**
 5. Real supervisor IPC.
 6. Partial transcript, cancellation, and TTS output metering.
 7. Optional wake word.

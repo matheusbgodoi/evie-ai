@@ -8,9 +8,11 @@ agent. Repository state must be sufficient to resume work safely.
 1. Read `AGENTS.md` and the documentation order it defines.
 2. Run `git status -sb` and identify unfinished/uncommitted work.
 3. Read the latest worklog entry and current project status.
-4. Verify the current roadmap phase and its exit criteria.
-5. Check ADR status before revisiting an accepted decision.
-6. State the bounded task and expected documentation updates.
+4. Read `docs/implementation/TASKS.md`; reconcile task status/ownership with the
+   working tree before claiming anything.
+5. Verify the current roadmap phase and its exit criteria.
+6. Check ADR status before revisiting an accepted decision.
+7. State the bounded task and expected documentation updates.
 
 ## End-of-session checklist
 

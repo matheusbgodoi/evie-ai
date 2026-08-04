@@ -3,6 +3,18 @@
 The roadmap is gate-based. A phase is complete only when its exit criteria are
 measured and documented; elapsed time alone is not completion.
 
+## Progress snapshot — 2026-08-04
+
+- Phase 0 has a documented architecture, threat model, resource hypotheses,
+  evaluation gates, ADRs, and multi-agent handoff contract.
+- Phase 1 is open. The TurboFieldfare streaming client exists, but no model or
+  context benchmark has been run on the target Mac.
+- Phase 2 has an early source implementation through VS-001: menu bar, floating
+  panel, shortcuts, quick text, native visual components, cancellation, and error
+  presentation. Supervisor/lifecycle work and target UI acceptance remain open.
+- `QA-001` is intentionally deferred at the user's request. No phase exit gate is
+  inferred from a successful compile.
+
 ## Phase 0 — feasibility and architecture
 
 Scope:
@@ -41,6 +53,10 @@ Exit criteria:
 - all measurements are reproducible from a pinned manifest.
 
 ## Phase 2 — supervisor and native interaction shell
+
+Current implementation note: VS-001 supplies the native quick-text shell and a
+temporary direct inference adapter. It does not satisfy this phase's supervisor,
+worker lifecycle, dormant-resource, recovery, packaging, or acceptance gates.
 
 Scope:
 

@@ -1,6 +1,7 @@
 # System architecture
 
-Status: proposed for Phase 1 validation.
+Status: target architecture proposed; VS-001 native/direct-client seam implemented
+for validation.
 
 ## Design principles
 
@@ -44,6 +45,38 @@ Status: proposed for Phase 1 validation.
  └──────────┘ └──────────┘ └───────────┘ └──────────┘ └─────────┘
 ```
 
+## VS-001 implementation boundary
+
+The first executable intentionally implements only this temporary path:
+
+```text
+Carbon global shortcut / AppKit status item
+                    |
+                    v
+       SwiftUI views in a floating NSPanel
+                    |
+                    v
+       OverlayViewModel -> AgentClient
+                    |
+                    v
+  TurboFieldfareClient -> loopback Chat Completions SSE
+```
+
+`EvieCore` owns backend-neutral message, phase, failure, usage, artifact, and
+reducer types. SwiftUI does not parse SSE or authorize backend output. The
+application composition root is the only place that chooses the concrete
+TurboFieldfare adapter.
+
+This direct connection is accepted only for VS-001 under
+[ADR 0006](adr/0006-direct-turbo-vertical-slice.md). It starts no process, executes
+no tools, persists no session, carries no credential, and rejects non-loopback
+hosts. The separately started server must use `--max-context 65536`; the client
+cannot increase a server launched at its 16K default.
+
+The waveform view is data-driven but receives no microphone or output-audio samples
+in this slice. Voice states exist in the stable event vocabulary for future workers,
+not as a claim that voice is operational.
+
 ## Always-on control plane
 
 ### Evie macOS UI
@@ -51,6 +84,12 @@ Status: proposed for Phase 1 validation.
 A SwiftUI/AppKit menu-bar utility owns the overlay, microphone feedback, audio
 playback presentation, result cards, approvals, and optional history window. It
 must not load ML models directly.
+
+VS-001 implements this as a SwiftPM development executable using an accessory
+application policy, AppKit status item, borderless nonactivating `NSPanel`, native
+vibrancy, Carbon hotkeys, and SwiftUI content. Signed `.app` packaging, login-item
+registration, shortcut preferences, and target behavior across Spaces/displays are
+not yet implemented or accepted.
 
 ### `evied` supervisor
 
@@ -115,6 +154,10 @@ incompatible during benchmarks.
 Initial candidate: TurboFieldfare serving Gemma 4 26B-A4B IT on loopback with 64K
 declared context. One process owns the model. The supervisor serializes use and
 applies warm/idle policy.
+
+VS-001 can stream from the server when the user starts it manually, but does not
+yet provide single-owner enforcement, health polling, start/stop, crash recovery,
+or warm/idle policy.
 
 ### STT worker
 
