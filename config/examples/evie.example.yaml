@@ -1,0 +1,62 @@
+# Planning example only. The runtime schema will be defined during implementation.
+# Do not copy secrets into this tracked file.
+
+identity:
+  name: Evie
+  pronunciation: ee-vee
+  locale: pt-BR
+  timezone: America/Sao_Paulo
+
+interaction:
+  quick_text_shortcut: option+shift+space
+  push_to_talk_shortcut: option+space
+  wake_word_enabled: false
+  wake_phrase: "Ei, Evie"
+  show_partial_transcript: true
+
+model:
+  primary:
+    provider: openai-compatible-local
+    endpoint: http://127.0.0.1:8080/v1
+    name: gemma-4-26b-a4b-it
+    context_tokens: 65536
+    kv_precision: fp16
+  routing:
+    deterministic_intents_first: true
+    vision_worker_on_demand: true
+    small_model_enabled: false
+
+lifecycle:
+  primary_idle_seconds_ac: 900
+  primary_idle_seconds_battery: 180
+  specialist_idle_seconds: 120
+  unload_on_memory_pressure: true
+  background_indexing_on_battery: false
+
+voice:
+  stt_provider: local-benchmark-winner
+  tts_provider: omnivoice-command
+  speak_mode: on-request
+  retain_raw_audio: false
+  reference_audio: /absolute/local/path/outside/repository/evie-reference.wav
+
+permissions:
+  dangerous_cron: deny
+  external_content_is_untrusted: true
+  outbound_messages: confirm
+  calendar_mutations: confirm
+  file_moves_outside_staging: confirm
+  workflow_enable: confirm
+  permanent_delete: deny
+
+storage:
+  application_support: "~/Library/Application Support/Evie"
+  cache: "~/Library/Caches/Evie"
+  logs: "~/Library/Logs/Evie"
+
+integrations:
+  google_workspace: disabled
+  apple_services: disabled
+  whatsapp: disabled
+  node_red: disabled
+  web_search: ddgs

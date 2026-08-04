@@ -1,0 +1,75 @@
+# Secrets and environment
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.p12
+*.mobileprovision
+secrets/
+credentials/
+
+# Runtime configuration and identity
+config/local/
+config/runtime/
+auth.json
+oauth*.json
+token*.json
+flows_cred.json
+whatsapp-session/
+
+# Personal and generated data
+data/
+private/
+voices/
+transcripts/
+documents/
+indexes/
+vector-store/
+sessions/
+memory/
+logs/
+cache/
+models/
+*.gguf
+*.safetensors
+*.gturbo
+*.onnx
+*.wav
+*.mp3
+*.m4a
+*.ogg
+
+# macOS and IDE
+.DS_Store
+.AppleDouble
+.LSOverride
+*.xcuserstate
+xcuserdata/
+.idea/
+.vscode/
+
+# Swift
+.build/
+DerivedData/
+.swiftpm/
+
+# Python
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Node
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Local test output
+artifacts/
+benchmarks/results/
+tmp/
