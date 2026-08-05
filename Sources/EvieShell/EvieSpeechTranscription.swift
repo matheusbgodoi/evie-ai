@@ -208,7 +208,7 @@ final class EvieSpeechTranscription {
 /// does nothing that can block. Marked unchecked because `AVAudioConverter` and
 /// `AVAudioFormat` predate `Sendable`; every use of them here is serialised.
 @available(macOS 26, *)
-final class AnalyzerInputPump: @unchecked Sendable {
+final class AnalyzerInputPump: EvieAudioBufferSink, @unchecked Sendable {
   private let converter: Mutex<AVAudioConverter>
   private let analyzerFormat: AVAudioFormat
   private let ratio: Double
@@ -228,7 +228,7 @@ final class AnalyzerInputPump: @unchecked Sendable {
     self.continuation = continuation
   }
 
-  func push(_ buffer: AVAudioPCMBuffer) {
+  func receive(_ buffer: AVAudioPCMBuffer) {
     let capacity = AVAudioFrameCount(Double(buffer.frameLength) * ratio) + 64
     guard capacity > 0,
       let output = AVAudioPCMBuffer(pcmFormat: analyzerFormat, frameCapacity: capacity)

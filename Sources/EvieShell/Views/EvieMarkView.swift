@@ -1,49 +1,13 @@
 import AppKit
 import SwiftUI
 
-/// Evie's mark: a key drawn in ASCII.
-///
-/// The art is drawn with its own characters. An earlier version replaced each
-/// one with a glyph from a shading ramp according to how solid it was, which is
-/// the technique for turning a *photograph* into ASCII — applied to art that was
-/// already ASCII it destroyed the drawing, and the key came out as a scattering
-/// of `+ : - =`. The light now changes only how bright a character is, never
-/// which character it is.
-enum EvieKeyArt {
-  /// Three columns wide, so it still reads as a key inside a 30-point badge.
-  static let compact = [
-    " _ ",
-    "(o)",
-    " | ",
-    " |=",
-    " '=",
-  ]
-
-  /// For call mode and anywhere the mark is given real room.
-  static let large = [
-    "  _  ",
-    " / \\ ",
-    "( o )",
-    " \\_/ ",
-    "  |  ",
-    "  |==",
-    "  |  ",
-    "  '==",
-  ]
-
-  static func art(forDiameter diameter: CGFloat) -> [String] {
-    diameter < 52 ? compact : large
-  }
-}
-
 /// The colours that separate "you are talking" from "Evie is talking".
 ///
-/// These are the system colours the interface already used. Only one value is
+/// These are the system colours the interface has always used. Only one value is
 /// substituted, and only in light appearance: `.mint` resolves to 1.82:1 against
 /// the HUD surface there, below the 3:1 WCAG asks of a graphical object, which
 /// made "listening" almost invisible on a light desktop. Dark appearance — where
-/// it measures 9:1 — is untouched, so the look nobody complained about is exactly
-/// the look that remains.
+/// it measures 9:1 — is untouched.
 enum EvieVoiceTint {
   static let input = adaptive(
     light: NSColor(srgbRed: 0x0D / 255, green: 0x77 / 255, blue: 0x70 / 255, alpha: 1),
@@ -69,9 +33,15 @@ enum EvieVoiceTint {
   }
 }
 
-/// The circular badge that carries the key, the reactive ring, and the tap target
-/// that opens the voice.
+/// Evie's mark: the sparkle badge, which is also the button that opens the voice.
+///
+/// An ASCII key lived here briefly and is in the history if it is ever wanted at a
+/// larger size. At thirty points the sparkle is simply the better mark: it is a
+/// vector, so it stays crisp, and the system animates it for free.
 struct EvieMarkView: View {
+  /// One half-cycle of the breathing motion.
+  private static let breathPeriod: TimeInterval = 2.6
+
   var state: EvieVisualState
   var waveformSamples: [CGFloat] = []
   var diameter: CGFloat = 30
@@ -90,69 +60,23 @@ struct EvieMarkView: View {
     EvieVoiceTint.color(for: direction)
   }
 
-  /// The cheap layer: a drawing rendered once and tilted by Core Animation.
-  /// Measured at roughly a tenth the cost of redrawing every frame, which is what
-  /// lets the mark stay alive while the overlay simply sits there.
-  private var isTilting: Bool {
+  private var isMoving: Bool {
     isAnimating && !reduceMotion
-  }
-
-  /// The expensive layer: light sweeping across the key, one redraw per frame.
-  /// Reserved for moments that have something real to convey.
-  private var isSweeping: Bool {
-    guard isTilting else {
-      return false
-    }
-    switch state {
-    case .listening, .speaking, .transcribing, .thinking, .usingTool: return true
-    default: return false
-    }
-  }
-
-  private var sweepInterval: Double {
-    switch state {
-    case .listening, .speaking: 1.0 / 30.0
-    default: 1.0 / 20.0
-    }
   }
 
   var body: some View {
     ZStack {
-      badge
-
       EvieVoiceRing(
         samples: waveformSamples,
         tint: tint,
         direction: direction,
-        isAnimating: isTilting
+        isAnimating: isMoving
       )
       .frame(width: diameter * 1.5, height: diameter * 1.5)
       .allowsHitTesting(false)
 
-      AsciiKeyCanvas(
-        art: EvieKeyArt.art(forDiameter: diameter),
-        isSweeping: isSweeping,
-        sweepInterval: sweepInterval
-      )
-      // The compact art is three columns against five rows, so height binds and
-      // there is horizontal room to spare. Giving it a little more of the badge
-      // buys legibility that a 30-point circle badly needs.
-      .frame(width: diameter * 0.76, height: diameter * 0.76)
-      // Twelve degrees, not twenty. On a drawing this small a wide swing reads
-      // as crooked rather than as depth.
-      .rotation3DEffect(
-        .degrees(isTilting ? 12 : -12),
-        axis: (x: 0.1, y: 1, z: 0),
-        anchorZ: 0,
-        perspective: 0.6
-      )
-      .animation(
-        isTilting
-          ? .easeInOut(duration: 3.4).repeatForever(autoreverses: true)
-          : .default,
-        value: isTilting
-      )
-      .allowsHitTesting(false)
+      breathingBadge
+        .allowsHitTesting(false)
     }
     .frame(width: diameter, height: diameter)
     .contentShape(Circle())
@@ -174,21 +98,16 @@ struct EvieMarkView: View {
     .accessibilityLabel(accessibilityLabel)
   }
 
-  /// The flat badge the interface already had: one colour with a soft diagonal
-  /// lift, a hairline rim, and a coloured shadow. Not a radial gradient.
-  private var badge: some View {
-    Circle()
-      .fill(
-        LinearGradient(
-          colors: [tint.opacity(0.82), tint],
-          startPoint: .topLeading,
-          endPoint: .bottomTrailing
-        )
-      )
-      .overlay {
-        Circle().strokeBorder(.white.opacity(0.22), lineWidth: 0.6)
-      }
-      .shadow(color: tint.opacity(0.32), radius: 6)
+  /// The badge. Its breathing lives in Core Animation rather than SwiftUI; see
+  /// `EvieBadgeLayerView` for the measurements that forced that.
+  private var breathingBadge: some View {
+    EvieBadgeLayerView(
+      symbolName: "sparkles",
+      tint: tint,
+      diameter: diameter,
+      isAnimating: isMoving
+    )
+    .frame(width: diameter, height: diameter)
   }
 
   private var helpText: String {
@@ -204,90 +123,6 @@ struct EvieMarkView: View {
     case .output: "Evie está falando"
     case nil: onActivate == nil ? "Evie" : "Falar com a Evie"
     }
-  }
-}
-
-/// Draws the key on a square-celled grid.
-///
-/// Square cells matter: a monospaced glyph box is about 1.9 times taller than it
-/// is wide, so stacked `Text` rows would stretch the drawing vertically.
-private struct AsciiKeyCanvas: View {
-  var art: [String]
-  var isSweeping: Bool
-  var sweepInterval: Double
-
-  var body: some View {
-    if isSweeping {
-      TimelineView(.animation(minimumInterval: sweepInterval, paused: false)) { timeline in
-        canvas(at: timeline.date.timeIntervalSinceReferenceDate)
-      }
-    } else {
-      // No timeline in the tree at all. Ordering the panel out does not stop a
-      // running timeline, so absence is the only reliable off switch.
-      canvas(at: 0)
-    }
-  }
-
-  private func canvas(at time: TimeInterval) -> some View {
-    Canvas(opaque: false, rendersAsynchronously: false) { context, size in
-      draw(in: &context, size: size, time: time)
-    } symbols: {
-      ForEach(Self.alphabet, id: \.self) { character in
-        Text(String(character))
-          .font(.system(size: 12, weight: .bold, design: .monospaced))
-          .foregroundStyle(.white)
-          .tag(character)
-      }
-    }
-  }
-
-  /// Every character any of the arts uses. Declared as canvas symbols so text
-  /// shaping happens once instead of per glyph per frame.
-  private static let alphabet: [Character] = ["_", "(", ")", "o", "|", "=", "'", "/", "\\"]
-
-  private func draw(in context: inout GraphicsContext, size: CGSize, time: TimeInterval) {
-    let rowCount = art.count
-    guard rowCount > 0, let columnCount = art.first?.count, columnCount > 0 else {
-      return
-    }
-    let cell = min(size.width / CGFloat(columnCount), size.height / CGFloat(rowCount))
-    guard cell > 0.4 else {
-      return
-    }
-    let originX = (size.width - cell * CGFloat(columnCount)) / 2
-    let originY = (size.height - cell * CGFloat(rowCount)) / 2
-    // Symbols are laid out at twelve points; scale the drawing rather than
-    // re-resolving them at every size.
-    let glyphScale = cell * 1.5 / 12
-
-    for (rowIndex, row) in art.enumerated() {
-      for (columnIndex, character) in row.enumerated() where character != " " {
-        guard let glyph = context.resolveSymbol(id: character) else {
-          continue
-        }
-        // Light travels across the face. It changes brightness only — the
-        // character always stays the one the drawing calls for.
-        let sweep =
-          time == 0
-          ? 0.75
-          : 0.5 + 0.5
-            * sin(time * 2.0 + Double(columnIndex) * 0.7 - Double(rowIndex) * 0.45)
-
-        let centreX = originX + (CGFloat(columnIndex) + 0.5) * cell
-        let centreY = originY + (CGFloat(rowIndex) + 0.5) * cell
-        context.opacity = 0.72 + 0.28 * sweep
-        context.draw(
-          glyph,
-          in: CGRect(
-            x: centreX - glyph.size.width * glyphScale / 2,
-            y: centreY - glyph.size.height * glyphScale / 2,
-            width: glyph.size.width * glyphScale,
-            height: glyph.size.height * glyphScale
-          )
-        )
-      }
-    }
-    context.opacity = 1
   }
 }
 

@@ -488,3 +488,44 @@
 - Method note: rendering the artwork to a PNG and looking at it found in one step
   what no amount of reading the code would have. Any future change to the mark
   should be rendered before it is committed.
+
+## 2026-08-05 — the crash, and the cost of a breathing circle
+
+- Trigger: Evie crashed on tapping the mark, still crashed after the microphone was
+  granted, showed no animation, cut its shadow off, and drew pale bars on hover.
+- **The crash**, from the report rather than from guessing:
+  `dispatch_assert_queue_fail` → `swift_task_isCurrentExecutor` →
+  `closure #1 in EvieAudioCapture.start` on queue `RealtimeMessenger.mServiceQueue`.
+  A closure literal written inside a `@MainActor` method is main-actor isolated
+  whatever its type says. The audio tap calls it on a real-time thread, Swift
+  checks the executor, and traps. Fixed by moving the tap installation into a
+  `nonisolated static` method. The first attempt — replacing the closure parameter
+  with a `Sendable` protocol — did not fix it, and the second crash report said so
+  in the same frame.
+- `--voice-check` was added so the audio path can be exercised without a mouse:
+  it opened the microphone, ran the tap for two seconds, reported a peak level of
+  0.439, closed, and produced no crash report.
+- **The animation cost**, measured on the release build with the overlay visible:
+  | version | CPU |
+  |---|---|
+  | no animation at all | 0.0% |
+  | SwiftUI: timeline + scale + animated shadow radius + `symbolEffect` | 22.2% |
+  | without the animated shadow radius | 19.2% |
+  | without `symbolEffect` | 10.0% |
+  | with `drawingGroup` rasterising the badge | 8.2% |
+  | Core Animation `CABasicAnimation` on `transform.scale` | **2.7%** |
+  SwiftUI re-renders the gradient, the rim, and the symbol on every frame of an
+  implicit animation. `EvieBadgeLayerView` draws the badge in `CALayer`s so the
+  render server interpolates the transform with no work in this process.
+- Also reverted per the user: the sparkle mark is back, the shadow has room to
+  fade (margin 30, shadow radius 16 plus offset 7), and the side handles draw
+  nothing.
+- Validation: `Scripts/test` 116/116; strict lint; release build; the crash path
+  exercised end to end; the badge confirmed animating by diffing two screen
+  captures.
+- Honest limit: 2.7% is not zero. A continuous animation on a transparent floating
+  panel forces the window to recomposite, and that cost is not removable while it
+  is on screen. It stops entirely when the overlay is hidden, and Reduce Motion or
+  the appearance preference turn it off.
+- Method note: screen captures taken during this work were deleted; they contained
+  the user's own screen.

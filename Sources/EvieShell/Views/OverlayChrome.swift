@@ -24,15 +24,15 @@ private final class DragCatchingView: NSView {
   }
 }
 
-/// The grip shown at the top of the overlay. It only becomes prominent on hover
-/// so the resting HUD stays free of chrome.
+/// The grip shown at the top of the overlay, and the only window control that
+/// draws anything at all.
 struct OverlayGripHandle: View {
   var isHighlighted: Bool
 
   var body: some View {
     Capsule(style: .continuous)
-      .fill(.secondary.opacity(isHighlighted ? 0.55 : 0.22))
-      .frame(width: 38, height: 4)
+      .fill(.secondary.opacity(isHighlighted ? 0.34 : 0))
+      .frame(width: 32, height: 3.5)
       .overlay {
         WindowDragArea()
           .frame(width: 96, height: 18)
@@ -42,8 +42,12 @@ struct OverlayGripHandle: View {
   }
 }
 
-/// A thin vertical handle on one side of the overlay. Dragging it widens or
+/// An invisible strip down each side of the overlay. Dragging it widens or
 /// narrows the panel around its own centre.
+///
+/// Deliberately draws nothing. A visible bar on each edge of a floating HUD reads
+/// as two stray white lines; the pointer changing to a resize cursor is the whole
+/// affordance, and it is the one macOS uses for window edges anyway.
 ///
 /// The gesture reports the total travel since it began; the controller keeps the
 /// starting width, which leaves this view free of local state.
@@ -61,15 +65,13 @@ struct OverlayWidthHandle: View {
   }
 
   var side: Side
-  var isHighlighted: Bool
   var onDrag: (CGFloat) -> Void
   var onCommit: () -> Void
 
   var body: some View {
-    Capsule(style: .continuous)
-      .fill(.secondary.opacity(isHighlighted ? 0.5 : 0.16))
-      .frame(width: 3, height: 30)
-      .contentShape(Rectangle().inset(by: -7))
+    Color.clear
+      .frame(width: 10, height: 44)
+      .contentShape(Rectangle())
       .gesture(
         DragGesture(minimumDistance: 1)
           .onChanged { value in

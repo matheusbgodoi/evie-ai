@@ -66,6 +66,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
       return
     }
 
+    // Opens the microphone for a couple of seconds through exactly the path a
+    // real activation takes, and writes what happened to a file. Launch Services
+    // gives no console, and this is the only way to exercise the audio tap —
+    // where a main-actor closure once crashed the process — without a mouse.
+    if CommandLine.arguments.contains("--voice-check") {
+      Task { @MainActor in
+        await Self.runVoiceCheck()
+        NSApp.terminate(nil)
+      }
+      return
+    }
+
     // Reads a file and prints exactly what Evie would receive. Useful on its own,
     // and the only way to check the reader without dragging something onto a
     // window.
@@ -92,6 +104,48 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     let coordinator = AppCoordinator()
     self.coordinator = coordinator
     coordinator.start()
+  }
+
+  /// Result goes to a file because a bundle launched by Launch Services has no
+  /// standard output anyone can read.
+  static func runVoiceCheck() async {
+    var report = ["bundle: \(Bundle.main.bundleIdentifier ?? "(nenhum)")"]
+    report.append("permissão antes de pedir: \(EvieAudioCapture.currentPermission())")
+
+    let capture = EvieAudioCapture()
+    var peak: CGFloat = 0
+    capture.onLevels = { levels in
+      peak = max(peak, levels.max() ?? 0)
+    }
+
+    do {
+      let format = try await capture.prepareInputFormat()
+      report.append("permissão depois de pedir: \(EvieAudioCapture.currentPermission())")
+      report.append(
+        "formato de entrada: \(Int(format.sampleRate)) Hz, \(format.channelCount) canal(is)"
+      )
+      try await capture.start()
+      report.append("microfone aberto: sim")
+      try? await Task.sleep(for: .seconds(2))
+      report.append(String(format: "pico de nível em 2 s: %.3f", Double(peak)))
+      capture.stop()
+      report.append("microfone fechado: sim")
+      report.append("RESULTADO: o caminho do áudio rodou inteiro sem derrubar o processo.")
+    } catch {
+      report.append(
+        "FALHA: \((error as? LocalizedError)?.errorDescription ?? error.localizedDescription)"
+      )
+    }
+
+    let directory = FileManager.default.homeDirectoryForCurrentUser
+      .appendingPathComponent("Library/Logs/Evie", isDirectory: true)
+    try? FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+    try? report.joined(separator: "\n").appending("\n")
+      .write(
+        to: directory.appendingPathComponent("voice-check.txt"),
+        atomically: true,
+        encoding: .utf8
+      )
   }
 
   func applicationWillTerminate(_ notification: Notification) {

@@ -6,10 +6,26 @@ All notable changes to Evie are documented here. Dates use `YYYY-MM-DD`.
 
 ### Fixed
 
+- Clicking the mark crashed Evie once the microphone was granted. The audio tap's
+  closure was written inside a `@MainActor` method, so it inherited main-actor
+  isolation whatever its type said; the tap invokes it on a real-time audio
+  thread, where Swift checks the executor and traps. The closure now lives in a
+  `nonisolated` method, and `evie-shell --voice-check` exercises the whole path
+  from the command line.
+- The mark went back to the sparkle. An ASCII key is in the history if it is ever
+  wanted larger; at thirty points the sparkle is simply the better mark.
+- The mark breathes again, drawn in Core Animation layers rather than SwiftUI.
+  Measured: the SwiftUI version cost 22% of a core with an animated shadow, 10%
+  with only a scale, 8% with the content rasterised, and 2.7% once the animation
+  moved to a `CABasicAnimation` the render server interpolates.
+- The window handles no longer draw two pale bars down the sides of the overlay.
+  Resizing is an invisible strip with a resize cursor, which is the affordance
+  macOS uses for window edges anyway, and the drag grip is invisible at rest.
 - The overlay's glass was being clipped. The content frame was set to the full
   window width and *then* padded, making it 36 points wider than the window, so
   the card's rounded corners, hairline border, and side shadow were cut off — the
-  reason it stopped reading as glass.
+  reason it stopped reading as glass. The transparent margin is now wider than the
+  shadow's reach, so the shadow fades out instead of ending on a hard line.
 - The mark did not read as a key at any size. Each character of the artwork was
   being replaced by a glyph from a shading ramp according to how solid it was,
   which is the technique for turning a photograph into ASCII; applied to art that

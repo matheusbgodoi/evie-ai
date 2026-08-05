@@ -4,6 +4,19 @@ import EvieCore
 import Foundation
 import Synchronization
 
+/// Receives microphone buffers on the audio thread.
+///
+/// This is a protocol rather than a closure on purpose. A closure written inside
+/// a `@MainActor` type inherits that isolation even when its type says
+/// `@Sendable`, and calling it from the real-time audio thread makes Swift assert
+/// the executor and kill the process. A method on a plain `Sendable` class has no
+/// isolation to inherit.
+protocol EvieAudioBufferSink: Sendable {
+  /// Called on the audio thread. Must not block, allocate unboundedly, or hop to
+  /// another executor.
+  func receive(_ buffer: AVAudioPCMBuffer)
+}
+
 /// Owns the microphone.
 ///
 /// The order of operations here is not stylistic. Measured on this Mac, touching
@@ -126,9 +139,9 @@ final class EvieAudioCapture: ObservableObject {
     return format
   }
 
-  /// Opens the microphone. `bufferSink` receives every buffer as it arrives, on
-  /// the audio thread, and must not block.
-  func start(bufferSink: (@Sendable (AVAudioPCMBuffer) -> Void)? = nil) async throws {
+  /// Opens the microphone. `sink` receives every buffer as it arrives, on the
+  /// audio thread.
+  func start(sink: (any EvieAudioBufferSink)? = nil) async throws {
     guard !isCapturing else {
       return
     }
@@ -141,10 +154,7 @@ final class EvieAudioCapture: ObservableObject {
 
     let meter = meter
     let floor = Self.noiseFloorDecibels
-    input.installTap(onBus: 0, bufferSize: 1_024, format: format) { buffer, _ in
-      meter.absorb(buffer, noiseFloorDecibels: floor)
-      bufferSink?(buffer)
-    }
+    Self.installTap(on: input, format: format, meter: meter, floor: floor, sink: sink)
 
     do {
       engine.prepare()
@@ -158,6 +168,29 @@ final class EvieAudioCapture: ObservableObject {
     isCapturing = true
     levels = Array(repeating: 0, count: Self.historyLength)
     startPublishing()
+  }
+
+  /// Installs the audio tap from a nonisolated context.
+  ///
+  /// This is not stylistic. A closure literal written inside a `@MainActor`
+  /// method is itself main-actor isolated, whatever it captures and whatever its
+  /// type says — and the audio tap invokes it on a real-time thread, where Swift
+  /// checks the executor and traps. That crash was reproduced twice from the
+  /// crash report before the closure was moved here, where it has no isolation to
+  /// inherit.
+  ///
+  /// Nothing this closure touches may be actor-isolated.
+  private nonisolated static func installTap(
+    on input: AVAudioInputNode,
+    format: AVAudioFormat,
+    meter: LevelMeter,
+    floor: Float,
+    sink: (any EvieAudioBufferSink)?
+  ) {
+    input.installTap(onBus: 0, bufferSize: 1_024, format: format) { buffer, _ in
+      meter.absorb(buffer, noiseFloorDecibels: floor)
+      sink?.receive(buffer)
+    }
   }
 
   /// Stops the engine itself rather than merely ignoring buffers.

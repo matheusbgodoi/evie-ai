@@ -99,7 +99,9 @@ struct GlassSurface<Content: View>: View {
           )
       }
       .clipShape(surfaceShape)
-      .shadow(color: .black.opacity(colorScheme == .dark ? 0.28 : 0.14), radius: 22, y: 10)
+      // Radius plus offset stays under the overlay's transparent margin, so the
+      // shadow fades out instead of being sliced off at the window edge.
+      .shadow(color: .black.opacity(colorScheme == .dark ? 0.30 : 0.15), radius: 16, y: 7)
   }
 
   private var surfaceShape: RoundedRectangle {

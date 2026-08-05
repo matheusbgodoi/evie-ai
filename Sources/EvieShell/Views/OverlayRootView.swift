@@ -11,7 +11,10 @@ struct OverlayRootView: View {
   private static let artifactViewportLimit: CGFloat = 470
   /// Transparent room kept around the content so the rounded corners, the
   /// hairline border, and the drop shadow of the glass all have somewhere to go.
-  private static let outerPadding: CGFloat = 18
+  ///
+  /// It has to exceed the shadow's reach — radius plus vertical offset — or the
+  /// shadow ends on a hard line at the window edge instead of fading out.
+  private static let outerPadding: CGFloat = 30
 
   @ObservedObject var chrome: OverlayChromeModel
 
@@ -103,12 +106,10 @@ struct OverlayRootView: View {
   private func widthHandle(_ side: OverlayWidthHandle.Side) -> some View {
     OverlayWidthHandle(
       side: side,
-      isHighlighted: chrome.isShowingHandles,
       onDrag: { chrome.onWidthDrag?($0) },
       onCommit: { chrome.onWidthCommit?() }
     )
     .padding(side == .leading ? .leading : .trailing, 5)
-    .opacity(chrome.isShowingHandles ? 1 : 0)
   }
 
   @ViewBuilder

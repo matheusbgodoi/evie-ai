@@ -417,7 +417,7 @@ extension AppCoordinator {
       do {
         let format = try await audioCapture.prepareInputFormat()
         let sink = try await startTranscription(inputFormat: format)
-        try await audioCapture.start(bufferSink: sink)
+        try await audioCapture.start(sink: sink)
         viewModel.beginListening()
       } catch {
         isHoldingToTalk = false
@@ -432,7 +432,7 @@ extension AppCoordinator {
   /// ring works and the transcript simply does not exist.
   fileprivate func startTranscription(
     inputFormat: AVAudioFormat
-  ) async throws -> (@Sendable (AVAudioPCMBuffer) -> Void)? {
+  ) async throws -> (any EvieAudioBufferSink)? {
     guard #available(macOS 26, *), EvieSpeechTranscription.isSupported else {
       return nil
     }
@@ -442,7 +442,7 @@ extension AppCoordinator {
     }
     let pump = try await recogniser.start(inputFormat: inputFormat)
     transcription = recogniser
-    return { buffer in pump.push(buffer) }
+    return pump
   }
 
   fileprivate func cancelTranscription() async {
