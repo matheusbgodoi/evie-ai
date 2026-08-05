@@ -6,6 +6,13 @@ All notable changes to Evie are documented here. Dates use `YYYY-MM-DD`.
 
 ### Added
 
+- Voices can be designed rather than cloned: a controlled vocabulary of gender,
+  age, pitch, style, and accent, with the engine rendering its own reference. Three
+  Portuguese female profiles were created this way, and they synthesise faster than
+  a cloned one — 0.69 s for a two-and-a-half-second sentence against 1.50 s.
+- `Scripts/evie-voice warm` now speaks once with every profile instead of one,
+  because the Whisper pass is charged per profile: 23.0 s for the profile without
+  stored reference text, under 1.5 s for the rest.
 - Evie can speak with a cloned voice. The local voice engine is detected when it
   is running, its profiles appear in Settings › Voz alongside the system voices,
   and `Scripts/evie-voice` starts, stops, lists, and warms it. Measured on this

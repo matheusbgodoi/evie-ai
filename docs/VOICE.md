@@ -73,6 +73,41 @@ transcribe the reference. Measured: **36.97 s** to first audio on a profile with
 no `ref_text`, against 2.30 s on one that has it. `Scripts/evie-voice voices`
 reports which profiles carry their text, and `warm` pays the cost up front.
 
+### Designed voices cost less than cloned ones
+
+A profile can also be created from a description rather than a recording:
+`kind='design'` with a controlled vocabulary — gender, age, pitch, style, accent —
+and the backend renders its own reference. Free text is rejected; "warm and
+friendly" is not a value the engine knows.
+
+Measured, warm, for a two-and-a-half-second sentence at eight steps:
+
+| Profile | Synthesis |
+|---|---|
+| Evie Enérgica (designed) | 0.69 s |
+| Evie Serena (designed) | 0.69 s |
+| Evie Companheira (designed) | 1.52 s |
+| matheus-voz-v2 (cloned) | 1.50 s |
+
+All of them are faster than real time. Designed voices are cheaper still, because
+there is no reference to encode.
+
+Every profile pays the Whisper pass once. `Scripts/evie-voice warm` now speaks
+once with each: measured at 23.0 s for the one profile without stored reference
+text and between 0.5 s and 1.4 s for the rest.
+
+### On cloning someone else's voice
+
+A specific person's voice — including a character performance in a game — is that
+performer's voice, and usually someone else's recording as well. The engine itself
+is built expecting consent: its profile table carries `consent_text`,
+`consent_audio_path`, `consent_recorded_at`, and `verified_own_voice`.
+
+What reproduces cleanly without any of that is the *register*: a designed voice
+set to young adult and high pitch gives the same quick, bright energy without
+being anyone in particular. That is what "Evie Enérgica" is. A real person's voice
+is a recording away, from anyone willing to give one.
+
 ### On training a voice instead of cloning one
 
 Asked whether a voice could be *trained* once to save compute later, rather than

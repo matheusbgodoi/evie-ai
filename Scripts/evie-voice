@@ -25,7 +25,7 @@ function usage() {
   print "  start   Load the model and serve on ${EVIE_VOICE_URL}"
   print "  stop    Shut it down and release the memory"
   print "  voices  List the cloned voice profiles"
-  print "  warm    Synthesise one short line so the first real answer is quick"
+  print "  warm    Speak once with every profile so no first answer waits"
 }
 
 function is_healthy() {
@@ -146,34 +146,64 @@ if not profiles:
   print "first use — measured at over thirty seconds. With it, first audio was 2.3 s."
 }
 
-# Sends one short line so the model, and the chosen profile, are warm before the
-# first real answer needs them.
+# Warms every profile.
+#
+# A profile stored without its reference text costs a one-off Whisper pass the
+# first time it speaks — measured at over thirty seconds, which is intolerable
+# mid-conversation and unnoticeable here. Afterwards every profile measured
+# between 0.69 s and 1.52 s for a two-and-a-half-second sentence: faster than
+# real time.
 function warm() {
   if ! is_healthy; then
     print -u2 "The engine is not running."
     return 1
   fi
-  local profile
-  profile=$(curl -sf "${EVIE_VOICE_URL}/profiles" | python3 -c '
-import json, sys
-data = json.load(sys.stdin)
-profiles = data if isinstance(data, list) else data.get("profiles", [])
-withText = [p for p in profiles if p.get("ref_text")]
-chosen = (withText or profiles)
-print(chosen[0]["id"] if chosen else "")
-')
-  if [[ -z "${profile}" ]]; then
-    print -u2 "No voice profile to warm."
-    return 1
-  fi
 
-  print "Warming ${profile}…"
-  local started
-  started=$(python3 -c 'import time; print(time.time())')
-  curl -sf -X POST "${EVIE_VOICE_URL}/generate" \
-    -F "text=Pronta." -F "profile_id=${profile}" \
-    -F "language=Portuguese" -F "num_step=8" >/dev/null
-  python3 -c "import time; print(f'Warm in {time.time() - ${started}:.1f} s.')"
+  EVIE_VOICE_BASE="${EVIE_VOICE_URL}" python3 <<'PYTHON'
+import json, os, time, urllib.request, uuid
+
+base = os.environ["EVIE_VOICE_BASE"]
+
+def multipart(fields):
+    boundary = "evie-" + uuid.uuid4().hex
+    body = b""
+    for name, value in fields.items():
+        body += f"--{boundary}\r\n".encode()
+        body += f'Content-Disposition: form-data; name="{name}"\r\n\r\n'.encode()
+        body += f"{value}\r\n".encode()
+    body += f"--{boundary}--\r\n".encode()
+    return body, f"multipart/form-data; boundary={boundary}"
+
+with urllib.request.urlopen(f"{base}/profiles", timeout=10) as response:
+    data = json.load(response)
+profiles = data if isinstance(data, list) else data.get("profiles", [])
+
+if not profiles:
+    print("  (no voice profiles to warm)")
+    raise SystemExit(0)
+
+# One at a time. The engine runs a single worker, so parallel requests only queue
+# behind each other and make the timings meaningless.
+for profile in profiles:
+    identifier = profile.get("id")
+    name = profile.get("name", identifier)
+    body, content_type = multipart({
+        "text": "Pronta.",
+        "profile_id": identifier,
+        "language": profile.get("language") or "Portuguese",
+        "num_step": "8",
+    })
+    request = urllib.request.Request(
+        f"{base}/generate", data=body, headers={"Content-Type": content_type}
+    )
+    started = time.time()
+    try:
+        with urllib.request.urlopen(request, timeout=900) as response:
+            response.read()
+        print(f"  {name:<26} warm in {time.time() - started:.1f} s")
+    except Exception as error:
+        print(f"  {name:<26} failed: {type(error).__name__}")
+PYTHON
 }
 
 case "${1:-}" in
