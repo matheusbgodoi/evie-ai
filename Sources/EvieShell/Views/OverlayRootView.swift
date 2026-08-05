@@ -9,8 +9,8 @@ import SwiftUI
 struct OverlayRootView: View {
   /// Above this the artifact list scrolls instead of the window growing.
   private static let artifactViewportLimit: CGFloat = 470
-  /// Transparent room kept around the content so the drop shadow and the grip
-  /// are never clipped by the window frame.
+  /// Transparent room kept around the content so the rounded corners, the
+  /// hairline border, and the drop shadow of the glass all have somewhere to go.
   private static let outerPadding: CGFloat = 18
 
   @ObservedObject var chrome: OverlayChromeModel
@@ -36,17 +36,29 @@ struct OverlayRootView: View {
 
   @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
-  var body: some View {
-    VStack(spacing: 8) {
-      chromeBar
+  /// The glass is inset by the padding on both sides. Setting the frame to the
+  /// full window width and *then* padding made the content 36 points wider than
+  /// the window, so the card's corners, border, and side shadow were clipped away
+  /// — which is what made the glass stop looking like glass.
+  private var contentWidth: CGFloat {
+    max(chrome.contentWidth - Self.outerPadding * 2, 120)
+  }
 
+  var body: some View {
+    VStack(spacing: 10) {
       artifactStack
 
       bottomSurface
     }
-    .frame(width: chrome.contentWidth)
+    .frame(width: contentWidth)
     .padding(Self.outerPadding)
     .fixedSize(horizontal: false, vertical: true)
+    // The window controls live in the transparent margin as overlays, so they
+    // take no layout space and the resting overlay is exactly what it was before
+    // they existed.
+    .overlay(alignment: .top) { gripControls }
+    .overlay(alignment: .leading) { widthHandle(.leading) }
+    .overlay(alignment: .trailing) { widthHandle(.trailing) }
     .onHover { hovering in
       chrome.setShowingHandles(hovering)
     }
@@ -67,22 +79,14 @@ struct OverlayRootView: View {
       value: artifacts.map(\.id)
     )
     .animation(reduceMotion ? nil : .smooth(duration: 0.2), value: state)
-    .animation(reduceMotion ? nil : .easeOut(duration: 0.14), value: chrome.isShowingHandles)
+    .animation(reduceMotion ? nil : .easeOut(duration: 0.16), value: chrome.isShowingHandles)
   }
 
-  /// Drag grip, width handles, and the reset control. It occupies a fixed height
-  /// whether or not it is prominent, so revealing it never nudges the layout.
-  private var chromeBar: some View {
-    HStack(spacing: 10) {
-      OverlayWidthHandle(
-        side: .leading,
-        isHighlighted: chrome.isShowingHandles,
-        onDrag: { chrome.onWidthDrag?($0) },
-        onCommit: { chrome.onWidthCommit?() }
-      )
-
-      Spacer(minLength: 0)
-
+  /// Drag grip and the reset control, invisible until the pointer is over the
+  /// overlay. They still respond to the mouse while invisible, which is what
+  /// makes the whole top margin a drag area.
+  private var gripControls: some View {
+    HStack(spacing: 8) {
       OverlayGripHandle(isHighlighted: chrome.isShowingHandles)
 
       if !chrome.isUsingDefaultPlacement {
@@ -91,18 +95,20 @@ struct OverlayRootView: View {
         }
         .transition(.opacity.combined(with: .scale(scale: 0.8)))
       }
-
-      Spacer(minLength: 0)
-
-      OverlayWidthHandle(
-        side: .trailing,
-        isHighlighted: chrome.isShowingHandles,
-        onDrag: { chrome.onWidthDrag?($0) },
-        onCommit: { chrome.onWidthCommit?() }
-      )
     }
-    .frame(height: 20)
-    .opacity(chrome.isShowingHandles ? 1 : 0.26)
+    .padding(.top, 5)
+    .opacity(chrome.isShowingHandles ? 1 : 0)
+  }
+
+  private func widthHandle(_ side: OverlayWidthHandle.Side) -> some View {
+    OverlayWidthHandle(
+      side: side,
+      isHighlighted: chrome.isShowingHandles,
+      onDrag: { chrome.onWidthDrag?($0) },
+      onCommit: { chrome.onWidthCommit?() }
+    )
+    .padding(side == .leading ? .leading : .trailing, 5)
+    .opacity(chrome.isShowingHandles ? 1 : 0)
   }
 
   @ViewBuilder

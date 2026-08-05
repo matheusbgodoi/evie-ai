@@ -454,3 +454,37 @@
   - writing and deleting do not exist, and deliberately will not until the
     approval card does.
 - Next action: `SEC-002` — the root registry, so a folder can actually be granted.
+
+## 2026-08-05 — design correction after first look
+
+- Trigger: the user reported the design was better before — logo, glassmorphism,
+  "almost everything". Two of those turned out to be defects rather than taste.
+- Scope: `Sources/EvieShell/Views/{EvieMarkView,OverlayRootView,StatusPill}.swift`.
+- Defects found and fixed:
+  - **The glass was clipped.** `.frame(width: contentWidth)` followed by
+    `.padding(18)` produced content 36 points wider than the window, so the card's
+    corners, border, and side shadow were cut. The frame is now the window width
+    minus the padding. This was the glassmorphism regression.
+  - **The mark was not a key.** Rendering it at real size proved it: at 30, 44,
+    and 64 points it came out as a scattering of `+ : - =`. The cause was applying
+    a density ramp — an image-to-ASCII technique — to art that was already ASCII,
+    which replaced every character of the drawing. Light now drives brightness
+    only, and a second render confirmed the key reads at 30 points.
+- Reverted by choice, per the user:
+  - the handle bar no longer takes layout space or shows at rest; it lives in the
+    margin as an overlay and appears on hover;
+  - system colours restored, including `.purple` for thinking and the flat
+    diagonal badge fill rather than a radial gradient;
+  - one exception, stated rather than slipped in: `.mint` in light appearance
+    measures 1.82:1 against the HUD, so listening keeps a darkened teal there.
+    Dark appearance is byte-identical to before.
+  - the mark art is the compact three-column key the user chose.
+- Validation:
+  - `Scripts/test` — 116/116;
+  - strict format lint clean; release build with warnings-as-errors;
+  - screen captured from the running application: the glass renders with its
+    corners, border, and shadow intact, and at 7× the mark is legibly a key;
+  - idle CPU with the mark animating: 0.0%.
+- Method note: rendering the artwork to a PNG and looking at it found in one step
+  what no amount of reading the code would have. Any future change to the mark
+  should be rendered before it is committed.

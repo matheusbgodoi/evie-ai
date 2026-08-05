@@ -39,14 +39,16 @@ enum EvieVisualState: String, CaseIterable, Hashable {
     }
   }
 
-  /// Listening and speaking deliberately reuse the two voice hues so the same
-  /// colour always means the same direction of audio, wherever it appears.
+  /// The system colours the interface has always used. Listening and speaking go
+  /// through `EvieVoiceTint` so the same hue always means the same direction of
+  /// audio wherever it appears — and so the one light-mode contrast failure is
+  /// fixed in a single place.
   var tint: Color {
     switch self {
     case .ready: EvieVoiceTint.idle
     case .listening: EvieVoiceTint.input
     case .transcribing: .cyan
-    case .thinking: EvieVoiceTint.idle
+    case .thinking: .purple
     case .usingTool: .blue
     case .speaking: EvieVoiceTint.output
     case .awaitingApproval: .orange

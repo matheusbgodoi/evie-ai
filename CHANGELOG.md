@@ -4,6 +4,25 @@ All notable changes to Evie are documented here. Dates use `YYYY-MM-DD`.
 
 ## [Unreleased]
 
+### Fixed
+
+- The overlay's glass was being clipped. The content frame was set to the full
+  window width and *then* padded, making it 36 points wider than the window, so
+  the card's rounded corners, hairline border, and side shadow were cut off — the
+  reason it stopped reading as glass.
+- The mark did not read as a key at any size. Each character of the artwork was
+  being replaced by a glyph from a shading ramp according to how solid it was,
+  which is the technique for turning a photograph into ASCII; applied to art that
+  was already ASCII it destroyed the drawing. The light now changes only how
+  bright a character is, never which character it is.
+- The window handles no longer occupy layout space or show at rest. They live in
+  the transparent margin as overlays and appear on hover, so the resting overlay
+  is exactly what it was before they existed.
+- The palette returned to the system colours the interface already used. One value
+  is still substituted, and only in light appearance, where `.mint` measures
+  1.82:1 against the HUD — below the 3:1 WCAG asks of a graphical object. Dark
+  appearance is untouched.
+
 ### Added
 
 - `EvieScopedFileReader`: reading inside a folder the user granted, contained by
