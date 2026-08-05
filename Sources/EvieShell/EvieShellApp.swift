@@ -253,8 +253,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         outcome.appended.compactMap { $0.toolCalls }.flatMap { $0 }.map { $0.name }
       print("")
       print("pergunta: \(question)")
-      print("tools: \(used.isEmpty ? "(nenhuma)" : used.joined(separator: " → "))")
+      // The model's own calls and the lookup the application did before asking
+      // it anything are different things, and reporting them together read as
+      // "she used nothing" on a turn that had searched the web.
+      print("tools que ela pediu: \(used.isEmpty ? "(nenhuma)" : used.joined(separator: " → "))")
       print("tempo: \(String(format: "%.0f", Date().timeIntervalSince(started))) s")
+      print("origem mostrada ao usuário: \(outcome.provenance.note)")
       print("")
       print(outcome.answer.isEmpty ? "(sem resposta — laço esgotado)" : outcome.answer)
     } catch {
@@ -394,8 +398,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
       print("")
       print("pergunta: \(question)")
       print("pasta: \(folder.lastPathComponent)")
-      print("tools: \(used.isEmpty ? "(nenhuma)" : used.joined(separator: " → "))")
+      // The model's own calls and the lookup the application did before asking
+      // it anything are different things, and reporting them together read as
+      // "she used nothing" on a turn that had searched the web.
+      print("tools que ela pediu: \(used.isEmpty ? "(nenhuma)" : used.joined(separator: " → "))")
       print("tempo: \(String(format: "%.0f", Date().timeIntervalSince(started))) s")
+      print("origem mostrada ao usuário: \(outcome.provenance.note)")
       print("")
       print(outcome.answer.isEmpty ? "(sem resposta — laço esgotado)" : outcome.answer)
     } catch {
@@ -463,6 +471,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
           .map { $0.name }
         report.append("  tools: \(used.isEmpty ? "(nenhuma)" : used.joined(separator: " → "))")
         report.append("  \(String(format: "%.0f", elapsed)) s, \(outcome.toolCallCount) chamada(s)")
+      report.append("  origem: \(outcome.provenance.note)")
         report.append(
           "  resposta: \(outcome.answer.isEmpty ? "(vazia — laço esgotado)" : outcome.answer)")
       } catch {

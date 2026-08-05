@@ -80,6 +80,29 @@ public struct EvieAgentLoop: Sendable {
       tools += EvieWebTool.definitions
     }
 
+    // Looked up before the model is asked anything, so the order the user asked
+    // for is a property of this code rather than a request the model can decline
+    // — which, measured twice, it does.
+    if let question = messages.last(where: { $0.role == .user })?.content,
+      EvieGrounding.needsLookup(question)
+    {
+      let grounding = await ground(
+        question: question,
+        roots: roots,
+        emit: emit
+      )
+      if let message = grounding.message {
+        conversation.append(message)
+        if grounding.localFindings != nil {
+          toolNames.append(EvieFileToolbox.ToolName.searchContent.rawValue)
+        }
+        if grounding.webFindings != nil {
+          toolNames.append(EvieWebTool.search.rawValue)
+        }
+        readAddresses.append(contentsOf: grounding.citedPages)
+      }
+    }
+
     for iteration in 0..<maximumIterations {
       try Task.checkCancellation()
 
@@ -160,6 +183,71 @@ public struct EvieAgentLoop: Sendable {
 }
 
 extension EvieAgentLoop {
+  /// Searches his notes, then the web, before anything is generated.
+  ///
+  /// The web is only consulted when the notes came back empty, which is the
+  /// order he asked for and also the cheaper one: his own writing is on this
+  /// disk and is more likely to be what he meant.
+  fileprivate func ground(
+    question: String,
+    roots: [EvieFileRoot],
+    emit: @Sendable (EvieInteractionEvent) async -> Void
+  ) async -> EvieGroundingResult {
+    var result = EvieGroundingResult()
+    let query = EvieGrounding.query(from: question)
+
+    if !roots.isEmpty {
+      await emit(.status(message: "Procurando nas suas anotações…"))
+      let found = roots.compactMap { root -> String? in
+        let call = EvieToolCall(
+          id: "grounding-\(root.id)",
+          name: EvieFileToolbox.ToolName.searchContent.rawValue,
+          argumentsJSON: Self.searchArguments(rootID: root.id, query: query)
+        )
+        let outcome = toolbox.execute(call, roots: roots)
+        return outcome.isFailure || outcome.content.contains("Não achei")
+          ? nil
+          : outcome.content
+      }
+      if !found.isEmpty {
+        result.localFindings = found.joined(separator: "\n\n")
+      }
+    }
+
+    // Only when his own writing did not answer it.
+    if result.localFindings == nil, let web {
+      await emit(.status(message: "Procurando na web…"))
+      if let results = try? await web.search(query), !results.isEmpty {
+        result.webFindings = EvieWebSearch.describe(results, query: query)
+        // The first result is opened, because a snippet is a headline and the
+        // page is the claim. Answering from snippets is how she gets things
+        // subtly wrong.
+        // A slice of the page, not the whole thing. Measured: grounding with the
+        // full 12,000-character excerpt took 136 s end to end, almost all of it
+        // the model reading a page whose first few paragraphs already answered
+        // the question.
+        if let first = results.first, let text = try? await web.read(first.url) {
+          result.webFindings? += "\n\n--- \(first.url) ---\n\(text.prefix(3_500))"
+          result.citedPages.append(first.url)
+        }
+      }
+    }
+    return result
+  }
+
+  /// Built with `JSONSerialization` rather than string interpolation, because a
+  /// question containing a quotation mark would otherwise produce malformed
+  /// arguments.
+  fileprivate static func searchArguments(rootID: String, query: String) -> String {
+    let object: [String: String] = ["root_id": rootID, "query": query]
+    guard let data = try? JSONSerialization.data(withJSONObject: object),
+      let text = String(data: data, encoding: .utf8)
+    else {
+      return "{}"
+    }
+    return text
+  }
+
   fileprivate struct Step {
     var message: ChatMessage
     var finishReason: EvieFinishReason

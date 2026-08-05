@@ -100,8 +100,19 @@ public struct EviePersona: Hashable, Sendable {
   /// The hidden system message. It is never persisted to history and never
   /// mentions which model or server is answering.
   public func systemPrompt(capabilities: EvieCapabilitySnapshot) -> String {
-    ([identitySection, capabilitySection(capabilities), conductSection] as [String])
-      .joined(separator: "\n\n")
+    (
+      [
+        identitySection,
+        capabilitySection(capabilities),
+        conductSection,
+        // Last, because the end of a prompt is what a model weighs most, and this
+        // is the rule it is most likely to skip: a model with tools available
+        // will happily answer from memory instead of using them.
+        sourceOrderSection(capabilities),
+      ] as [String]
+    )
+    .compactMap { $0.isEmpty ? nil : $0 }
+    .joined(separator: "\n\n")
   }
 }
 
@@ -137,27 +148,6 @@ extension EviePersona {
       )
     } else {
       unavailable.append("responder falando")
-    }
-
-    // The order matters more than any single capability, and it is stated before
-    // the capabilities so it frames them rather than trailing after.
-    if capabilities.readsLocalFiles || capabilities.searchesTheWeb {
-      var order: [String] = []
-      if capabilities.readsLocalFiles {
-        order.append("primeiro procure nas pastas e anotações dele")
-      }
-      if capabilities.searchesTheWeb {
-        order.append(
-          order.isEmpty ? "primeiro procure na web" : "depois procure na web"
-        )
-      }
-      order.append("só então responda do que você já sabe")
-      available.append(
-        "Ordem para responder qualquer pergunta de fato: " + order.joined(separator: ", ")
-          + ". E diga de onde veio: cite o arquivo quando vier das anotações dele, "
-          + "cite o endereço quando vier da web, e avise que pode conter erro quando "
-          + "vier só da sua memória. Não invente uma fonte que você não abriu."
-      )
     }
 
     if capabilities.readsLocalFiles {
@@ -217,6 +207,55 @@ extension EviePersona {
     }
 
     return lines.joined(separator: "\n")
+  }
+
+  /// The rule about where an answer comes from.
+  ///
+  /// Written as an instruction with a trigger list rather than a principle,
+  /// because the first version — one bullet among the capabilities, phrased as
+  /// "a ordem é" — was measured being ignored: asked to compare HTTP/2 and
+  /// HTTP/3 with the web switched on, she answered from memory and called no
+  /// tool at all.
+  fileprivate func sourceOrderSection(_ capabilities: EvieCapabilitySnapshot) -> String {
+    guard capabilities.readsLocalFiles || capabilities.searchesTheWeb else {
+      return ""
+    }
+
+    var steps: [String] = []
+    if capabilities.readsLocalFiles {
+      steps.append(
+        "1. Procure primeiro nas pastas e anotações de \(creatorPreferredName), com "
+          + "search_content. O que ele escreveu vale mais do que qualquer outra fonte."
+      )
+    }
+    if capabilities.searchesTheWeb {
+      steps.append(
+        "\(steps.count + 1). Não achando lá, procure na web com search_web e abra a "
+          + "página com read_page antes de afirmar o que ela diz."
+      )
+    }
+    steps.append(
+      "\(steps.count + 1). Só depois disso responda do que você já sabe, e diga que "
+        + "está respondendo de memória e pode estar errada."
+    )
+
+    return """
+      ANTES DE RESPONDER QUALQUER PERGUNTA DE FATO, siga esta ordem:
+
+      \(steps.joined(separator: "\n"))
+
+      Vale para: datas, números, versões, preços, especificações, notícias, quem \
+      fez o quê, como algo funciona, qualquer coisa que possa ter mudado, e \
+      qualquer coisa sobre a vida, os projetos ou as empresas de \
+      \(creatorPreferredName). Na dúvida sobre se precisa procurar, procure.
+
+      Não precisa procurar para: conta simples, tradução, reescrever ou resumir um \
+      texto que ele já te deu, e conversa.
+
+      Sempre diga de onde veio a resposta: cite o arquivo quando vier das anotações \
+      dele, cite o endereço quando vier da web. Nunca cite uma fonte que você não \
+      abriu de verdade.
+      """
   }
 
   fileprivate var conductSection: String {

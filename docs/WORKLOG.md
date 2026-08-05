@@ -872,3 +872,44 @@ previous day of building. Everything here came from that.
 - Also verified while checking: `--voices-check` still passes, and the user's five
   profiles were untouched throughout.
 - Validation: `Scripts/test` 268/268 in 26 suites.
+
+## 2026-08-05 — SRC-001: sources in a fixed order, and a label that cannot lie
+
+- The user asked her to prefer his notes, then the web, then her own knowledge,
+  and to say which she used.
+- **The label is derived, not asked for.** A model reporting on itself sometimes
+  claims to have checked notes it never opened, and more often forgets to mention
+  it was going from memory — the case where the reader most needs to know. The
+  loop records which tools ran; `EvieAnswerProvenance` computes the line from that
+  record. Listing which folders exist does not count as having looked in one, or
+  every turn would claim to have used his notes.
+- **The order could not be obtained by instruction.** Measured against the running
+  model, twice: asked to compare HTTP/2 and HTTP/3 with the web switched on, she
+  answered from memory and called no tool at all — first with the rule as a bullet
+  among the capabilities, then with it rewritten as an imperative section at the
+  end of the prompt with a trigger list. `tool_choice` cannot compel it either:
+  the server answers `tool_choice=required is not supported` and
+  `named tool choices are not supported`.
+- So the application searches before the model is asked anything, and hands the
+  findings over with the question. The order became a property of the code. Same
+  question afterwards: `Usei a web · sempreupdate.com.br`, answered from the page.
+- Two things measured while wiring it:
+  - Findings must arrive as a user turn, not developer guidance. The server
+    refuses guidance after the conversation has begun:
+    `system or developer guidance must precede the conversation`.
+  - Grounding with the full 12,000-character page excerpt took 136 s end to end.
+    Trimmed to 3,500 it takes 70 s for the same answer and the same citation —
+    almost all of the difference was the model reading a page whose opening
+    paragraphs already answered the question.
+- The heuristic is deliberately lopsided, because "sempre priorize a busca" means
+  a wasted search is the cheap mistake and answering from memory when the answer
+  was on disk is the expensive one. Only conversation, arithmetic, and work on
+  text already in the conversation skip it.
+- Also landed, unwired: `EvieFileWriter`, which performs an approved change.
+  Trash rather than unlink; `renamex_np(RENAME_EXCL)` so a move fails instead of
+  silently destroying the destination, which `rename(2)` and
+  `FileManager.moveItem` both do; the file's inode, device, size and modification
+  time re-checked at the instant of the change, because an approval is for the
+  file the user was shown; and the credential denylist applied to moving exactly
+  as to reading. Sixteen tests, of which the ones that matter are the refusals.
+- Validation: `Scripts/test` 300/300 in 28 suites.

@@ -13,15 +13,17 @@ All notable changes to Evie are documented here. Dates use `YYYY-MM-DD`.
   happened: a model asked to report on itself will sometimes claim to have
   checked your notes, and will more often forget to mention it was going from
   memory.
-- She is told the order to answer in: your folders and notes first, then the web,
-  and only then her own knowledge.
+- Questions of fact are looked up before she answers, in the order you asked for:
+  your notes and folders first, the web only if they came up empty, and her own
+  knowledge last. The application does the looking — telling her to was tried
+  twice and measured being ignored, and this server does not support forcing a
+  tool call — so the order is a property of the code rather than a request she
+  can decline. Conversation, arithmetic, and work on text you already sent are
+  answered directly.
 
-- Describe the voice you want in your own words — "feminina, jovem, grave,
-  enérgica" — and the ready-made voices that fit rise to the top, one click to
-  adopt. Those sixty voices are designed from attributes rather than copied from
-  anybody, which is what makes them free to use. The description also says which
-  of your words it could not use, because the engine understands only gender,
-  age, pitch and style and silently drops the rest.
+- A trained voice can be made more careful. Settings › Voz trades speed for how
+  close it lands to the reference recording, in three steps. The default moved
+  from the engine's cheapest setting to the middle one.
 
 - Evie can search the web, if you let her. Off by default, and it is the one
   switch in this application that changes what leaves your Mac — the setting says
