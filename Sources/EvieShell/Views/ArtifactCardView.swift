@@ -2,10 +2,6 @@ import EvieCore
 import SwiftUI
 
 enum ArtifactKind: String, Hashable {
-  /// What you asked. Shown so the conversation reads as a conversation and you
-  /// can find your place in it, rather than a column of answers to questions
-  /// that vanished.
-  case prompt
   case answer
   case research
   case email
@@ -19,7 +15,6 @@ enum ArtifactKind: String, Hashable {
 
   var title: String {
     switch self {
-    case .prompt: "Você"
     case .answer: "Resposta"
     case .research: "Pesquisa"
     case .email: "E-mail"
@@ -35,7 +30,6 @@ enum ArtifactKind: String, Hashable {
 
   var symbolName: String {
     switch self {
-    case .prompt: "quote.opening"
     case .answer: "sparkles"
     case .research: "globe"
     case .email: "envelope.fill"
@@ -51,7 +45,6 @@ enum ArtifactKind: String, Hashable {
 
   var tint: Color {
     switch self {
-    case .prompt: .gray
     case .answer: .indigo
     case .research: .cyan
     case .email: .blue
@@ -83,6 +76,13 @@ struct ArtifactCardModel: Identifiable, Hashable {
   var id: UUID = UUID()
   var kind: ArtifactKind
   var title: String
+  /// What was asked to produce this. Shown only when the card is open.
+  ///
+  /// It lives on the answer rather than in a card of its own. A separate card for
+  /// your own question doubles the length of every conversation with text you
+  /// already know, and the thing you actually want back later is the answer —
+  /// with the question there to confirm you opened the right one.
+  var question: String? = nil
   var summary: String
 
   /// The answer with its markdown and LaTeX resolved. Parsed once here rather
@@ -95,6 +95,14 @@ struct ArtifactCardModel: Identifiable, Hashable {
   var isExpanded = false
   var isSensitive = false
   var actions: [ArtifactActionModel] = []
+
+  /// Whether this card is asking something rather than reporting something.
+  ///
+  /// Its buttons live in the open state, so it must survive the tidying a new
+  /// question does. "Copiar" is not a decision; a primary action is.
+  var isAwaitingDecision: Bool {
+    actions.contains { $0.role == .primary }
+  }
 }
 
 struct ArtifactCardView: View {
@@ -105,38 +113,34 @@ struct ArtifactCardView: View {
 
   @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
-  private var isPrompt: Bool {
-    artifact.kind == .prompt
-  }
 
   var body: some View {
     GlassSurface(
-      cornerRadius: isPrompt ? 16 : 20,
+      cornerRadius: 20,
       material: .popover,
-      contentPadding: isPrompt
-        ? EdgeInsets(top: 9, leading: 12, bottom: 9, trailing: 10)
-        : EdgeInsets(top: 13, leading: 14, bottom: 13, trailing: 12),
+      contentPadding: EdgeInsets(top: 13, leading: 14, bottom: 13, trailing: 12),
       tint: artifact.kind.tint
     ) {
-      VStack(alignment: .leading, spacing: isPrompt && !artifact.isExpanded ? 0 : 11) {
+      VStack(alignment: .leading, spacing: artifact.isExpanded ? 11 : 0) {
         header
 
-        // A collapsed prompt shows nothing but its header. Seeing your own
-        // question repeated back is noise on every turn; the header keeps a
-        // one-line trace so a long conversation is still navigable, and the
-        // chevron brings the whole thing back.
-        if isPrompt, !artifact.isExpanded {
-          EmptyView()
-        } else if artifact.isSensitive, !artifact.isExpanded {
-          sensitivePreview
-        } else {
-          content
+        // Closed, a card is its title and nothing else — a line you can scan
+        // down to find the answer you are after. Everything else waits.
+        if artifact.isExpanded {
+          if let question = artifact.question, !question.isEmpty {
+            askedRow(question)
+          }
+          if artifact.isSensitive {
+            sensitivePreview
+          } else {
+            content
+          }
         }
 
         // Where the answer came from. Derived from the tools that actually ran,
         // so it cannot disagree with what happened, and kept out of the answer
         // text so it is never spoken and never copied.
-        if let source = artifact.source, !isPrompt {
+        if let source = artifact.source, artifact.isExpanded {
           Label(source, systemImage: sourceSymbol(for: source))
             .font(.system(size: 10))
             .foregroundStyle(.secondary)
@@ -156,39 +160,26 @@ struct ArtifactCardView: View {
   }
 
   private var header: some View {
-    HStack(spacing: isPrompt ? 8 : 10) {
-      if !isPrompt {
-        Image(systemName: artifact.kind.symbolName)
-          .font(.system(size: 12, weight: .semibold))
-          .foregroundStyle(artifact.kind.tint)
-          .frame(width: 28, height: 28)
-          .background(artifact.kind.tint.opacity(0.12), in: RoundedRectangle(cornerRadius: 9))
-      }
+    HStack(spacing: 10) {
+      Image(systemName: artifact.kind.symbolName)
+        .font(.system(size: 12, weight: .semibold))
+        .foregroundStyle(artifact.kind.tint)
+        .frame(width: 28, height: 28)
+        .background(artifact.kind.tint.opacity(0.12), in: RoundedRectangle(cornerRadius: 9))
 
       VStack(alignment: .leading, spacing: 1) {
-        if isPrompt {
-          HStack(spacing: 6) {
-            Text("Você perguntou")
-              .font(.system(size: 10, weight: .semibold))
-              .foregroundStyle(.secondary)
-            if !artifact.isExpanded {
-              Text(artifact.summary)
-                .font(.system(size: 10))
-                .foregroundStyle(.secondary.opacity(0.75))
-                .lineLimit(1)
-                .truncationMode(.tail)
-            }
-          }
-        } else {
+        if artifact.isExpanded {
           Text(artifact.kind.title.uppercased())
             .font(.system(size: 9, weight: .bold))
             .foregroundStyle(artifact.kind.tint)
             .tracking(0.75)
-
-          Text(artifact.title)
-            .font(.subheadline.weight(.semibold))
-            .lineLimit(artifact.isExpanded ? 3 : 1)
         }
+
+        Text(artifact.title)
+          .font(.subheadline.weight(artifact.isExpanded ? .semibold : .regular))
+          .foregroundStyle(Color.primary.opacity(artifact.isExpanded ? 1 : 0.72))
+          .lineLimit(artifact.isExpanded ? 3 : 1)
+          .truncationMode(.tail)
       }
 
       Spacer(minLength: 8)
@@ -208,26 +199,24 @@ struct ArtifactCardView: View {
     }
   }
 
-  @ViewBuilder
-  private var content: some View {
-    if isPrompt {
-      Text(artifact.summary)
-        .font(.callout)
-        .foregroundStyle(.primary.opacity(0.78))
-        .lineLimit(artifact.isExpanded ? nil : 2)
-        .textSelection(.enabled)
-        .frame(maxWidth: .infinity, alignment: .leading)
-    } else if artifact.isExpanded {
-      EvieRichTextView(text: artifact.richSummary)
-    } else {
-      // Collapsed, the card is a glance: plain text reads better than a stack of
-      // headings squeezed into three lines.
-      Text(artifact.richSummary.plainText)
-        .font(.callout)
-        .foregroundStyle(.primary.opacity(0.88))
-        .lineLimit(3)
+  /// The question, small and above the answer, so it is available to confirm you
+  /// opened the right card without being read again on every turn.
+  private func askedRow(_ question: String) -> some View {
+    HStack(alignment: .top, spacing: 6) {
+      Image(systemName: "quote.opening")
+        .font(.system(size: 9))
+        .foregroundStyle(.secondary.opacity(0.7))
+      Text(question)
+        .font(.system(size: 11))
+        .foregroundStyle(.secondary)
         .textSelection(.enabled)
     }
+    .frame(maxWidth: .infinity, alignment: .leading)
+  }
+
+  @ViewBuilder
+  private var content: some View {
+    EvieRichTextView(text: artifact.richSummary)
 
     if artifact.isExpanded {
       if let detail = artifact.detail, !detail.isEmpty {

@@ -981,3 +981,28 @@ previous day of building. Everything here came from that.
   rather than a binary. And "Modelo local" is gone from the cards — it named the
   machinery, and a restored conversation kept it forever.
 - Validation: `Scripts/test` 311/311 in 29 suites.
+
+## 2026-08-05 — UI-012: one card per turn, one card open
+
+- Two requests that turned out to be one change: only the newest answer should be
+  open, and his own prompt should not be shown up front.
+- The prompt card is gone entirely. A separate card for your own question doubles
+  the length of every conversation with text you already know, and what you want
+  back later is the answer. The question became the answer card's *title* —
+  which is also what makes a scrolled-back column navigable, since "Resposta da
+  Evie" twenty times is not.
+- Closed, a card is its title and nothing else. Open, it shows the question in
+  small secondary text above the answer, so you can confirm you opened the right
+  one without reading it again on every turn.
+- Submitting closes every other card, **except one awaiting a decision**. Its
+  buttons only exist in the open state, so closing a memory proposal would have
+  left a question nobody could answer. Caught by reading the collapse loop rather
+  than by hitting it.
+- `ArtifactKind.prompt` was removed rather than left unused: a case nothing
+  produces is a case that rots.
+- Restoring a conversation and paging back both work in turns now — a user
+  message paired with the assistant message that answered it, skipping the
+  assistant turns that only asked for a tool.
+- Validation: `Scripts/test` 311/311 in 29 suites; release build; installed.
+- Not validated by eye, which for a change that is entirely visual is the whole
+  risk: `QA-006`.

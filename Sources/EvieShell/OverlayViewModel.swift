@@ -167,8 +167,7 @@ final class OverlayViewModel: ObservableObject {
         [ChatMessage(role: .system, content: systemPrompt)]
         + stored.messages
       artifacts = Self.cards(
-        for: Array(Self.shownMessages(in: stored.messages).suffix(Self.artifactPageSize)),
-        title: stored.title
+        for: Array(Self.turns(in: stored.messages).suffix(Self.artifactPageSize))
       )
       visualState = .ready
       primaryText = stored.title
@@ -531,20 +530,24 @@ final class OverlayViewModel: ObservableObject {
     // Your own question, kept on screen. Without it the overlay is a column of
     // answers to questions that disappeared, and there is no way to find your
     // place in a long conversation.
-    artifacts.append(
-      ArtifactCardModel(
-        id: userMessage.id,
-        kind: .prompt,
-        title: Self.title(for: prompt),
-        summary: prompt,
-        isExpanded: false
-      )
-    )
+    // A new question closes everything before it. Reading is the point of the
+    // window, and reading is easier when exactly one thing is open — the rest
+    // stays a column of titles to scan and reopen deliberately.
+    //
+    // Except a card that is waiting on an answer. Its buttons only exist while
+    // it is open, so closing it would leave a question nobody can reply to.
+    for index in artifacts.indices where !artifacts[index].isAwaitingDecision {
+      artifacts[index].isExpanded = false
+    }
     artifacts.append(
       ArtifactCardModel(
         id: artifactID,
         kind: .answer,
-        title: "Resposta da Evie",
+        // The question is the title, because it is what you will be looking for
+        // when you scroll back — not "Resposta da Evie", of which there are
+        // twenty.
+        title: Self.title(for: prompt),
+        question: prompt,
         summary: "Aguardando o primeiro trecho…",
         isExpanded: true,
         actions: [
@@ -1219,31 +1222,53 @@ extension OverlayViewModel {
     }
   }
 
-  static func cards(for messages: [ChatMessage], title: String) -> [ArtifactCardModel] {
-    messages.map { message in
-      message.role == .user
-        ? ArtifactCardModel(
-          id: message.id,
-          kind: .prompt,
-          title: Self.title(for: message.content),
-          summary: message.content,
-          isExpanded: false
-        )
-        : ArtifactCardModel(
-          id: message.id,
-          kind: .answer,
-          title: title,
-          summary: message.content,
-          isExpanded: false,
-          actions: [
-            ArtifactActionModel(
-              id: "copy",
-              title: "Copiar",
-              systemImage: "doc.on.doc",
-              role: .secondary
-            )
-          ]
-        )
+  /// A question and the answer it produced, which is the unit a person actually
+  /// wants back. An assistant turn that only asked for a tool has no answer in
+  /// it and is skipped.
+  static func turns(in messages: [ChatMessage]) -> [(question: ChatMessage, answer: ChatMessage)] {
+    var turns: [(question: ChatMessage, answer: ChatMessage)] = []
+    var pending: ChatMessage?
+
+    for message in messages {
+      switch message.role {
+      case .user:
+        pending = message
+      case .assistant:
+        guard message.toolCalls == nil, !message.content.isEmpty else {
+          continue
+        }
+        if let question = pending {
+          turns.append((question, message))
+          pending = nil
+        }
+      default:
+        continue
+      }
+    }
+    return turns
+  }
+
+  static func cards(
+    for turns: [(question: ChatMessage, answer: ChatMessage)]
+  ) -> [ArtifactCardModel] {
+    turns.map { turn in
+      ArtifactCardModel(
+        // Keyed on the answer, because that is what the card is.
+        id: turn.answer.id,
+        kind: .answer,
+        title: Self.title(for: turn.question.content),
+        question: turn.question.content,
+        summary: turn.answer.content,
+        isExpanded: false,
+        actions: [
+          ArtifactActionModel(
+            id: "copy",
+            title: "Copiar",
+            systemImage: "doc.on.doc",
+            role: .secondary
+          )
+        ]
+      )
     }
   }
 
@@ -1254,19 +1279,18 @@ extension OverlayViewModel {
   /// the expansion state of cards the user had opened.
   var earlierTurnCount: Int {
     let shown = Set(artifacts.map(\.id))
-    return Self.shownMessages(in: conversation).filter { !shown.contains($0.id) }.count
+    return Self.turns(in: conversation).filter { !shown.contains($0.answer.id) }.count
   }
 
-  /// Brings back the previous page of turns, oldest-last.
+  /// Brings back the previous page of turns, oldest-last, all closed.
   func loadEarlierTurns() {
     let shown = Set(artifacts.map(\.id))
-    let hidden = Self.shownMessages(in: conversation).filter { !shown.contains($0.id) }
+    let hidden = Self.turns(in: conversation).filter { !shown.contains($0.answer.id) }
     guard !hidden.isEmpty else {
       return
     }
-    let page = Array(hidden.suffix(Self.artifactPageSize))
     artifacts.insert(
-      contentsOf: Self.cards(for: page, title: activeConversationTitle),
+      contentsOf: Self.cards(for: Array(hidden.suffix(Self.artifactPageSize))),
       at: 0
     )
     onLayoutInvalidated?()

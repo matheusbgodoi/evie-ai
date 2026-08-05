@@ -4,6 +4,15 @@ All notable changes to Evie are documented here. Dates use `YYYY-MM-DD`.
 
 ## [Unreleased]
 
+### Changed
+
+- One card per turn, not two. Your question is the card's title and its full text
+  waits inside, so the column reads as a list of what you asked rather than a
+  transcript of yourself.
+- Asking something new closes everything before it. Exactly one answer is open at
+  a time; the rest is a column of titles to scan and reopen deliberately. A card
+  still waiting on a decision stays open, because its buttons live in that state.
+
 ### Added
 
 - Evie can see. Attach a photo, a chart, a screenshot or a diagram and she
