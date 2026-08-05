@@ -4,6 +4,21 @@ All notable changes to Evie are documented here. Dates use `YYYY-MM-DD`.
 
 ## [Unreleased]
 
+### Added
+
+- Evie can move, rename, and trash files in the folders you authorised — off by
+  default, in Settings › O que ela sabe. She never does it herself: the tool she
+  calls only raises a card naming the exact file and the exact action, and the
+  change happens when you press the button. Deleting always means the Trash, a
+  move fails rather than overwriting anything, and the file's identity is
+  re-checked at the instant of the change, so an approval you gave for one file
+  is never spent on another.
+- And a switch to skip the button, for when asking every time is the annoying
+  part. It is narrow on purpose: it only applies when **your own message** asked
+  for a change, so a document telling her to delete something still stops at a
+  card you decline. Everything done that way is reported in the conversation
+  afterwards, and deleting is still the Trash.
+
 ### Changed
 
 - One card per turn, not two. Your question is the card's title and its full text

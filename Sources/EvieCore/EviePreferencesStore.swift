@@ -60,6 +60,8 @@ public struct EviePreferencesStore: Sendable {
       appearance: document.appearance ?? EvieAppearancePreferences(),
       shortcuts: document.shortcuts ?? EvieShortcutPreferences(),
       voice: document.voice ?? EvieVoicePreferences(),
+      fileChangesEnabled: document.fileChangesEnabled ?? false,
+      autoApproveChanges: document.autoApproveChanges ?? false,
       webSearchEnabled: document.webSearchEnabled ?? false
     )
 
@@ -90,6 +92,8 @@ public struct EviePreferencesStore: Sendable {
       appearance: preferences.appearance,
       shortcuts: preferences.shortcuts,
       voice: preferences.voice,
+      fileChangesEnabled: preferences.fileChangesEnabled,
+      autoApproveChanges: preferences.autoApproveChanges,
       webSearchEnabled: preferences.webSearchEnabled
     )
     let encoder = JSONEncoder()
@@ -154,6 +158,8 @@ extension EviePreferencesStore {
       case appearance
       case shortcuts
       case voice
+      case fileChangesEnabled = "file_changes_enabled"
+      case autoApproveChanges = "auto_approve_changes"
       case webSearchEnabled = "web_search_enabled"
     }
 
@@ -161,6 +167,8 @@ extension EviePreferencesStore {
     let appearance: EvieAppearancePreferences?
     let shortcuts: EvieShortcutPreferences?
     let voice: EvieVoicePreferences?
+    let fileChangesEnabled: Bool?
+    let autoApproveChanges: Bool?
     let webSearchEnabled: Bool?
   }
 }

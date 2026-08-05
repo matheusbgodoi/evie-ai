@@ -33,6 +33,14 @@ final class OverlayViewModel: ObservableObject {
   /// Whether web search is switched on, asked for at the start of every turn so
   /// turning it off takes effect on the next question.
   var isWebSearchEnabled: @MainActor () -> Bool = { false }
+  /// Whether she may suggest changing a file, and whether a suggestion happens
+  /// without a button. Both asked for per turn, so switching them off in Settings
+  /// applies to the next question rather than the next launch.
+  var fileChangePolicy: @MainActor () -> (offers: Bool, autoApproves: Bool) = {
+    (false, false)
+  }
+  /// Carries out a change the user approved, and reports what happened.
+  var onChangeApproved: (@MainActor (EvieFileChange) -> String)?
   /// What she has been allowed to remember. Asked for when a turn starts rather
   /// than held, so a memory deleted in Settings stops applying to the next
   /// question rather than to the next launch.
@@ -58,6 +66,8 @@ final class OverlayViewModel: ObservableObject {
   private var streamedResponse = ""
   private var pendingPrompt: String?
   private let documentReader = EvieDocumentReader()
+  /// Changes shown but not yet answered, so a button press knows what it means.
+  private var pendingChanges: [UUID: EvieFileChange] = [:]
   private let visionDescriber = EvieVisionDescriber()
   /// Ceiling on how much document text one turn may carry, so a long PDF cannot
   /// silently push the actual question out of the model's context.
@@ -567,6 +577,10 @@ final class OverlayViewModel: ObservableObject {
     // to be told so is a slower answer for nothing.
     let roots = grantedRoots()
     let web: (any EvieWebSearching)? = isWebSearchEnabled() ? EvieWebClient() : nil
+    let changePolicy = fileChangePolicy()
+    // Read from his own message, not from the model's decision: a proposal that
+    // came out of a document must still stop at a button.
+    let heAskedForAChange = EvieChangeIntent.isPresent(in: prompt)
 
     requestTask = Task { @MainActor [weak self] in
       do {
@@ -581,7 +595,7 @@ final class OverlayViewModel: ObservableObject {
         // Captured again, weakly, rather than reaching for the enclosing `self`:
         // the loop's callback is `@Sendable` and runs off this actor, so it may
         // not close over the outer closure's mutable binding.
-        let outcome = try await EvieAgentLoop(web: web).run(
+        let outcome = try await EvieAgentLoop(web: web, offersChanges: changePolicy.offers).run(
           messages: requestMessages,
           roots: roots,
           client: client
@@ -589,7 +603,12 @@ final class OverlayViewModel: ObservableObject {
           await self?.receiveDuringLoop(event, requestID: requestID)
         }
         try Task.checkCancellation()
-        self?.finishLoop(outcome, requestID: requestID, userMessage: userMessage)
+        self?.finishLoop(
+          outcome,
+          requestID: requestID,
+          userMessage: userMessage,
+          autoApproveChanges: changePolicy.autoApproves && heAskedForAChange
+        )
       } catch is CancellationError {
         self?.finishCancellation(requestID: requestID)
       } catch {
@@ -649,6 +668,21 @@ final class OverlayViewModel: ObservableObject {
 
   func performArtifactAction(_ id: UUID, action: ArtifactActionModel) {
     guard let artifact = artifacts.first(where: { $0.id == id }) else {
+      return
+    }
+
+    if action.id.hasPrefix("change-do:") {
+      artifacts.removeAll { $0.id == id }
+      if let change = pendingChanges[id] {
+        performChange(change, wasAutomatic: false)
+      }
+      return
+    }
+    if action.id.hasPrefix("change-skip:") {
+      artifacts.removeAll { $0.id == id }
+      pendingChanges[id] = nil
+      primaryText = "Não mexi em nada"
+      onLayoutInvalidated?()
       return
     }
 
@@ -895,6 +929,66 @@ extension OverlayViewModel {
     artifacts[index].source = provenance.note
   }
 
+  /// Puts a change on screen with two buttons and no default.
+  ///
+  /// The card says exactly what will happen to exactly which file, because an
+  /// approval is only meaningful if the thing approved was legible. It expires
+  /// on its own terms in the writer, so a card left on screen while the world
+  /// moved on cannot be honoured later.
+  fileprivate func presentChangeProposal(_ change: EvieFileChange) {
+    let rootName = grantedRoots().first { $0.id == change.rootID }?.displayName ?? "a pasta"
+    artifacts.append(
+      ArtifactCardModel(
+        id: change.id,
+        kind: .approval,
+        title: change.describe(rootName: rootName),
+        summary: change.detail(rootName: rootName),
+        isExpanded: true,
+        actions: [
+          ArtifactActionModel(
+            id: "change-do:\(change.id.uuidString)",
+            title: change.kind == .trash ? "Mandar para o Lixo" : "Fazer",
+            systemImage: change.kind == .trash ? "trash" : "checkmark",
+            role: .primary
+          ),
+          ArtifactActionModel(
+            id: "change-skip:\(change.id.uuidString)",
+            title: "Não",
+            systemImage: "xmark",
+            role: .secondary
+          ),
+        ]
+      )
+    )
+    pendingChanges[change.id] = change
+    onLayoutInvalidated?()
+  }
+
+  /// Carries it out and says what happened, whether a button was pressed or not.
+  ///
+  /// A change made automatically is reported exactly as loudly as one that was
+  /// approved. Convenience that hides what it did is how a person stops knowing
+  /// the state of their own disk.
+  fileprivate func performChange(_ change: EvieFileChange, wasAutomatic: Bool) {
+    pendingChanges[change.id] = nil
+    guard let onChangeApproved else {
+      return
+    }
+    let report = onChangeApproved(change)
+    artifacts.append(
+      ArtifactCardModel(
+        kind: .file,
+        title: wasAutomatic ? "Feito, sem te perguntar" : "Feito",
+        summary: wasAutomatic
+          ? report + "\n\nVocê pediu isso na sua mensagem, e a aprovação automática "
+            + "está ligada. Desligue em Configurações › O que ela sabe."
+          : report,
+        isExpanded: true
+      )
+    )
+    onLayoutInvalidated?()
+  }
+
   /// Puts "guardar isto?" on screen.
   ///
   /// A card rather than a dialog: a modal in the middle of reading an answer is
@@ -940,7 +1034,8 @@ extension OverlayViewModel {
   fileprivate func finishLoop(
     _ outcome: EvieAgentLoop.Outcome,
     requestID: UUID,
-    userMessage: ChatMessage
+    userMessage: ChatMessage,
+    autoApproveChanges: Bool = false
   ) {
     guard activeRequestID == requestID else {
       return
@@ -964,6 +1059,13 @@ extension OverlayViewModel {
     setProvenance(outcome.provenance, on: activeArtifactID)
     for proposal in outcome.memoryProposals {
       presentMemoryProposal(proposal)
+    }
+    for change in outcome.changeProposals {
+      if autoApproveChanges {
+        performChange(change, wasAutomatic: true)
+      } else {
+        presentChangeProposal(change)
+      }
     }
     onAnswerReady?(EvieRichText(answer))
     if conversation.count == 1 {

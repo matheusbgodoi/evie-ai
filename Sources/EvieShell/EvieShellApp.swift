@@ -263,9 +263,78 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
       return
     }
 
+    // Drives the whole change path against the running model over a throwaway
+    // folder: she proposes, the proposal is inspected, it is performed, and the
+    // file is checked afterwards. Nothing about this is asserted from the couch.
+    if CommandLine.arguments.contains("--change-check") {
+      Task { @MainActor in
+        await Self.runChangeCheck()
+        NSApp.terminate(nil)
+      }
+      return
+    }
+
     let coordinator = AppCoordinator()
     self.coordinator = coordinator
     coordinator.start()
+  }
+
+  static func runChangeCheck() async {
+    let directory = FileManager.default.temporaryDirectory
+      .appendingPathComponent("evie-change-check", isDirectory: true)
+    try? FileManager.default.removeItem(at: directory)
+    try? FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+    try? Data("rascunho velho\n".utf8)
+      .write(to: directory.appendingPathComponent("rascunho-antigo.txt"))
+    try? Data("importante\n".utf8)
+      .write(to: directory.appendingPathComponent("contrato.pdf.txt"))
+    defer { try? FileManager.default.removeItem(at: directory) }
+
+    let roots = [
+      EvieFileRoot(id: "chk00001", displayName: "Pasta de teste", path: directory.path)
+    ]
+    var capabilities = EvieCapabilitySnapshot.textOnly
+    capabilities.readsLocalFiles = true
+    let configuration = (try? EvieConfigurationLoader().load()) ?? EvieConfiguration()
+
+    let question = "manda o rascunho-antigo.txt pro lixo"
+    print("pergunta: \(question)")
+    print("a mensagem dele pede mudança: \(EvieChangeIntent.isPresent(in: question))")
+
+    do {
+      let outcome = try await EvieAgentLoop(offersChanges: true).run(
+        messages: [
+          ChatMessage(
+            role: .system,
+            content: EviePersona.evie.systemPrompt(capabilities: capabilities)
+          ),
+          ChatMessage(role: .user, content: question),
+        ],
+        roots: roots,
+        client: TurboFieldfareClient(configuration: configuration),
+        emit: { event in
+          if case .status(let message) = event { print("   · \(message)") }
+        }
+      )
+
+      guard let change = outcome.changeProposals.first else {
+        print("NÃO propôs mudança nenhuma. Resposta: \(outcome.answer.prefix(200))")
+        return
+      }
+      print("propôs: \(change.describe(rootName: "Pasta de teste"))")
+      print("  identidade capturada: \(change.precondition != nil)")
+      print("  arquivo ainda lá antes de aprovar: "
+        + "\(FileManager.default.fileExists(atPath: directory.appendingPathComponent("rascunho-antigo.txt").path))")
+
+      let receipt = try EvieFileWriter().perform(change, in: roots[0])
+      print("aprovado e feito: \(receipt.change.kind.rawValue)")
+      print("  arquivo sumiu da pasta: "
+        + "\(!FileManager.default.fileExists(atPath: directory.appendingPathComponent("rascunho-antigo.txt").path))")
+      print("  o outro arquivo continua: "
+        + "\(FileManager.default.fileExists(atPath: directory.appendingPathComponent("contrato.pdf.txt").path))")
+    } catch {
+      print("FALHOU: \((error as? LocalizedError)?.errorDescription ?? "\(error)")")
+    }
   }
 
   static func runWebQuestion(_ question: String) async {

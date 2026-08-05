@@ -15,6 +15,28 @@ final class EvieRootsViewModel: ObservableObject {
   /// Called whenever the set changes, so Evie's own idea of what she can reach
   /// changes with it rather than at the next launch.
   var onChange: (@MainActor ([EvieFileRoot]) -> Void)?
+  /// Reads and writes the two switches that decide whether she may change a file
+  /// at all, and whether a change needs a click. They live in preferences rather
+  /// than in the registry, but they belong on this screen: they are about the
+  /// same folders.
+  var canChangeFiles = false
+  var autoApprovesChanges = false
+  var onPolicyChanged: (@MainActor (_ canChange: Bool, _ autoApprove: Bool) -> Void)?
+
+  func setCanChangeFiles(_ enabled: Bool) {
+    canChangeFiles = enabled
+    if !enabled {
+      autoApprovesChanges = false
+    }
+    onPolicyChanged?(canChangeFiles, autoApprovesChanges)
+    objectWillChange.send()
+  }
+
+  func setAutoApprovesChanges(_ enabled: Bool) {
+    autoApprovesChanges = enabled
+    onPolicyChanged?(canChangeFiles, autoApprovesChanges)
+    objectWillChange.send()
+  }
 
   private let registry: EvieRootRegistry
 

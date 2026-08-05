@@ -9,6 +9,20 @@ public struct EviePreferences: Codable, Hashable, Sendable {
   public var appearance: EvieAppearancePreferences
   public var shortcuts: EvieShortcutPreferences
   public var voice: EvieVoicePreferences
+  /// Whether Evie may suggest changing a file.
+  ///
+  /// Off by default, because it is the first switch in this application that can
+  /// alter something outside her own settings. Even on, the tool she calls only
+  /// raises a card — the change happens when a button is pressed.
+  public var fileChangesEnabled: Bool
+  /// Whether a change she suggests happens without a button.
+  ///
+  /// The user asked for this so he would not have to approve things by hand. It
+  /// is narrow on purpose: it only applies when his own message asked for a
+  /// change, so a document telling her to delete something still produces a card
+  /// he declines. Deleting still means the Trash, and every change is reported
+  /// after the fact.
+  public var autoApproveChanges: Bool
   /// Whether Evie may search the web.
   ///
   /// Off by default, and it is the one switch in this application that changes
@@ -21,11 +35,15 @@ public struct EviePreferences: Codable, Hashable, Sendable {
     appearance: EvieAppearancePreferences = EvieAppearancePreferences(),
     shortcuts: EvieShortcutPreferences = EvieShortcutPreferences(),
     voice: EvieVoicePreferences = EvieVoicePreferences(),
+    fileChangesEnabled: Bool = false,
+    autoApproveChanges: Bool = false,
     webSearchEnabled: Bool = false
   ) {
     self.appearance = appearance
     self.shortcuts = shortcuts
     self.voice = voice
+    self.fileChangesEnabled = fileChangesEnabled
+    self.autoApproveChanges = autoApproveChanges
     self.webSearchEnabled = webSearchEnabled
   }
 
@@ -33,6 +51,8 @@ public struct EviePreferences: Codable, Hashable, Sendable {
     case appearance
     case shortcuts
     case voice
+    case fileChangesEnabled = "file_changes_enabled"
+    case autoApproveChanges = "auto_approve_changes"
     case webSearchEnabled = "web_search_enabled"
   }
 
@@ -49,8 +69,21 @@ public struct EviePreferences: Codable, Hashable, Sendable {
     voice =
       try container.decodeIfPresent(EvieVoicePreferences.self, forKey: .voice)
       ?? EvieVoicePreferences()
+    fileChangesEnabled =
+      try container.decodeIfPresent(Bool.self, forKey: .fileChangesEnabled) ?? false
+    autoApproveChanges =
+      try container.decodeIfPresent(Bool.self, forKey: .autoApproveChanges) ?? false
     webSearchEnabled =
       try container.decodeIfPresent(Bool.self, forKey: .webSearchEnabled) ?? false
+  }
+
+  /// Turning changes off must also clear the bypass, or the file keeps a switch
+  /// saying changes happen without asking while nothing can change at all.
+  public mutating func setFileChangesEnabled(_ enabled: Bool) {
+    fileChangesEnabled = enabled
+    if !enabled {
+      autoApproveChanges = false
+    }
   }
 
   public func validate() throws {

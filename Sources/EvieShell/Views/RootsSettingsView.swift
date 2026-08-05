@@ -86,6 +86,55 @@ struct RootsSettingsView: View {
       }
 
       Section {
+        Toggle(
+          "Deixar a Evie mexer nos arquivos",
+          isOn: Binding(
+            get: { viewModel.canChangeFiles },
+            set: { viewModel.setCanChangeFiles($0) }
+          )
+        )
+        Text(
+          viewModel.canChangeFiles
+            ? """
+              Ela pode sugerir mandar para o Lixo, renomear e mover, dentro das \
+              pastas autorizadas. Cada sugestão vira um cartão com o arquivo exato, \
+              e nada acontece até você clicar. Apagar sempre é o Lixo — ela não \
+              tem como apagar de vez.
+              """
+            : """
+              Desligado. Ela lê e só. Não existe ferramenta capaz de mover ou \
+              apagar nada, então nenhum documento e nenhuma página conseguem \
+              convencê-la a tentar.
+              """
+        )
+        .font(.footnote)
+        .foregroundStyle(.secondary)
+
+        Toggle(
+          "Fazer sem me perguntar",
+          isOn: Binding(
+            get: { viewModel.autoApprovesChanges },
+            set: { viewModel.setAutoApprovesChanges($0) }
+          )
+        )
+        .disabled(!viewModel.canChangeFiles)
+        Text(
+          viewModel.autoApprovesChanges
+            ? """
+              Ligado, e só vale quando a **sua mensagem** pedir para mexer em algo. \
+              Uma sugestão que apareceu sozinha — porque um arquivo ou uma página \
+              mandou — continua parando num cartão. Tudo que for feito assim aparece \
+              na conversa depois, e apagar continua sendo o Lixo.
+              """
+            : "Cada mudança espera um clique seu. É o padrão, e é o mais seguro."
+        )
+        .font(.footnote)
+        .foregroundStyle(.secondary)
+      } header: {
+        Text("Mexer nos arquivos")
+      }
+
+      Section {
         Button {
           viewModel.grant()
         } label: {

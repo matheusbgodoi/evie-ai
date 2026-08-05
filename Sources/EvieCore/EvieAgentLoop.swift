@@ -23,15 +23,20 @@ public struct EvieAgentLoop: Sendable {
   /// Set only when the user switched web search on. Absent means the tools are
   /// never offered, which is the truth rather than a refusal she has to explain.
   public var web: (any EvieWebSearching)?
+  /// Whether she may suggest changing a file. Off unless the user switched it on,
+  /// and even then the tool only ever raises a card.
+  public var offersChanges: Bool
   public var maximumIterations: Int
 
   public init(
     toolbox: EvieFileToolbox = EvieFileToolbox(),
     web: (any EvieWebSearching)? = nil,
+    offersChanges: Bool = false,
     maximumIterations: Int = EvieAgentLoop.maximumIterations
   ) {
     self.toolbox = toolbox
     self.web = web
+    self.offersChanges = offersChanges
     self.maximumIterations = maximumIterations
   }
 
@@ -52,6 +57,9 @@ public struct EvieAgentLoop: Sendable {
     /// Where the answer came from, worked out from what ran rather than from what
     /// she says she did.
     public var provenance = EvieAnswerProvenance()
+    /// Changes she asked to make. Nothing has happened: these are proposals, and
+    /// each one is a button the user has not pressed.
+    public var changeProposals: [EvieFileChange] = []
   }
 
   /// Runs the turn.
@@ -71,6 +79,7 @@ public struct EvieAgentLoop: Sendable {
     var appended: [ChatMessage] = []
     var toolCallCount = 0
     var memoryProposals: [String] = []
+    var changeProposals: [EvieFileChange] = []
     var toolNames: [String] = []
     var readAddresses: [String] = []
     // Memory is offered alongside the file tools, and is the only one of them
@@ -78,6 +87,9 @@ public struct EvieAgentLoop: Sendable {
     var tools = EvieFileToolbox.definitions + [EvieMemoryTool.definition]
     if web != nil {
       tools += EvieWebTool.definitions
+    }
+    if offersChanges, !roots.isEmpty {
+      tools.append(EvieChangeTool.definition)
     }
 
     // Looked up before the model is asked anything, so the order the user asked
@@ -125,7 +137,8 @@ public struct EvieAgentLoop: Sendable {
           toolCallCount: toolCallCount,
           exhausted: false,
           memoryProposals: memoryProposals,
-          provenance: .from(toolCalls: toolNames, readAddresses: readAddresses)
+          provenance: .from(toolCalls: toolNames, readAddresses: readAddresses),
+          changeProposals: changeProposals
         )
       }
 
@@ -144,6 +157,12 @@ public struct EvieAgentLoop: Sendable {
             readAddresses.append(address)
           }
           result = await Self.runWeb(webTool, call: call, using: web)
+        } else if offersChanges, call.name == EvieChangeTool.name {
+          let (outcome, proposal) = Self.recordChange(call, roots: roots, toolbox: toolbox)
+          result = outcome
+          if let proposal {
+            changeProposals.append(proposal)
+          }
         } else if call.name == EvieMemoryTool.name {
           let fact = ((try? call.arguments()) ?? [:])["fact"] ?? ""
           result = Self.acknowledgeMemory(call, fact: fact)
@@ -177,7 +196,8 @@ public struct EvieAgentLoop: Sendable {
       toolCallCount: toolCallCount,
       exhausted: true,
       memoryProposals: memoryProposals,
-      provenance: .from(toolCalls: toolNames, readAddresses: readAddresses)
+      provenance: .from(toolCalls: toolNames, readAddresses: readAddresses),
+      changeProposals: changeProposals
     )
   }
 }
@@ -313,6 +333,9 @@ extension EvieAgentLoop {
       if call.name == EvieMemoryTool.name {
         return "Anotando uma coisa para te perguntar…"
       }
+      if call.name == EvieChangeTool.name {
+        return "Preparando uma sugestão para você aprovar…"
+      }
       switch EvieWebTool(rawValue: call.name) {
       case .search:
         if let query = arguments["query"], !query.isEmpty {
@@ -381,6 +404,73 @@ extension EvieAgentLoop {
         name: call.name,
         content: (error as? LocalizedError)?.errorDescription ?? "A web não respondeu.",
         isFailure: true
+      )
+    }
+  }
+
+  /// Turns a change request into a card, and performs nothing.
+  ///
+  /// The file's identity is captured here rather than when the button is pressed,
+  /// because the approval is for the file as it is *now* — the one the user is
+  /// about to be shown. If it changes between the card appearing and the click,
+  /// the writer refuses.
+  fileprivate static func recordChange(
+    _ call: EvieToolCall,
+    roots: [EvieFileRoot],
+    toolbox: EvieFileToolbox
+  ) -> (EvieToolResult, EvieFileChange?) {
+    switch EvieChangeTool.proposal(from: call) {
+    case .failure(let reason):
+      return (
+        EvieToolResult(
+          callID: call.id, name: call.name, content: reason.message, isFailure: true
+        ),
+        nil
+      )
+
+    case .success(var change):
+      guard let root = roots.first(where: { $0.id == change.rootID }) else {
+        return (
+          EvieToolResult(
+            callID: call.id,
+            name: call.name,
+            content: """
+              Não existe pasta autorizada com o identificador \(change.rootID). \
+              Chame list_roots e use um de lá.
+              """,
+            isFailure: true
+          ),
+          nil
+        )
+      }
+      // Refused here rather than at the button, so the model learns immediately
+      // that the file is not reachable instead of the user discovering it.
+      guard
+        let precondition = try? EvieFileWriter().precondition(of: change, in: root)
+      else {
+        return (
+          EvieToolResult(
+            callID: call.id,
+            name: call.name,
+            content: "Não achei \(change.path) em \(root.displayName).",
+            isFailure: true
+          ),
+          nil
+        )
+      }
+      change.precondition = precondition
+
+      return (
+        EvieToolResult(
+          callID: call.id,
+          name: call.name,
+          content: """
+            Sugestão mostrada ao Matheus: \(change.describe(rootName: root.displayName)). \
+            NADA foi feito ainda — só acontece se ele confirmar na tela. Não diga \
+            que já fez.
+            """
+        ),
+        change
       )
     }
   }

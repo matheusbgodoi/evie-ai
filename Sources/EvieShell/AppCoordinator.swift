@@ -125,6 +125,28 @@ final class AppCoordinator: NSObject {
     viewModel.grantedRoots = { [rootsViewModel] in rootsViewModel.roots }
     viewModel.memories = { [memoryViewModel] in memoryViewModel.entries }
     viewModel.isWebSearchEnabled = { [weak self] in self?.preferences.webSearchEnabled ?? false }
+    viewModel.fileChangePolicy = { [weak self] in
+      guard let self else { return (false, false) }
+      return (preferences.fileChangesEnabled, preferences.autoApproveChanges)
+    }
+    viewModel.onChangeApproved = { [weak self] change in
+      guard let self,
+        let root = rootsViewModel.roots.first(where: { $0.id == change.rootID })
+      else {
+        return "Essa pasta não está mais autorizada, então não mexi em nada."
+      }
+      do {
+        let receipt = try EvieFileWriter().perform(change, in: root)
+        switch receipt.change.kind {
+        case .trash:
+          return "\(change.path) está no Lixo. Dá para recuperar de lá."
+        case .rename, .move:
+          return "\(change.path) agora é \(receipt.resultingPath ?? change.destination ?? "?")."
+        }
+      } catch {
+        return (error as? LocalizedError)?.errorDescription ?? "Não consegui fazer isso."
+      }
+    }
     speechOutput.setQualitySteps(preferences.voice.resolvedQualitySteps)
     viewModel.onMemoryDecided = { [weak self] fact, keep in
       guard let self, keep else { return }
@@ -134,6 +156,16 @@ final class AppCoordinator: NSObject {
       self?.viewModel.refreshSystemPrompt()
     }
     viewModel.refreshSystemPrompt()
+    rootsViewModel.canChangeFiles = preferences.fileChangesEnabled
+    rootsViewModel.autoApprovesChanges = preferences.autoApproveChanges
+    rootsViewModel.onPolicyChanged = { [weak self] canChange, autoApprove in
+      guard let self else { return }
+      var updated = preferences
+      updated.setFileChangesEnabled(canChange)
+      updated.autoApproveChanges = autoApprove && canChange
+      preferencesDidChange(updated)
+      try? preferencesStore.save(updated)
+    }
     rootsViewModel.onChange = { [weak self] roots in
       guard let self else { return }
       viewModel.applyCapabilities(
