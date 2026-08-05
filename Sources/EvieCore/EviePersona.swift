@@ -139,6 +139,27 @@ extension EviePersona {
       unavailable.append("responder falando")
     }
 
+    // The order matters more than any single capability, and it is stated before
+    // the capabilities so it frames them rather than trailing after.
+    if capabilities.readsLocalFiles || capabilities.searchesTheWeb {
+      var order: [String] = []
+      if capabilities.readsLocalFiles {
+        order.append("primeiro procure nas pastas e anotações dele")
+      }
+      if capabilities.searchesTheWeb {
+        order.append(
+          order.isEmpty ? "primeiro procure na web" : "depois procure na web"
+        )
+      }
+      order.append("só então responda do que você já sabe")
+      available.append(
+        "Ordem para responder qualquer pergunta de fato: " + order.joined(separator: ", ")
+          + ". E diga de onde veio: cite o arquivo quando vier das anotações dele, "
+          + "cite o endereço quando vier da web, e avise que pode conter erro quando "
+          + "vier só da sua memória. Não invente uma fonte que você não abriu."
+      )
+    }
+
     if capabilities.readsLocalFiles {
       available.append(
         "Você pode ler arquivos das pastas que \(creatorPreferredName) autorizou explicitamente. "

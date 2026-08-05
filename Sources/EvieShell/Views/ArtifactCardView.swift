@@ -133,6 +133,16 @@ struct ArtifactCardView: View {
           content
         }
 
+        // Where the answer came from. Derived from the tools that actually ran,
+        // so it cannot disagree with what happened, and kept out of the answer
+        // text so it is never spoken and never copied.
+        if let source = artifact.source, !isPrompt {
+          Label(source, systemImage: sourceSymbol(for: source))
+            .font(.system(size: 10))
+            .foregroundStyle(.secondary)
+            .labelStyle(.titleAndIcon)
+        }
+
         if artifact.isExpanded, !artifact.actions.isEmpty {
           actionBar
             .transition(.move(edge: .top).combined(with: .opacity))
@@ -275,6 +285,18 @@ struct ArtifactCardView: View {
         .accessibilityLabel(action.title)
       }
     }
+  }
+
+  /// A different mark for "I looked it up" and "I am going from memory", because
+  /// the second is the one worth noticing at a glance.
+  private func sourceSymbol(for source: String) -> String {
+    if source.contains("só o que eu já sabia") {
+      return "exclamationmark.circle"
+    }
+    if source.contains("web") {
+      return "globe"
+    }
+    return "folder"
   }
 
   private func iconButton(

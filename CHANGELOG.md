@@ -6,6 +6,16 @@ All notable changes to Evie are documented here. Dates use `YYYY-MM-DD`.
 
 ### Added
 
+- Every answer says where it came from, on a line under it. Your notes, the web
+  with the sites she actually opened, or — the one worth noticing — only what she
+  already knew, which comes with a warning that it may be wrong. The label is
+  worked out from the tools that actually ran, so it cannot disagree with what
+  happened: a model asked to report on itself will sometimes claim to have
+  checked your notes, and will more often forget to mention it was going from
+  memory.
+- She is told the order to answer in: your folders and notes first, then the web,
+  and only then her own knowledge.
+
 - Describe the voice you want in your own words — "feminina, jovem, grave,
   enérgica" — and the ready-made voices that fit rise to the top, one click to
   adopt. Those sixty voices are designed from attributes rather than copied from

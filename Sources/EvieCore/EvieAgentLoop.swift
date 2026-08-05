@@ -49,6 +49,9 @@ public struct EvieAgentLoop: Sendable {
     /// Memories she asked to keep. Nothing has been stored: these are proposals,
     /// and storing one is a click the user has not made yet.
     public var memoryProposals: [String] = []
+    /// Where the answer came from, worked out from what ran rather than from what
+    /// she says she did.
+    public var provenance = EvieAnswerProvenance()
   }
 
   /// Runs the turn.
@@ -68,6 +71,8 @@ public struct EvieAgentLoop: Sendable {
     var appended: [ChatMessage] = []
     var toolCallCount = 0
     var memoryProposals: [String] = []
+    var toolNames: [String] = []
+    var readAddresses: [String] = []
     // Memory is offered alongside the file tools, and is the only one of them
     // that is about her rather than about the disk. It still changes nothing.
     var tools = EvieFileToolbox.definitions + [EvieMemoryTool.definition]
@@ -96,7 +101,8 @@ public struct EvieAgentLoop: Sendable {
           answer: step.message.content,
           toolCallCount: toolCallCount,
           exhausted: false,
-          memoryProposals: memoryProposals
+          memoryProposals: memoryProposals,
+          provenance: .from(toolCalls: toolNames, readAddresses: readAddresses)
         )
       }
 
@@ -108,8 +114,12 @@ public struct EvieAgentLoop: Sendable {
         try Task.checkCancellation()
         await emit(.status(message: Self.describe(call)))
 
+        toolNames.append(call.name)
         let result: EvieToolResult
         if let web, let webTool = EvieWebTool(rawValue: call.name) {
+          if webTool == .read, let address = ((try? call.arguments()) ?? [:])["url"] {
+            readAddresses.append(address)
+          }
           result = await Self.runWeb(webTool, call: call, using: web)
         } else if call.name == EvieMemoryTool.name {
           let fact = ((try? call.arguments()) ?? [:])["fact"] ?? ""
@@ -143,7 +153,8 @@ public struct EvieAgentLoop: Sendable {
       answer: "",
       toolCallCount: toolCallCount,
       exhausted: true,
-      memoryProposals: memoryProposals
+      memoryProposals: memoryProposals,
+      provenance: .from(toolCalls: toolNames, readAddresses: readAddresses)
     )
   }
 }

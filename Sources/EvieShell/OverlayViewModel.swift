@@ -832,6 +832,7 @@ extension OverlayViewModel {
       }
 
       updateActiveArtifact(with: content)
+      setProvenance(EvieAnswerProvenance(), on: activeArtifactID)
       onAnswerReady?(EvieRichText(content))
       if conversation.count == 1 {
         activeConversationTitle = Self.title(for: userMessage.content)
@@ -878,6 +879,14 @@ extension OverlayViewModel {
     default:
       receive(event, requestID: requestID, userMessage: nil)
     }
+  }
+
+  /// Labels a card with where its answer came from.
+  fileprivate func setProvenance(_ provenance: EvieAnswerProvenance, on id: UUID?) {
+    guard let id, let index = artifacts.firstIndex(where: { $0.id == id }) else {
+      return
+    }
+    artifacts[index].source = provenance.note
   }
 
   /// Puts "guardar isto?" on screen.
@@ -943,6 +952,10 @@ extension OverlayViewModel {
     }
 
     updateActiveArtifact(with: answer)
+    // Set on the card rather than appended to the answer, so it is never spoken
+    // and never lands on the clipboard: it is a note about the answer, not part
+    // of it.
+    setProvenance(outcome.provenance, on: activeArtifactID)
     for proposal in outcome.memoryProposals {
       presentMemoryProposal(proposal)
     }

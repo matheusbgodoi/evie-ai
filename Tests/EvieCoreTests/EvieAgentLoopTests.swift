@@ -295,6 +295,74 @@ struct EvieAgentLoopTests {
     #expect(result.content.contains("recusei"))
   }
 
+  // MARK: - Where the answer came from
+
+  /// The label is derived from the record of the turn, not asked of the model,
+  /// so it cannot disagree with what actually happened.
+  @Test("a turn with no tools is labelled as memory")
+  func provenanceOfAPlainAnswer() async throws {
+    let client = ScriptedClient(turns: [.text("São 68.")])
+
+    let outcome = try await EvieAgentLoop().run(
+      messages: [ChatMessage(role: .user, content: "17 vezes 4?")],
+      roots: [],
+      client: client,
+      emit: { _ in }
+    )
+
+    #expect(outcome.provenance.usedOnlyItsOwnKnowledge)
+    #expect(outcome.provenance.note.contains("erro"))
+  }
+
+  @Test("a turn that read the folders is labelled as such")
+  func provenanceOfALocalAnswer() async throws {
+    let client = ScriptedClient(turns: [
+      .tools([
+        EvieToolCall(
+          id: "c1",
+          name: "search_content",
+          argumentsJSON: #"{"root_id":"r1","query":"cluemed"}"#
+        )
+      ]),
+      .text("Achei nas suas notas."),
+    ])
+
+    let outcome = try await EvieAgentLoop().run(
+      messages: [ChatMessage(role: .user, content: "o que tenho sobre a Cluemed?")],
+      roots: [EvieFileRoot(id: "r1", displayName: "Obsidian", path: "/tmp/nao-existe")],
+      client: client,
+      emit: { _ in }
+    )
+
+    #expect(outcome.provenance.usedLocalKnowledge)
+    #expect(!outcome.provenance.usedOnlyItsOwnKnowledge)
+  }
+
+  @Test("a turn that opened a page carries the address it opened")
+  func provenanceCarriesTheAddress() async throws {
+    let client = ScriptedClient(turns: [
+      .tools([
+        EvieToolCall(
+          id: "c1",
+          name: "read_page",
+          argumentsJSON: #"{"url":"https://exemplo.com/artigo"}"#
+        )
+      ]),
+      .text("Segundo a página…"),
+    ])
+
+    let outcome = try await EvieAgentLoop(web: StubWeb()).run(
+      messages: [ChatMessage(role: .user, content: "lê isso")],
+      roots: [],
+      client: client,
+      emit: { _ in }
+    )
+
+    #expect(outcome.provenance.usedWeb)
+    #expect(outcome.provenance.citedPages == ["https://exemplo.com/artigo"])
+    #expect(outcome.provenance.note.contains("exemplo.com"))
+  }
+
   // MARK: - What the user sees
 
   @Test("says what she is doing while a tool runs")
