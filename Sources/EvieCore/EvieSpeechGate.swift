@@ -21,22 +21,37 @@ public struct EvieSpeechGate: Sendable {
     case speechEnded
   }
 
-  /// How fast the floor follows the level down. Quick, so walking into a quiet
-  /// room is noticed within a second.
-  private static let floorFallRate: CGFloat = 0.30
-  /// And up. Very slow, so a person talking does not drag the floor up to their
-  /// own voice and silence themselves.
-  private static let floorRiseRate: CGFloat = 0.004
-  /// Speech has to clear the floor by at least this much. Prevents a dead-silent
-  /// microphone, where the floor is near zero, from hearing speech in noise.
-  private static let minimumSpeechMargin: CGFloat = 0.045
-  /// And proportionally, for a room where the floor is already high.
-  private static let speechMarginRatio: CGFloat = 1.4
+  /// Samples ignored when listening starts, while the meter climbs out of zero.
+  ///
+  /// Measured on this Mac: the published level takes about 0.6 s to reach the
+  /// room's real level, ramping 0.000 → 0.098 → 0.251 → 0.300. Anything read
+  /// before that describes the meter, not the room.
+  private static let settleSamples = 25
+  /// How much recent history the floor is estimated from. Long enough to contain
+  /// a gap between sentences, which is what makes the estimate a floor rather
+  /// than an average of whatever is being said.
+  private static let windowSamples = 200
+  /// Which point of that window is taken as the floor. Not the minimum: a single
+  /// dip — or the tail of the meter warming up — would drag it far below the
+  /// room and make the room itself read as speech, which is exactly what
+  /// happened. A low percentile is the quiet part of the window without being
+  /// the single quietest instant in it.
+  private static let floorPercentile = 0.2
+
+  /// Speech has to clear the floor by at least this much.
+  ///
+  /// Sized from the real range this meter produces rather than from theory. In
+  /// the measured trace the room sat between 0.26 and 0.45 while speech reached
+  /// 0.72, so a margin of a few hundredths — which is what was here — could not
+  /// tell them apart at all.
+  private static let minimumSpeechMargin: CGFloat = 0.11
+  /// And proportionally, so a louder room needs a louder voice.
+  private static let speechMarginRatio: CGFloat = 0.42
   /// Falling back to this much above the floor counts as stopped. Lower than the
   /// starting threshold on purpose: without that gap the gate chatters on every
   /// syllable.
-  private static let minimumSilenceMargin: CGFloat = 0.018
-  private static let silenceMarginRatio: CGFloat = 0.55
+  private static let minimumSilenceMargin: CGFloat = 0.045
+  private static let silenceMarginRatio: CGFloat = 0.17
 
   public var sampleInterval: Duration
   /// How much silence ends a turn. Long enough to survive a pause for breath,
@@ -45,9 +60,21 @@ public struct EvieSpeechGate: Sendable {
   /// How much speech must be heard before a turn can end. A cough, a chair, or a
   /// keystroke is not a turn, and ending on one submits nothing.
   public var minimumSpeech: Duration
+  /// After this much unbroken sound with no dip at all, the gate stops believing
+  /// its own floor.
+  ///
+  /// Nobody talks for ten seconds without a gap between words. When the level
+  /// never falls below the silence threshold for that long, the reading that is
+  /// wrong is the floor, not the speaker — so it is re-estimated from the
+  /// quietest moment actually observed and the turn starts over. Without this the
+  /// gate can latch: a floor that is too low keeps every sample above the
+  /// threshold, so nothing ever counts as a dip, so the floor is never corrected.
+  public var maximumUnbrokenSpeech: Duration
 
+  /// Recent levels, oldest first, bounded to `windowSamples`.
+  private var window: [CGFloat] = []
   private var floor: CGFloat = 0
-  private var hasSeenSample = false
+  private var samplesSeen = 0
   private var isSpeaking = false
   private var speechSamples = 0
   private var silentSamples = 0
@@ -56,11 +83,13 @@ public struct EvieSpeechGate: Sendable {
   public init(
     sampleInterval: Duration = .milliseconds(40),
     silenceToEndTurn: Duration = .milliseconds(900),
-    minimumSpeech: Duration = .milliseconds(280)
+    minimumSpeech: Duration = .milliseconds(280),
+    maximumUnbrokenSpeech: Duration = .seconds(6)
   ) {
     self.sampleInterval = sampleInterval
     self.silenceToEndTurn = silenceToEndTurn
     self.minimumSpeech = minimumSpeech
+    self.maximumUnbrokenSpeech = maximumUnbrokenSpeech
   }
 
   /// The level above which the gate considers someone to be talking, right now.
@@ -89,28 +118,35 @@ public struct EvieSpeechGate: Sendable {
   public mutating func absorb(level: CGFloat) -> Event {
     let level = max(0, level)
 
-    // Seeded from the first sample rather than from zero, so the gate does not
-    // spend its first second treating ordinary room noise as speech.
-    guard hasSeenSample else {
-      hasSeenSample = true
-      floor = level
+    // Exactly zero means the meter has no audio yet, not that the room is
+    // silent — no microphone reports a true zero once it is running. Letting
+    // those into the window dragged the floor below anything real and made the
+    // room itself read as speech.
+    guard level > 0 else {
+      return .none
+    }
+    samplesSeen += 1
+
+    // The settling samples are not merely ignored for deciding — they are kept
+    // out of the window entirely. They describe the meter climbing out of zero,
+    // and leaving them in dragged the estimated floor below the room, which is
+    // the whole failure this guards against.
+    guard samplesSeen > Self.settleSamples else {
+      return .none
+    }
+
+    window.append(level)
+    if window.count > Self.windowSamples {
+      window.removeFirst(window.count - Self.windowSamples)
+    }
+    floor = Self.percentile(of: window, at: Self.floorPercentile)
+
+    guard !hasEnded else {
       return .none
     }
 
     let start = speechThreshold
     let stop = silenceThreshold
-    // Tracked before the decision, and never while speech is in progress in the
-    // downward direction, so a long silence between words cannot pull the floor
-    // down to the point where the following word looks like a shout.
-    if level < floor {
-      floor += (level - floor) * Self.floorFallRate
-    } else if !isSpeaking {
-      floor += (level - floor) * Self.floorRiseRate
-    }
-
-    guard !hasEnded else {
-      return .none
-    }
 
     if isSpeaking {
       // Only voiced samples count towards "enough speech to be a turn".
@@ -119,6 +155,14 @@ public struct EvieSpeechGate: Sendable {
       guard level < stop else {
         speechSamples += 1
         silentSamples = 0
+        // Nobody talks this long without a gap between words. When it happens,
+        // what is wrong is the estimate, not the speaker — so the turn is
+        // abandoned rather than left latched forever.
+        if speechSamples >= samples(in: maximumUnbrokenSpeech) {
+          isSpeaking = false
+          speechSamples = 0
+          silentSamples = 0
+        }
         return .none
       }
 
@@ -149,13 +193,34 @@ public struct EvieSpeechGate: Sendable {
     return .none
   }
 
-  /// Forgets the turn but keeps the learned floor, because the room has not
-  /// changed between one question and the next.
+  /// The value at a given position of the sorted window.
+  static func percentile(of values: [CGFloat], at fraction: Double) -> CGFloat {
+    guard !values.isEmpty else {
+      return 0
+    }
+    let sorted = values.sorted()
+    let index = Int((Double(sorted.count - 1) * fraction).rounded())
+    return sorted[min(max(index, 0), sorted.count - 1)]
+  }
+
+  /// Starts a fresh turn.
+  ///
+  /// The settle-and-learn window runs again, because the level meter restarts
+  /// from zero every time the microphone is reopened — carrying the old floor
+  /// across while the meter climbs would drag it straight back down to nothing.
   public mutating func reset() {
     isSpeaking = false
     speechSamples = 0
     silentSamples = 0
     hasEnded = false
+    samplesSeen = 0
+    floor = 0
+    window.removeAll(keepingCapacity: true)
+  }
+
+  /// True once the room has been measured and the gate is able to decide.
+  public var isListening: Bool {
+    samplesSeen > Self.settleSamples
   }
 
   private func samples(in duration: Duration) -> Int {

@@ -766,3 +766,40 @@ previous day of building. Everything here came from that.
   why: retrieval answers "what did I write", memory answers "what did I tell her",
   and conflating them would mean writing to the vault.
 - Validation: `Scripts/test` 237/237 in 23 suites; release build; installed.
+
+## 2026-08-05 — QA-008: three bugs the user found in one session
+
+- **Preferences were being discarded on every launch.** Adding two fields to
+  `EvieVoicePreferences` made synthesised `Codable` demand keys that no existing
+  file had, so every file written before that release decoded as damaged — shown
+  to the user as "o arquivo de preferências estava corrompido". Fixed by decoding
+  every field with `decodeIfPresent` and a default: a missing field is an older
+  version, not corruption. A test now loads a real pre-change file.
+- **And a worse one it uncovered.** `clonedVoiceID` never decoded at all.
+  `convertToSnakeCase` writes `cloned_voice_id`; `convertFromSnakeCase` reads it
+  back as `clonedVoiceId`. The two are not inverses around an acronym, and
+  because the property is optional nothing ever failed — the chosen voice was
+  simply forgotten on every launch. Both strategies are gone; every key is named.
+  Shortcut names accept either spelling so files already on disk keep working.
+- **End of speech never fired, and the reason was not what the tests said.**
+  Instrumenting `--voice-check` to dump the real level trace settled it in one
+  run. Three compounding faults:
+  - The floor was seeded from the first published sample, which is zero, because
+    the meter starts at zero every time the microphone opens. Floor 0.000,
+    threshold 0.045, "speech" declared at 0.3 s in a quiet room.
+  - The floor could only rise while *not* speaking, so a bad seed latched
+    permanently and the turn could never end.
+  - The test scenarios were physically unreal. "Quiet speech at 0.11" is
+    -49 dBFS through this meter — quieter than any room. They were rewritten in
+    decibels against the meter's actual mapping, anchored to the measured trace:
+    a room sits near 0.3 and speech reaches 0.72.
+  The floor is now the 20th percentile of a six-second window, with the settling
+  samples kept out of it entirely, zero-valued samples rejected as "no audio
+  yet", and margins proportional to the room. Verified with the real microphone:
+  floor 0.287, threshold 0.408, and the turn ended — the thing that had never
+  happened.
+- **Eight settings tabs overflowed into a menu.** macOS folds a tab bar it cannot
+  fit, so each new pane had silently made every pane one click further away.
+  Reduced to five by grouping panes that answer the same question.
+- Validation: `Scripts/test` 243/243 in 24 suites; release build; installed; the
+  microphone check run three times against the real room.

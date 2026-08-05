@@ -3,6 +3,8 @@ import Foundation
 
 @MainActor
 final class ModelSettingsViewModel: ObservableObject {
+  /// Which pane of the Avançado tab is showing.
+  @Published var advancedPane = 0
   @Published var temperature: Double
   @Published var topP: Double
   @Published var usesDefaultTemperature: Bool

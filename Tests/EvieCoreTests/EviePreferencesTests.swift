@@ -226,6 +226,78 @@ struct EvieSpeaksAnswerTests {
   }
 }
 
+@Suite("Evie preferences survive their own history")
+struct EviePreferencesCompatibilityTests {
+  /// The bug this exists to prevent, in the exact shape it happened: a new
+  /// preference was added, synthesised `Codable` demanded the key, and every file
+  /// written before that release decoded as damaged — reported to the user as
+  /// corruption and replaced with defaults, losing their voice and their
+  /// settings.
+  @Test("a file written before a preference existed still loads")
+  func olderFileStillLoads() throws {
+    let older = """
+      {
+        "appearance": { "animates_logo": true, "overlay_width": 576 },
+        "schema_version": 1,
+        "shortcuts": {},
+        "voice": {
+          "call_mode_enabled": true,
+          "cloned_voice_id": "75cec5f0",
+          "push_to_talk_enabled": true,
+          "retains_raw_audio": false,
+          "speech_output_enabled": true,
+          "speech_rate": 0.5,
+          "voice_identifier": "com.apple.eloquence.pt-BR.Eddy",
+          "wake_phrase": "Ei, Evie",
+          "wake_word_enabled": false
+        }
+      }
+      """
+
+    let preferences = try JSONDecoder().decode(
+      EviePreferences.self,
+      from: Data(older.utf8)
+    )
+
+    // What the user had is preserved…
+    #expect(preferences.voice.clonedVoiceID == "75cec5f0")
+    #expect(preferences.voice.callModeEnabled)
+    #expect(preferences.voice.voiceIdentifier == "com.apple.eloquence.pt-BR.Eddy")
+    #expect(preferences.appearance.overlayWidth == 576)
+    // …and what did not exist yet takes its default.
+    #expect(!preferences.voice.speaksTypedAnswers)
+    #expect(preferences.voice.hiddenVoiceIdentifiers.isEmpty)
+  }
+
+  @Test("an almost empty file takes every default rather than failing")
+  func minimalFileLoads() throws {
+    let preferences = try JSONDecoder().decode(
+      EviePreferences.self,
+      from: Data(#"{"appearance":{},"shortcuts":{},"voice":{}}"#.utf8)
+    )
+
+    #expect(preferences.voice.wakePhrase == EvieVoicePreferences.defaultWakePhrase)
+    #expect(preferences.appearance.overlayWidth
+      == EvieAppearancePreferences.defaultOverlayWidth)
+  }
+
+  @Test("what is written today still reads today")
+  func currentRoundTrips() throws {
+    var voice = EvieVoicePreferences()
+    voice.speaksTypedAnswers = true
+    voice.hideVoice(identifier: "uma")
+    voice.clonedVoiceID = "abc"
+    let original = EviePreferences(voice: voice)
+
+    let decoded = try JSONDecoder().decode(
+      EviePreferences.self,
+      from: try JSONEncoder().encode(original)
+    )
+
+    #expect(decoded == original)
+  }
+}
+
 @Suite("Evie voice library")
 struct EvieVoiceLibraryTests {
   /// Removing a system voice must also stop it being the one that speaks.

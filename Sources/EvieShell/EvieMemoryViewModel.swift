@@ -13,6 +13,8 @@ final class EvieMemoryViewModel: ObservableObject {
   /// Things she asked to keep, still waiting on an answer.
   @Published private(set) var proposals: [Proposal] = []
   @Published private(set) var feedback: Feedback?
+  /// Which pane of the "O que ela sabe" tab is showing.
+  @Published var knowledgePane = 0
 
   /// Called whenever what she remembers changes, so her instructions are rebuilt
   /// before the next question rather than before the next launch.

@@ -423,8 +423,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     let capture = EvieAudioCapture()
     var peak: CGFloat = 0
+    // Every published level, so a gate that misbehaves can be read rather than
+    // guessed at. Theorising about this cost two wrong fixes.
+    var trace: [CGFloat] = []
     capture.onLevels = { levels in
       peak = max(peak, levels.max() ?? 0)
+      if let latest = levels.last {
+        trace.append(latest)
+      }
     }
 
     do {
@@ -433,10 +439,44 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
       report.append(
         "formato de entrada: \(Int(format.sampleRate)) Hz, \(format.channelCount) canal(is)"
       )
+      // The gate's decisions are recorded, not just the peak. A capture that
+      // reaches a healthy level and still never ends a turn is exactly the bug
+      // the user hit, and the peak alone cannot tell the two apart.
+      var ended = false
+      var endedAfter: Double = 0
+      let started = Date()
+      capture.detectsEndOfSpeech = true
+      capture.onSpeechStarted = {
+        report.append(String(format: "  fala detectada em %.1f s", Date().timeIntervalSince(started)))
+      }
+      capture.onEndOfSpeech = {
+        ended = true
+        endedAfter = Date().timeIntervalSince(started)
+      }
+
       try await capture.start()
       report.append("microfone aberto: sim")
-      try? await Task.sleep(for: .seconds(2))
-      report.append(String(format: "pico de nível em 2 s: %.3f", Double(peak)))
+      report.append("FALE ALGO AGORA, depois fique em silêncio.")
+      for _ in 0..<40 where !ended {
+        try? await Task.sleep(for: .milliseconds(250))
+      }
+      report.append(String(format: "pico de nível: %.3f", Double(peak)))
+      report.append(String(format: "piso de ruído aprendido: %.3f", Double(capture.noiseFloor)))
+      report.append(String(format: "limiar de fala: %.3f", Double(capture.speechThreshold)))
+      report.append(
+        ended
+          ? String(format: "FIM DE FALA: detectado em %.1f s", endedAfter)
+          : "FIM DE FALA: NÃO detectado em 10 s"
+      )
+      report.append("")
+      report.append("níveis publicados (um a cada 30 ms):")
+      for chunk in stride(from: 0, to: trace.count, by: 10) {
+        let slice = trace[chunk..<min(chunk + 10, trace.count)]
+        let stamp = String(format: "%5.1fs", Double(chunk) * 0.03)
+        report.append(
+          "  \(stamp)  " + slice.map { String(format: "%.3f", Double($0)) }.joined(separator: " ")
+        )
+      }
       capture.stop()
       report.append("microfone fechado: sim")
       report.append("RESULTADO: o caminho do áudio rodou inteiro sem derrubar o processo.")

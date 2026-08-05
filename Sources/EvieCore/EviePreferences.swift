@@ -88,6 +88,26 @@ public struct EvieAppearancePreferences: Codable, Hashable, Sendable {
     self.animatesLogo = animatesLogo
   }
 
+  enum CodingKeys: String, CodingKey {
+    case overlayWidth = "overlay_width"
+    case overlayOrigin = "overlay_origin"
+    case animatesLogo = "animates_logo"
+  }
+
+  /// Same reasoning as the voice preferences: a missing field is an older file,
+  /// not a damaged one.
+  public init(from decoder: any Decoder) throws {
+    let container = try decoder.container(keyedBy: CodingKeys.self)
+    let defaults = EvieAppearancePreferences()
+
+    overlayWidth =
+      try container.decodeIfPresent(CGFloat.self, forKey: .overlayWidth)
+      ?? defaults.overlayWidth
+    overlayOrigin = try container.decodeIfPresent(EvieOverlayOrigin.self, forKey: .overlayOrigin)
+    animatesLogo =
+      try container.decodeIfPresent(Bool.self, forKey: .animatesLogo) ?? defaults.animatesLogo
+  }
+
   /// The width actually used for layout, clamped so a damaged or hand-edited
   /// file can never render an unusable overlay.
   public var resolvedOverlayWidth: CGFloat {
@@ -182,6 +202,38 @@ public enum EvieShortcutAction: String, CaseIterable, Codable, Sendable {
     case .openSettings: EvieShortcut(keyCode: 43, modifiers: [.option, .shift])
     case .emergencyStop: EvieShortcut(keyCode: 53, modifiers: [.option, .shift])
     }
+  }
+
+  /// How the action is written in the preferences file.
+  ///
+  /// Snake case, because that is what every file already on disk contains — it
+  /// was produced by a key strategy that has since been removed for being
+  /// asymmetric. Reading accepts either spelling so no existing file loses its
+  /// bindings.
+  public var storageKey: String {
+    var key = ""
+    for character in rawValue {
+      if character.isUppercase {
+        key.append("_")
+        key.append(Character(character.lowercased()))
+      } else {
+        key.append(character)
+      }
+    }
+    return key
+  }
+
+  public init?(storageKey: String) {
+    if let action = EvieShortcutAction(rawValue: storageKey) {
+      self = action
+      return
+    }
+    guard
+      let action = EvieShortcutAction.allCases.first(where: { $0.storageKey == storageKey })
+    else {
+      return nil
+    }
+    self = action
   }
 
   /// Push-to-talk is the only action that reacts to key release as well, so the
@@ -299,7 +351,7 @@ extension EvieShortcutPreferences: Codable {
     self.init()
     let container = try decoder.container(keyedBy: ActionKey.self)
     for key in container.allKeys {
-      guard let action = EvieShortcutAction(rawValue: key.stringValue) else {
+      guard let action = EvieShortcutAction(storageKey: key.stringValue) else {
         continue
       }
       if try container.decodeNil(forKey: key) {
@@ -313,7 +365,7 @@ extension EvieShortcutPreferences: Codable {
   public func encode(to encoder: any Encoder) throws {
     var container = encoder.container(keyedBy: ActionKey.self)
     for action in EvieShortcutAction.allCases {
-      let key = ActionKey(stringValue: action.rawValue)
+      let key = ActionKey(stringValue: action.storageKey)
       if disabledActions.contains(action) {
         try container.encodeNil(forKey: key)
       } else if let shortcut = overrides[action] {
@@ -431,6 +483,69 @@ public struct EvieVoicePreferences: Codable, Hashable, Sendable {
       return false
     }
     return inCall || wasSpoken || speaksTypedAnswers
+  }
+
+  /// Written out by hand rather than left to `convertFromSnakeCase`.
+  ///
+  /// Foundation's two conversions are not inverses of each other around an
+  /// acronym: `clonedVoiceID` is written as `cloned_voice_id` and read back as
+  /// `clonedVoiceId`, which never matches. The property is optional, so nothing
+  /// failed — the chosen voice was simply forgotten on every launch, silently.
+  /// Naming the keys makes the mapping exact and takes the heuristic out of it.
+  enum CodingKeys: String, CodingKey {
+    case wakeWordEnabled = "wake_word_enabled"
+    case wakePhrase = "wake_phrase"
+    case pushToTalkEnabled = "push_to_talk_enabled"
+    case speechOutputEnabled = "speech_output_enabled"
+    case speaksTypedAnswers = "speaks_typed_answers"
+    case callModeEnabled = "call_mode_enabled"
+    case retainsRawAudio = "retains_raw_audio"
+    case voiceProfileAlias = "voice_profile_alias"
+    case voiceIdentifier = "voice_identifier"
+    case clonedVoiceID = "cloned_voice_id"
+    case hiddenVoiceIdentifiers = "hidden_voice_identifiers"
+    case speechRate = "speech_rate"
+  }
+
+  /// Decoded field by field, with every one optional.
+  ///
+  /// Synthesised `Codable` requires every non-optional property to be present,
+  /// so adding one preference made every file written before it undecodable —
+  /// which the store correctly reported as damaged, and which cost a user their
+  /// settings. A preferences file is a document that outlives the code that
+  /// wrote it: a missing field is an older version, not corruption, and the only
+  /// safe reading of one is the default.
+  public init(from decoder: any Decoder) throws {
+    let container = try decoder.container(keyedBy: CodingKeys.self)
+    let defaults = EvieVoicePreferences()
+
+    wakeWordEnabled =
+      try container.decodeIfPresent(Bool.self, forKey: .wakeWordEnabled)
+      ?? defaults.wakeWordEnabled
+    wakePhrase =
+      try container.decodeIfPresent(String.self, forKey: .wakePhrase) ?? defaults.wakePhrase
+    pushToTalkEnabled =
+      try container.decodeIfPresent(Bool.self, forKey: .pushToTalkEnabled)
+      ?? defaults.pushToTalkEnabled
+    speechOutputEnabled =
+      try container.decodeIfPresent(Bool.self, forKey: .speechOutputEnabled)
+      ?? defaults.speechOutputEnabled
+    speaksTypedAnswers =
+      try container.decodeIfPresent(Bool.self, forKey: .speaksTypedAnswers)
+      ?? defaults.speaksTypedAnswers
+    callModeEnabled =
+      try container.decodeIfPresent(Bool.self, forKey: .callModeEnabled)
+      ?? defaults.callModeEnabled
+    retainsRawAudio =
+      try container.decodeIfPresent(Bool.self, forKey: .retainsRawAudio)
+      ?? defaults.retainsRawAudio
+    voiceProfileAlias = try container.decodeIfPresent(String.self, forKey: .voiceProfileAlias)
+    voiceIdentifier = try container.decodeIfPresent(String.self, forKey: .voiceIdentifier)
+    clonedVoiceID = try container.decodeIfPresent(String.self, forKey: .clonedVoiceID)
+    hiddenVoiceIdentifiers =
+      try container.decodeIfPresent(Set<String>.self, forKey: .hiddenVoiceIdentifiers) ?? []
+    speechRate =
+      try container.decodeIfPresent(Double.self, forKey: .speechRate) ?? defaults.speechRate
   }
 
   /// Clamped so a hand-edited file cannot produce speech nobody can follow.

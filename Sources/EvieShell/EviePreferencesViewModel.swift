@@ -19,6 +19,9 @@ final class EviePreferencesViewModel: ObservableObject {
   /// Cloned voices offered by the local voice engine, empty when it is down.
   @Published private(set) var clonedVoices: [EvieClonedVoice] = []
   @Published private(set) var isVoiceEngineRunning = false
+  /// Which pane of the Voz tab is showing. Here rather than in the view because
+  /// this toolchain has no `@State`.
+  @Published var voicePane = 0
 
   private let store: EviePreferencesStore
   private let onTestVoice: @MainActor (String?, Double) -> Void

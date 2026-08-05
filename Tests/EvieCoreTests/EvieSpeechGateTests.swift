@@ -13,7 +13,8 @@ struct EvieSpeechGateTests {
     var gate = EvieSpeechGate()
     let events = run(
       &gate,
-      silence(0.04, seconds: 1) + speech(0.45, seconds: 2) + silence(0.04, seconds: 2)
+      silence(silentRoom, seconds: 2) + speech(ordinaryVoice, seconds: 2)
+        + silence(silentRoom, seconds: 2)
     )
 
     #expect(events.contains(.speechStarted))
@@ -27,7 +28,8 @@ struct EvieSpeechGateTests {
     var gate = EvieSpeechGate()
     let events = run(
       &gate,
-      silence(0.012, seconds: 1) + speech(0.11, seconds: 2) + silence(0.012, seconds: 2)
+      silence(silentRoom, seconds: 2) + speech(quietVoice, seconds: 2)
+        + silence(silentRoom, seconds: 2)
     )
 
     #expect(events.contains(.speechStarted))
@@ -39,7 +41,7 @@ struct EvieSpeechGateTests {
   @Test("a noisy room does not hear speech in its own noise")
   func noisyRoomAlone() {
     var gate = EvieSpeechGate()
-    let events = run(&gate, silence(0.14, seconds: 6))
+    let events = run(&gate, silence(noisyRoom, seconds: 8))
 
     #expect(!events.contains(.speechStarted))
     #expect(!events.contains(.speechEnded))
@@ -50,7 +52,8 @@ struct EvieSpeechGateTests {
     var gate = EvieSpeechGate()
     let events = run(
       &gate,
-      silence(0.14, seconds: 2) + speech(0.52, seconds: 2) + silence(0.14, seconds: 2)
+      silence(noisyRoom, seconds: 3) + speech(ordinaryVoice, seconds: 2)
+        + silence(noisyRoom, seconds: 3)
     )
 
     #expect(events.contains(.speechStarted))
@@ -64,11 +67,11 @@ struct EvieSpeechGateTests {
     var gate = EvieSpeechGate()
     let events = run(
       &gate,
-      silence(0.03, seconds: 1)
-        + speech(0.40, seconds: 1)
+      silence(silentRoom, seconds: 2)
+        + speech(ordinaryVoice, seconds: 1)
         // Shorter than the silence that ends a turn.
-        + silence(0.03, seconds: 0.5)
-        + speech(0.40, seconds: 1)
+        + silence(silentRoom, seconds: 0.5)
+        + speech(ordinaryVoice, seconds: 1)
     )
 
     #expect(events.filter { $0 == .speechStarted }.count == 1)
@@ -78,7 +81,7 @@ struct EvieSpeechGateTests {
   @Test("silence alone never ends a turn that never started")
   func silenceAlone() {
     var gate = EvieSpeechGate()
-    let events = run(&gate, silence(0.02, seconds: 8))
+    let events = run(&gate, silence(silentRoom, seconds: 8))
 
     #expect(events.isEmpty)
   }
@@ -90,7 +93,8 @@ struct EvieSpeechGateTests {
     var gate = EvieSpeechGate()
     let events = run(
       &gate,
-      silence(0.03, seconds: 1) + speech(0.6, seconds: 0.08) + silence(0.03, seconds: 3)
+      silence(silentRoom, seconds: 2) + speech(ordinaryVoice, seconds: 0.08)
+        + silence(silentRoom, seconds: 3)
     )
 
     #expect(!events.contains(.speechEnded))
@@ -103,11 +107,11 @@ struct EvieSpeechGateTests {
     var gate = EvieSpeechGate()
     let events = run(
       &gate,
-      silence(0.03, seconds: 1)
-        + speech(0.6, seconds: 0.08)
-        + silence(0.03, seconds: 2)
-        + speech(0.4, seconds: 1.5)
-        + silence(0.03, seconds: 2)
+      silence(silentRoom, seconds: 2)
+        + speech(ordinaryVoice, seconds: 0.08)
+        + silence(silentRoom, seconds: 2)
+        + speech(ordinaryVoice, seconds: 1.5)
+        + silence(silentRoom, seconds: 2)
     )
 
     #expect(events.contains(.speechEnded))
@@ -121,22 +125,67 @@ struct EvieSpeechGateTests {
     var gate = EvieSpeechGate()
     let events = run(
       &gate,
-      silence(0.03, seconds: 1) + speech(0.4, seconds: 1) + silence(0.03, seconds: 10)
+      silence(silentRoom, seconds: 2) + speech(ordinaryVoice, seconds: 1)
+        + silence(silentRoom, seconds: 10)
     )
 
     #expect(events.filter { $0 == .speechEnded }.count == 1)
   }
 
-  @Test("resetting allows the next turn without relearning the room")
-  func resetKeepsTheFloor() {
+  @Test("the room is measured, not guessed")
+  func learnsTheFloor() {
     var gate = EvieSpeechGate()
-    _ = run(&gate, silence(0.13, seconds: 3) + speech(0.5, seconds: 1) + silence(0.13, seconds: 2))
-    let learned = gate.noiseFloor
+    _ = run(&gate, silence(noisyRoom, seconds: 3))
+
+    #expect(gate.noiseFloor > 0.05, "não aprendeu o piso da sala: \(gate.noiseFloor)")
+    #expect(gate.isListening)
+  }
+
+  /// The bug the user hit, in the shape it happened. The level meter starts at
+  /// zero every time the microphone opens, so the first samples describe the
+  /// meter and not the room; seeding from them put the floor at zero, made
+  /// ambient noise read as speech immediately, and left the turn unable to end.
+  @Test("the meter climbing out of zero is not mistaken for silence")
+  func ignoresTheMeterWarmingUp() {
+    var gate = EvieSpeechGate()
+    // Exactly what the microphone produces: a ramp from zero up to room noise.
+    let ramp: [CGFloat] = (0..<10).map { CGFloat($0) * (noisyRoom / 10) }
+    let events = run(&gate, ramp + silence(noisyRoom, seconds: 8))
+
+    #expect(gate.noiseFloor > 0.05, "piso ficou em \(gate.noiseFloor)")
+    #expect(!events.contains(.speechStarted), "confundiu o ruído da sala com fala")
+  }
+
+  /// And the second half of the same bug: once the floor was wrong it could
+  /// never recover, because it was only allowed to rise while not speaking.
+  @Test("a floor seeded too low recovers instead of latching")
+  func recoversFromABadFloor() {
+    var gate = EvieSpeechGate()
+    let ramp: [CGFloat] = (0..<10).map { _ in 0.0 }
+    let events = run(&gate, ramp + silence(noisyRoom, seconds: 20))
+
+    // It does briefly mistake the room for speech — with a floor of zero it can
+    // do nothing else. What matters is that it recalibrates instead of latching,
+    // and never ends a turn, which would have submitted nothing.
+    #expect(!events.contains(.speechEnded))
+    #expect(gate.noiseFloor > 0.05, "não recuperou: \(gate.noiseFloor)")
+    #expect(!gate.isHearingSpeech, "ficou preso achando que é fala")
+  }
+
+  @Test("a fresh turn measures the room again")
+  func resetRelearns() {
+    var gate = EvieSpeechGate()
+    _ = run(&gate, silence(noisyRoom, seconds: 3) + speech(ordinaryVoice, seconds: 1)
+        + silence(noisyRoom, seconds: 3))
     gate.reset()
 
-    #expect(learned > 0.05, "não aprendeu o piso da sala: \(learned)")
+    #expect(!gate.isListening)
 
-    let events = run(&gate, speech(0.5, seconds: 1) + silence(0.13, seconds: 2))
+    let events = run(
+      &gate,
+      silence(noisyRoom, seconds: 2) + speech(ordinaryVoice, seconds: 1)
+        + silence(noisyRoom, seconds: 3)
+    )
     #expect(events.contains(.speechStarted))
     #expect(events.contains(.speechEnded))
   }
@@ -145,7 +194,7 @@ struct EvieSpeechGateTests {
   @Test("the threshold to stop is below the threshold to start")
   func hysteresis() {
     var gate = EvieSpeechGate()
-    _ = run(&gate, silence(0.05, seconds: 2))
+    _ = run(&gate, silence(silentRoom, seconds: 2))
 
     #expect(gate.silenceThreshold < gate.speechThreshold)
   }
@@ -154,9 +203,9 @@ struct EvieSpeechGateTests {
   func endsPromptly() {
     var gate = EvieSpeechGate()
     let interval = 0.04
-    var samples = silence(0.03, seconds: 1) + speech(0.4, seconds: 1)
+    var samples = silence(silentRoom, seconds: 2) + speech(ordinaryVoice, seconds: 1)
     let beforeSilence = samples.count
-    samples += silence(0.03, seconds: 3)
+    samples += silence(silentRoom, seconds: 3)
 
     var index = 0
     var endedAt: Int?
@@ -175,6 +224,24 @@ struct EvieSpeechGateTests {
 }
 
 extension EvieSpeechGateTests {
+  /// Levels as the real meter produces them.
+  ///
+  /// `EvieLevelMeter` maps decibels linearly from a -55 dBFS floor, so a level is
+  /// `1 + dBFS / 55`. Writing the scenarios in decibels keeps them anchored to
+  /// something physical: an earlier version of this suite invented "quiet speech"
+  /// at 0.11, which is -49 dBFS — quieter than most rooms, and a level no speaker
+  /// produces. Measured on this Mac, an ordinary room sits near 0.3 and speech
+  /// reaches 0.72, which is what these numbers reproduce.
+  fileprivate func level(dBFS: Double) -> CGFloat {
+    CGFloat(max(0, min(1, 1 + dBFS / 55)))
+  }
+
+  /// A silent room, a room with a fan, quiet speech, ordinary speech.
+  fileprivate var silentRoom: CGFloat { level(dBFS: -50) }
+  fileprivate var noisyRoom: CGFloat { level(dBFS: -38) }
+  fileprivate var quietVoice: CGFloat { level(dBFS: -30) }
+  fileprivate var ordinaryVoice: CGFloat { level(dBFS: -20) }
+
   /// Levels at the 40 ms publish interval the capture actually uses.
   fileprivate func samples(_ level: CGFloat, seconds: Double) -> [CGFloat] {
     Array(repeating: level, count: max(1, Int((seconds / 0.04).rounded())))

@@ -41,7 +41,9 @@ public struct EviePreferencesStore: Sendable {
     }
 
     let decoder = JSONDecoder()
-    decoder.keyDecodingStrategy = .convertFromSnakeCase
+    // No key strategy. `convertToSnakeCase` and `convertFromSnakeCase` are not
+    // inverses around an acronym — `clonedVoiceID` is written `cloned_voice_id`
+    // and read back as `clonedVoiceId` — so every type below names its keys.
 
     let document: PreferencesDocument
     do {
@@ -89,7 +91,6 @@ public struct EviePreferencesStore: Sendable {
       voice: preferences.voice
     )
     let encoder = JSONEncoder()
-    encoder.keyEncodingStrategy = .convertToSnakeCase
     encoder.outputFormatting = [.prettyPrinted, .sortedKeys, .withoutEscapingSlashes]
     var data = try encoder.encode(document)
     data.append(0x0A)
@@ -146,6 +147,13 @@ extension EviePreferencesStore {
   }
 
   fileprivate struct PreferencesDocument: Codable {
+    enum CodingKeys: String, CodingKey {
+      case schemaVersion = "schema_version"
+      case appearance
+      case shortcuts
+      case voice
+    }
+
     let schemaVersion: Int
     let appearance: EvieAppearancePreferences?
     let shortcuts: EvieShortcutPreferences?
