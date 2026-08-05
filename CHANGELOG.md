@@ -6,6 +6,13 @@ All notable changes to Evie are documented here. Dates use `YYYY-MM-DD`.
 
 ### Added
 
+- Describe the voice you want in your own words — "feminina, jovem, grave,
+  enérgica" — and the ready-made voices that fit rise to the top, one click to
+  adopt. Those sixty voices are designed from attributes rather than copied from
+  anybody, which is what makes them free to use. The description also says which
+  of your words it could not use, because the engine understands only gender,
+  age, pitch and style and silently drops the rest.
+
 - Evie can search the web, if you let her. Off by default, and it is the one
   switch in this application that changes what leaves your Mac — the setting says
   so instead of burying it. No account, no key, no quota. Verified end to end:

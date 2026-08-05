@@ -849,3 +849,26 @@ previous day of building. Everything here came from that.
   tells her to avoid. Worth watching, and the reason results are labelled as
   claims rather than facts.
 - Validation: `Scripts/test` 260/260 in 25 suites.
+
+## 2026-08-05 — VOI-021: a voice you like, without taking anyone's
+
+- The user found a voice he liked in a commercial voice library and asked whether
+  it could be downloaded and cloned locally. Declined: those terms forbid using
+  the output to build another voice model, and library voices are usually real
+  people who consented to that service and not to this one. Downloading the audio
+  as a reference is precisely what the clause covers.
+- What carries over is the description, so that is what was built. `EvieVoiceDesign`
+  reads a description in Portuguese and maps it to the engine's controlled
+  vocabulary. Measured first: the engine's own `/design/describe` recognises only
+  English tokens across Gender, Age, Pitch, Style and Accent, and drops everything
+  else without saying so — "confiante", "irreverente" and "com energia" all
+  matched nothing. The mapping lives in `EvieCore` where it can be read, and the
+  interface reports which words were ignored rather than letting a generic result
+  look like a misunderstanding of the voice.
+- The engine also ships sixty archetypes, and the field that matters is that they
+  carry `instruct` and `attrs` rather than a reference recording: they are
+  designed from attributes, not cloned from a person. Adopting one was verified
+  end to end and the test profile removed.
+- Also verified while checking: `--voices-check` still passes, and the user's five
+  profiles were untouched throughout.
+- Validation: `Scripts/test` 268/268 in 26 suites.

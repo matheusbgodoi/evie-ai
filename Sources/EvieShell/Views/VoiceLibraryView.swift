@@ -46,6 +46,55 @@ struct VoiceLibraryView: View {
       }
 
       Section {
+        TextField(
+          "Descreva a voz que você quer: \"feminina, jovem, grave, enérgica\"",
+          text: $viewModel.wantedVoice
+        )
+        if !viewModel.wantedVoice.isEmpty {
+          Text("Entendi: \(viewModel.design.summary)")
+            .font(.caption)
+            .foregroundStyle(.secondary)
+          if !viewModel.ignoredFromDescription.isEmpty {
+            Text(
+              "Ignorei: \(viewModel.ignoredFromDescription.joined(separator: ", ")) — "
+                + "o motor só entende gênero, idade, tom e estilo."
+            )
+            .font(.caption)
+            .foregroundStyle(.secondary)
+          }
+        }
+
+        ForEach(viewModel.suggestedArchetypes.prefix(8)) { archetype in
+          HStack(spacing: 10) {
+            VStack(alignment: .leading, spacing: 1) {
+              Text(archetype.name)
+              Text(archetype.instruction.isEmpty ? archetype.useCase : archetype.instruction)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .lineLimit(1)
+            }
+            Spacer()
+            Button("Usar esta") { viewModel.adopt(archetype) }
+              .buttonStyle(.borderless)
+              .disabled(viewModel.isBusy)
+          }
+          .padding(.vertical, 1)
+        }
+      } header: {
+        Text("Vozes prontas")
+      } footer: {
+        Text(
+          """
+          Estas vozes são desenhadas a partir de atributos, não copiadas de \
+          ninguém — por isso podem ser usadas à vontade. Descreva o que você \
+          gostou numa voz e a lista se ajusta.
+          """
+        )
+        .font(.footnote)
+        .foregroundStyle(.secondary)
+      }
+
+      Section {
         HStack {
           Button {
             viewModel.chooseAudio()
@@ -88,6 +137,11 @@ struct VoiceLibraryView: View {
           pessoa por cima. Escrever o que é dito na gravação é opcional: sem isso, \
           a primeira vez que ela falar com essa voz gasta uns vinte e três segundos \
           transcrevendo — uma única vez, mas no meio de uma conversa.
+
+          Use sua própria voz, a de alguém que autorizou, ou uma gravação de \
+          domínio público. Áudio de serviço comercial de voz não serve: os termos \
+          deles proíbem treinar outro modelo com aquilo, e a voz costuma ser de \
+          uma pessoa real que consentiu com aquele serviço e não com este.
           """
         )
         .font(.footnote)
