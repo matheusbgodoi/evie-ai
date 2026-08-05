@@ -4,14 +4,13 @@ Evie is a local-first personal AI assistant for macOS, pronounced **"ee-vee"**
 ("ívi"). It is intended to be available by voice or a global shortcut without
 behaving like a permanent chat window.
 
-The project now has its first **source-implemented vertical slice** and a bounded
-local development-runtime controller. A native menu-bar/overlay shell can send
-quick text to a separately managed TurboFieldfare server and stream Gemma's
-response into a glass result card. The controller pins and prepares that server
-and model outside Git; it is development tooling, not the future supervisor or a
-persistent background service. Target-Mac UI acceptance and the initial real
-inference smoke test are separate gates; the smoke test now passes, while manual
-shortcut/focus/visual acceptance remains with the user.
+The project now has two **source-implemented vertical slices** and a bounded local
+development-runtime controller. A native menu-bar/overlay shell opens ready for
+text, streams Gemma into glass result cards, supports continuous follow-ups, and
+stores visible sessions locally for a deliberate history window. Model sampling
+preferences have a native settings window. The controller pins and prepares the
+server/model outside Git; it is development tooling, not the future supervisor or
+a persistent background service. Target-Mac UI acceptance remains open.
 
 ## Product intent
 
@@ -43,12 +42,13 @@ the retrieval engine, and the TTS engine remain behind local adapters.
 
 ## Implemented now
 
-VS-001 contains:
+VS-001 and VS-002 contain:
 
 - a Swift 6 package with backend-neutral `EvieCore` contracts;
 - a loopback-only streaming client for TurboFieldfare Chat Completions;
 - a native SwiftUI/AppKit menu-bar utility and transparent floating `NSPanel`;
-- `Option-Space` summon/dismiss and `Option-Shift-Space` quick text;
+- launch-time focused input, `Option-Space` open/hide, and a secondary
+  `Option-Shift-Space` text shortcut;
 - native vibrancy, compact state pill, data-driven waveform component, and
   expandable artifact cards inspired by CLUI CC's interaction grammar;
 - cancellation and explicit unavailable/malformed-server states;
@@ -56,13 +56,25 @@ VS-001 contains:
   exist;
 - typed non-secret configuration with precedence `defaults < local JSON <
   environment`;
+- continuous multi-turn input with complete visible transcripts persisted in
+  user-only, schema-versioned per-conversation records;
+- deliberate native History and Settings windows with explicit history deletion
+  confirmation and live next-request sampling changes;
+- tested nominal read/propose/commit contracts whose opaque process-local authority
+  cannot be constructed from model/tool JSON; no actual tool executor is enabled;
+- a tested one-shot OmniVoice TTS adapter with private stdin transport,
+  process-group cancellation, supported-library offline-resolution flags, bounded
+  RIFF/WAVE validation, and best-effort temporary cleanup; it has no active UI,
+  playback, configured personal voice, network sandbox, or executable identity
+  pin yet;
 - a pinned `Scripts/evie-runtime` development workflow for setup, verification,
   explicit start/stop, health, synthetic inference smoke testing, and launch.
 
-The slice does not yet contain voice capture, STT/TTS, tools, web search, RAG,
-Hermes, supervisor lifecycle, automations, personal integrations, or persistent
-memory. See the [VS-001 implementation guide](docs/implementation/VS_001.md) for
-the exact boundary and deferred manual acceptance checklist.
+The slices do not yet contain voice capture/playback, STT, active TTS, tools, web
+search, RAG, Hermes, supervisor lifecycle, automations, personal integrations, or
+semantic memory. See the [VS-001 implementation guide](docs/implementation/VS_001.md)
+and [VS-002 guide](docs/implementation/VS_002.md) for exact boundaries and manual
+acceptance checklists.
 
 ## First local test workflow
 
@@ -121,13 +133,16 @@ No credential belongs in either example or the model configuration.
 - [Resource and standby budget](docs/RESOURCE_BUDGET.md)
 - [Interface and interaction model](docs/UI_UX.md)
 - [Voice architecture](docs/VOICE.md)
+- [Hermes integration direction](docs/HERMES.md)
 - [RAG design](docs/RAG.md)
+- [Web-search design](docs/WEB_SEARCH.md)
 - [Automation design](docs/AUTOMATIONS.md)
 - [Security model](docs/SECURITY.md)
 - [Testing and evaluation](evals/README.md)
 - [Agent handoff protocol](docs/HANDOFF.md)
 - [Implementation task ledger](docs/implementation/TASKS.md)
 - [VS-001 implementation and run guide](docs/implementation/VS_001.md)
+- [VS-002 conversation/history/settings guide](docs/implementation/VS_002.md)
 - [Work log](docs/WORKLOG.md)
 - [Decision records](docs/adr/README.md)
 - [Research sources](docs/RESEARCH_SOURCES.md)
@@ -138,8 +153,8 @@ This repository contains source code, documentation, schemas, sanitized workflow
 definitions, and configuration examples. Runtime state and private data must stay
 outside Git. The current development layout uses
 `~/Library/Application Support/Evie/` for the pinned runtime, model,
-configuration, and process state, plus `~/Library/Logs/Evie/` for the local server
-log. Private/runtime material includes:
+  configuration, conversation history, and process state, plus
+  `~/Library/Logs/Evie/` for the local server log. Private/runtime material includes:
 
 - OAuth tokens and API credentials;
 - WhatsApp session material;
@@ -154,7 +169,8 @@ integration.
 ## Status
 
 VS-001 and the local runtime/configuration tooling are implemented at source
-level. The pinned TurboFieldfare runtime, verified Gemma installation, 64K server,
-synthetic inference, and native process launch have passed on the target Mac. The
-user's shortcut/focus/visual acceptance, Phase 1 benchmark matrix, and Phase 2
+level; VS-002 adds continuous text, visible local history, and model settings. The
+pinned TurboFieldfare runtime, verified Gemma installation, 64K server, synthetic
+inference, and native process launch have passed on the target Mac. The updated
+shortcut/focus/history/settings acceptance, Phase 1 benchmark matrix, and Phase 2
 supervisor/lifecycle gates remain open.

@@ -15,6 +15,10 @@ struct OverlayRootView: View {
   var onToggleArtifact: ((UUID) -> Void)? = nil
   var onDismissArtifact: ((UUID) -> Void)? = nil
   var onArtifactAction: ((UUID, ArtifactActionModel) -> Void)? = nil
+  var quickText: Binding<String>? = nil
+  var quickTextEndpointDescription: String? = nil
+  var onSubmitQuickText: (() -> Void)? = nil
+  var onCancelQuickText: (() -> Void)? = nil
 
   @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
@@ -24,6 +28,32 @@ struct OverlayRootView: View {
 
       artifactStack
 
+      bottomSurface
+    }
+    .frame(maxWidth: 540, maxHeight: .infinity, alignment: .bottom)
+    .padding(18)
+    .animation(
+      reduceMotion ? nil : .snappy(duration: 0.32, extraBounce: 0.05),
+      value: artifacts.map(\.id)
+    )
+    .animation(reduceMotion ? nil : .smooth(duration: 0.2), value: state)
+  }
+
+  @ViewBuilder
+  private var bottomSurface: some View {
+    if let quickText,
+      let quickTextEndpointDescription,
+      let onSubmitQuickText,
+      let onCancelQuickText
+    {
+      QuickTextEntryView(
+        text: quickText,
+        endpointDescription: quickTextEndpointDescription,
+        onSubmit: onSubmitQuickText,
+        onCancel: onCancelQuickText
+      )
+      .transition(.move(edge: .bottom).combined(with: .opacity))
+    } else {
       CommandCapsule(
         state: state,
         primaryText: primaryText,
@@ -34,14 +64,8 @@ struct OverlayRootView: View {
         onCancel: onCancel,
         onOpenDetails: onOpenDetails
       )
+      .transition(.opacity)
     }
-    .frame(maxWidth: 540, maxHeight: .infinity, alignment: .bottom)
-    .padding(18)
-    .animation(
-      reduceMotion ? nil : .snappy(duration: 0.32, extraBounce: 0.05),
-      value: artifacts.map(\.id)
-    )
-    .animation(reduceMotion ? nil : .smooth(duration: 0.2), value: state)
   }
 
   @ViewBuilder

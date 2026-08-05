@@ -1,6 +1,6 @@
 # Local RAG design
 
-Status: proposed.
+Status: implementation direction researched; benchmark/ADR still required.
 
 ## Purpose
 
@@ -60,6 +60,20 @@ and reranking, and an existing Hermes skill.
 
 Tradeoff: its documented warm daemon is around 2 GB and cold model initialization
 can be noticeable. It can run on demand first.
+
+The current candidate pin is QMD `v2.5.3`, dereferenced commit
+`53232770867ccb16538c2c6034e7d891dffc9ce3`. Evie should wrap its library behind an
+`evie-rag` worker with an explicit database path and close it after roughly 60–120
+seconds idle. Do not expose raw QMD MCP or its configuration `update` command to the
+agent: the wrapper must enforce collection isolation and no arbitrary shell/config
+surface.
+
+Start with normalized immutable Markdown staging and keyword/BM25 citations. Then
+add hybrid retrieval with query expansion plus embeddings and no reranker. The
+first embedding baseline is multilingual EmbeddingGemma 300M Q8; compare it with
+Qwen3-Embedding-0.6B only if the extra memory improves PT-BR retrieval. Add QMD's
+larger reranker only after measured precision/recall/MRR and citation gains justify
+its cold latency and resident memory.
 
 ### Lightweight custom option
 

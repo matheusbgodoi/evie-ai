@@ -12,3 +12,5 @@ supersede rather than silently rewrite them when the decision changes.
 | [0005](0005-node-red-workflow-plane.md) | Node-RED as visual deterministic workflow plane | Accepted for planning |
 | [0006](0006-direct-turbo-vertical-slice.md) | Backend-neutral core with direct TurboFieldfare prototype adapter | Accepted for VS-001 |
 | [0007](0007-local-development-runtime.md) | Pinned local development runtime outside Git | Accepted for first-test development |
+| [0008](0008-local-conversation-history.md) | Local visible conversation history before Hermes | Accepted for native-shell prototype |
+| [0009](0009-nominal-capability-authority.md) | Nominal read/propose/commit with process-local authority | Accepted for policy-broker foundation |

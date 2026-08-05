@@ -38,6 +38,16 @@ checks exact target, revision, scope, approval, idempotency, and audit metadata.
 Separate tools and credentials should enforce these levels. A prompt saying "ask
 before sending" is insufficient.
 
+`CORE-005` now encodes these levels as nominal Swift types. Serializable read and
+proposal values may carry untrusted model/tool data, but commit authority has no
+public initializer or serialization conformance and is emitted only by an internal
+factory after lifetime, revision, binding, and approval-evidence checks. Delete is
+always classified destructive and rejects standing-policy evidence. This is a
+tested contract only: serialized metadata also has hard byte/count/depth/node and
+15-minute lifetime ceilings. No executor, filesystem access, integration, or
+approval UI is enabled yet, and the future broker must independently derive
+trust/evidence.
+
 ## Default confirmation policy
 
 Always confirm initially:
@@ -77,14 +87,21 @@ tools must not inherit Accessibility.
 Avoid Full Disk Access. Use user-selected roots/bookmarks or an explicit local
 allowlist. Consider a separate macOS user for high-risk autonomous experiments.
 
-### VS-001 boundary
+### VS-001/VS-002 boundary
 
-The first native executable has no account, filesystem, Accessibility, microphone,
-automation, or tool capability. Its direct TurboFieldfare adapter rejects
-non-loopback hosts, sends no credential, logs no prompt/result body, and retains
-conversation text only in process memory. The system prompt accurately describes
-those limitations, but remains presentation guidance rather than a security
-boundary.
+The native executable has no account, filesystem, Accessibility, microphone,
+automation, web-search, RAG, or tool capability. Its direct TurboFieldfare adapter
+rejects non-loopback hosts, sends no credential, and logs no prompt/result body.
+VS-002 persists only visible conversation history under Application Support using
+an actor-isolated, schema-versioned, per-record store. The directory is mode
+`0700`, records are `0600`, writes replace atomically, and hidden system/developer
+messages never enter the record. The system prompt accurately describes these
+limitations, but remains presentation guidance rather than a security boundary.
+
+History deletion requires a deliberate window and confirmation. This is separate
+from future filesystem tools: user-file deletion must always use an approved,
+recoverable Trash operation and must never expose a model-callable permanent
+delete primitive.
 
 The loopback server itself has no authentication or TLS and must never be exposed
 through a proxy, tunnel, wildcard bind, or remote interface. Future tools cannot be
@@ -158,11 +175,21 @@ addresses.
 User-facing history and low-level diagnostic logs have separate retention and
 redaction policies.
 
+Conversation JSON is user-facing private state, not a diagnostic log. No worklog,
+crash report, test fixture, RAG index, or audit event may copy its message bodies.
+The future supervisor must become its single writer before more than one process
+can access it.
+
 The current TurboFieldfare development log is local operational output and is not
 committed. Evie's smoke prompts are fixed synthetic strings. Verification and
 handoff output must record only status/metrics—not model assets, personal prompt
 bodies, or the full local configuration. Rotation and purge remain `OPS-003`; the
 development controller does not claim production log management.
+
+The source-only OmniVoice adapter passes offline-resolution flags only to supported
+libraries; it does not sandbox a configured executable from the network. Treat that
+executable as trusted local code and do not activate TTS until its identity/version
+and model manifest are pinned, outputs are supervised, and orphan cleanup exists.
 
 ## Update and dependency policy
 

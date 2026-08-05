@@ -25,6 +25,10 @@ documentation for capability discovery. Revalidate unstable claims before coding
 - [64K local-model requirement](https://hermes-agent.nousresearch.com/docs/getting-started/quickstart)
 - [Local/custom model providers](https://hermes-agent.nousresearch.com/docs/integrations/providers)
 - [Tools and toolsets](https://hermes-agent.nousresearch.com/docs/user-guide/features/tools/)
+- [Local API and session events](https://hermes-agent.nousresearch.com/docs/user-guide/features/api-server/)
+- [Toolset reference](https://hermes-agent.nousresearch.com/docs/reference/toolsets-reference)
+- [MCP integration](https://hermes-agent.nousresearch.com/docs/user-guide/features/mcp/)
+- [Memory controls](https://hermes-agent.nousresearch.com/docs/user-guide/features/memory/)
 - [Tool Search progressive disclosure](https://hermes-agent.nousresearch.com/docs/user-guide/features/tool-search)
 - [Context compression and caching](https://hermes-agent.nousresearch.com/docs/developer-guide/context-compression-and-caching/)
 - [Profiles](https://hermes-agent.nousresearch.com/docs/user-guide/profiles/)
@@ -38,6 +42,16 @@ documentation for capability discovery. Revalidate unstable claims before coding
 ## Voice
 
 - [OmniVoice repository and CLI/Python examples](https://github.com/k2-fsa/OmniVoice)
+- [OmniVoice model card](https://huggingface.co/k2-fsa/OmniVoice)
+- [MLX Whisper](https://github.com/ml-explore/mlx-examples/tree/main/whisper)
+- [Whisper large-v3-turbo model card](https://huggingface.co/openai/whisper-large-v3-turbo)
+- [FluidAudio](https://github.com/FluidInference/FluidAudio)
+- [FluidAudio speaker management](https://raw.githubusercontent.com/FluidInference/FluidAudio/main/Documentation/Diarization/SpeakerManager.md)
+- [FluidAudio Core ML speaker model](https://huggingface.co/FluidInference/speaker-diarization-coreml)
+- [Silero VAD](https://github.com/snakers4/silero-vad)
+- [Apple Create ML sound classifier](https://developer.apple.com/documentation/CreateML/MLSoundClassifier)
+- [Apple microphone permission](https://developer.apple.com/documentation/avfoundation/requesting-authorization-to-capture-and-save-media)
+- [openWakeWord](https://github.com/dscripka/openWakeWord)
 - [LiveKit WakeWord](https://github.com/livekit/livekit-wakeword)
 - [sherpa-onnx keyword spotting](https://k2-fsa.github.io/sherpa/onnx/kws/index.html)
 - [Apple Sound Analysis](https://developer.apple.com/documentation/soundanalysis/)
@@ -76,6 +90,17 @@ documentation for capability discovery. Revalidate unstable claims before coding
 - [Running Node-RED locally](https://nodered.org/docs/getting-started/local)
 - [Node-RED flow workspace](https://nodered.org/docs/user-guide/editor/workspace/flows)
 - [Node-RED Admin API types](https://nodered.org/docs/api/admin/types)
+
+## Retrieval and web search
+
+- [QMD repository](https://github.com/tobi/qmd)
+- [EmbeddingGemma 300M](https://huggingface.co/google/embeddinggemma-300m)
+- [Qwen3 Embedding 0.6B](https://huggingface.co/Qwen/Qwen3-Embedding-0.6B)
+- [node-llama-cpp](https://github.com/withcatai/node-llama-cpp)
+- [sqlite-vec](https://github.com/asg017/sqlite-vec)
+- [SQLite copyright/license](https://www.sqlite.org/copyright.html)
+- [DDGS repository](https://github.com/deedy5/ddgs)
+- [SearXNG documentation](https://docs.searxng.org/)
 
 ## Model candidates
 

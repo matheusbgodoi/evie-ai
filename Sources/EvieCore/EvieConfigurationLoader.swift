@@ -18,7 +18,7 @@ public struct EvieConfigurationLoader: Sendable {
     environment: [String: String] = ProcessInfo.processInfo.environment
   ) throws -> EvieConfiguration {
     var configuration = EvieConfiguration()
-    let selectedFileURL = try configurationFileURL(environment: environment)
+    let selectedFileURL = try resolvedFileURL(environment: environment)
 
     if FileManager.default.fileExists(atPath: selectedFileURL.path) {
       let file = try decodeFile(at: selectedFileURL)
@@ -28,6 +28,14 @@ public struct EvieConfigurationLoader: Sendable {
     try apply(environment: environment, to: &configuration)
     try configuration.validate()
     return configuration
+  }
+
+  /// Resolves the local file selected by `EVIE_CONFIG_FILE` without reading it.
+  /// Settings writers use this to update the same source that the loader reads.
+  public func resolvedFileURL(
+    environment: [String: String] = ProcessInfo.processInfo.environment
+  ) throws -> URL {
+    try configurationFileURL(environment: environment)
   }
 
   public static var defaultFileURL: URL {

@@ -6,25 +6,36 @@ import Foundation
 final class OverlayViewModel: ObservableObject {
   @Published var visualState: EvieVisualState = .ready
   @Published var primaryText = "Evie está pronta"
-  @Published var secondaryText: String? = "⇧⌥Espaço para digitar"
+  @Published var secondaryText: String? = "⌥Espaço para conversar"
   @Published var waveformSamples: [CGFloat] = []
   @Published var artifacts: [ArtifactCardModel] = []
   @Published var isQuickTextEntryPresented = false
   @Published var quickText = ""
+  @Published private(set) var activeConversationID = UUID()
+  @Published private(set) var activeConversationTitle = "Nova conversa"
 
   var onLayoutInvalidated: (@MainActor () -> Void)?
   var onDismissRequested: (@MainActor () -> Void)?
 
-  private let agentClient: any AgentClient
+  private var agentClient: any AgentClient
+  private let conversationStore: EvieConversationStore
   private var conversation: [ChatMessage]
+  private var conversationCreatedAt = Date()
   private var interactionState = EvieInteractionState()
   private var requestTask: Task<Void, Never>?
+  private var persistenceTask: Task<Void, Never>?
+  private var conversationGeneration: UInt64 = 0
   private var activeRequestID: UUID?
   private var activeArtifactID: UUID?
   private var streamedResponse = ""
+  private var pendingPrompt: String?
 
-  init(agentClient: any AgentClient) {
+  init(
+    agentClient: any AgentClient,
+    conversationStore: EvieConversationStore = EvieConversationStore()
+  ) {
     self.agentClient = agentClient
+    self.conversationStore = conversationStore
     conversation = [
       ChatMessage(role: .system, content: Self.systemPrompt)
     ]
@@ -41,6 +52,114 @@ final class OverlayViewModel: ObservableObject {
       "\(configuration.endpoint.host ?? "127.0.0.1"):\(configuration.endpoint.port ?? defaultPort)"
   }
 
+  var configuration: EvieConfiguration {
+    agentClient.configuration
+  }
+
+  func applyConfiguration(_ configuration: EvieConfiguration) {
+    agentClient = TurboFieldfareClient(configuration: configuration)
+    secondaryText = "Novos ajustes serão usados na próxima pergunta"
+    onLayoutInvalidated?()
+  }
+
+  func startNewConversation() {
+    if hasActiveRequest {
+      cancelCurrentInteraction()
+    }
+
+    conversationGeneration &+= 1
+    activeConversationID = UUID()
+    activeConversationTitle = "Nova conversa"
+    conversationCreatedAt = Date()
+    conversation = [ChatMessage(role: .system, content: Self.systemPrompt)]
+    artifacts = []
+    visualState = .ready
+    primaryText = "Nova conversa"
+    secondaryText = "O histórico anterior continua salvo somente neste Mac"
+    quickText = ""
+    pendingPrompt = nil
+    isQuickTextEntryPresented = true
+    onLayoutInvalidated?()
+  }
+
+  @discardableResult
+  func openConversation(id: UUID) async -> Bool {
+    if hasActiveRequest {
+      cancelCurrentInteraction()
+    }
+    conversationGeneration &+= 1
+    let requestedGeneration = conversationGeneration
+
+    do {
+      let stored = try await conversationStore.load(id: id)
+      guard conversationGeneration == requestedGeneration else {
+        return false
+      }
+      activeConversationID = stored.id
+      activeConversationTitle = stored.title
+      conversationCreatedAt = stored.createdAt
+      conversation =
+        [ChatMessage(role: .system, content: Self.systemPrompt)]
+        + stored.messages
+      artifacts = stored.messages
+        .filter { $0.role == .assistant }
+        .suffix(8)
+        .map { message in
+          ArtifactCardModel(
+            id: message.id,
+            kind: .answer,
+            title: stored.title,
+            summary: message.content,
+            source: "Histórico local",
+            isExpanded: false,
+            actions: [
+              ArtifactActionModel(
+                id: "copy",
+                title: "Copiar",
+                systemImage: "doc.on.doc",
+                role: .secondary
+              )
+            ]
+          )
+        }
+      visualState = .ready
+      primaryText = stored.title
+      secondaryText = "Conversa restaurada deste Mac"
+      quickText = ""
+      pendingPrompt = nil
+      isQuickTextEntryPresented = true
+      onLayoutInvalidated?()
+      return true
+    } catch {
+      guard conversationGeneration == requestedGeneration else {
+        return false
+      }
+      presentRuntimeError(title: "Não foi possível abrir a conversa", error: error)
+      return false
+    }
+  }
+
+  func conversationWasDeleted(id: UUID) {
+    guard activeConversationID == id else {
+      return
+    }
+    startNewConversation()
+  }
+
+  func waitForHistoryPersistence() async {
+    await persistenceTask?.value
+  }
+
+  func prepareForConversationDeletion(id: UUID) async {
+    if activeConversationID == id, hasActiveRequest {
+      cancelCurrentInteraction()
+    }
+    await persistenceTask?.value
+    if activeConversationID == id {
+      startNewConversation()
+    }
+  }
+
   func presentReadyState() {
     guard !hasActiveRequest else {
       return
@@ -49,7 +168,7 @@ final class OverlayViewModel: ObservableObject {
     isQuickTextEntryPresented = false
     visualState = .ready
     primaryText = "Evie está pronta"
-    secondaryText = "Voz ainda não está ativa · ⇧⌥Espaço para digitar"
+    secondaryText = "Voz ainda não está ativa · ⌥Espaço para conversar"
     waveformSamples = []
     onLayoutInvalidated?()
   }
@@ -61,7 +180,6 @@ final class OverlayViewModel: ObservableObject {
       return false
     }
 
-    quickText = ""
     isQuickTextEntryPresented = true
     visualState = .ready
     primaryText = "Digite um comando"
@@ -97,6 +215,7 @@ final class OverlayViewModel: ObservableObject {
     activeArtifactID = artifactID
     streamedResponse = ""
     interactionState = EvieInteractionState(phase: .thinking)
+    pendingPrompt = prompt
     quickText = ""
     isQuickTextEntryPresented = false
     visualState = .thinking
@@ -171,6 +290,10 @@ final class OverlayViewModel: ObservableObject {
 
     activeArtifactID = nil
     streamedResponse = ""
+    quickText = pendingPrompt ?? quickText
+    pendingPrompt = nil
+    isQuickTextEntryPresented = true
+    onLayoutInvalidated?()
   }
 
   func toggleArtifact(_ id: UUID) {
@@ -239,11 +362,54 @@ extension OverlayViewModel {
   fileprivate static let systemPrompt = """
     Você é Evie (pronúncia “ívi”), uma assistente pessoal local no macOS.
     Responda no idioma do usuário, com clareza e concisão. Neste estágio você não
-    possui ferramentas, acesso à web, arquivos, e-mail, calendário, WhatsApp ou
-    memória persistente. Nunca alegue ter realizado uma ação externa. Quando uma
-    solicitação depender dessas capacidades, explique a limitação brevemente e
-    ajude com o que puder apenas pelo texto.
+    possui ferramentas, acesso à web, arquivos, e-mail, calendário ou WhatsApp.
+    O histórico visível das conversas pode ser salvo localmente, mas você ainda
+    não possui memória pessoal semântica nem RAG. Nunca alegue ter realizado uma
+    ação externa. Quando uma solicitação depender dessas capacidades, explique a
+    limitação brevemente e ajude com o que puder apenas pelo texto.
     """
+
+  fileprivate static func title(for prompt: String) -> String {
+    let firstLine =
+      prompt
+      .split(whereSeparator: \.isNewline)
+      .first
+      .map(String.init) ?? prompt
+    let collapsed =
+      firstLine
+      .split(whereSeparator: \.isWhitespace)
+      .joined(separator: " ")
+    guard collapsed.count > 64 else {
+      return collapsed
+    }
+    return String(collapsed.prefix(61)).trimmingCharacters(in: .whitespaces) + "…"
+  }
+
+  fileprivate func persistConversation() {
+    let visibleMessages = conversation.filter { message in
+      message.role != .system && message.role != .developer
+    }
+    let snapshot = EvieConversation(
+      id: activeConversationID,
+      title: activeConversationTitle,
+      createdAt: conversationCreatedAt,
+      updatedAt: Date(),
+      messages: visibleMessages
+    )
+    let precedingTask = persistenceTask
+    let store = conversationStore
+
+    persistenceTask = Task { @MainActor [weak self] in
+      await precedingTask?.value
+      do {
+        _ = try await store.save(snapshot)
+      } catch {
+        guard let self else { return }
+        self.secondaryText = "A resposta chegou, mas o histórico não pôde ser salvo"
+        self.onLayoutInvalidated?()
+      }
+    }
+  }
 
   fileprivate func receive(
     _ event: EvieInteractionEvent,
@@ -293,9 +459,12 @@ extension OverlayViewModel {
       }
 
       updateActiveArtifact(with: content)
+      if conversation.count == 1 {
+        activeConversationTitle = Self.title(for: userMessage.content)
+      }
       conversation.append(userMessage)
       conversation.append(message)
-      trimConversation()
+      persistConversation()
       visualState = .completed
       primaryText = "Resposta concluída"
       if let usage = interactionState.usage {
@@ -306,7 +475,10 @@ extension OverlayViewModel {
       activeRequestID = nil
       activeArtifactID = nil
       streamedResponse = ""
+      pendingPrompt = nil
       requestTask = nil
+      isQuickTextEntryPresented = true
+      onLayoutInvalidated?()
 
     case .failed(let failure):
       finishFailure(failure, requestID: requestID)
@@ -321,9 +493,13 @@ extension OverlayViewModel {
     activeArtifactID = nil
     requestTask = nil
     streamedResponse = ""
+    quickText = pendingPrompt ?? quickText
+    pendingPrompt = nil
     visualState = .ready
     primaryText = "Consulta cancelada"
     secondaryText = "Nenhuma ação foi executada"
+    isQuickTextEntryPresented = true
+    onLayoutInvalidated?()
   }
 
   fileprivate func finishFailure(_ error: any Error, requestID: UUID) {
@@ -374,6 +550,9 @@ extension OverlayViewModel {
     activeArtifactID = nil
     requestTask = nil
     streamedResponse = ""
+    quickText = pendingPrompt ?? quickText
+    pendingPrompt = nil
+    isQuickTextEntryPresented = true
     onLayoutInvalidated?()
   }
 
@@ -457,20 +636,6 @@ extension OverlayViewModel {
       removeOldestTurn(from: &prefix)
     }
     return prefix + [userMessage]
-  }
-
-  fileprivate func trimConversation() {
-    let characterBudget = max(
-      8_000,
-      (agentClient.configuration.contextWindowTokens
-        - agentClient.configuration.maxCompletionTokens) * 2
-    )
-
-    while conversation.count > 1,
-      conversation.reduce(0, { $0 + $1.content.count }) > characterBudget
-    {
-      removeOldestTurn(from: &conversation)
-    }
   }
 
   fileprivate func removeOldestTurn(from messages: inout [ChatMessage]) {

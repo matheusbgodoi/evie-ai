@@ -74,7 +74,9 @@ final class OverlayPanelController {
 extension OverlayPanelController {
   fileprivate func synchronizePresentation() {
     updateGeometry()
-    if !viewModel.isQuickTextEntryPresented, panel.isKeyWindow {
+    if viewModel.isQuickTextEntryPresented, panel.isVisible, !panel.isKeyWindow {
+      panel.makeKeyAndOrderFront(nil)
+    } else if !viewModel.isQuickTextEntryPresented, panel.isKeyWindow {
       panel.resignKey()
       panel.orderFrontRegardless()
     }
@@ -104,10 +106,6 @@ extension OverlayPanelController {
   }
 
   fileprivate var desiredHeight: CGFloat {
-    if viewModel.isQuickTextEntryPresented {
-      return 104
-    }
-
     guard !viewModel.artifacts.isEmpty else {
       return 104
     }

@@ -8,20 +8,25 @@ Last updated: 2026-08-04
 progress.**
 
 The Phase 0 planning foundation is complete enough to support bounded code work.
-VS-001, the first native quick-text vertical slice, is implemented at source level.
+VS-001 and VS-002 are implemented at source level: the native shell now supports
+continuous quick text, complete local visible-history records, resume/delete UI,
+and non-secret model settings while retaining the transient overlay as default.
 The local first-test slice now also has typed configuration and an explicit
 development-runtime controller. On this target Mac, TurboFieldfare revision
 `7a99f2a635e3adf7ed0720b882d2edb600f2f0da` has been cloned outside Git and its
 release repacker/server products have built successfully. The Gemma download and
 repack completed; the upstream verifier passed all 37 files, and model discovery,
 non-streaming inference, and SSE inference passed on loopback at a declared 64K.
-The native shell and server are running for the user's test. Shortcut, focus,
-Spaces, display, cancellation, and visual behavior remain manual `QA-001` work.
+The VS-002 release shell has been rebuilt and relaunched against the healthy local
+server. Model discovery, a synthetic non-streaming response, and SSE `[DONE]`
+passed again. Shortcut, focus-after-completion, Spaces, display, history, settings,
+cancellation, and visual behavior remain manual `QA-001`/`QA-005` work.
 
-No Hermes runtime, persistent background service, integration, personal data, or
-credential has been installed or configured. TurboFieldfare source, model state,
-local configuration, PID state, and logs live under the user's `~/Library`
-directories rather than in this repository.
+No Hermes runtime, persistent background service, account integration, or
+credential has been installed or configured. Completed conversations are now
+personal local state under `Application Support/Evie/Conversations`; they remain
+outside Git and hidden prompts are never stored. TurboFieldfare source, model
+state, configuration, PID state, and logs also remain under `~/Library`.
 
 ## Implementation snapshot
 
@@ -32,23 +37,40 @@ directories rather than in this repository.
   not send or execute tools. Its byte-level SSE framing preserves empty event
   separators across arbitrary transport fragmentation and CR/LF variants.
 - `evie-shell` is a SwiftUI/AppKit menu-bar development executable with a
-  transparent floating `NSPanel`, global shortcuts, quick-text entry, native glass
-  surfaces, status states, and transient result/error cards.
+  transparent floating `NSPanel`, launch-focused and repeatable quick text, native
+  glass result cards, a deliberate history window, and a model-settings window.
 - The composition root talks directly to TurboFieldfare only for this reversible
   slice. ADR 0006 records why this is not the future trust/lifecycle boundary.
 - `EvieConfigurationLoader` applies built-in defaults, an optional versioned local
   JSON file, then supported environment overrides; invalid settings surface an
   actionable startup error and no credential is read or printed.
+- `CORE-005` nominal read/propose/commit contracts now make authority opaque and
+  non-serializable, bound serialized identifiers/collections/depth/bytes and plan
+  lifetime, revalidate revision/binding, redact material metadata, and require
+  explicit-user evidence for delete. There is deliberately no real tool executor
+  yet.
 - `Scripts/evie-runtime` provides an explicit development-only doctor, setup,
   configure, verify, start, stop, status, synthetic smoke, and shell-launch
   workflow. It pins the runtime and 64K launch shape but is not `evied`, a login
   item, an idle-unload policy, or crash recovery.
 - `Scripts/test` is a compatibility wrapper for Swift Testing discovery/rpaths
   with the macOS 27 Command Line Tools present on this Mac.
-- Conversation context exists only in process memory. There is no prompt/result
-  logging or persistent history.
+- Complete visible conversations persist as schema-versioned per-session JSON with
+  `0700`/`0600` permissions and atomic replacement. Model context is bounded from
+  an in-memory copy independently, and termination waits for pending history
+  writes. History scanning contains a malformed/unavailable failure to that
+  individual file, retains readable sessions, and shows only an opaque
+  unavailable-record count. There is still no semantic memory, prompt/result
+  diagnostic logging, or RAG.
 - The reusable waveform is present but receives no audio data; microphone capture,
-  STT, and TTS are not implemented and the UI says so.
+  STT, TTS invocation/playback, and a configured personal voice are not active,
+  and the UI says so.
+- Current research pins a deny-by-default Hermes candidate, QMD/DDGS directions,
+  and a native “E aí, ívi” wake-word path. None is installed or enabled by Evie.
+- A backend-neutral TTS protocol and defensive source-only OmniVoice batch adapter are
+  source implemented and synthetically tested. They do not load a model, generate
+  real audio, inspect a voice profile, verify the configured executable identity,
+  network-sandbox it, or connect to UI/playback yet.
 
 See `docs/implementation/VS_001.md` and the task ledger for exact boundaries and
 handoff evidence.
@@ -70,6 +92,12 @@ The preferred first technical hypothesis is:
 - Node-RED for deterministic visual workflows;
 - a read/propose/commit permission boundary for every integration.
 
+The researched agent candidate is Hermes `v2026.8.3` at
+`3c27eb6234bf91b8ceee9e9071591b31e9b148cb`, behind `evied` with native dangerous
+toolsets disabled. The retrieval candidate is QMD `v2.5.3` behind an on-demand
+collection-isolating worker; DDGS `v9.9.3` is the first no-key web-search prototype.
+All pins remain uninstalled hypotheses until their gates pass.
+
 This remains a hypothesis until the Phase 1 benchmarks pass.
 
 One toolchain observation is now established for this exact machine: the pinned
@@ -90,6 +118,8 @@ wiring only; they are not the Phase 1 model/context/energy benchmark.
 - The product name is **Evie**, pronounced "ee-vee"/"ívi".
 - The default interaction is not a chat window. It is a transient voice/command
   overlay with expandable result cards; full history is secondary.
+- Visible completed conversations persist locally and are opened deliberately;
+  hidden prompts, semantic memory, and action authority are excluded from history.
 - The high-quality Gemma model is preserved as the primary candidate instead of
   being replaced prematurely by a smaller model.
 - Simple known commands should bypass an LLM when a deterministic action exists.
@@ -124,6 +154,8 @@ See the ADR index for decision status.
    multiple-display, and accessibility behavior still require target QA.
 8. Validate Node-RED draft/import/disable/approve/enable behavior through a narrow
    adapter without exposing unrestricted administration to the model.
+9. Run `QA-005` for repeated follow-ups, restart/resume, deletion, environment-
+   managed settings, and response-completion focus behavior.
 
 The bounded first-test readiness checks are complete: model repack, upstream
 verification, loopback health at 65,536 tokens, model discovery, non-streaming and
@@ -144,6 +176,13 @@ readiness only; they are not the Phase 1 performance suite.
   own lifecycle, idle unload, crash recovery, power policy, or automatic startup.
 - OmniVoice performance and the format of the user's existing voice assets have
   not been inspected locally.
+- The target Mac has OmniVoice/Whisper tooling and model caches, and the source
+  adapter validates the separate cached Higgs tokenizer requirement. No real Evie
+  audio request, microphone permission, TTS output, STT benchmark, or personal
+  voice-reference inspection has occurred.
+- Before activation, the OmniVoice worker still needs a trusted pinned
+  executable/model manifest, a version probe, startup cleanup of orphaned private
+  temporary directories, and supervisor lifecycle integration.
 - The exact smaller text and vision model candidates must be pinned immediately
   before benchmarking because this area changes quickly.
 - Location triggers require a trusted source such as a phone shortcut, Home
@@ -152,9 +191,9 @@ readiness only; they are not the Phase 1 performance suite.
 
 ## Next recommended action
 
-Run the manual `QA-001` shortcut/focus/visual checklist against the already running
-local Evie, then stop it with the documented lifecycle command when desired. The
-next product code task remains `CORE-002`, followed by `SUP-001`; the development
-controller must not be mistaken for the future supervisor. Do not configure email,
-WhatsApp, Drive, file mutation, microphone access, or automatic workflow activation
-before their permission and validation gates pass.
+Run the already rebuilt/relaunched VS-002 manual repeated-follow-up/history/settings/
+focus checklist. In code, finish the backend-neutral event and supervisor boundary
+before installing Hermes or exposing any real tool. Package a stable `.app` identity
+before requesting microphone permission, then implement push-to-talk before wake word.
+Do not configure email, WhatsApp, Drive, file mutation, automatic microphone, or
+workflow activation before their permission and validation gates pass.

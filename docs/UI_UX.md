@@ -1,7 +1,8 @@
 # Native interface and interaction model
 
-Status: VS-001 visual/native shell source implemented; target interaction acceptance
-pending. CLUI CC is a UX reference, not a runtime dependency.
+Status: VS-002 continuous text/history/settings source implemented; target
+interaction acceptance pending. CLUI CC is a UX reference, not a runtime
+dependency.
 
 ## Product stance
 
@@ -109,8 +110,11 @@ field. It submits without opening history. Representative defaults for prototypi
 All shortcuts remain configurable and must be tested against Spotlight, input
 methods, editors, and accessibility tools.
 
-VS-001 currently submits quick text with `Return`, closes that entry with `Escape`,
-and exposes stream cancellation in the capsule. Shortcuts are fixed in source for
+VS-002 opens the field at shell launch, uses `Option-Space` as its primary
+open/hide shortcut, submits with `Return`, closes with `Escape`, and exposes stream
+cancellation in the capsule. After completion, the answer card stays visible and a
+new focused field returns for a follow-up. `Option-Shift-Space` remains a temporary
+secondary text shortcut until the voice phase. Shortcuts are fixed in source for
 the prototype; persistence and conflict preferences belong to `UI-009`.
 
 ### Artifact cards
@@ -149,6 +153,17 @@ Opened deliberately for:
 - logs and health state.
 
 It is not required for ordinary voice use.
+
+VS-002 implements the first deliberately opened subset as two native windows:
+
+- History lists local sessions, renders only their visible messages, resumes a
+  session, starts a new one, and confirms deletion;
+- Settings edits non-secret Gemma sampling/response limits and honestly labels
+  voice, RAG, and tools as unavailable.
+
+Pinned artifacts, workflow/permission/resource management, health, semantic
+memory, and compact active-task tabs remain future `UI-007`/`UI-012` work. The
+history window does not change the transient overlay into the default chat UI.
 
 ## State machine
 

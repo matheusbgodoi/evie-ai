@@ -79,6 +79,18 @@ struct EvieConfigurationLoaderTests {
       try loader.load(environment: [:])
     }
   }
+
+  @Test("resolves the same absolute file selected by the environment")
+  func selectedFileURL() throws {
+    let selectedURL = missingFileURL().standardizedFileURL
+    let loader = EvieConfigurationLoader()
+
+    let resolved = try loader.resolvedFileURL(
+      environment: ["EVIE_CONFIG_FILE": selectedURL.path]
+    )
+
+    #expect(resolved.standardizedFileURL == selectedURL)
+  }
 }
 
 extension EvieConfigurationLoaderTests {

@@ -150,12 +150,12 @@ lifecycle dependencies listed below.
 | ID | Status | Depends on | Deliverable and definition of done |
 |---|---|---|---|
 | `FND-002` | `DONE` | `FND-001` | Test targets and deterministic fixture boundaries are established; generated state, private fixtures, and model artifacts remain ignored or outside Git. |
-| `FND-003` | `DONE` | `CORE-001` | Typed configuration precedence for defaults, environment, and an ignored local file; invalid endpoints/timeouts/model IDs produce actionable errors, secrets are never printable, and four deterministic loader fixtures pass. |
+| `FND-003` | `DONE` | `CORE-001` | Typed configuration precedence for defaults, environment, and an ignored local file; the native settings writer atomically preserves the same non-secret schema/mode; invalid values produce actionable errors and deterministic load/save fixtures pass. |
 | `FND-004` | `PLANNED` | `FND-002` | Structured local logging with privacy levels and redaction tests; prompt bodies, credentials, voice data, and personal content are excluded by default. |
 | `CORE-002` | `READY` | `CORE-001` | Versioned backend-neutral command/event envelope covering state, deltas, artifacts, cancellation, permissions, and errors; unknown future events fail safely. |
 | `CORE-003` | `PLANNED` | `CORE-002` | Artifact protocol for text, sources, email/calendar proposals, files, images, workflows, and permission cards; payloads carry provenance/trust metadata. |
 | `CORE-004` | `PLANNED` | `CORE-002` | Cancellation, timeout, retry classification, and request identity contracts; stale deltas cannot update a newer interaction. |
-| `CORE-005` | `PLANNED` | `CORE-003` | Capability types encode read/propose/commit separately; commit authority cannot be constructed from untrusted model/tool output. |
+| `CORE-005` | `DONE` | `CORE-001` | Nominal read/propose/commit contracts carry bounded provenance/target/revision metadata; opaque non-serializable commit authority is emitted only by an internal factory, fails closed on lifetime/revision/binding mismatch, and delete always requires explicit-user evidence. `CORE-003` artifacts will present these values later; no executor or real tool is implemented. |
 | `QA-002` | `DEFERRED` | `CORE-001`, `INF-001` | Eight deterministic TurboFieldfare protocol fixtures now cover SSE fragmentation, CR/LF, malformed/unfinished streams, errors, loopback, and routes; state-transition, cancellation, and redaction coverage still gates full completion. |
 
 ## Phase B — Native shell completion
@@ -170,7 +170,10 @@ turns it into a robust long-lived macOS surface.
 | `UI-009` | `PLANNED` | `UI-003` | Shortcut preferences detect common conflicts, persist outside Git, and expose a reliable reset path. |
 | `UI-010` | `PLANNED` | `CORE-002`, `UI-007` | Visible worker-loading, offline, permission, cancellation, retry, sleeping, and memory-pressure states never overstate what the system is doing. |
 | `UI-011` | `PLANNED` | `UI-007`, `POL-002` | Approval card shows exact action, target, material arguments, revision, expiration, approve/deny controls, and post-action result. |
-| `UI-012` | `DEFERRED` | `UI-007`, `AGT-006`, `AUT-009` | Optional control center provides deliberate access to history, pinned artifacts, workflows, permissions, resource settings, and health; it never opens for normal commands. |
+| `UI-012` | `IN_PROGRESS` | `UI-007`, `AGT-006`, `AUT-009` | VS-002 deliberately opens native History and model Settings windows without changing the default overlay; pinned artifacts, workflows, permissions, semantic-memory/resource controls, and health remain deferred. |
+| `APP-002` | `DONE` | `APP-001`, `FND-003` | Continuous completed turns persist as user-only, schema-versioned visible-history records; full history is independent of bounded prompt context, hidden prompts never persist, sessions resume through the native history window, and deletion is explicitly confirmed. |
+| `UI-013` | `PLANNED` | `UI-004`, user logo asset | Replace the temporary sparkle glyph with the user-supplied Evie mark and a state-driven animation that respects Reduce Motion, keeps microphone/action indicators unambiguous, and has a static fallback. |
+| `QA-005` | `DEFERRED` | `APP-002`, `UI-012` | Target-Mac checks cover launch focus, repeated follow-ups, response-completion focus restoration, history resume/relaunch/delete, and live settings behavior. |
 | `QA-003` | `DEFERRED` | `UI-008`, `UI-010` | UI/state tests cover focus restoration, Spaces/full-screen, multiple displays, keyboard-only use, accessibility settings, hide/show, and stale asynchronous events. |
 
 ## Phase C — Supervisor and model lifecycle
@@ -220,12 +223,14 @@ model, and remains excluded from VS-001.
 | `VOI-004` | `PLANNED` | `SUP-004`, `VOI-003` | Backend-neutral STT worker accepts bounded PCM/audio, emits partial/final transcripts and confidence metadata where available, and unloads on idle. |
 | `VOI-005` | `DEFERRED` | `VOI-004` | Brazilian Portuguese STT candidates are measured on names, dates, mixed English, rooms/noise, cold/warm latency, memory, and energy before selection. |
 | `VOI-006` | `PLANNED` | `VOI-004`, `APP-001` | Final transcript submits through the same interaction path as quick text; partial text is clearly provisional and cannot authorize an action. |
-| `VOI-007` | `PLANNED` | `SUP-004` | OmniVoice command adapter uses a configured local executable/model/reference, bounded input/output paths, timeout/cancel, and no OmniVoice UI. |
-| `VOI-008` | `PLANNED` | `VOI-007`, `SEC-001` | Authorized voice profiles/references live outside Git with restrictive permissions; UI lists friendly aliases without exposing raw paths unnecessarily. |
+| `VOI-007` | `DONE` | `CORE-001` | Source-only backend-neutral TTS contracts and a one-shot adapter targeting the inspected OmniVoice 0.3.12 CLI contract validate absolute local executable/model/cache/reference paths, send private JSONL only through stdin, request supported-library offline resolution in a minimal environment, isolate and cancel/timeout the child process group, enforce `0700`/`0600`, cap output at 64 MiB, validate RIFF/WAVE structure, and perform best-effort cleanup without running the OmniVoice UI. Eight synthetic tests pass; this is not a network sandbox or operational worker. |
+| `VOI-008` | `PLANNED` | `VOI-007`, `SEC-001` | Authorized TTS voice references/prompts live outside Git with restrictive permissions; UI lists friendly aliases without exposing raw paths unnecessarily and can delete a profile explicitly. |
 | `VOI-009` | `PLANNED` | `VOI-007`, `VOI-002` | Native playback exposes first-audio/loading/speaking states and real output metering; sentence chunking preserves order and cancellation. |
 | `VOI-010` | `PLANNED` | `VOI-003`, `VOI-009` | Hard stop and barge-in cancel capture/inference/TTS consistently; stale audio cannot continue after cancellation. |
-| `VOI-011` | `DEFERRED` | `VOI-003`, `SUP-008` | “Ei, Evie” wake-word engine is selected only after false-accept/reject and full-day energy testing; visible mute and opt-out are permanent. |
+| `VOI-011` | `DEFERRED` | `VOI-003`, `SUP-008`, `OPS-001` | A local dataset/trainer for “E aí, ívi”/“Ei, ívi” creates a Core ML wake classifier only after held-out false-accept/reject and 8–24 hour energy testing; visible mute and opt-out are permanent. |
 | `VOI-012` | `PLANNED` | `SUP-007`, `VOI-009` | Warm-window policy keeps OmniVoice only as long as justified; Low Power Mode and memory pressure unload voice workers first. |
+| `VOI-013` | `PLANNED` | `VOI-001`, `SEC-001` | Optional speaker enrollment extracts local embeddings from several approved phrases, encrypts the profile with a Keychain-backed key, deletes raw audio by default, supports one-step removal, and is never accepted as commit authorization. |
+| `VOI-014` | `PLANNED` | `SUP-004`, `VOI-007` | Before TTS activation, pin and verify a trusted executable/model/tokenizer manifest and version probe, remove orphaned request directories at supervised startup, and expose worker health/idle unload without claiming process-level network isolation. |
 
 ## Phase F — Local memory and RAG
 

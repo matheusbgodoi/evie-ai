@@ -12,9 +12,10 @@ measured and documented; elapsed time alone is not completion.
   verified, and non-streaming plus SSE synthetic inference passed at a declared
   64K on the target Mac. The 16K/32K/64K correctness/performance matrix remains
   open.
-- Phase 2 has an early source implementation through VS-001: menu bar, floating
-  panel, shortcuts, quick text, native visual components, cancellation, and error
-  presentation. Supervisor/lifecycle work and target UI acceptance remain open.
+- Phase 2 has an early source implementation through VS-002: menu bar, floating
+  panel, launch-focused continuous quick text, native visual components,
+  cancellation, local visible-history sessions, and model settings. Supervisor,
+  lifecycle, packaging, voice, tools, and target UI acceptance remain open.
 - `QA-001` is intentionally deferred at the user's request. No phase exit gate is
   inferred from a successful compile.
 
@@ -61,9 +62,10 @@ Exit criteria:
 
 ## Phase 2 — supervisor and native interaction shell
 
-Current implementation note: VS-001 supplies the native quick-text shell and a
-temporary direct inference adapter. It does not satisfy this phase's supervisor,
-worker lifecycle, dormant-resource, recovery, packaging, or acceptance gates.
+Current implementation note: VS-002 supplies the continuous native quick-text
+shell, deliberate history/settings windows, and a temporary direct inference
+adapter. It does not satisfy this phase's supervisor, worker lifecycle,
+dormant-resource, recovery, packaging, voice, tool, or acceptance gates.
 
 Scope:
 

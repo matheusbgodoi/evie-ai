@@ -1,7 +1,7 @@
 # System architecture
 
-Status: target architecture proposed; VS-001 native/direct-client seam implemented
-for validation.
+Status: target architecture proposed; VS-002 native/direct-client shell with local
+visible history and settings implemented for validation.
 
 ## Design principles
 
@@ -45,7 +45,7 @@ for validation.
  └──────────┘ └──────────┘ └───────────┘ └──────────┘ └─────────┘
 ```
 
-## VS-001 implementation boundary
+## VS-001/VS-002 implementation boundary
 
 The first executable intentionally implements only this temporary path:
 
@@ -63,17 +63,34 @@ Carbon global shortcut / AppKit status item
 ```
 
 `EvieCore` owns backend-neutral message, phase, failure, usage, artifact, and
-reducer types. SwiftUI does not parse SSE or authorize backend output. The
+reducer types, plus nominal read/propose/commit capability contracts. SwiftUI does
+not parse SSE or authorize backend output. The
 application composition root is the only place that chooses the concrete
 TurboFieldfare adapter.
 
-This direct connection is accepted only for VS-001 under
+The commit-authority contract is deliberately non-serializable and constructible
+only inside EvieCore's future trusted broker path. It currently has no executor;
+adding a filesystem/network implementation to the direct UI client remains
+forbidden.
+
+This direct connection is accepted only for the current prototype under
 [ADR 0006](adr/0006-direct-turbo-vertical-slice.md). The application starts no
-process, executes no tools, persists no session, carries no credential, and
-rejects non-loopback hosts. The adjacent `Scripts/evie-runtime` development tool
-can explicitly prepare and manage the process for testing, but it is not linked
-into the application. The server must use `--max-context 65536`; the client cannot
-increase a server launched at its 16K default.
+process, executes no tools, carries no credential, and rejects non-loopback hosts.
+VS-002 adds only a native visible-conversation store and non-secret configuration
+writer; neither can authorize model actions. The adjacent `Scripts/evie-runtime`
+development tool can explicitly prepare and manage the process for testing, but it
+is not linked into the application. The server must use `--max-context 65536`; the
+client cannot increase a server launched at its 16K default.
+
+```text
+~/Library/Application Support/Evie/
+  Conversations/<uuid>.json    visible user/assistant history, 0600
+  config.json                   non-secret model preferences, 0600
+```
+
+The UI keeps a complete visible session for persistence while constructing a
+separate bounded copy for each inference request. Hidden prompts are always
+reconstructed in memory. See [ADR 0008](adr/0008-local-conversation-history.md).
 
 The waveform view is data-driven but receives no microphone or output-audio samples
 in this slice. Voice states exist in the stable event vocabulary for future workers,
@@ -87,11 +104,12 @@ A SwiftUI/AppKit menu-bar utility owns the overlay, microphone feedback, audio
 playback presentation, result cards, approvals, and optional history window. It
 must not load ML models directly.
 
-VS-001 implements this as a SwiftPM development executable using an accessory
+VS-002 implements this as a SwiftPM development executable using an accessory
 application policy, AppKit status item, borderless nonactivating `NSPanel`, native
-vibrancy, Carbon hotkeys, and SwiftUI content. Signed `.app` packaging, login-item
-registration, shortcut preferences, and target behavior across Spaces/displays are
-not yet implemented or accepted.
+vibrancy, Carbon hotkeys, SwiftUI content, a deliberate history window, and a
+model-settings window. Signed `.app` packaging, login-item registration, shortcut
+preferences, and target behavior across Spaces/displays are not yet implemented
+or accepted.
 
 ### `evied` supervisor
 
@@ -175,6 +193,19 @@ Receives text, voice reference/profile, and output path/stream. OmniVoice CLI is
 the baseline cold implementation. A persistent Python provider is allowed only if
 benchmark evidence justifies model reuse or streaming.
 
+`VOI-007` now implements the backend-neutral request/audio/error contract and a
+one-shot adapter targeting the inspected `omnivoice-infer-batch` 0.3.12 contract.
+It sends text/reference transcript as JSONL on stdin, requires explicit absolute
+executable/model/Hugging Face cache/reference paths, asks supported libraries to
+resolve offline in a minimal child environment, and launches in an isolated
+process group. Cancellation/timeout terminate descendants; private request
+directories/WAVs are `0700`/`0600`, outputs are capped at 64 MiB and structurally
+validated as RIFF/WAVE, and cleanup is best effort on failure or discard. The
+configured executable is trusted local code: this adapter neither network-sandboxes
+it nor verifies its version/hash yet. No UI composition, playback, voice-profile
+store, or real inference is implemented, and no OmniVoice daemon/app remains
+active.
+
 ### Vision worker
 
 Loads only when an image is attached or a vision tool is called. It returns a
@@ -218,6 +249,12 @@ Invalid model configuration produces a visible startup error. The loader does no
 read credentials or print configuration. Secrets remain a future Keychain/broker
 concern, never part of the model endpoint file.
 
+The model settings window writes the same schema with atomic replacement and mode
+`0600`, then swaps the direct client's non-secret settings for the next request.
+Environment variables still override the file after a future relaunch. Endpoint,
+model identity, and context remain visible but read-only in this initial settings
+surface.
+
 [ADR 0007](adr/0007-local-development-runtime.md) accepts this development-only
 layout:
 
@@ -227,6 +264,7 @@ layout:
   Models/gemma4.gturbo/               installed/repacked model assets
   State/                              development PID state
   config.json                         versioned non-secret model configuration
+  Conversations/                      visible local conversation records
 ~/Library/Logs/Evie/
   turbo-fieldfare-server.log          user-only development server log
 ```

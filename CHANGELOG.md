@@ -38,6 +38,34 @@ All notable changes to Evie are documented here. Dates use `YYYY-MM-DD`.
   and unfinished streams.
 - A `doctor` preflight for target OS/architecture, toolchain commands, storage,
   memory, runtime revision, model presence, binaries, and local file permissions.
+- VS-002 continuous follow-up input that preserves answer cards, opens focused at
+  launch, uses `Option-Space` for text open/hide, and preserves drafts on hide,
+  cancellation, and backend failure.
+- Actor-isolated, schema-versioned local conversation records with atomic writes,
+  `0700`/`0600` permissions, per-record corruption containment with an opaque UI
+  warning, full visible transcripts, and guaranteed exclusion of hidden
+  system/developer prompts.
+- Deliberate native conversation-history UI for listing, viewing, resuming,
+  creating, and explicitly confirming deletion of local sessions.
+- Native model settings UI and atomic configuration writer for temperature, top-p,
+  completion limit, and timeout, including custom config paths, environment-owned
+  field indicators, optional server defaults, and next-request application.
+- ADR 0008 and VS-002 handoff/acceptance documentation for local history and
+  settings before Hermes.
+- Current implementation research for a deny-by-default pinned Hermes profile,
+  no-Docker DDGS web research, on-demand QMD RAG, native “E aí, ívi” wake-word,
+  PT-BR STT, speaker enrollment, and reuse of installed OmniVoice assets.
+- Backend-neutral nominal read/propose/commit capability contracts with redacted
+  material metadata, provenance, immutable revisions/expiry, and opaque
+  non-serializable authority; destructive delete cannot use standing-policy
+  evidence. These contracts execute no tool.
+- Backend-neutral TTS contracts and a defensive one-shot OmniVoice batch adapter
+  that sends private JSONL through stdin, validates local model/tokenizer/reference
+  paths, requests offline resolution from supported libraries, isolates the process
+  group, bounds timeout and output size, validates RIFF/WAVE structure, kills
+  descendants on cancel, and performs best-effort temporary cleanup. It is not a
+  network sandbox, does not yet pin the configured executable identity, and is not
+  connected to playback or a real voice profile.
 
 ### Changed
 
@@ -55,6 +83,12 @@ All notable changes to Evie are documented here. Dates use `YYYY-MM-DD`.
 - Kept the development controller alive while the shell runs so it reaps a stopped
   server cleanly, and made repeat launches reuse the current release binary until
   package/source files change.
+- The menu-bar surface now exposes Converse, New Conversation, History, Show/Hide,
+  Settings, local endpoint, and Quit instead of requiring the secondary quick-text
+  shortcut for every turn.
+- Conversation switching uses generation checks, deletion drains pending writes,
+  and application termination waits for history persistence so stale asynchronous
+  work cannot resurrect or silently lose a completed session.
 
 ## [0.0.1] - 2026-08-04
 
