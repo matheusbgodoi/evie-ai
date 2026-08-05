@@ -158,9 +158,9 @@ complete request set, what shipped, and the measurements are in
 
 | ID | Status | Depends on | Deliverable and definition of done |
 |---|---|---|---|
-| `PKG-001` | `PLANNED` | `APP-002` | A reproducible script builds `Evie.app` from the SwiftPM product with a stable bundle identifier, `Info.plist` usage descriptions, and a signature. Without a bundle identity macOS will not grant the microphone, and an ad-hoc signature re-prompts on every rebuild. |
-| `VOI-015` | `PLANNED` | `PKG-001`, `VOI-001` | Real input levels from `AVAudioEngine` drive the ring and the waveform; stopping capture stops both immediately. |
-| `VOI-016` | `PLANNED` | `VOI-015`, `UI-021` | Push-to-talk, the mark, and the wake phrase all enter through one activation path so the three routes cannot drift apart. |
+| `PKG-001` | `DONE` | `APP-002` | A reproducible script builds `Evie.app` from the SwiftPM product with a stable bundle identifier, `Info.plist` usage descriptions, and a signature. Without a bundle identity macOS will not grant the microphone, and an ad-hoc signature re-prompts on every rebuild. |
+| `VOI-015` | `DONE` | `PKG-001`, `VOI-001` | Real input levels from `AVAudioEngine` drive the ring and the waveform; stopping capture stops both immediately. |
+| `VOI-016` | `DONE` | `VOI-015`, `UI-021` | Push-to-talk, the mark, and the wake phrase all enter through one activation path so the three routes cannot drift apart. |
 | `VOI-017` | `PLANNED` | `VOI-016` | Local speech recognition produces a transcript that is submitted through the same interaction path as typed text, with partial text marked provisional. |
 | `VOI-018` | `PLANNED` | `VOI-007`, `VOI-015` | The existing OmniVoice adapter is connected to native playback with sentence chunking, output metering, cancellation, and barge-in. |
 | `VOI-019` | `PLANNED` | `VOI-018`, `CFG-003` | Call mode renders only the mark and its ring, with no transcript on screen, and leaving it restores the written conversation. |

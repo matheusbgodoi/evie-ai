@@ -28,6 +28,22 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
       return
     }
 
+    // Reports the microphone situation without asking for anything. Deliberately
+    // never calls `requestAccess`: a diagnostic must not put a consent dialog on
+    // someone's screen as a side effect of being run.
+    if CommandLine.arguments.contains("--audio-check") {
+      let bundleIdentifier = Bundle.main.bundleIdentifier ?? "(nenhum — não empacotado)"
+      let usage =
+        Bundle.main.object(forInfoDictionaryKey: "NSMicrophoneUsageDescription") as? String
+      print("bundle: \(bundleIdentifier)")
+      print("bundlePath: \(Bundle.main.bundlePath)")
+      print("NSMicrophoneUsageDescription: \(usage ?? "(ausente)")")
+      print("permissão do microfone: \(EvieAudioCapture.currentPermission())")
+      print("pode capturar: \(EvieAudioCapture.isBundled ? "identidade OK" : "sem identidade")")
+      NSApp.terminate(nil)
+      return
+    }
+
     let coordinator = AppCoordinator()
     self.coordinator = coordinator
     coordinator.start()

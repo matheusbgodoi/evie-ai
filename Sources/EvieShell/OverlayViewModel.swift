@@ -231,6 +231,61 @@ final class OverlayViewModel: ObservableObject {
     onVoiceActivationRequested()
   }
 
+  /// The microphone is open. This is only ever called after capture actually
+  /// started, so the listening indicator can never be shown over a closed
+  /// microphone.
+  func beginListening() {
+    guard !hasActiveRequest else {
+      return
+    }
+    visualState = .listening
+    primaryText = "Ouvindo…"
+    secondaryText = "Clique na chave de novo para parar"
+    waveformSamples = []
+    onLayoutInvalidated?()
+  }
+
+  func updateInputLevels(_ levels: [CGFloat]) {
+    guard visualState == .listening else {
+      return
+    }
+    waveformSamples = levels
+  }
+
+  /// Capture stopped. `transcript` is `nil` while speech recognition is not wired,
+  /// and the interface says so rather than pretending the audio was understood.
+  func endListening(transcript: String?) {
+    waveformSamples = []
+    guard let transcript, !transcript.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    else {
+      visualState = .ready
+      primaryText = "Microfone fechado"
+      secondaryText = "A transcrição ainda não está ligada — me escreva por enquanto."
+      isQuickTextEntryPresented = true
+      onLayoutInvalidated?()
+      return
+    }
+
+    quickText = transcript
+    visualState = .ready
+    primaryText = "Transcrito"
+    secondaryText = nil
+    isQuickTextEntryPresented = true
+    onLayoutInvalidated?()
+    submitQuickText()
+  }
+
+  /// Voice could not start. Nothing about the interface may suggest it did.
+  func presentVoiceUnavailable(_ error: any Error) {
+    visualState = .ready
+    waveformSamples = []
+    primaryText = "Microfone indisponível"
+    secondaryText =
+      (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
+    isQuickTextEntryPresented = true
+    onLayoutInvalidated?()
+  }
+
   func dismissQuickText() {
     guard !hasActiveRequest else {
       return

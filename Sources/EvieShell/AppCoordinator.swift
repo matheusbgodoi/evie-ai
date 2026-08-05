@@ -18,6 +18,10 @@ final class AppCoordinator: NSObject {
   private var statusItem: NSStatusItem?
   private var settingsWindowController: SettingsWindowController?
   private var preferencesViewModel: EviePreferencesViewModel?
+  private let audioCapture = EvieAudioCapture()
+  /// True while push-to-talk is holding the microphone open, so releasing the key
+  /// stops it but a click on the mark toggles instead.
+  private var isHoldingToTalk = false
   private var historyWindowController: ConversationHistoryWindowController?
   private weak var visibilityMenuItem: NSMenuItem?
 
@@ -112,6 +116,13 @@ final class AppCoordinator: NSObject {
     NSApp.setActivationPolicy(.accessory)
     configureStatusItem()
 
+    audioCapture.onLevels = { [weak self] levels in
+      self?.viewModel.updateInputLevels(levels)
+    }
+    viewModel.onVoiceActivationRequested = { [weak self] in
+      self?.toggleListening()
+    }
+
     do {
       let controller = try GlobalHotKeyController()
       controller.onAction = { [weak self] action, phase in
@@ -143,6 +154,7 @@ final class AppCoordinator: NSObject {
   }
 
   func stop() {
+    audioCapture.stop()
     viewModel.cancelCurrentInteraction()
     hotKeyController = nil
     if let statusItem {
@@ -156,6 +168,7 @@ final class AppCoordinator: NSObject {
   }
 
   func prepareForTermination() async {
+    audioCapture.stop()
     viewModel.cancelCurrentInteraction()
     await viewModel.waitForHistoryPersistence()
   }
@@ -356,7 +369,14 @@ extension AppCoordinator {
     case (.openSettings, .pressed):
       openSettings()
     case (.pushToTalk, .pressed):
-      viewModel.requestVoiceActivation()
+      isHoldingToTalk = true
+      startListening()
+    case (.pushToTalk, .released):
+      guard isHoldingToTalk else {
+        break
+      }
+      isHoldingToTalk = false
+      stopListening()
     case (.toggleCallMode, .pressed):
       toggleCallMode()
     case (.emergencyStop, .pressed):
@@ -366,11 +386,48 @@ extension AppCoordinator {
     }
   }
 
+  /// Clicking the mark toggles; holding push-to-talk does not.
+  fileprivate func toggleListening() {
+    if audioCapture.isCapturing {
+      stopListening()
+    } else {
+      startListening()
+    }
+  }
+
+  fileprivate func startListening() {
+    guard !audioCapture.isCapturing else {
+      return
+    }
+    Task { @MainActor [weak self] in
+      guard let self else { return }
+      do {
+        try await audioCapture.start()
+        viewModel.beginListening()
+      } catch {
+        isHoldingToTalk = false
+        viewModel.presentVoiceUnavailable(error)
+      }
+    }
+  }
+
+  fileprivate func stopListening() {
+    guard audioCapture.isCapturing else {
+      return
+    }
+    audioCapture.stop()
+    // Speech recognition is not wired yet, so there is no transcript to hand
+    // back. The view model says exactly that rather than inventing one.
+    viewModel.endListening(transcript: nil)
+  }
+
   /// Cancels the running answer and puts the overlay away.
   ///
   /// Once audio exists this also closes the microphone and cuts playback; the
   /// shortcut is registered now so the reflex is already in the user's hands.
   fileprivate func stopEverything() {
+    isHoldingToTalk = false
+    audioCapture.stop()
     viewModel.cancelCurrentInteraction()
     panelController.hide()
     updateToggleMenuTitle()

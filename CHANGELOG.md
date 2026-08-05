@@ -6,6 +6,20 @@ All notable changes to Evie are documented here. Dates use `YYYY-MM-DD`.
 
 ### Added
 
+- `Scripts/evie-app`: builds `Evie.app` from the SwiftPM product with a stable
+  bundle identifier, usage descriptions, and a signature, then installs, launches,
+  and reports on it. This clears the hard blocker for voice — measured on this
+  Mac, an unbundled binary touching `AVAudioEngine().inputNode` does not fail, it
+  hangs the main thread inside `coreaudiod` forever, because TCC has no
+  application to name and no description to show.
+- `EvieAudioCapture`: microphone ownership with the permission checked and
+  requested *before* the engine is built, real level metering through vDSP with a
+  fast attack and slow release, levels published at a bounded rate, and a stop
+  that stops the engine rather than discarding buffers.
+- Clicking the mark toggles listening; push-to-talk holds it open and closes it on
+  release. Both routes go through the same activation path.
+- `evie-shell --audio-check` reports bundle identity, usage description, and
+  microphone status without ever asking for consent.
 - A real settings window, in five tabs: Atalhos, Voz, Aparência, Modelo, and
   Diagnóstico. Changes are written as they are made rather than behind a Save
   button, because a preference that only applies once you remember to press Save

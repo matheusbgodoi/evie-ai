@@ -309,3 +309,41 @@
     adds a capture controller to it.
 - Next action: `PKG-001` — build `Evie.app` from the SwiftPM product, because
   microphone permission cannot be requested without a bundle identity.
+
+## 2026-08-05 — PKG-001 and VOI-015: a bundle identity and a real microphone
+
+- Scope: `Scripts/evie-app`, `Sources/EvieShell/{EvieAudioCapture,AppCoordinator,OverlayViewModel,EvieShellApp}.swift`,
+  `CHANGELOG.md`, `docs/implementation/TASKS.md`.
+- Completed:
+  - packaged `Evie.app` with `com.matheusbgodoi.evie`, `LSUIElement`, and the
+    microphone, speech, and folder usage descriptions;
+  - added `identity` to create a self-signed code-signing certificate, because an
+    ad-hoc signature has no stable designated requirement and macOS therefore
+    re-asks for the microphone after every rebuild;
+  - added `run`, which launches through Launch Services rather than executing the
+    binary, since starting it from a terminal makes TCC attribute the request to
+    the terminal and grant the permission to the wrong application;
+  - implemented microphone capture with permission first, engine second, and level
+    metering that feeds the mark's ring;
+  - wired the mark and push-to-talk to the same activation path, and made
+    stop-everything close the microphone too.
+- Validation:
+  - `Scripts/test` — 85/85 passed;
+  - strict format lint clean; release build with warnings-as-errors;
+  - `--audio-check` unbundled: no bundle identifier, no usage description;
+  - `--audio-check` bundled: `com.matheusbgodoi.evie`, usage description present,
+    permission `notDetermined`;
+  - the installed bundle launched through `open -a` and stayed resident at 0.0% CPU
+    and 105 MB.
+- Deliberately not done: the microphone consent dialog was never triggered. Asking
+  for it is the user's decision to make at a moment they choose, and a background
+  session must not leave a system dialog waiting on their screen.
+- Risks/blockers:
+  - the signature is still ad-hoc, so the first grant will not survive a rebuild
+    until `Scripts/evie-app identity` is run and the certificate is trusted for
+    code signing in Keychain Access, which cannot be scripted;
+  - speech recognition is not connected, so closing the microphone produces no
+    transcript and the interface says exactly that.
+- Next action: `VOI-017` — Apple's `SpeechTranscriber`, which supports pt-BR, runs
+  outside this process so it does not compete with the model for memory, and
+  exposes explicit model unload.
