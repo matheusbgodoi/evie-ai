@@ -274,3 +274,38 @@
     no UI yet.
 - Next action: `UI-014` — the tabbed settings window, starting with the shortcut
   recorder, so the preferences that already exist become reachable.
+
+## 2026-08-05 — VS-004 the settings window
+
+- Scope: `Sources/EvieShell/{EviePreferencesViewModel,GlobalHotKeyController,AppCoordinator,SettingsWindowController,OverlayPanelController,OverlayViewModel}.swift`,
+  `Sources/EvieShell/Views/{SettingsView,ShortcutSettingsView,VoiceSettingsView,AppearanceSettingsView,ModelSettingsView,DiagnosticsSettingsView}.swift`,
+  `CHANGELOG.md`, `docs/implementation/TASKS.md`.
+- Completed:
+  - replaced the single model form with a five-tab window and moved the model
+    settings into their own tab unchanged;
+  - added a shortcut recorder driven by a local key monitor rather than
+    first-responder plumbing, with validation, conflict naming, per-action disable,
+    reset, and reset-all;
+  - made `GlobalHotKeyController` data-driven: it registers from
+    `EvieShortcutPreferences`, fails per action rather than wholesale, and returns
+    the refusals so the interface can name them;
+  - routed every shortcut through the same methods the menu bar uses, and added
+    call-mode toggle and stop-everything;
+  - gave the voice tab the two coupled switches with the dependency explained in
+    place and a sentence stating which of the three presentations is active;
+  - added the appearance tab (width, placement reset, mark animation) and the
+    diagnostics tab, which is now the only surface showing the endpoint.
+- Validation:
+  - `Scripts/test` — 85/85 passed;
+  - `swift format lint --strict --recursive Sources Tests` — clean;
+  - `swift build -c release --product evie-shell -Xswiftc -warnings-as-errors` — passed;
+  - launched with `--open-settings`: the process stayed resident with no output and
+    resident memory rose from 104 MB to 124 MB, which is the window rendering.
+- Risks/blockers:
+  - no tab has been driven by hand yet; recording a shortcut, the conflict row, and
+    the refusal row are all `QA-006`;
+  - the voice tab writes preferences that nothing consumes yet, and says so;
+  - `AppCoordinator` is getting long and will need splitting before the voice loop
+    adds a capture controller to it.
+- Next action: `PKG-001` — build `Evie.app` from the SwiftPM product, because
+  microphone permission cannot be requested without a bundle identity.

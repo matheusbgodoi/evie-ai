@@ -116,6 +116,19 @@ final class OverlayPanelController: NSObject {
     }
   }
 
+  /// Adopts an appearance edited elsewhere, typically the settings window.
+  ///
+  /// The panel is repositioned immediately so a width change is visible while the
+  /// slider is still moving.
+  func applyAppearance(_ appearance: EvieAppearancePreferences) {
+    guard appearance != self.appearance else {
+      return
+    }
+    self.appearance = appearance
+    chrome.apply(appearance)
+    updateGeometry()
+  }
+
   /// Puts the overlay back where it started: bottom centre, original width.
   func resetPlacement() {
     appearance.resetPlacement()

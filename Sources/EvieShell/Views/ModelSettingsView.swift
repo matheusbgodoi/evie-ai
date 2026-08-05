@@ -1,6 +1,7 @@
 import SwiftUI
 
-struct SettingsView: View {
+/// Sampling and response limits for the local model.
+struct ModelSettingsView: View {
   @ObservedObject var viewModel: ModelSettingsViewModel
 
   var body: some View {
@@ -40,7 +41,7 @@ struct SettingsView: View {
         HStack {
           VStack(alignment: .leading, spacing: 3) {
             Text("Limite de resposta")
-            Text("Não altera a janela de 64K do servidor.")
+            Text("Não altera a janela de contexto do servidor.")
               .font(.caption)
               .foregroundStyle(.secondary)
           }
@@ -83,18 +84,6 @@ struct SettingsView: View {
         }
       }
 
-      Section("Voz e capacidades") {
-        Label(
-          "Wake word, STT, TTS, RAG e tools ainda não estão ativos.", systemImage: "lock.shield"
-        )
-        .foregroundStyle(.secondary)
-        Text(
-          "Eles serão adicionados como workers locais, com permissões visíveis e exclusão sempre confirmada."
-        )
-        .font(.caption)
-        .foregroundStyle(.secondary)
-      }
-
       if let feedback = viewModel.feedback {
         Section {
           Label(
@@ -121,7 +110,6 @@ struct SettingsView: View {
       .padding(14)
       .background(.bar)
     }
-    .frame(minWidth: 620, minHeight: 540)
   }
 
   private func settingSlider(

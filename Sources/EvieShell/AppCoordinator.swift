@@ -17,6 +17,7 @@ final class AppCoordinator: NSObject {
   private var hotKeyController: GlobalHotKeyController?
   private var statusItem: NSStatusItem?
   private var settingsWindowController: SettingsWindowController?
+  private var preferencesViewModel: EviePreferencesViewModel?
   private var historyWindowController: ConversationHistoryWindowController?
   private weak var visibilityMenuItem: NSMenuItem?
 
@@ -113,17 +114,21 @@ final class AppCoordinator: NSObject {
 
     do {
       let controller = try GlobalHotKeyController()
-      controller.onSummonPressed = { [weak self] in
-        self?.toggleQuickText()
-      }
-      controller.onSummonReleased = {}
-      controller.onQuickText = { [weak self] in
-        self?.openQuickText()
+      controller.onAction = { [weak self] action, phase in
+        self?.perform(action, phase: phase)
       }
       hotKeyController = controller
+      applyShortcuts()
     } catch {
-      viewModel.presentRuntimeError(title: "Atalho global indisponível", error: error)
+      viewModel.presentRuntimeError(title: "Atalhos globais indisponíveis", error: error)
       panelController.showPassive()
+    }
+
+    // Evie has no Dock icon, so there is no ordinary way to reach Settings when a
+    // shortcut is unavailable. This flag is that way out, and it is what makes the
+    // window testable without a mouse.
+    if CommandLine.arguments.contains("--open-settings") {
+      openSettings()
     }
 
     if let startupConfigurationError {
@@ -178,18 +183,16 @@ extension AppCoordinator {
     let newConversationItem = NSMenuItem(
       title: "Nova conversa",
       action: #selector(newConversation),
-      keyEquivalent: "n"
+      keyEquivalent: ""
     )
-    newConversationItem.keyEquivalentModifierMask = [.command]
     newConversationItem.target = self
     menu.addItem(newConversationItem)
 
     let historyItem = NSMenuItem(
       title: "Histórico…",
       action: #selector(openHistory),
-      keyEquivalent: "h"
+      keyEquivalent: ""
     )
-    historyItem.keyEquivalentModifierMask = [.command, .shift]
     historyItem.target = self
     menu.addItem(historyItem)
 
@@ -215,9 +218,8 @@ extension AppCoordinator {
     let settingsItem = NSMenuItem(
       title: "Configurações…",
       action: #selector(openSettings),
-      keyEquivalent: ","
+      keyEquivalent: ""
     )
-    settingsItem.keyEquivalentModifierMask = [.command]
     settingsItem.target = self
     menu.addItem(settingsItem)
 
@@ -311,7 +313,7 @@ extension AppCoordinator {
 
   @objc fileprivate func openSettings() {
     if settingsWindowController == nil {
-      let settingsViewModel = ModelSettingsViewModel(
+      let modelViewModel = ModelSettingsViewModel(
         configuration: viewModel.configuration,
         store: configurationStore,
         loader: configurationLoader,
@@ -319,9 +321,111 @@ extension AppCoordinator {
       ) { [weak self] configuration in
         self?.viewModel.applyConfiguration(configuration)
       }
-      settingsWindowController = SettingsWindowController(viewModel: settingsViewModel)
+      let preferencesViewModel = EviePreferencesViewModel(
+        preferences: preferences,
+        store: preferencesStore,
+        loadFailure: preferencesLoadFailure
+      ) { [weak self] updated in
+        self?.preferencesDidChange(updated)
+      }
+      self.preferencesViewModel = preferencesViewModel
+      settingsWindowController = SettingsWindowController(
+        modelViewModel: modelViewModel,
+        preferencesViewModel: preferencesViewModel,
+        preferencesPath: preferencesStore.fileURL.path,
+        configurationPath: configurationStore.fileURL.path
+      )
     }
     settingsWindowController?.present()
+  }
+
+  /// Routes a global shortcut to the thing it names.
+  ///
+  /// Every route goes through the same methods the menu bar uses, so a shortcut
+  /// and a menu item can never drift into doing different things.
+  fileprivate func perform(_ action: EvieShortcutAction, phase: GlobalHotKeyController.Phase) {
+    switch (action, phase) {
+    case (.toggleOverlay, .pressed):
+      toggleQuickText()
+    case (.quickText, .pressed):
+      openQuickText()
+    case (.newConversation, .pressed):
+      newConversation()
+    case (.openHistory, .pressed):
+      openHistory()
+    case (.openSettings, .pressed):
+      openSettings()
+    case (.pushToTalk, .pressed):
+      viewModel.requestVoiceActivation()
+    case (.toggleCallMode, .pressed):
+      toggleCallMode()
+    case (.emergencyStop, .pressed):
+      stopEverything()
+    default:
+      break
+    }
+  }
+
+  /// Cancels the running answer and puts the overlay away.
+  ///
+  /// Once audio exists this also closes the microphone and cuts playback; the
+  /// shortcut is registered now so the reflex is already in the user's hands.
+  fileprivate func stopEverything() {
+    viewModel.cancelCurrentInteraction()
+    panelController.hide()
+    updateToggleMenuTitle()
+  }
+
+  fileprivate func toggleCallMode() {
+    var updated = preferences
+    updated.voice.setCallModeEnabled(!updated.voice.callModeEnabled)
+    do {
+      try preferencesStore.save(updated)
+      preferencesDidChange(updated)
+      // The preference is real and saved; the behaviour it selects is not built
+      // yet. Saying so is better than flipping a switch that appears to do
+      // nothing.
+      viewModel.presentRuntimeWarning(
+        updated.voice.callModeEnabled
+          ? "Modo ligação guardado. Ele passa a valer quando a voz estiver ligada."
+          : "Modo ligação desligado."
+      )
+    } catch {
+      viewModel.presentRuntimeError(title: "Não consegui mudar o modo", error: error)
+    }
+  }
+
+  fileprivate func preferencesDidChange(_ updated: EviePreferences) {
+    let appearanceChanged = updated.appearance != preferences.appearance
+    let shortcutsChanged = updated.shortcuts != preferences.shortcuts
+    preferences = updated
+
+    if appearanceChanged {
+      panelController.applyAppearance(updated.appearance)
+    }
+    if shortcutsChanged {
+      applyShortcuts()
+    }
+    preferencesViewModel?.adopt(updated)
+    viewModel.applyCapabilities(Self.capabilities(for: updated))
+  }
+
+  /// Re-registers every shortcut and reports the ones the system refused.
+  ///
+  /// A refusal is normal — another application already owns the combination — so
+  /// it is surfaced by name rather than silently swallowed.
+  fileprivate func applyShortcuts() {
+    guard let hotKeyController else {
+      return
+    }
+    let failures = hotKeyController.apply(preferences.shortcuts)
+    preferencesViewModel?.reportShortcutAvailability(unavailable: Set(failures.keys))
+    if let message = GlobalHotKeyController.failureMessage(
+      for: failures,
+      preferences: preferences.shortcuts
+    ) {
+      viewModel.presentRuntimeWarning(message)
+    }
   }
 
   fileprivate func updateToggleMenuTitle() {

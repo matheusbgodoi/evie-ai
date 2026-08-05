@@ -6,6 +6,22 @@ All notable changes to Evie are documented here. Dates use `YYYY-MM-DD`.
 
 ### Added
 
+- A real settings window, in five tabs: Atalhos, Voz, Aparência, Modelo, and
+  Diagnóstico. Changes are written as they are made rather than behind a Save
+  button, because a preference that only applies once you remember to press Save
+  is a preference that quietly does not apply.
+- A shortcut recorder for all eight actions, with per-action disable and reset,
+  the conflicting action named in place, and a row that says so when the system
+  refuses a combination another application already owns.
+- Global shortcuts are now driven by the preferences at runtime: registration is
+  per action, a refusal costs only that one shortcut, and re-registration happens
+  as soon as a binding changes.
+- Two new global actions: toggle call mode, and stop everything, which cancels the
+  running answer and puts the overlay away.
+- A Diagnóstico tab, the only place the interface shows the model name, the
+  loopback address, and the local file paths, each copyable.
+- `evie-shell --open-settings` opens the window without a mouse. Evie has no Dock
+  icon, so an unavailable shortcut would otherwise leave no way in.
 - Evie's own identity: `EviePersona` generates the hidden system message from an
   explicit capability snapshot, names Matheus Barboza de Godoi as her creator,
   addresses him as `você`/`seu` with masculine agreement, and can only claim a

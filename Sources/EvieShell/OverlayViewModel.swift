@@ -379,6 +379,16 @@ final class OverlayViewModel: ObservableObject {
     onLayoutInvalidated?()
   }
 
+  /// Something is degraded but Evie still works.
+  ///
+  /// Deliberately quieter than `presentRuntimeError`: it does not take over the
+  /// visual state, close the entry field, or cancel anything. A shortcut another
+  /// application already owns is worth saying once, not worth interrupting for.
+  func presentRuntimeWarning(_ message: String) {
+    secondaryText = message
+    onLayoutInvalidated?()
+  }
+
   func presentRuntimeError(title: String, error: any Error) {
     requestTask?.cancel()
     requestTask = nil

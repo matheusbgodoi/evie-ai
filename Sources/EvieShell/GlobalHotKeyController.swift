@@ -1,21 +1,25 @@
 import Carbon.HIToolbox
+import EvieCore
 import Foundation
 
+/// Registers Evie's global shortcuts from the saved preferences.
+///
+/// Registration is per action and failure is partial: the system refuses a
+/// combination that another application already owns, and losing one shortcut
+/// must not cost the user the other seven. The failures are returned so the
+/// settings window can name them.
 final class GlobalHotKeyController: @unchecked Sendable {
-  enum HotKeyID: UInt32 {
-    case summon = 1
-    case quickText = 2
+  enum Phase {
+    case pressed
+    case released
   }
 
-  var onSummonPressed: (@MainActor () -> Void)?
-  var onSummonReleased: (@MainActor () -> Void)?
-  var onQuickText: (@MainActor () -> Void)?
+  var onAction: (@MainActor (EvieShortcutAction, Phase) -> Void)?
 
   private static let signature: OSType = 0x4556_4945  // "EVIE"
 
   private var eventHandler: EventHandlerRef?
-  private var summonHotKey: EventHotKeyRef?
-  private var quickTextHotKey: EventHotKeyRef?
+  private var registrations: [UInt32: (action: EvieShortcutAction, reference: EventHotKeyRef)] = [:]
 
   init() throws {
     var eventTypes = [
@@ -40,69 +44,55 @@ final class GlobalHotKeyController: @unchecked Sendable {
     guard status == noErr else {
       throw HotKeyError.installHandler(status)
     }
-
-    do {
-      try registerHotKeys()
-    } catch {
-      unregisterHotKeys()
-      if let eventHandler {
-        RemoveEventHandler(eventHandler)
-      }
-      self.eventHandler = nil
-      throw error
-    }
   }
 
   deinit {
-    unregisterHotKeys()
+    for registration in registrations.values {
+      UnregisterEventHotKey(registration.reference)
+    }
     if let eventHandler {
       RemoveEventHandler(eventHandler)
     }
   }
 
-  private func unregisterHotKeys() {
-    if let summonHotKey {
-      UnregisterEventHotKey(summonHotKey)
-      self.summonHotKey = nil
+  /// Replaces every registration with the current preferences.
+  ///
+  /// Returns the actions the system refused, so the interface can say which
+  /// shortcut is unavailable instead of silently doing nothing when it is
+  /// pressed.
+  @discardableResult
+  func apply(_ preferences: EvieShortcutPreferences) -> [EvieShortcutAction: OSStatus] {
+    for registration in registrations.values {
+      UnregisterEventHotKey(registration.reference)
     }
-    if let quickTextHotKey {
-      UnregisterEventHotKey(quickTextHotKey)
-      self.quickTextHotKey = nil
+    registrations.removeAll()
+
+    var failures: [EvieShortcutAction: OSStatus] = [:]
+    for action in EvieShortcutAction.allCases {
+      guard let shortcut = preferences.shortcut(for: action) else {
+        continue
+      }
+      let identifier = Self.identifier(for: action)
+      var reference: EventHotKeyRef?
+      let status = RegisterEventHotKey(
+        UInt32(shortcut.keyCode),
+        shortcut.modifiers.carbonFlags,
+        EventHotKeyID(signature: Self.signature, id: identifier),
+        GetApplicationEventTarget(),
+        0,
+        &reference
+      )
+      if status == noErr, let reference {
+        registrations[identifier] = (action, reference)
+      } else {
+        failures[action] = status
+      }
     }
+    return failures
   }
 
-  private func registerHotKeys() throws {
-    let summonID = EventHotKeyID(
-      signature: Self.signature,
-      id: HotKeyID.summon.rawValue
-    )
-    var status = RegisterEventHotKey(
-      UInt32(kVK_Space),
-      UInt32(optionKey),
-      summonID,
-      GetApplicationEventTarget(),
-      0,
-      &summonHotKey
-    )
-    guard status == noErr else {
-      throw HotKeyError.registerSummon(status)
-    }
-
-    let quickTextID = EventHotKeyID(
-      signature: Self.signature,
-      id: HotKeyID.quickText.rawValue
-    )
-    status = RegisterEventHotKey(
-      UInt32(kVK_Space),
-      UInt32(optionKey | shiftKey),
-      quickTextID,
-      GetApplicationEventTarget(),
-      0,
-      &quickTextHotKey
-    )
-    guard status == noErr else {
-      throw HotKeyError.registerQuickText(status)
-    }
+  private static func identifier(for action: EvieShortcutAction) -> UInt32 {
+    UInt32((EvieShortcutAction.allCases.firstIndex(of: action) ?? 0) + 1)
   }
 
   private static let eventCallback: EventHandlerUPP = { _, event, userData in
@@ -130,18 +120,20 @@ final class GlobalHotKeyController: @unchecked Sendable {
     let controller = Unmanaged<GlobalHotKeyController>
       .fromOpaque(userData)
       .takeUnretainedValue()
+    guard let action = controller.registrations[identifier.id]?.action else {
+      return OSStatus(eventNotHandledErr)
+    }
     let kind = GetEventKind(event)
-    let id = HotKeyID(rawValue: identifier.id)
 
     DispatchQueue.main.async {
       MainActor.assumeIsolated {
-        switch (id, kind) {
-        case (.summon, UInt32(kEventHotKeyPressed)):
-          controller.onSummonPressed?()
-        case (.summon, UInt32(kEventHotKeyReleased)):
-          controller.onSummonReleased?()
-        case (.quickText, UInt32(kEventHotKeyPressed)):
-          controller.onQuickText?()
+        switch kind {
+        case UInt32(kEventHotKeyPressed):
+          controller.onAction?(action, .pressed)
+        case UInt32(kEventHotKeyReleased):
+          // Only hold-to-activate actions care, but delivering it for every
+          // action keeps the contract simple and the handler decides.
+          controller.onAction?(action, .released)
         default:
           break
         }
@@ -155,18 +147,34 @@ final class GlobalHotKeyController: @unchecked Sendable {
 extension GlobalHotKeyController {
   enum HotKeyError: LocalizedError {
     case installHandler(OSStatus)
-    case registerSummon(OSStatus)
-    case registerQuickText(OSStatus)
 
     var errorDescription: String? {
       switch self {
       case .installHandler(let status):
         "Não foi possível instalar o handler de atalhos (\(status))."
-      case .registerSummon(let status):
-        "Não foi possível registrar Option+Space (\(status))."
-      case .registerQuickText(let status):
-        "Não foi possível registrar Option+Shift+Space (\(status))."
       }
     }
+  }
+
+  /// A sentence naming the shortcuts the system refused, or `nil` when every
+  /// registration succeeded.
+  static func failureMessage(
+    for failures: [EvieShortcutAction: OSStatus],
+    preferences: EvieShortcutPreferences
+  ) -> String? {
+    guard !failures.isEmpty else {
+      return nil
+    }
+    let described =
+      EvieShortcutAction.allCases
+      .filter { failures[$0] != nil }
+      .map { action in
+        let combination = preferences.shortcut(for: action)?.displayString ?? "—"
+        return "\(action.title) (\(combination))"
+      }
+    let subject = described.count == 1 ? "Um atalho já está" : "Alguns atalhos já estão"
+    return
+      "\(subject) em uso por outro app: \(described.joined(separator: ", ")). "
+      + "Escolha outra combinação em Configurações › Atalhos."
   }
 }

@@ -144,15 +144,15 @@ complete request set, what shipped, and the measurements are in
 | `PERF-001` | `DONE` | `OverlayPanelController`, `EvieMarkView` | `UI-013` | Hiding or occluding the overlay removes the animation timeline from the view tree; idle CPU of the release shell with the overlay visible measured 0.0%. |
 | `QA-006` | `DEFERRED` | user target-hardware acceptance | `UI-013`–`UI-016` | On the target display the user accepts dragging, resizing, reset, the fade, mark legibility at 30 points, and the palette in light and dark. |
 
-### VS-004 — Everything configurable — `PLANNED`
+### VS-004 — Everything configurable — `DONE` (source); `QA-006` deferred
 
 | ID | Status | Depends on | Deliverable and definition of done |
 |---|---|---|---|
-| `UI-017` | `PLANNED` | `CFG-002` | A tabbed settings window replaces the single model form: Atalhos, Voz, Aparência, Modelo, Diagnóstico. Every tab writes through the existing atomic stores and reports validation failures in place. |
-| `UI-018` | `PLANNED` | `UI-017` | A shortcut recorder captures a real key combination, shows the conflict set by name when two actions collide, offers per-action disable, and offers reset for one action or for all. |
-| `UI-019` | `PLANNED` | `UI-017`, `CFG-003` | The voice tab presents wake word, push-to-talk, call mode, and speech output, and explains the dependency in place rather than silently reverting a switch. |
-| `UI-020` | `PLANNED` | `UI-017` | The appearance tab exposes overlay width, placement reset, and the logo animation switch, and the diagnostics tab is the only place the endpoint appears. |
-| `UI-021` | `PLANNED` | `UI-018`, `UI-009` | Registered global shortcuts follow the preferences at runtime: re-registration on change, a visible failure when the system refuses a combination, and push-to-talk registered for key release as well. |
+| `UI-017` | `DONE` | `CFG-002` | A tabbed settings window replaces the single model form: Atalhos, Voz, Aparência, Modelo, Diagnóstico. Every tab writes through the existing atomic stores and reports validation failures in place. |
+| `UI-018` | `DONE` | `UI-017` | A shortcut recorder captures a real key combination, shows the conflict set by name when two actions collide, offers per-action disable, and offers reset for one action or for all. |
+| `UI-019` | `DONE` | `UI-017`, `CFG-003` | The voice tab presents wake word, push-to-talk, call mode, and speech output, and explains the dependency in place rather than silently reverting a switch. |
+| `UI-020` | `DONE` | `UI-017` | The appearance tab exposes overlay width, placement reset, and the logo animation switch, and the diagnostics tab is the only place the endpoint appears. |
+| `UI-021` | `DONE` | `UI-018`, `UI-009` | Registered global shortcuts follow the preferences at runtime: re-registration on change, a visible failure when the system refuses a combination, and push-to-talk registered for key release as well. |
 
 ### VS-005 — The voice loop — `PLANNED`
 
@@ -217,7 +217,7 @@ turns it into a robust long-lived macOS surface.
 |---|---|---|---|
 | `UI-007` | `PLANNED` | `APP-001`, `CORE-003` | General artifact stack supports pin/expand/copy/open/dismiss and compact task tabs without exposing private preview content by default. |
 | `UI-008` | `PLANNED` | `UI-002`–`UI-007` | Keyboard navigation, VoiceOver labels/order, Dynamic Type strategy, Reduce Motion, Reduce Transparency, high contrast, and light/dark behavior are verified. |
-| `UI-009` | `IN_PROGRESS` | `UI-003` | The preference model, conflict detection, per-action disable, and reset exist (`CFG-002`); the recorder UI and runtime re-registration are `UI-018`/`UI-021`. |
+| `UI-009` | `DONE` | `UI-003` | Delivered across `CFG-002`, `UI-018`, and `UI-021`: preferences, recorder, conflict display, per-action disable, reset, and runtime re-registration with named failures. |
 | `UI-010` | `PLANNED` | `CORE-002`, `UI-007` | Visible worker-loading, offline, permission, cancellation, retry, sleeping, and memory-pressure states never overstate what the system is doing. |
 | `UI-011` | `PLANNED` | `UI-007`, `POL-002` | Approval card shows exact action, target, material arguments, revision, expiration, approve/deny controls, and post-action result. |
 | `UI-012` | `IN_PROGRESS` | `UI-007`, `AGT-006`, `AUT-009` | VS-002 deliberately opens native History and model Settings windows without changing the default overlay; pinned artifacts, workflows, permissions, semantic-memory/resource controls, and health remain deferred. |
