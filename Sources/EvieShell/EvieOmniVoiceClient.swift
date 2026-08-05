@@ -10,13 +10,17 @@ struct EvieClonedVoice: Identifiable, Hashable, Sendable {
 
 /// Talks to the local OmniVoice backend.
 ///
-/// The backend holds a 2.4 GB model and is deliberately not started by Evie. It
-/// is a separate, explicitly controlled process — `Scripts/evie-voice` — for the
-/// same reason the inference server is: a heavy resident worker that starts
-/// itself is a resource decision taken away from the user.
+/// The backend holds a 2.4 GB model and stays a separate process, for the same
+/// reason the inference server does: a heavy resident worker is a resource
+/// decision that belongs to the person whose machine it is.
+///
+/// It is started on demand by `EvieVoiceEngineLauncher`, and only when a trained
+/// voice is actually asked to speak — never at login, never for a system voice.
+/// `Scripts/evie-voice` manages the same process by hand and releases its memory.
 struct EvieOmniVoiceClient: Sendable {
   /// Chosen by the backend's own default, not by Evie.
-  static let defaultEndpoint = URL(string: "http://127.0.0.1:3900")!
+  static let defaultPort = 3900
+  static let defaultEndpoint = URL(string: "http://127.0.0.1:\(defaultPort)")!
 
   /// Diffusion steps. Measured on this Mac with a warm model: eight steps
   /// produced 2.12 s of audio in 2.99 s, sixteen took 4.03 s for the same words.

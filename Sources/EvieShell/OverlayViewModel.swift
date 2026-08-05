@@ -431,6 +431,17 @@ final class OverlayViewModel: ObservableObject {
     onLayoutInvalidated?()
   }
 
+  /// Says why a trained voice is not the one speaking.
+  ///
+  /// Out loud rather than swallowed: the failure this replaces was silence with
+  /// no explanation anywhere, which cost an evening of looking for a crash that
+  /// had not happened.
+  func reportVoiceEngineFailure(_ error: any Error) {
+    secondaryText =
+      (error as? LocalizedError)?.errorDescription
+      ?? "Não consegui iniciar o motor de voz treinada."
+  }
+
   func updateOutputLevels(_ levels: [CGFloat]) {
     guard visualState == .speaking else {
       return

@@ -56,6 +56,7 @@ final class EvieVoiceLibraryViewModel: ObservableObject {
   }
 
   private let engine = EvieOmniVoiceClient()
+  private let launcher = EvieVoiceEngineLauncher()
   private let preferences: () -> EvieVoicePreferences
   private let mutate: (@MainActor (inout EvieVoicePreferences) -> Void) -> Void
 
@@ -95,6 +96,30 @@ final class EvieVoiceLibraryViewModel: ObservableObject {
     // Trained voices first: they are the ones worth listening to, and the ones
     // the user made.
     entries = clonedEntries + systemEntries
+  }
+
+  /// Whether starting the engine is even possible, so the button is offered only
+  /// when it can work.
+  var canStartEngine: Bool {
+    EvieVoiceEngineLauncher.isInstalled && !isEngineRunning && !isBusy
+  }
+
+  /// Brings the engine up from settings, which is where somebody looking at a
+  /// list of trained voices they cannot use will go first.
+  func startEngine() async {
+    isBusy = true
+    feedback = Feedback(message: "Carregando o modelo de voz — leva alguns segundos…", isError: false)
+    do {
+      try await launcher.ensureRunning(client: engine)
+      feedback = Feedback(message: "Motor de voz no ar.", isError: false)
+    } catch {
+      feedback = Feedback(
+        message: (error as? LocalizedError)?.errorDescription ?? "Não consegui iniciar o motor.",
+        isError: true
+      )
+    }
+    isBusy = false
+    await refresh()
   }
 
   func select(_ entry: Entry) {

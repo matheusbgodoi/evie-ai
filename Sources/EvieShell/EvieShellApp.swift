@@ -70,6 +70,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     // Speaks one sentence out loud through the whole path — synthesis, playback,
     // and metering — and reports what happened. You hear it; the file says
     // whether the level was real.
+    // Brings the voice engine up the way asking her to speak does, and reports
+    // how long it took. The point is to prove the app can start it without the
+    // shell script, which is the failure this exists for.
+    if CommandLine.arguments.contains("--voice-engine-check") {
+      Task { @MainActor in
+        await Self.runVoiceEngineCheck()
+        NSApp.terminate(nil)
+      }
+      return
+    }
+
     if CommandLine.arguments.contains("--speak-check") {
       Task { @MainActor in
         await Self.runSpeakCheck()
@@ -592,6 +603,29 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
       "http://10.0.0.5",
     ] {
       print("  \(EvieWebClient.validate(address) == nil ? "recusado" : "ACEITOU — BUG") \(address)")
+    }
+  }
+
+  @MainActor
+  static func runVoiceEngineCheck() async {
+    print("instalado: \(EvieVoiceEngineLauncher.isInstalled)")
+    print("porta \(EvieOmniVoiceClient.defaultPort) ocupada: \(EvieVoiceEngineLauncher.isPortBound())")
+
+    let client = EvieOmniVoiceClient()
+    print("já no ar: \(await client.isHealthy())")
+
+    let start = Date()
+    do {
+      try await EvieVoiceEngineLauncher().ensureRunning(client: client)
+      let elapsed = Date().timeIntervalSince(start)
+      let profiles = await client.voices()
+      print(String(format: "RESULTADO: no ar em %.2f s, %d perfil(is)", elapsed, profiles.count))
+      for profile in profiles {
+        print("  \(profile.name) [\(profile.id)]")
+      }
+    } catch {
+      print("RESULTADO: falhou — \((error as? LocalizedError)?.errorDescription ?? "\(error)")")
+      print("log: \(EvieVoiceEngineLauncher.logURL.path)")
     }
   }
 

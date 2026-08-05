@@ -17,6 +17,13 @@ struct VoiceLibraryView: View {
         ForEach(viewModel.entries.filter { !$0.isHidden }) { entry in
           row(for: entry)
         }
+        // Offered here because this is where somebody looking at a list with no
+        // trained voices in it will be standing.
+        if viewModel.canStartEngine {
+          Button("Ligar o motor de voz") {
+            Task { await viewModel.startEngine() }
+          }
+        }
       } header: {
         Text("Vozes")
       } footer: {
@@ -24,8 +31,10 @@ struct VoiceLibraryView: View {
           viewModel.isEngineRunning
             ? "As vozes treinadas soam melhor e são apagadas de verdade ao remover. "
               + "As do sistema pertencem ao macOS: remover só tira da lista."
-            : "O motor de voz está desligado, então só aparecem as vozes do sistema. "
-              + "Rode Scripts/evie-voice start para treinar ou usar uma voz sua."
+            : EvieVoiceEngineLauncher.isInstalled
+              ? "O motor de voz está desligado, então só aparecem as vozes do sistema. "
+                + "Ele sobe sozinho quando você pede pra ela falar com uma voz treinada."
+              : "O motor de voz não está instalado neste Mac, então só há vozes do sistema."
         )
         .font(.footnote)
         .foregroundStyle(.secondary)

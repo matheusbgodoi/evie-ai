@@ -36,10 +36,16 @@ Scripts/evie-app run           # Evie herself
 binary directly.** Running the executable from a terminal makes macOS attribute
 the microphone and folder permissions to the terminal instead of to Evie.
 
-Optional, for a voice that does not sound synthetic:
+For a voice that does not sound synthetic, pick a trained voice in Settings ›
+Vozes. Evie starts the engine herself the first time she is asked to speak with
+one — about seven seconds, and roughly 2.4 GB resident while it is up. Nothing
+loads at login, and a system voice never starts it.
+
+To manage that process by hand, or to release its memory:
 
 ```bash
-Scripts/evie-voice start       # the local voice engine. ~2.4 GB resident
+Scripts/evie-voice status
+Scripts/evie-voice stop
 ```
 
 Requirements: Apple Silicon, macOS 26 or newer, about 25 GB free, and Apple's

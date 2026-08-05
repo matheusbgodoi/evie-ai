@@ -29,6 +29,7 @@ final class AppCoordinator: NSObject {
   private let vaultIndex = EvieVaultIndex()
   private let audioCapture = EvieAudioCapture()
   private let speechOutput = EvieSpeechOutput()
+  private let voiceEngineLauncher = EvieVoiceEngineLauncher()
   /// True while push-to-talk is holding the microphone open, so releasing the key
   /// stops it but a click on the mark toggles instead.
   private var isHoldingToTalk = false
@@ -660,14 +661,35 @@ extension AppCoordinator {
     else {
       return
     }
+    let voice = Self.voice(for: preferences.voice)
     // The visual state follows `onStarted`, not this call: synthesis happens
     // first, and claiming she is speaking before any audio exists would be the
     // exact kind of dishonest indicator this project refuses.
-    speechOutput.speak(
-      answer,
-      using: Self.voice(for: preferences.voice),
-      rate: preferences.voice.resolvedSpeechRate
-    )
+    let rate = preferences.voice.resolvedSpeechRate
+
+    // A trained voice needs its engine, and asking for the voice is the request
+    // for the engine. Starting it costs a few seconds once; before this, a voice
+    // chosen in settings simply never spoke and there was nothing on screen or in
+    // any log to say why.
+    guard case .cloned = voice else {
+      speechOutput.speak(answer, using: voice, rate: rate)
+      return
+    }
+    Task { @MainActor [weak self] in
+      guard let self else {
+        return
+      }
+      do {
+        try await voiceEngineLauncher.ensureRunning()
+      } catch {
+        // Said out loud rather than swallowed, because falling silent is exactly
+        // the failure this replaces. The system voice still reads the answer.
+        viewModel.reportVoiceEngineFailure(error)
+        speechOutput.speak(answer, using: Self.fallbackVoice(for: preferences.voice), rate: rate)
+        return
+      }
+      speechOutput.speak(answer, using: voice, rate: rate)
+    }
   }
 
   /// A cloned voice is used when one is chosen; whether its engine is running is
@@ -682,6 +704,19 @@ extension AppCoordinator {
     // A voice the user removed from the list must not come back as the fallback
     // when nothing is chosen — that is the one place a hidden voice could still
     // speak.
+    if let chosen = preferences.voiceIdentifier,
+      !preferences.hiddenVoiceIdentifiers.contains(chosen)
+    {
+      return .system(identifier: chosen)
+    }
+    return fallbackVoice(for: preferences)
+  }
+
+  /// The best system voice available, used when a trained voice was asked for
+  /// and its engine could not be brought up.
+  fileprivate static func fallbackVoice(
+    for preferences: EvieVoicePreferences
+  ) -> EvieSpeechOutput.Voice {
     if let chosen = preferences.voiceIdentifier,
       !preferences.hiddenVoiceIdentifiers.contains(chosen)
     {
