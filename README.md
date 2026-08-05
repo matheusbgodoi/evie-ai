@@ -129,6 +129,7 @@ evie-shell --speak-check                   # says one sentence through the whole
 evie-shell --read <file>                   # what Evie would read from an image or PDF
 evie-shell --tools-check                   # a real agentic turn over a throwaway folder
 evie-shell --ask-folder <folder> "<question>"   # ask a real question of a real folder
+evie-shell --voices-check <audio.wav>      # train a throwaway voice, speak with it, delete it
 ```
 
 Server lifecycle:

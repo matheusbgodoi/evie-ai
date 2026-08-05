@@ -803,3 +803,17 @@ previous day of building. Everything here came from that.
   Reduced to five by grouping panes that answer the same question.
 - Validation: `Scripts/test` 243/243 in 24 suites; release build; installed; the
   microphone check run three times against the real room.
+
+## 2026-08-05 — VOI-020 verified end to end
+
+- The user asked whether the voice library was actually built. It was, and the
+  honest answer needed evidence rather than assertion.
+- Added `--voices-check <audio>`, which drives `EvieOmniVoiceClient` through the
+  whole path: list, train from a file, confirm it appears, **speak with it**, and
+  delete. Testing the engine's HTTP protocol with a throwaway script proves the
+  protocol; only this proves the client speaks it — the same distinction that
+  mattered for tool calling.
+- Result against the running engine: trained `46084af3`, produced 1.38 s of audio
+  with it, deleted it, and the user's five existing profiles were untouched.
+- Speaking is part of the check on purpose. A profile that is created and listed
+  but cannot synthesise is the failure that would only show up mid-conversation.

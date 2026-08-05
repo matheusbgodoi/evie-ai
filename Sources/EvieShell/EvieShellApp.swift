@@ -180,9 +180,74 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
       return
     }
 
+    // Exercises the voice library through the same client the settings window
+    // uses. The engine's protocol was proved with a throwaway script; this is
+    // what proves *this* code speaks it, which is otherwise discovered by a
+    // person trying to train a voice and getting an error.
+    if let index = CommandLine.arguments.firstIndex(of: "--voices-check"),
+      index + 1 < CommandLine.arguments.count
+    {
+      let audioURL = URL(fileURLWithPath: CommandLine.arguments[index + 1])
+      Task { @MainActor in
+        await Self.runVoicesCheck(audioURL: audioURL)
+        NSApp.terminate(nil)
+      }
+      return
+    }
+
     let coordinator = AppCoordinator()
     self.coordinator = coordinator
     coordinator.start()
+  }
+
+  static func runVoicesCheck(audioURL: URL) async {
+    let engine = EvieOmniVoiceClient()
+
+    guard await engine.isHealthy() else {
+      print("motor de voz fora do ar — rode Scripts/evie-voice start")
+      return
+    }
+
+    let before = await engine.voices()
+    print("vozes treinadas antes: \(before.map(\.name))")
+    print("vozes do sistema: \(EvieSpeechOutput.availableVoices().count)")
+
+    let identifier: String
+    do {
+      identifier = try await engine.createProfile(
+        name: "TESTE-descartavel",
+        audioURL: audioURL,
+        referenceText: "Esta é uma gravação de referência para testar o treino de voz da Evie."
+      )
+      print("TREINAR: ok, id = \(identifier)")
+    } catch {
+      print("TREINAR falhou: \((error as? LocalizedError)?.errorDescription ?? "\(error)")")
+      return
+    }
+
+    let during = await engine.voices()
+    print("aparece na lista: \(during.contains { $0.id == identifier })")
+
+    // And it can actually speak, which is the only thing that makes a trained
+    // voice worth having.
+    do {
+      let buffer = try await engine.synthesise("Pronta.", profileID: identifier)
+      let seconds = Double(buffer.frameLength) / buffer.format.sampleRate
+      print(String(format: "FALAR: ok, %.2f s de áudio", seconds))
+    } catch {
+      print("FALAR falhou: \((error as? LocalizedError)?.errorDescription ?? "\(error)")")
+    }
+
+    do {
+      try await engine.deleteProfile(id: identifier)
+      print("APAGAR: ok")
+    } catch {
+      print("APAGAR falhou: \((error as? LocalizedError)?.errorDescription ?? "\(error)")")
+    }
+
+    let after = await engine.voices()
+    print("vozes depois: \(after.map(\.name))")
+    print("suas vozes intactas: \(before.map(\.id).sorted() == after.map(\.id).sorted())")
   }
 
   /// One question against one folder, with the tools, printing what she used.
