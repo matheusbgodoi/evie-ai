@@ -139,7 +139,8 @@ struct EvieAgentLoopTests {
 
     let offered = await client.toolsPerCall
     #expect(offered.count == 2)
-    #expect(offered[0] == EvieFileToolbox.definitions.count)
+    // The file tools plus the one that proposes a memory.
+    #expect(offered[0] == EvieFileToolbox.definitions.count + 1)
     #expect(offered[1] == 0)
   }
 
@@ -162,6 +163,56 @@ struct EvieAgentLoopTests {
     let sent = await client.lastMessages
     let answered = Set(sent.filter { $0.role == .tool }.compactMap(\.toolCallID))
     #expect(answered == Set(manyCalls.map(\.id)))
+  }
+
+  // MARK: - Memory
+
+  /// She may ask to keep something. Asking is all she may do — the outcome
+  /// carries a proposal, and nothing has been written.
+  @Test("a memory is proposed, never stored")
+  func proposesMemory() async throws {
+    let client = ScriptedClient(turns: [
+      .tools([
+        EvieToolCall(
+          id: "c1",
+          name: "propose_memory",
+          argumentsJSON: #"{"fact":"Prefere reuniões de manhã."}"#
+        )
+      ]),
+      .text("Anotei a sugestão."),
+    ])
+
+    let outcome = try await EvieAgentLoop().run(
+      messages: [ChatMessage(role: .user, content: "só marca reunião de manhã pra mim")],
+      roots: [],
+      client: client,
+      emit: { _ in }
+    )
+
+    #expect(outcome.memoryProposals == ["Prefere reuniões de manhã."])
+
+    // And she is told plainly that nothing was kept, so she does not go on to
+    // tell the user she has remembered it.
+    let sent = await client.lastMessages
+    let result = try #require(sent.first { $0.role == .tool })
+    #expect(result.content.contains("NADA foi guardado"))
+  }
+
+  @Test("a proposal with no text is refused rather than recorded")
+  func refusesEmptyMemory() async throws {
+    let client = ScriptedClient(turns: [
+      .tools([EvieToolCall(id: "c1", name: "propose_memory", argumentsJSON: #"{"fact":"  "}"#)]),
+      .text("Ok."),
+    ])
+
+    let outcome = try await EvieAgentLoop().run(
+      messages: [ChatMessage(role: .user, content: "oi")],
+      roots: [],
+      client: client,
+      emit: { _ in }
+    )
+
+    #expect(outcome.memoryProposals.isEmpty)
   }
 
   // MARK: - What the user sees

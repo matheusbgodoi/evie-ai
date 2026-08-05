@@ -82,6 +82,10 @@ document telling her to delete your backups cannot work.
 She reads it to answer — what you wrote about a project, a company, a decision —
 and never writes to it.
 
+**What she remembers.** When she thinks she has learned something durable about
+you, she asks — a card with two buttons. Nothing is stored until you press one.
+Settings › Memória shows everything she keeps, one line each, deletable.
+
 **Her voice.** Settings › Vozes. Remove the system voices you dislike, or train
 your own: pick a clean ten-to-thirty-second recording, name it, and it becomes one
 of her voices. Writing out what the recording says is optional and saves about
@@ -97,6 +101,7 @@ twenty-three seconds the first time she uses it.
 - Call mode
 - Reading images and PDFs, including scanned ones
 - Reading, searching, and searching inside folders you authorise
+- Memory of what you told her, when you confirm it
 - A movable, resizable overlay, and configurable everything
 
 ## What does not, yet
@@ -105,7 +110,6 @@ twenty-three seconds the first time she uses it.
 - Anything that writes, moves, or deletes a file
 - Email, calendar, Drive, WhatsApp
 - Automations and scheduled work
-- Semantic memory across conversations
 
 She is told exactly which of these are wired up and will say so rather than
 pretend. `evie-shell --print-persona` prints what she has been told about herself.
@@ -145,6 +149,7 @@ Scripts/test                                # the Swift test suite
 | Settings | `~/Library/Application Support/Evie/preferences.json` |
 | Model configuration | `~/Library/Application Support/Evie/config.json` |
 | Authorised folders | `~/Library/Application Support/Evie/roots.json` |
+| What she remembers | `~/Library/Application Support/Evie/memory.json` |
 | Conversations | `~/Library/Application Support/Evie/Conversations/` |
 | Logs | `~/Library/Logs/Evie/` |
 

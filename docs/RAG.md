@@ -51,6 +51,23 @@ The credential denylist applies to retrieval exactly as it does to reading: a
 match. `~/Library` is refused wherever it appears, so authorising a home folder
 does not turn Mail and Messages into a retrieval corpus.
 
+### Memory is a different thing, and is also not an index
+
+Retrieval answers "what did I write". Memory answers "what did I tell her". They
+are kept apart deliberately: the vault is the user's own writing and Evie only
+reads it, while memory is what was said out loud in a conversation and exists
+nowhere else.
+
+The user chose propose-and-confirm over both "only when I say so" and "she
+decides". `EvieMemoryTool` is a tool that stores nothing: it raises a card, and a
+click stores. That preserves the project's invariant — no tool the model can call
+changes anything — and it is the answer to the failure mode every self-writing
+memory has, where one misunderstanding becomes a permanent fact and later answers
+are wrong in a way whose origin cannot be traced.
+
+Bounded at sixty entries and two thousand recalled characters, because every
+memory is paid for on every turn.
+
 ### Read-only, structurally
 
 There is no tool that writes. The vault is a source and never a destination, and

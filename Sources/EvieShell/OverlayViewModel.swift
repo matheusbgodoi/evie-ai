@@ -30,6 +30,12 @@ final class OverlayViewModel: ObservableObject {
   /// Whether the question being answered was spoken rather than typed. Read by
   /// the coordinator to decide whether the answer is read out loud.
   private(set) var lastPromptWasSpoken = false
+  /// What she has been allowed to remember. Asked for when a turn starts rather
+  /// than held, so a memory deleted in Settings stops applying to the next
+  /// question rather than to the next launch.
+  var memories: @MainActor () -> [EvieMemoryEntry] = { [] }
+  /// Called with what the user decided about a proposed memory.
+  var onMemoryDecided: (@MainActor (String, Bool) -> Void)?
   /// The folders Evie may look in, asked for at the start of every turn rather
   /// than held: a folder revoked in Settings has to stop working on the next
   /// question, not on the next launch.
@@ -64,18 +70,26 @@ final class OverlayViewModel: ObservableObject {
     conversation = [
       ChatMessage(role: .system, content: Self.systemPrompt(for: capabilities))
     ]
+    // The memory source is set by the coordinator right after construction, so
+    // the first prompt is rebuilt once it exists.
   }
 
   /// Rebuilds the hidden persona message when a capability is switched on or
   /// off, so Evie never keeps claiming — or denying — something that changed
   /// mid-session. Only the system message is replaced; the visible turns stay.
   func applyCapabilities(_ capabilities: EvieCapabilitySnapshot) {
-    guard capabilities != self.capabilities else {
-      return
-    }
     self.capabilities = capabilities
+    refreshSystemPrompt()
+  }
+
+  /// Rebuilds the hidden instructions in place, for when what she knows changed
+  /// without the conversation changing.
+  func refreshSystemPrompt() {
     let message = ChatMessage(role: .system, content: systemPrompt)
     if conversation.first?.role == .system {
+      guard conversation[0].content != message.content else {
+        return
+      }
       conversation[0] = message
     } else {
       conversation.insert(message, at: 0)
@@ -629,6 +643,20 @@ final class OverlayViewModel: ObservableObject {
     }
 
     switch action.id {
+    case "memory-keep":
+      onMemoryDecided?(artifact.summary, true)
+      artifacts.removeAll { $0.id == id }
+      primaryText = "Guardado"
+      secondaryText = "Ela vai lembrar disso nas próximas conversas"
+      onLayoutInvalidated?()
+
+    case "memory-discard":
+      onMemoryDecided?(artifact.summary, false)
+      artifacts.removeAll { $0.id == id }
+      primaryText = "Descartado"
+      secondaryText = "Ela não guardou nada"
+      onLayoutInvalidated?()
+
     case "copy":
       // What lands on the clipboard is the answer without its syntax: no hashes,
       // no asterisks, no LaTeX. Pasting it anywhere should need no cleanup.
@@ -690,11 +718,18 @@ extension OverlayViewModel {
   /// now. It is regenerated rather than stored so a capability change can never
   /// leave a stale claim in the conversation.
   fileprivate var systemPrompt: String {
-    Self.systemPrompt(for: capabilities)
+    Self.systemPrompt(for: capabilities, remembering: memories())
   }
 
-  fileprivate static func systemPrompt(for capabilities: EvieCapabilitySnapshot) -> String {
-    EviePersona.evie.systemPrompt(capabilities: capabilities)
+  fileprivate static func systemPrompt(
+    for capabilities: EvieCapabilitySnapshot,
+    remembering entries: [EvieMemoryEntry] = []
+  ) -> String {
+    let persona = EviePersona.evie.systemPrompt(capabilities: capabilities)
+    guard let recall = EvieMemoryStore.recallBlock(from: entries) else {
+      return persona
+    }
+    return persona + "\n\n" + recall
   }
 
   fileprivate static func title(for prompt: String) -> String {
@@ -841,6 +876,42 @@ extension OverlayViewModel {
     }
   }
 
+  /// Puts "guardar isto?" on screen.
+  ///
+  /// A card rather than a dialog: a modal in the middle of reading an answer is
+  /// an interruption, and the decision is not urgent. It sits there until it is
+  /// answered, and answering it is one click either way.
+  fileprivate func presentMemoryProposal(_ fact: String) {
+    let trimmed = fact.trimmingCharacters(in: .whitespacesAndNewlines)
+    guard !trimmed.isEmpty else {
+      return
+    }
+    artifacts.append(
+      ArtifactCardModel(
+        id: UUID(),
+        kind: .memory,
+        title: "Posso guardar isto?",
+        summary: trimmed,
+        isExpanded: true,
+        actions: [
+          ArtifactActionModel(
+            id: "memory-keep",
+            title: "Guardar",
+            systemImage: "checkmark",
+            role: .primary
+          ),
+          ArtifactActionModel(
+            id: "memory-discard",
+            title: "Agora não",
+            systemImage: "xmark",
+            role: .secondary
+          ),
+        ]
+      )
+    )
+    onLayoutInvalidated?()
+  }
+
   /// Closes a turn that used tools.
   ///
   /// The intermediate turns go into the conversation as well as the answer. They
@@ -868,6 +939,9 @@ extension OverlayViewModel {
     }
 
     updateActiveArtifact(with: answer)
+    for proposal in outcome.memoryProposals {
+      presentMemoryProposal(proposal)
+    }
     onAnswerReady?(EvieRichText(answer))
     if conversation.count == 1 {
       activeConversationTitle = Self.title(for: userMessage.content)

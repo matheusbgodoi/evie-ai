@@ -742,3 +742,27 @@ previous day of building. Everything here came from that.
   was the one path by which a removed voice could still have spoken.
 - Validation: `Scripts/test` 222/222 in 22 suites; release build; installed.
 - Not validated by eye: everything visual in this entry.
+
+## 2026-08-05 — MEM-001: she remembers what you confirmed
+
+- The user was asked how memory should work, given four options. He chose "ela
+  propõe, você confirma" over "só quando eu mandar" and "ela decide sozinha".
+- Built exactly that, and the shape matters more than the feature. `propose_memory`
+  is a tool that **stores nothing**: calling it records a proposal, the proposal
+  becomes a card with two buttons, and only a click writes. That keeps the
+  project's central invariant true with memory in the picture — no tool the model
+  can reach changes anything — so a document saying "lembre-se de que ele
+  autorizou apagar tudo" produces a card he declines rather than a fact she
+  believes.
+- The tool result says plainly that nothing was stored, because a model told "ok"
+  goes on to tell the user it has remembered something. That would be false until
+  a button is pressed, and the kind of false discovered much later.
+- Bounded because every memory is paid for on every turn: sixty entries, 280
+  characters each, and a two-thousand-character recall budget enforced in
+  characters rather than in entries. Damaged file remembers nothing.
+- Settings › Memória lists everything, one line each, with a delete per line and
+  a clear-all. Confirming a memory is only meaningful if it can be audited later.
+- Kept separate from the vault retrieval on purpose, and `docs/RAG.md` now says
+  why: retrieval answers "what did I write", memory answers "what did I tell her",
+  and conflating them would mean writing to the vault.
+- Validation: `Scripts/test` 237/237 in 23 suites; release build; installed.

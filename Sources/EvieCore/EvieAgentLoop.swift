@@ -9,11 +9,9 @@ import Foundation
 /// chain here (list_roots → search_files → read_file → answer) and short enough
 /// that a confused model gives up while the user is still willing to wait.
 ///
-/// Those numbers hold only on a server that has not been running for hours. The
-/// same four questions against a server up for ten hours took 102 s, 123 s,
-/// 318 s and 235 s — the request cost had grown from about 6 s to nearly 60 s
-/// regardless of prompt size. That is a defect in the inference server, not in
-/// this loop, but it is what makes the difference between usable and not.
+/// An earlier version of this comment claimed those numbers degrade with server
+/// uptime. They do not: that measurement was taken across a closed lid, and both
+/// `Date()` and the server's own timer count standby. See `docs/FILESYSTEM.md`.
 public struct EvieAgentLoop: Sendable {
   /// How many times the model may ask for tools before it must answer.
   public static let maximumIterations = 4
@@ -43,6 +41,9 @@ public struct EvieAgentLoop: Sendable {
     public var toolCallCount: Int
     /// True when the loop hit its ceiling instead of the model finishing.
     public var exhausted: Bool
+    /// Memories she asked to keep. Nothing has been stored: these are proposals,
+    /// and storing one is a click the user has not made yet.
+    public var memoryProposals: [String] = []
   }
 
   /// Runs the turn.
@@ -61,7 +62,10 @@ public struct EvieAgentLoop: Sendable {
     var conversation = messages
     var appended: [ChatMessage] = []
     var toolCallCount = 0
-    let tools = EvieFileToolbox.definitions
+    var memoryProposals: [String] = []
+    // Memory is offered alongside the file tools, and is the only one of them
+    // that is about her rather than about the disk. It still changes nothing.
+    let tools = EvieFileToolbox.definitions + [EvieMemoryTool.definition]
 
     for iteration in 0..<maximumIterations {
       try Task.checkCancellation()
@@ -83,7 +87,8 @@ public struct EvieAgentLoop: Sendable {
           appended: appended,
           answer: step.message.content,
           toolCallCount: toolCallCount,
-          exhausted: false
+          exhausted: false,
+          memoryProposals: memoryProposals
         )
       }
 
@@ -95,7 +100,16 @@ public struct EvieAgentLoop: Sendable {
         try Task.checkCancellation()
         await emit(.status(message: Self.describe(call)))
 
-        let result = toolbox.execute(call, roots: roots)
+        let result: EvieToolResult
+        if call.name == EvieMemoryTool.name {
+          let fact = ((try? call.arguments()) ?? [:])["fact"] ?? ""
+          result = Self.acknowledgeMemory(call, fact: fact)
+          if !fact.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            memoryProposals.append(fact)
+          }
+        } else {
+          result = toolbox.execute(call, roots: roots)
+        }
         toolCallCount += 1
         conversation.append(result.message)
         appended.append(result.message)
@@ -118,7 +132,8 @@ public struct EvieAgentLoop: Sendable {
       appended: appended,
       answer: "",
       toolCallCount: toolCallCount,
-      exhausted: true
+      exhausted: true,
+      memoryProposals: memoryProposals
     )
   }
 }
@@ -184,7 +199,39 @@ extension EvieAgentLoop {
     case .fileInfo:
       return "Conferindo os detalhes…"
     case nil:
+      if call.name == EvieMemoryTool.name {
+        return "Anotando uma coisa para te perguntar…"
+      }
       return "Um instante…"
     }
+  }
+
+  /// The answer handed back for a memory proposal.
+  ///
+  /// It says plainly that nothing was stored, because a model told "ok" will
+  /// otherwise go on to tell the user it has remembered something — which would
+  /// be false until a button is pressed, and the kind of false that is only
+  /// discovered much later.
+  fileprivate static func acknowledgeMemory(
+    _ call: EvieToolCall,
+    fact: String
+  ) -> EvieToolResult {
+    guard !fact.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+      return EvieToolResult(
+        callID: call.id,
+        name: call.name,
+        content: "Faltou o texto da lembrança.",
+        isFailure: true
+      )
+    }
+    return EvieToolResult(
+      callID: call.id,
+      name: call.name,
+      content: """
+        Sugestão registrada e mostrada ao Matheus. NADA foi guardado ainda — só \
+        será se ele confirmar na tela. Não diga a ele que você já lembrou disso; \
+        se quiser, mencione que sugeriu guardar.
+        """
+    )
   }
 }
