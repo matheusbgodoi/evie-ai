@@ -176,6 +176,11 @@ extension EvieAgentLoop {
         return "Procurando por \"\(query)\"…"
       }
       return "Procurando…"
+    case .searchContent:
+      if let query = arguments["query"], !query.isEmpty {
+        return "Lendo suas anotações sobre \"\(query)\"…"
+      }
+      return "Lendo suas anotações…"
     case .fileInfo:
       return "Conferindo os detalhes…"
     case nil:

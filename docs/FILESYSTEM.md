@@ -172,18 +172,19 @@ All four answers were correct. The `.env` question is the interesting one: the
 denylist withheld the file from the listing and from the search, and Evie
 reported honestly that she could not find it rather than inventing a password.
 
-**The inference server degrades badly with uptime, and this is the single largest
-risk to the feature being usable.** The same four questions against a server that
-had been up ten hours took 102 s, 123 s, 318 s and 235 s. A trivial `"oi"` with
-eight completion tokens took **1657 seconds** — 27 minutes. Per-request cost had
-grown from about 6 s to nearly 60 s and no longer varied with prompt size
-(148 prompt tokens cost the same as 1322), and prefix caching had stopped hitting
-entirely — `cached=0` on every request, against `cached=1077` after a restart.
-The process held 1.6 GB resident and used 115% CPU, barely more than one core of
-an M5. Restarting restored 5.8 s immediately. This is a defect in
-TurboFieldfareServer, not in the loop, and it needs its own investigation; until
-then, `Scripts/evie-runtime stop && start` is the workaround, and a slow Evie is
-the symptom to watch for.
+**Retracted: an earlier version of this document claimed the inference server
+degrades badly with uptime.** It does not, and the measurement behind the claim
+was invalid. The 1657-second request that anchored it was wall-clock across a
+MacBook lid closing: both `Date()` and the server's own timer count time spent in
+standby, so the figure measured sleep, not inference. The other slow figures from
+that round (102 s, 123 s, 318 s, 235 s) came from a background run that spanned
+the same standby and are unreliable for the same reason.
+
+Re-measured awake, after 1 h 39 min of server uptime: 6.6 s, 6.8 s, 6.9 s for
+128 completion tokens — about 19 tokens per second, with no drift. There is no
+known uptime defect. The lesson is narrower and worth keeping: **never time a
+local model with wall clock across a background run**, because a lid closing is
+indistinguishable from a slow server in the numbers.
 
 An earlier round of measurements in this session was contaminated by leftover
 probe processes queuing behind each other on the same single-worker server — the

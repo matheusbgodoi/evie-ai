@@ -15,10 +15,13 @@ final class EvieLevelMeter: Sendable {
 
   private let state = Mutex(State())
 
-  /// Rises quickly so speech onset is visible immediately.
-  private static let attack: Float = 0.35
-  /// Falls slowly so the gaps inside a sentence do not read as silence.
-  private static let release: Float = 0.06
+  /// Rises almost immediately, so the first syllable is already on screen.
+  private static let attack: Float = 0.55
+  /// Falls fast enough to show the shape of speech and slow enough that the gaps
+  /// between syllables do not read as silence. The previous 0.06 took over half a
+  /// second to decay, which flattened every sentence into one long plateau and is
+  /// most of why the trace felt unresponsive.
+  private static let release: Float = 0.16
 
   func absorb(_ buffer: AVAudioPCMBuffer, noiseFloorDecibels: Float) {
     guard let channel = buffer.floatChannelData?[0] else {

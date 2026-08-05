@@ -86,8 +86,22 @@ struct VoiceSettingsView: View {
         )
         captionRow(
           voice.speechOutputEnabled
-            ? "As respostas saem em áudio além do texto. Falar com ela por cima interrompe."
+            ? "Ela responde falando quando você fala com ela. Falar por cima interrompe."
             : "As respostas ficam só escritas, mesmo quando você perguntar falando."
+        )
+
+        Toggle(
+          "Falar também quando eu digitar",
+          isOn: Binding(
+            get: { voice.speaksTypedAnswers },
+            set: viewModel.setSpeaksTypedAnswers
+          )
+        )
+        .disabled(!voice.speechOutputEnabled)
+        captionRow(
+          voice.speaksTypedAnswers
+            ? "Ela lê toda resposta em voz alta, inclusive as que você pediu escrevendo."
+            : "Perguntou escrevendo, ela responde escrevendo. Perguntou falando, ela fala."
         )
 
         Toggle(

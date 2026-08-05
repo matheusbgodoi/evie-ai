@@ -179,6 +179,105 @@ struct EviePreferencesTests {
   }
 }
 
+@Suite("Evie speaks the way she was asked")
+struct EvieSpeaksAnswerTests {
+  /// The default, and the reason it is the default: an answer read aloud to
+  /// something you typed interrupts whatever your hands were doing.
+  @Test("typed questions are answered in writing by default")
+  func typedIsSilentByDefault() {
+    let voice = EvieVoicePreferences()
+
+    #expect(voice.speechOutputEnabled)
+    #expect(!voice.speaksTypedAnswers)
+    #expect(!voice.speaksAnswer(toSpokenPrompt: false))
+  }
+
+  @Test("spoken questions are answered out loud")
+  func spokenSpeaks() {
+    #expect(EvieVoicePreferences().speaksAnswer(toSpokenPrompt: true))
+  }
+
+  @Test("the switch makes her read typed answers too")
+  func optingIn() {
+    var voice = EvieVoicePreferences()
+    voice.speaksTypedAnswers = true
+
+    #expect(voice.speaksAnswer(toSpokenPrompt: false))
+    #expect(voice.speaksAnswer(toSpokenPrompt: true))
+  }
+
+  @Test("with speech off she stays quiet however she was asked")
+  func speechOffWinsOverEverything() {
+    var voice = EvieVoicePreferences()
+    voice.speaksTypedAnswers = true
+    voice.setSpeechOutputEnabled(false)
+
+    #expect(!voice.speaksAnswer(toSpokenPrompt: true))
+    #expect(!voice.speaksAnswer(toSpokenPrompt: false))
+    #expect(!voice.speaksAnswer(toSpokenPrompt: false, inCall: true))
+    // The switch is cleared rather than left claiming something untrue.
+    #expect(!voice.speaksTypedAnswers)
+  }
+
+  /// A call speaks whatever the words arrived as; that is what makes it a call.
+  @Test("a call always speaks")
+  func callAlwaysSpeaks() {
+    #expect(EvieVoicePreferences().speaksAnswer(toSpokenPrompt: false, inCall: true))
+  }
+}
+
+@Suite("Evie voice library")
+struct EvieVoiceLibraryTests {
+  /// Removing a system voice must also stop it being the one that speaks.
+  @Test("hiding the selected voice deselects it")
+  func hidingClearsSelection() {
+    var voice = EvieVoicePreferences()
+    voice.voiceIdentifier = "com.apple.voice.compact.pt-BR.Luciana"
+
+    voice.hideVoice(identifier: "com.apple.voice.compact.pt-BR.Luciana")
+
+    #expect(voice.voiceIdentifier == nil)
+    #expect(voice.hiddenVoiceIdentifiers.contains("com.apple.voice.compact.pt-BR.Luciana"))
+  }
+
+  @Test("hiding another voice leaves the selection alone")
+  func hidingAnotherKeepsSelection() {
+    var voice = EvieVoicePreferences()
+    voice.voiceIdentifier = "escolhida"
+
+    voice.hideVoice(identifier: "outra")
+
+    #expect(voice.voiceIdentifier == "escolhida")
+  }
+
+  @Test("a hidden voice can be brought back")
+  func restoring() {
+    var voice = EvieVoicePreferences()
+    voice.hideVoice(identifier: "uma")
+
+    voice.showVoice(identifier: "uma")
+
+    #expect(voice.hiddenVoiceIdentifiers.isEmpty)
+  }
+
+  @Test("hidden voices survive being written and read")
+  func roundTrip() throws {
+    var voice = EvieVoicePreferences()
+    voice.hideVoice(identifier: "a")
+    voice.hideVoice(identifier: "b")
+
+    let data = try JSONEncoder().encode(EviePreferences(voice: voice))
+    let decoded = try JSONDecoder().decode(EviePreferences.self, from: data)
+
+    #expect(decoded.voice.hiddenVoiceIdentifiers == ["a", "b"])
+  }
+
+  @Test("nothing is hidden to begin with")
+  func defaultsToNothingHidden() {
+    #expect(EvieVoicePreferences().hiddenVoiceIdentifiers.isEmpty)
+  }
+}
+
 @Suite("Evie preferences store")
 struct EviePreferencesStoreTests {
   @Test("round-trips every section through the loader")

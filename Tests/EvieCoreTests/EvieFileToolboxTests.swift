@@ -7,11 +7,16 @@ import Testing
 struct EvieFileToolboxTests {
   // MARK: - Declaration
 
-  @Test("declares exactly the five read-only tools")
-  func declaresFiveTools() {
+  @Test("declares exactly the read-only tools, and no others")
+  func declaresTheReadOnlyTools() {
     let names = EvieFileToolbox.definitions.map(\.name).sorted()
 
-    #expect(names == ["file_info", "list_folder", "list_roots", "read_file", "search_files"])
+    #expect(
+      names == [
+        "file_info", "list_folder", "list_roots", "read_file", "search_content",
+        "search_files",
+      ]
+    )
     #expect(names.count == EvieFileToolbox.ToolName.allCases.count)
   }
 
@@ -273,6 +278,122 @@ struct EvieFileToolboxTests {
     )
 
     #expect(!result.content.contains("fundo.txt"))
+  }
+
+  // MARK: - Searching inside the text
+
+  /// The whole point of pointing Evie at a vault of notes: finding what was
+  /// written about something, without knowing which note it is in.
+  @Test("finds a note by what is written inside it")
+  func searchesContent() throws {
+    let directory = try makeTree()
+    defer { try? FileManager.default.removeItem(at: directory) }
+    let root = EvieFileRoot(id: "r1", displayName: "Obsidian", path: directory.path)
+
+    let result = EvieFileToolbox().execute(
+      call("search_content", #"{"root_id":"r1","query":"Corpo"}"#),
+      roots: [root]
+    )
+
+    #expect(!result.isFailure)
+    #expect(result.content.contains("relatório.md"))
+    #expect(result.content.contains("Corpo"))
+  }
+
+  @Test("accents and case do not matter inside the text either")
+  func contentSearchFolds() throws {
+    let directory = try makeTree()
+    defer { try? FileManager.default.removeItem(at: directory) }
+    let root = EvieFileRoot(id: "r1", displayName: "Obsidian", path: directory.path)
+    let toolbox = EvieFileToolbox()
+
+    for query in ["RELATORIO", "relatório"] {
+      let result = toolbox.execute(
+        call("search_content", #"{"root_id":"r1","query":"\#(query)"}"#),
+        roots: [root]
+      )
+      #expect(!result.isFailure, "falhou com \(query)")
+      #expect(result.content.contains("relatório.md"), "não achou com \(query)")
+    }
+  }
+
+  @Test("a term that appears nowhere says so, and says how much it looked at")
+  func contentSearchFindsNothing() throws {
+    let directory = try makeTree()
+    defer { try? FileManager.default.removeItem(at: directory) }
+    let root = EvieFileRoot(id: "r1", displayName: "Obsidian", path: directory.path)
+
+    let result = EvieFileToolbox().execute(
+      call("search_content", #"{"root_id":"r1","query":"jabuticaba"}"#),
+      roots: [root]
+    )
+
+    #expect(!result.isFailure)
+    #expect(result.content.contains("Não achei"))
+  }
+
+  /// One or two letters would match everything and fill the answer with noise.
+  @Test("a one-letter search is refused rather than run")
+  func contentSearchNeedsATerm() throws {
+    let directory = try makeTree()
+    defer { try? FileManager.default.removeItem(at: directory) }
+    let root = EvieFileRoot(id: "r1", displayName: "Obsidian", path: directory.path)
+
+    let result = EvieFileToolbox().execute(
+      call("search_content", #"{"root_id":"r1","query":"a"}"#),
+      roots: [root]
+    )
+
+    #expect(result.content.contains("duas letras"))
+  }
+
+  /// The credential denylist has to hold for the search that reads files too,
+  /// not only for the one that lists them.
+  @Test("a credential is never searched, so its contents cannot leak through a match")
+  func contentSearchSkipsCredentials() throws {
+    let directory = try makeTree()
+    defer { try? FileManager.default.removeItem(at: directory) }
+    try Data("SENHA=jabuticaba-secreta\n".utf8)
+      .write(to: directory.appendingPathComponent(".env"))
+    let root = EvieFileRoot(id: "r1", displayName: "Obsidian", path: directory.path)
+
+    let result = EvieFileToolbox().execute(
+      call("search_content", #"{"root_id":"r1","query":"jabuticaba"}"#),
+      roots: [root]
+    )
+
+    #expect(!result.content.contains("jabuticaba-secreta"))
+    #expect(!result.content.contains(".env"))
+  }
+
+  @Test("only text is opened, so a binary is never scanned")
+  func onlyTextIsSearched() {
+    #expect(EvieFileToolbox.isProbablyText("nota.md"))
+    #expect(EvieFileToolbox.isProbablyText("dados.json"))
+    #expect(EvieFileToolbox.isProbablyText("App.swift"))
+    #expect(!EvieFileToolbox.isProbablyText("foto.png"))
+    #expect(!EvieFileToolbox.isProbablyText("video.mov"))
+    #expect(!EvieFileToolbox.isProbablyText("modelo.gguf"))
+    // No extension is as likely to be a token file as prose.
+    #expect(!EvieFileToolbox.isProbablyText("token"))
+  }
+
+  @Test("a matching line is trimmed rather than returned whole")
+  func matchesAreTrimmed() {
+    let long = String(repeating: "palavra ", count: 200) + "agulha"
+    let lines = EvieFileToolbox.matchingLines(in: long, needle: "palavra")
+
+    #expect(lines.count == 1)
+    #expect(lines[0].count <= 221)
+    #expect(lines[0].hasSuffix("…"))
+  }
+
+  @Test("only the first few lines of one file come back")
+  func matchesAreCapped() {
+    let repeated = Array(repeating: "tem agulha aqui", count: 40).joined(separator: "\n")
+    let lines = EvieFileToolbox.matchingLines(in: repeated, needle: "agulha")
+
+    #expect(lines.count == 3)
   }
 
   // MARK: - file_info

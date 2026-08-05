@@ -73,6 +73,7 @@ struct CommandCapsule: View {
   var primaryText: String
   var secondaryText: String? = nil
   var waveformSamples: [CGFloat] = []
+  var waveformNoiseFloor: CGFloat = 0
   var isMuted = false
   var isAnimating = true
   var onToggleMute: (() -> Void)? = nil
@@ -141,7 +142,8 @@ struct CommandCapsule: View {
           direction: direction,
           tint: state.tint,
           isActive: !isMuted,
-          barCount: 24
+          barCount: 24,
+          noiseFloor: waveformNoiseFloor
         )
         .frame(height: 25)
 

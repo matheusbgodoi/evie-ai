@@ -6,6 +6,46 @@ All notable changes to Evie are documented here. Dates use `YYYY-MM-DD`.
 
 ### Added
 
+- Evie reads your Obsidian vault to answer. Settings › Pastas offers the vault
+  directly, and `search_content` looks inside the text of your notes rather than
+  only at their names. Verified against the real vault: asked what was written
+  about one of the user's companies, she found the role, the site, the files, and
+  a specific note about a funding conversation, in 42 seconds. She never writes to
+  it — no tool that writes exists.
+- Voices are yours to manage. Settings › Vozes lists every voice, lets you remove
+  the ones you dislike, and trains a new one from a recording you pick: choose the
+  audio, name it, and it becomes one of her voices. System voices are hidden
+  rather than deleted, because an application cannot delete an operating-system
+  file and should not pretend to.
+- She stops listening when you stop talking. End-of-speech detection is now on for
+  every spoken turn rather than only in call mode, and it reads the room's own
+  noise floor instead of comparing against two constants measured once in one
+  room — so a quiet speaker is heard and a fan is not mistaken for speech.
+- Scroll to the top of a conversation to load the turns before it.
+
+### Changed
+
+- She answers out loud only when you spoke to her. Typing gets a written answer.
+  Settings › Voz has a switch to always answer out loud; it is off by default,
+  because an answer read aloud to a question you typed interrupts whatever your
+  hands were doing.
+- Your own questions are collapsed to one line, expandable and collapsible again,
+  so a conversation is a column of answers rather than a transcript of yourself.
+- The waveform is drawn from the audio and nothing else. An earlier version
+  multiplied each bar by a fixed sine pattern to look wave-like, which meant the
+  picture was partly invented; levels are now read against the room's noise floor,
+  the meter's decay was shortened from over half a second to about a fifth, and
+  the whole trace is one `Canvas` rather than thirty separately animating views.
+- The README is now an installation and usage guide rather than a status report.
+
+### Fixed
+
+- The expand and close controls were stretched and crooked. Their glyph layer was
+  forced into a square of `glyphSize * 1.9`, so any symbol that is not square came
+  out distorted — a chevron is about twice as wide as it is tall. Symbols are now
+  laid out at their own proportions, and the chevron points the way it will move.
+
+
 - Evie can read the folders you authorise. Settings › Pastas is where a folder is
   granted, through the system's own open panel, and where it is taken back. With
   nothing granted she says so instead of offering to look.

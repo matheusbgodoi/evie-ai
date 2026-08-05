@@ -42,6 +42,8 @@ struct EvieOmniVoiceClient: Sendable {
     case rejected(Int)
     case emptyAudio
     case undecodableAudio
+    case unreadableAudio
+    case unexpectedResponse
 
     var errorDescription: String? {
       switch self {
@@ -53,6 +55,10 @@ struct EvieOmniVoiceClient: Sendable {
         "O motor de voz respondeu sem áudio."
       case .undecodableAudio:
         "Não consegui ler o áudio que o motor de voz devolveu."
+      case .unreadableAudio:
+        "Não consegui abrir esse arquivo de áudio."
+      case .unexpectedResponse:
+        "O motor de voz respondeu de um jeito que eu não reconheço."
       }
     }
   }
@@ -156,9 +162,114 @@ struct EvieOmniVoiceClient: Sendable {
 }
 
 extension EvieOmniVoiceClient {
+  /// Trains a new voice from a recording.
+  ///
+  /// `referenceText` is what the recording actually says. It is optional to the
+  /// engine and worth insisting on: without it the first use of the voice pays a
+  /// one-off transcription pass, measured on this Mac at 23 seconds, in the
+  /// middle of whatever conversation happens to trigger it.
+  func createProfile(
+    name: String,
+    audioURL: URL,
+    referenceText: String,
+    language: String = "Portuguese"
+  ) async throws -> String {
+    let audio: Data
+    do {
+      audio = try Data(contentsOf: audioURL)
+    } catch {
+      throw ClientError.unreadableAudio
+    }
+
+    var request = URLRequest(url: endpoint.appendingPathComponent("profiles"))
+    request.httpMethod = "POST"
+    request.timeoutInterval = timeout
+
+    let boundary = "evie-\(UUID().uuidString)"
+    request.setValue(
+      "multipart/form-data; boundary=\(boundary)",
+      forHTTPHeaderField: "Content-Type"
+    )
+    var fields = ["name": name, "language": language]
+    if !referenceText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+      fields["ref_text"] = referenceText
+    }
+    request.httpBody = Self.multipartBody(
+      boundary: boundary,
+      fields: fields,
+      file: (name: "ref_audio", filename: audioURL.lastPathComponent, data: audio)
+    )
+
+    let data: Data
+    let response: URLResponse
+    do {
+      (data, response) = try await URLSession.shared.data(for: request)
+    } catch {
+      throw ClientError.unavailable
+    }
+    guard let status = (response as? HTTPURLResponse)?.statusCode else {
+      throw ClientError.unavailable
+    }
+    guard (200...299).contains(status) else {
+      throw ClientError.rejected(status)
+    }
+    guard
+      let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+      let identifier = (object["id"] ?? object["profile_id"]) as? String
+    else {
+      throw ClientError.unexpectedResponse
+    }
+    return identifier
+  }
+
+  /// Removes a voice from the engine for good.
+  func deleteProfile(id: String) async throws {
+    var request = URLRequest(
+      url: endpoint.appendingPathComponent("profiles").appendingPathComponent(id)
+    )
+    request.httpMethod = "DELETE"
+    request.timeoutInterval = 15
+
+    let response: URLResponse
+    do {
+      (_, response) = try await URLSession.shared.data(for: request)
+    } catch {
+      throw ClientError.unavailable
+    }
+    guard let status = (response as? HTTPURLResponse)?.statusCode else {
+      throw ClientError.unavailable
+    }
+    // A voice that is already gone is the outcome that was asked for.
+    guard (200...299).contains(status) || status == 404 else {
+      throw ClientError.rejected(status)
+    }
+  }
+}
+
+extension EvieOmniVoiceClient {
   fileprivate static func multipartBody(
     boundary: String,
-    fields: [String: String]
+    fields: [String: String],
+    file: (name: String, filename: String, data: Data)
+  ) -> Data {
+    var body = multipartBody(boundary: boundary, fields: fields, closing: false)
+    body.append(Data("--\(boundary)\r\n".utf8))
+    body.append(
+      Data(
+        "Content-Disposition: form-data; name=\"\(file.name)\"; filename=\"\(file.filename)\"\r\n"
+          .utf8
+      )
+    )
+    body.append(Data("Content-Type: application/octet-stream\r\n\r\n".utf8))
+    body.append(file.data)
+    body.append(Data("\r\n--\(boundary)--\r\n".utf8))
+    return body
+  }
+
+  fileprivate static func multipartBody(
+    boundary: String,
+    fields: [String: String],
+    closing: Bool = true
   ) -> Data {
     var body = Data()
     for (name, value) in fields {
@@ -168,7 +279,9 @@ extension EvieOmniVoiceClient {
       )
       body.append(Data("\(value)\r\n".utf8))
     }
-    body.append(Data("--\(boundary)--\r\n".utf8))
+    if closing {
+      body.append(Data("--\(boundary)--\r\n".utf8))
+    }
     return body
   }
 

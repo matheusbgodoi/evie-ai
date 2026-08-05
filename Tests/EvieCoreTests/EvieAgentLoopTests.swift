@@ -139,7 +139,7 @@ struct EvieAgentLoopTests {
 
     let offered = await client.toolsPerCall
     #expect(offered.count == 2)
-    #expect(offered[0] == 5)
+    #expect(offered[0] == EvieFileToolbox.definitions.count)
     #expect(offered[1] == 0)
   }
 

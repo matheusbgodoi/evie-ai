@@ -356,6 +356,13 @@ public struct EvieVoicePreferences: Codable, Hashable, Sendable {
   public var pushToTalkEnabled: Bool
   /// Whether Evie answers out loud at all.
   public var speechOutputEnabled: Bool
+  /// Whether she also reads out an answer to something that was typed.
+  ///
+  /// Off by default, and the default is the point: speaking back to a question
+  /// you spoke is a conversation, speaking back to a question you typed is an
+  /// interruption. Answering out loud follows the way the question was asked
+  /// unless this says otherwise.
+  public var speaksTypedAnswers: Bool
   /// Whether a voice turn hides the written transcript entirely.
   public var callModeEnabled: Bool
   public var retainsRawAudio: Bool
@@ -365,6 +372,13 @@ public struct EvieVoicePreferences: Codable, Hashable, Sendable {
   /// A cloned voice from the local voice engine. When set, and the engine is
   /// running, it wins over the system voice.
   public var clonedVoiceID: String?
+  /// System voices removed from the picker.
+  ///
+  /// macOS voices cannot be uninstalled by an application, and most of them are
+  /// audibly synthetic. Hiding is the honest version of removing: they stop being
+  /// offered, the list becomes the voices actually worth choosing, and nothing
+  /// pretends to have deleted a file belonging to the operating system.
+  public var hiddenVoiceIdentifiers: Set<String>
   /// `AVSpeechUtterance` rate, where 0.5 is the system default.
   public var speechRate: Double
 
@@ -373,23 +387,50 @@ public struct EvieVoicePreferences: Codable, Hashable, Sendable {
     wakePhrase: String = EvieVoicePreferences.defaultWakePhrase,
     pushToTalkEnabled: Bool = true,
     speechOutputEnabled: Bool = true,
+    speaksTypedAnswers: Bool = false,
     callModeEnabled: Bool = false,
     retainsRawAudio: Bool = false,
     voiceProfileAlias: String? = nil,
     voiceIdentifier: String? = nil,
     clonedVoiceID: String? = nil,
+    hiddenVoiceIdentifiers: Set<String> = [],
     speechRate: Double = 0.5
   ) {
     self.wakeWordEnabled = wakeWordEnabled
     self.wakePhrase = wakePhrase
     self.pushToTalkEnabled = pushToTalkEnabled
     self.speechOutputEnabled = speechOutputEnabled
+    self.speaksTypedAnswers = speaksTypedAnswers
     self.callModeEnabled = callModeEnabled
     self.retainsRawAudio = retainsRawAudio
     self.voiceProfileAlias = voiceProfileAlias
     self.voiceIdentifier = voiceIdentifier
     self.clonedVoiceID = clonedVoiceID
+    self.hiddenVoiceIdentifiers = hiddenVoiceIdentifiers
     self.speechRate = speechRate
+  }
+
+  /// Hides a voice, and stops using it if it was the one selected.
+  public mutating func hideVoice(identifier: String) {
+    hiddenVoiceIdentifiers.insert(identifier)
+    if voiceIdentifier == identifier {
+      voiceIdentifier = nil
+    }
+  }
+
+  public mutating func showVoice(identifier: String) {
+    hiddenVoiceIdentifiers.remove(identifier)
+  }
+
+  /// Whether this answer should be read out, given how the question arrived.
+  ///
+  /// A call always speaks — that is what a call is — regardless of how the words
+  /// were captured.
+  public func speaksAnswer(toSpokenPrompt wasSpoken: Bool, inCall: Bool = false) -> Bool {
+    guard speechOutputEnabled else {
+      return false
+    }
+    return inCall || wasSpoken || speaksTypedAnswers
   }
 
   /// Clamped so a hand-edited file cannot produce speech nobody can follow.
@@ -411,6 +452,9 @@ public struct EvieVoicePreferences: Codable, Hashable, Sendable {
     speechOutputEnabled = enabled
     if !enabled {
       callModeEnabled = false
+      // Nothing speaks, so "also speak typed answers" would be a switch that
+      // says something untrue about what will happen.
+      speaksTypedAnswers = false
     }
   }
 

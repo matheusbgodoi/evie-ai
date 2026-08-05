@@ -26,11 +26,22 @@ public struct EvieFileToolbox: Sendable {
     self.reader = reader
   }
 
+  /// How many text files a content search will open. The Obsidian vault this was
+  /// designed against holds 197 notes; the ceiling is set well above that so a
+  /// normal vault is searched completely, and low enough that pointing Evie at a
+  /// source tree does not turn one question into a minute of disk work.
+  public static let maximumFilesSearched = 600
+  /// How much of each file is scanned. A note longer than this has its opening
+  /// searched, which is where a note says what it is about.
+  public static let maximumSearchBytesPerFile = 64 * 1_024
+  public static let maximumContentMatches = 12
+
   public enum ToolName: String, CaseIterable, Sendable {
     case listRoots = "list_roots"
     case listFolder = "list_folder"
     case readFile = "read_file"
     case searchFiles = "search_files"
+    case searchContent = "search_content"
     case fileInfo = "file_info"
   }
 
@@ -116,6 +127,33 @@ public struct EvieFileToolbox: Sendable {
         ]
       ),
       EvieToolDefinition(
+        name: ToolName.searchContent.rawValue,
+        summary: """
+          Procura dentro do texto dos arquivos, não só no nome. Use para achar \
+          o que o Matheus escreveu sobre um assunto quando ele não souber em \
+          qual arquivo está — anotações, notas do Obsidian, documentos. Devolve \
+          os trechos com o arquivo de cada um; leia o arquivo depois se precisar \
+          do contexto inteiro.
+          """,
+        parameters: [
+          EvieToolParameter(
+            name: "root_id",
+            type: .string,
+            summary: "Identificador da pasta, vindo de list_roots.",
+            isRequired: true
+          ),
+          EvieToolParameter(
+            name: "query",
+            type: .string,
+            summary: """
+              Palavra ou expressão procurada. Maiúsculas e acentos não importam. \
+              Prefira uma ou duas palavras específicas a uma frase inteira.
+              """,
+            isRequired: true
+          ),
+        ]
+      ),
+      EvieToolDefinition(
         name: ToolName.fileInfo.rawValue,
         summary: """
           Tamanho e data de modificação de um arquivo ou pasta, sem abrir o \
@@ -171,6 +209,10 @@ public struct EvieFileToolbox: Sendable {
     case .searchFiles:
       return withRoot(call, arguments: arguments, roots: roots) { root in
         try searchFiles(root: root, query: arguments["query"] ?? "")
+      }
+    case .searchContent:
+      return withRoot(call, arguments: arguments, roots: roots) { root in
+        try searchContent(root: root, query: arguments["query"] ?? "")
       }
     case .fileInfo:
       return withRoot(call, arguments: arguments, roots: roots) { root in
@@ -428,4 +470,124 @@ extension EvieFileToolbox {
     formatter.dateFormat = "d 'de' MMMM 'de' yyyy"
     return formatter
   }()
+}
+
+extension EvieFileToolbox {
+  /// Searches inside the text of the files in a granted folder.
+  ///
+  /// This is what makes a folder of notes usable as a source rather than a list
+  /// of filenames. It is a plain substring scan rather than an embedding index,
+  /// and that is a deliberate choice: an index would need building, keeping in
+  /// sync with every edit, and storing a second copy of everything the user
+  /// wrote. Reading the files is slower per query and always current, needs no
+  /// storage, and cannot answer from a stale copy of a note that has changed.
+  ///
+  /// Bounded in every direction that can run away, and it says so when it stops
+  /// early — a search that silently gave up looks exactly like a search that
+  /// found nothing.
+  fileprivate func searchContent(root: EvieFileRoot, query: String) throws -> String {
+    let needle = Self.fold(query)
+    guard needle.count >= 2 else {
+      return "Preciso de pelo menos duas letras para procurar."
+    }
+
+    var matches: [String] = []
+    var queue: [(path: String, depth: Int)] = [("", 0)]
+    var filesRead = 0
+    var stoppedEarly = false
+
+    search: while !queue.isEmpty {
+      let (path, depth) = queue.removeFirst()
+      guard let listing = try? reader.list(root: root.url, relativePath: path) else {
+        continue
+      }
+
+      for entry in listing.entries {
+        if entry.isDirectory {
+          if depth + 1 < Self.maximumSearchDepth {
+            queue.append((path.isEmpty ? entry.name : "\(path)/\(entry.name)", depth + 1))
+          }
+          continue
+        }
+        guard Self.isProbablyText(entry.name) else {
+          continue
+        }
+        if filesRead >= Self.maximumFilesSearched {
+          stoppedEarly = true
+          break search
+        }
+
+        let entryPath = path.isEmpty ? entry.name : "\(path)/\(entry.name)"
+        guard let excerpt = try? reader.read(root: root.url, relativePath: entryPath) else {
+          continue
+        }
+        filesRead += 1
+
+        for line in Self.matchingLines(in: excerpt.text, needle: needle) {
+          matches.append("\(entryPath): \(line)")
+          if matches.count >= Self.maximumContentMatches {
+            stoppedEarly = true
+            break search
+          }
+        }
+      }
+    }
+
+    guard !matches.isEmpty else {
+      return """
+        Não achei "\(query)" no texto de nenhum arquivo de \(root.displayName) \
+        (procurei em \(filesRead)).
+        """
+    }
+    var answer = "Trechos com \"\(query)\" em \(root.displayName):\n"
+    answer += matches.joined(separator: "\n")
+    if stoppedEarly {
+      answer += "\n(parei aqui; pode haver mais)"
+    }
+    return answer
+  }
+
+  /// Lines containing the term, trimmed to something a model can read.
+  ///
+  /// One line of context is enough to decide whether the file is worth opening,
+  /// which is the decision this tool exists to support. Handing back whole
+  /// paragraphs for a dozen matches would fill the context with text that mostly
+  /// is not the answer.
+  static func matchingLines(in text: String, needle: String, limit: Int = 3) -> [String] {
+    var found: [String] = []
+    for line in text.split(separator: "\n", omittingEmptySubsequences: true) {
+      guard fold(String(line)).contains(needle) else {
+        continue
+      }
+      var trimmed = line.trimmingCharacters(in: .whitespaces)
+      if trimmed.count > 220 {
+        trimmed = String(trimmed.prefix(220)) + "…"
+      }
+      guard !trimmed.isEmpty else {
+        continue
+      }
+      found.append(trimmed)
+      if found.count >= limit {
+        break
+      }
+    }
+    return found
+  }
+
+  /// Whether a name is worth opening as text.
+  ///
+  /// By extension rather than by sniffing content, because the point is to avoid
+  /// opening the file at all. The reader still refuses binary it is handed.
+  static func isProbablyText(_ name: String) -> Bool {
+    let searchable: Set<String> = [
+      "md", "markdown", "txt", "text", "org", "rst", "canvas",
+      "json", "yaml", "yml", "toml", "csv", "tsv",
+      "swift", "py", "js", "ts", "tsx", "jsx", "rb", "go", "rs", "java", "kt",
+      "c", "h", "cpp", "hpp", "m", "sh", "zsh", "sql", "html", "css", "xml",
+    ]
+    let extensionName = (name as NSString).pathExtension.lowercased()
+    // An extensionless file is skipped: it is as likely to be a binary or a
+    // token file as prose, and the denylist already refuses the worst of those.
+    return !extensionName.isEmpty && searchable.contains(extensionName)
+  }
 }

@@ -39,32 +39,39 @@ final class EvieAudioCapture: ObservableObject {
   /// `detectsEndOfSpeech` is on, and only after speech was actually heard.
   var onEndOfSpeech: (@MainActor () -> Void)?
 
-  /// Turns on silence detection, which is what makes a call end a turn without
-  /// anyone pressing anything.
-  var detectsEndOfSpeech = false
+  /// Reports that speech was detected, so the interface can say it is hearing
+  /// something rather than only drawing a level.
+  var onSpeechStarted: (@MainActor () -> Void)?
+
+  /// Turns on silence detection, which is what ends a turn without anyone
+  /// pressing anything. On for every spoken turn, not only calls: having to
+  /// click a button to say "I finished talking" is the thing that made speaking
+  /// to Evie worse than typing.
+  var detectsEndOfSpeech = true
+
+  /// The level above which the gate currently considers someone to be talking.
+  /// Published so the waveform can show the same threshold the decision uses
+  /// instead of a second guess at it.
+  var speechThreshold: CGFloat { gate.speechThreshold }
+  var noiseFloor: CGFloat { gate.noiseFloor }
 
   /// How many level samples the ring and the waveform draw.
   private static let historyLength = 44
   /// Levels are published at a bounded rate rather than per audio buffer.
-  private static let publishInterval = Duration.milliseconds(40)
+  /// Roughly thirty frames a second. Forty milliseconds was visibly steppy on
+  /// the trace, and going below thirty buys smoothness the eye cannot see at the
+  /// cost of waking the main actor more often while the microphone is open.
+  static let publishInterval = Duration.milliseconds(30)
   /// Below this the microphone is treated as silent.
   private static let noiseFloorDecibels: Float = -55
-  /// A normalised level above this counts as someone talking. Set from the
-  /// measured room floor rather than guessed: ambient noise sat near 0.05 while
-  /// speech peaked above 0.4.
-  private static let speechLevel: CGFloat = 0.16
-  /// Below this, and for long enough, the turn is over.
-  private static let silenceLevel: CGFloat = 0.09
-  /// How much silence ends a turn. Long enough to survive a pause for breath,
-  /// short enough that a finished sentence does not sit there.
-  private static let silenceToEndTurn = Duration.milliseconds(1_100)
 
   private let meter = EvieLevelMeter()
   private var engine: AVAudioEngine?
   private var publishTask: Task<Void, Never>?
-  private var hasHeardSpeech = false
-  private var silentSamples = 0
-  private var hasReportedEndOfSpeech = false
+  /// Decides when a turn started and ended, from the room's own noise floor
+  /// rather than from constants measured once in one room. Kept across turns so
+  /// the floor it learned is not thrown away between questions.
+  private var gate = EvieSpeechGate(sampleInterval: EvieAudioCapture.publishInterval)
 
   init(permission: Permission = EvieAudioCapture.currentPermission()) {
     self.permission = permission
@@ -186,9 +193,7 @@ final class EvieAudioCapture: ObservableObject {
 
     isCapturing = true
     levels = Array(repeating: 0, count: Self.historyLength)
-    hasHeardSpeech = false
-    silentSamples = 0
-    hasReportedEndOfSpeech = false
+    gate.reset()
     startPublishing()
   }
 
@@ -239,27 +244,18 @@ final class EvieAudioCapture: ObservableObject {
   /// It waits for speech before it will ever end a turn, so opening the
   /// microphone in a quiet room does not immediately submit nothing.
   private func considerEndOfSpeech(level: CGFloat) {
-    guard detectsEndOfSpeech, !hasReportedEndOfSpeech else {
+    let event = gate.absorb(level: level)
+    guard detectsEndOfSpeech else {
       return
     }
-    if level >= Self.speechLevel {
-      hasHeardSpeech = true
-      silentSamples = 0
-      return
+    switch event {
+    case .speechStarted:
+      onSpeechStarted?()
+    case .speechEnded:
+      onEndOfSpeech?()
+    case .none:
+      break
     }
-    guard hasHeardSpeech, level < Self.silenceLevel else {
-      return
-    }
-
-    silentSamples += 1
-    let needed = Int(
-      Self.silenceToEndTurn / Self.publishInterval
-    )
-    guard silentSamples >= needed else {
-      return
-    }
-    hasReportedEndOfSpeech = true
-    onEndOfSpeech?()
   }
 
   private func startPublishing() {

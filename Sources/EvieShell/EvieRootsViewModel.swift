@@ -126,6 +126,56 @@ final class EvieRootsViewModel: ObservableObject {
     roots = registry.load()
   }
 
+  // MARK: - Obsidian
+
+  /// The vault, if there is one where Obsidian puts it.
+  ///
+  /// Offered as a button because it is the folder this user most wants Evie to
+  /// read and the hardest one to find in an open panel: it lives inside the
+  /// iCloud container, several levels below a folder called
+  /// `Mobile Documents` that Finder does not show under that name.
+  static var obsidianVaultURLs: [URL] {
+    let home = FileManager.default.homeDirectoryForCurrentUser
+    let containers = [
+      home.appendingPathComponent(
+        "Library/Mobile Documents/iCloud~md~obsidian/Documents",
+        isDirectory: true
+      ),
+      home.appendingPathComponent("Documents", isDirectory: true),
+      home,
+    ]
+
+    var found: [URL] = []
+    for container in containers {
+      guard
+        let entries = try? FileManager.default.contentsOfDirectory(
+          at: container,
+          includingPropertiesForKeys: [.isDirectoryKey],
+          options: [.skipsHiddenFiles]
+        )
+      else {
+        continue
+      }
+      for entry in entries {
+        // A vault is a folder with an `.obsidian` settings directory in it.
+        // Checking for that rather than for a name means a vault called anything
+        // is found and a folder merely called "Obsidian" is not.
+        let marker = entry.appendingPathComponent(".obsidian", isDirectory: true)
+        if FileManager.default.fileExists(atPath: marker.path) {
+          found.append(entry)
+        }
+      }
+    }
+    return found
+  }
+
+  var untrackedObsidianVaults: [URL] {
+    let granted = Set(roots.map { EvieRootRegistry.canonicalPath($0.path) })
+    return Self.obsidianVaultURLs.filter { url in
+      !granted.contains(EvieRootRegistry.canonicalPath(url.path))
+    }
+  }
+
   // MARK: - The whole home folder
 
   static var homeURL: URL {

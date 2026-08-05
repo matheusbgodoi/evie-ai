@@ -181,19 +181,26 @@ struct EvieGlowButton: NSViewRepresentable {
         1
       )
 
-      let size = identity.glyphSize * 1.9
-      glyph.frame = CGRect(
-        x: (identity.diameter - size) / 2,
-        y: (identity.diameter - size) / 2,
-        width: size,
-        height: size
-      )
-      glyph.contentsScale = scale
-      glyph.contents = Self.image(
+      // The glyph is laid out at the symbol's own proportions. It used to be
+      // forced into a square of `glyphSize * 1.9`, which stretched every symbol
+      // that is not square — a chevron is about twice as wide as it is tall, so
+      // it came out fat and visibly crooked, and an `xmark` came out nearly
+      // filling the circle.
+      let drawn = Self.image(
         named: identity.systemImage,
         size: identity.glyphSize,
         colour: identity.style == .filled ? .white : .secondaryLabelColor
       )
+      let glyphSize = drawn?.size ?? CGSize(width: identity.glyphSize, height: identity.glyphSize)
+      glyph.frame = CGRect(
+        x: ((identity.diameter - glyphSize.width) / 2).rounded(),
+        y: ((identity.diameter - glyphSize.height) / 2).rounded(),
+        width: glyphSize.width,
+        height: glyphSize.height
+      )
+      glyph.contentsScale = scale
+      glyph.contentsGravity = .resizeAspect
+      glyph.contents = drawn?.image
 
       CATransaction.commit()
     }
@@ -257,11 +264,21 @@ struct EvieGlowButton: NSViewRepresentable {
       return true
     }
 
+    /// A rendered symbol together with the size it wants to be drawn at.
+    ///
+    /// The size travels with the image because a symbol's natural box is not
+    /// square, and laying it out without that is what made the controls look
+    /// stretched.
+    private struct DrawnGlyph {
+      let image: CGImage
+      let size: CGSize
+    }
+
     private static func image(
       named name: String,
       size: CGFloat,
       colour: NSColor
-    ) -> CGImage? {
+    ) -> DrawnGlyph? {
       let configuration = NSImage.SymbolConfiguration(pointSize: size, weight: .semibold)
         .applying(.init(hierarchicalColor: colour))
       guard
@@ -271,7 +288,10 @@ struct EvieGlowButton: NSViewRepresentable {
         return nil
       }
       var rect = CGRect(origin: .zero, size: image.size)
-      return image.cgImage(forProposedRect: &rect, context: nil, hints: nil)
+      guard let cgImage = image.cgImage(forProposedRect: &rect, context: nil, hints: nil) else {
+        return nil
+      }
+      return DrawnGlyph(image: cgImage, size: image.size)
     }
   }
 }

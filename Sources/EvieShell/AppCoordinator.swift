@@ -23,6 +23,7 @@ final class AppCoordinator: NSObject {
   /// can reach on every turn, so they have to outlive a window that is usually
   /// closed.
   private let rootsViewModel = EvieRootsViewModel()
+  private var voiceLibraryViewModel: EvieVoiceLibraryViewModel?
   private let audioCapture = EvieAudioCapture()
   private let speechOutput = EvieSpeechOutput()
   /// True while push-to-talk is holding the microphone open, so releasing the key
@@ -159,7 +160,8 @@ final class AppCoordinator: NSObject {
     configureStatusItem()
 
     audioCapture.onLevels = { [weak self] levels in
-      self?.viewModel.updateInputLevels(levels)
+      guard let self else { return }
+      viewModel.updateInputLevels(levels, noiseFloor: audioCapture.noiseFloor)
     }
     audioCapture.onEndOfSpeech = { [weak self] in
       self?.stopListening()
@@ -470,10 +472,23 @@ extension AppCoordinator {
         }
       )
       self.preferencesViewModel = preferencesViewModel
+      let voiceLibraryViewModel = EvieVoiceLibraryViewModel(
+        preferences: { [weak self] in self?.preferences.voice ?? EvieVoicePreferences() },
+        mutate: { [weak self] change in
+          guard let self else { return }
+          var updated = preferences
+          change(&updated.voice)
+          preferencesViewModel.adopt(updated)
+          preferencesDidChange(updated)
+          try? preferencesStore.save(updated)
+        }
+      )
+      self.voiceLibraryViewModel = voiceLibraryViewModel
       settingsWindowController = SettingsWindowController(
         modelViewModel: modelViewModel,
         preferencesViewModel: preferencesViewModel,
         rootsViewModel: rootsViewModel,
+        voiceLibraryViewModel: voiceLibraryViewModel,
         preferencesPath: preferencesStore.fileURL.path,
         configurationPath: configurationStore.fileURL.path
       )
@@ -569,7 +584,15 @@ extension AppCoordinator {
   /// Reads the text with its markup already resolved, so no asterisk or hash is
   /// ever pronounced.
   fileprivate func speak(_ answer: EvieRichText) {
-    guard preferences.voice.speechOutputEnabled else {
+    // Speaking follows how the question was asked. Answering out loud something
+    // that was typed interrupts whatever the person was doing with their hands,
+    // which is why the switch that forces it is off by default.
+    guard
+      preferences.voice.speaksAnswer(
+        toSpokenPrompt: viewModel.lastPromptWasSpoken,
+        inCall: isInCall
+      )
+    else {
       return
     }
     // The visual state follows `onStarted`, not this call: synthesis happens
@@ -591,7 +614,17 @@ extension AppCoordinator {
     if let cloned = preferences.clonedVoiceID, !cloned.isEmpty {
       return .cloned(profileID: cloned)
     }
-    return .system(identifier: preferences.voiceIdentifier)
+    // A voice the user removed from the list must not come back as the fallback
+    // when nothing is chosen — that is the one place a hidden voice could still
+    // speak.
+    if let chosen = preferences.voiceIdentifier,
+      !preferences.hiddenVoiceIdentifiers.contains(chosen)
+    {
+      return .system(identifier: chosen)
+    }
+    let firstVisible = EvieSpeechOutput.availableVoices()
+      .first { !preferences.hiddenVoiceIdentifiers.contains($0.id) }
+    return .system(identifier: firstVisible?.id)
   }
 
   fileprivate func startListening() {
@@ -607,9 +640,11 @@ extension AppCoordinator {
       do {
         let format = try await audioCapture.prepareInputFormat()
         let sink = try await startTranscription(inputFormat: format)
-        // Only a call ends its own turns. Push-to-talk ends when the key is
-        // released, and a click ends when it is clicked again.
-        audioCapture.detectsEndOfSpeech = isInCall
+        // Every spoken turn ends itself, except push-to-talk, where releasing
+        // the key already says "I finished". Having to click a second time to
+        // report that you stopped talking is what made speaking worse than
+        // typing, and it is what stopped call mode from behaving like a call.
+        audioCapture.detectsEndOfSpeech = !isHoldingToTalk
         try await audioCapture.start(sink: sink)
         viewModel.beginListening()
       } catch {

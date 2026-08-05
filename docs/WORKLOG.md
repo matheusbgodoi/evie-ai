@@ -640,12 +640,13 @@
   live model over a throwaway folder. All four answered correctly, including a
   three-tool chain, and the `.env` planted in the granted folder stayed
   withheld — she reported not finding it rather than inventing a password.
-- **Measured, and the largest risk to this being usable:** the inference server
-  degrades severely with uptime. Ten hours in, a trivial eight-token request took
-  1657 s (27 minutes), per-request cost no longer varied with prompt size, and
-  prefix caching had stopped hitting. A restart restored 5.8 s. Full numbers in
-  `docs/FILESYSTEM.md`. Workaround is `Scripts/evie-runtime stop && start`;
-  the defect itself is unfixed and belongs to the server.
+- **Retracted the same day.** This entry originally reported that the inference
+  server degrades severely with uptime, on the strength of a 1657-second request.
+  The MacBook's lid had closed: both `Date()` and the server's own timer count
+  standby, so the figure measured sleep. Re-measured awake after 1 h 39 min of
+  uptime: 6.6–6.9 s for 128 tokens, no drift. There is no uptime defect. The
+  durable lesson is not to time a local model with wall clock across a background
+  run.
 - Earlier timings in this session were contaminated by leftover probe processes
   queuing on the same single-worker server — the same mistake the voice timings
   made in July. The `queued` → `generating` gap in the server log is the tell.
@@ -687,3 +688,57 @@
 - Not validated by eye: the Pastas tab, the switch, and the progress lines during
   a lookup. The home switch was left off — turning it on is the user's decision
   to make, not one to make for him.
+
+## 2026-08-05 — QA-007 and RAG-001: the things real use exposed
+
+Five minutes of the user actually living with Evie produced more findings than the
+previous day of building. Everything here came from that.
+
+- **The uptime claim was wrong, and is retracted.** The 1657-second request that
+  anchored it was measured across a closed lid; `Date()` and the server's own
+  timer both count standby. Re-measured awake after 1 h 39 min: 6.6–6.9 s for 128
+  tokens, no drift. Corrected in `docs/FILESYSTEM.md`, `docs/PROJECT_STATUS.md`
+  and the entry above. Durable lesson: never time a local model with wall clock
+  across a background run.
+- **End of speech never fired.** Two causes. It was enabled only in call mode, so
+  an ordinary spoken turn had to be ended by clicking — which is also why call
+  mode felt wrong. And the thresholds were two constants (0.16 / 0.09) taken from
+  one room; a quieter speaker never crosses them. Replaced with `EvieSpeechGate`,
+  which tracks the noise floor and derives both thresholds from it, with
+  hysteresis and a minimum amount of *voiced* samples before a turn can end. Twelve
+  tests over recorded level sequences, including a quiet speaker, a noisy room, a
+  breath pause, and a click that must not count as a turn.
+  - One bug the tests caught immediately: counting elapsed samples rather than
+    voiced ones let a single 80 ms click qualify as a turn simply by being
+    followed by enough silence.
+- **She spoke answers to typed questions.** Now `speaksAnswer(toSpokenPrompt:
+  inCall:)` decides, and Settings › Voz carries an explicit switch, off by
+  default. A call always speaks regardless.
+- **The card controls were stretched.** The glyph layer was a square of
+  `glyphSize * 1.9` holding a symbol whose natural box is not square. Laid out at
+  the symbol's own size now, with `resizeAspect` as a second guard.
+- **Prompts are collapsed to one line**, header only, with a truncated trace so a
+  conversation stays navigable, and expandable both ways.
+- **History could not be scrolled back.** The whole conversation was always in
+  memory but only the last twelve turns were ever drawn. Added paging with a
+  control at the top of the list, and one mapping from message to card so
+  restoring and paging cannot drift apart.
+- **The waveform was partly invented.** It multiplied each bar by
+  `sin(index * 0.86)` to look wave-like. Removed; levels are now measured against
+  the room's noise floor, the meter's release went from 0.06 to 0.16 — the old one
+  took over half a second to decay and flattened every sentence — and the trace is
+  one `Canvas` instead of thirty animating views.
+- **`RAG-001` — the vault as a source.** `search_content` searches inside text,
+  and Settings › Pastas detects an Obsidian vault by its `.obsidian` folder rather
+  than by name. Verified against the real vault (197 notes): *"o que eu tenho
+  anotado sobre a Cluemed?"* → `list_roots` → `search_content` → a correct answer
+  in 42 s including a specific note about a funding conversation. No index was
+  built, and `docs/RAG.md` now records why, and at what point that stops being the
+  right call.
+- **`VOI-020` — voices are managed by the user.** Settings › Vozes removes system
+  voices from the picker (hidden, not deleted — an application cannot delete a
+  macOS voice) and trains new ones from an audio file through the local engine's
+  `POST /profiles`. A hidden voice can no longer come back as the fallback, which
+  was the one path by which a removed voice could still have spoken.
+- Validation: `Scripts/test` 222/222 in 22 suites; release build; installed.
+- Not validated by eye: everything visual in this entry.

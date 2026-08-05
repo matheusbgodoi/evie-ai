@@ -1,6 +1,66 @@
 # Local RAG design
 
-Status: implementation direction researched; benchmark/ADR still required.
+Status: **agentic retrieval over authorised folders is implemented and in use.**
+The embedding-index design below is *not* built, and the reason is worth reading
+before anyone builds it.
+
+## What was built instead of an index
+
+Evie retrieves by searching, as a step she chooses, using the same read-only tools
+that reach any authorised folder: `search_content` looks inside the text,
+`search_files` looks at names, `read_file` opens what looks relevant. She decides
+whether to search at all, what to search for, and whether to follow a result by
+opening the file.
+
+Verified 5 August 2026 against the user's own Obsidian vault — 197 notes across
+`EU/`, `Cluemed/`, `Keymatic/`, `PUC-SP/`. Asked *"o que eu tenho anotado sobre a
+Cluemed?"*, she called `list_roots` then `search_content`, and answered in 42
+seconds with the company being a healthtech, the user's role, the site and
+Instagram handle, the files involved, and a specific note about an Eurofarma
+funding conversation including the CEO's objection to corporate VC on the cap
+table. Reproduce with:
+
+```bash
+evie-shell --ask-folder "<vault>" "O que eu tenho anotado sobre a Cluemed?"
+```
+
+### Why not embeddings
+
+An index would answer faster and would match on meaning rather than on the word
+that happens to be typed. It would also need building, rebuilding on every edit,
+and storing a second copy of everything the user has written. For a vault of a few
+hundred notes on the machine that owns them, scanning is fast enough, is always
+current, needs no storage, and cannot answer from a stale copy of a note that
+changed this morning. The failure mode of a stale index — a confident answer from
+text the user already deleted — is worse than the failure mode of scanning, which
+is being slower.
+
+The point at which this stops being true is measurable, not a matter of taste:
+when a search takes long enough to be felt, or when the vault outgrows
+`maximumFilesSearched`. The pipeline below is the design for that day.
+
+### Bounds, and why they are visible
+
+`EvieFileToolbox` scans at most 600 text files, four directories deep, and returns
+at most twelve matching lines with at most three per file. A search that stops
+early says so, because a truncated search that reports nothing is indistinguishable
+from a search that found nothing.
+
+The credential denylist applies to retrieval exactly as it does to reading: a
+`.env` inside the vault is never opened, so its contents cannot surface as a
+match. `~/Library` is refused wherever it appears, so authorising a home folder
+does not turn Mail and Messages into a retrieval corpus.
+
+### Read-only, structurally
+
+There is no tool that writes. The vault is a source and never a destination, and
+that is a property of the vocabulary rather than a rule the model is asked to
+follow.
+
+---
+
+The rest of this document is the **unbuilt** index design, kept for the day the
+scanning approach stops being adequate.
 
 ## Purpose
 

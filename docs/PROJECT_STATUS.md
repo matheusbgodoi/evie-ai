@@ -231,12 +231,11 @@ readiness only; they are not the Phase 1 performance suite.
 - No audio has been transcribed. Speech recognition is implemented and the system
   reports Brazilian Portuguese available with a one-time language pack, but
   accuracy, latency after that download, barge-in, and energy cost are unmeasured.
-- Evie cannot search the web. She speaks, and she reads the folders granted in
-  Settings › Pastas.
-- The inference server gets dramatically slower the longer it runs: ten hours of
-  uptime turned a 6 s request into 60 s, and one eight-token answer took 27
-  minutes. A restart fixes it immediately. Undiagnosed; tracked as `RUN-001`.
-  Every timing in this repository assumes a freshly started server.
+- Evie cannot search the web. She speaks, reads the folders granted in Settings ›
+  Pastas, searches inside their text, and manages her own voices.
+- Semantic memory across conversations does not exist. Retrieval is agentic search
+  over authorised folders, which is not the same thing: she can find what the user
+  wrote, and remembers nothing she was told.
 - Nothing that writes, moves, or trashes exists, and nothing should until the
   approval card does. The bypass switch the user asked for is unwritten pending
   his answer on its scope.
@@ -266,12 +265,18 @@ readiness only; they are not the Phase 1 performance suite.
 
 Three things, in this order.
 
-**`RUN-001` — the server that gets slower the longer it runs.** New, and now the
-largest thing standing between Evie and being pleasant to use. Ten hours of
-uptime turned a 6 s request into a 60 s one, and an eight-token answer took 27
-minutes; prefix caching stopped hitting entirely. A restart fixes it instantly.
-Measurements in `docs/FILESYSTEM.md`. Until it is diagnosed, every other timing
-in this repository should be read as conditional on a freshly started server.
+**`QA-006` — the human pass, now the only thing between here and a release.**
+Nothing visual has been accepted by eye. The adaptive end-of-speech gate is tested
+against recorded level sequences but has never been spoken at. The waveform, the
+Pastas and Vozes tabs, the collapsed prompts, and the corrected card controls are
+all unproven in use. This outranks every remaining feature.
+
+**`REL-001` — the first release.** The user has asked for one once the current
+round is finished. What it needs: `QA-006` passed, an ADR for the retrieval
+decision, a `1.0.0` section in the changelog, and a decision on whether the
+release ships the app or the instructions to build it. Notarisation is *not*
+available — the signing identity is self-signed — so the honest form is a tagged
+source release with the four-command install, not a downloadable `.app`.
 
 **`UI-011` / `POL-002` — the approval card.** Reading shipped without needing one.
 Nothing should write, move, or trash before it exists. The user has also asked

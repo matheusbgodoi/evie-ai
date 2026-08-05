@@ -166,9 +166,70 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
       return
     }
 
+    // Asks a real question of a real folder — the vault, by default — so that
+    // "she can read my notes" is something demonstrated rather than claimed.
+    if let index = CommandLine.arguments.firstIndex(of: "--ask-folder"),
+      index + 2 < CommandLine.arguments.count
+    {
+      let folder = URL(fileURLWithPath: CommandLine.arguments[index + 1])
+      let question = CommandLine.arguments[index + 2]
+      Task { @MainActor in
+        await Self.runFolderQuestion(folder: folder, question: question)
+        NSApp.terminate(nil)
+      }
+      return
+    }
+
     let coordinator = AppCoordinator()
     self.coordinator = coordinator
     coordinator.start()
+  }
+
+  /// One question against one folder, with the tools, printing what she used.
+  static func runFolderQuestion(folder: URL, question: String) async {
+    let roots = [
+      EvieFileRoot(
+        displayName: folder.lastPathComponent,
+        path: folder.path
+      )
+    ]
+    var capabilities = EvieCapabilitySnapshot.textOnly
+    capabilities.readsLocalFiles = true
+    let configuration = (try? EvieConfigurationLoader().load()) ?? EvieConfiguration()
+
+    let started = Date()
+    do {
+      let outcome = try await EvieAgentLoop().run(
+        messages: [
+          ChatMessage(
+            role: .system,
+            content: EviePersona.evie.systemPrompt(capabilities: capabilities)
+          ),
+          ChatMessage(role: .user, content: question),
+        ],
+        roots: roots,
+        client: TurboFieldfareClient(configuration: configuration),
+        emit: { event in
+          if case .status(let message) = event {
+            print("   · \(message)")
+          }
+        }
+      )
+      let used: [String] =
+        outcome.appended
+        .compactMap { $0.toolCalls }
+        .flatMap { $0 }
+        .map { $0.name }
+      print("")
+      print("pergunta: \(question)")
+      print("pasta: \(folder.lastPathComponent)")
+      print("tools: \(used.isEmpty ? "(nenhuma)" : used.joined(separator: " → "))")
+      print("tempo: \(String(format: "%.0f", Date().timeIntervalSince(started))) s")
+      print("")
+      print(outcome.answer.isEmpty ? "(sem resposta — laço esgotado)" : outcome.answer)
+    } catch {
+      print("FALHOU: \((error as? LocalizedError)?.errorDescription ?? "\(error)")")
+    }
   }
 
   static func runToolsCheck() async {

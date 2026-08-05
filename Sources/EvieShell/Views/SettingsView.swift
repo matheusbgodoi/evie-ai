@@ -10,6 +10,7 @@ struct SettingsView: View {
   @ObservedObject var modelViewModel: ModelSettingsViewModel
   @ObservedObject var preferencesViewModel: EviePreferencesViewModel
   @ObservedObject var rootsViewModel: EvieRootsViewModel
+  @ObservedObject var voiceLibraryViewModel: EvieVoiceLibraryViewModel
   var preferencesPath: String = EviePreferencesStore.defaultFileURL.path
   var configurationPath: String = EvieConfigurationLoader.defaultFileURL.path
 
@@ -23,6 +24,12 @@ struct SettingsView: View {
 
       VoiceSettingsView(viewModel: preferencesViewModel)
         .tabItem { Label("Voz", systemImage: "waveform") }
+
+      VoiceLibraryView(
+        viewModel: voiceLibraryViewModel,
+        onPreview: { preferencesViewModel.testVoice() }
+      )
+      .tabItem { Label("Vozes", systemImage: "person.wave.2") }
 
       AppearanceSettingsView(viewModel: preferencesViewModel)
         .tabItem { Label("Aparência", systemImage: "macwindow") }

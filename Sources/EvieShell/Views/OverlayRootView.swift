@@ -22,12 +22,16 @@ struct OverlayRootView: View {
   var primaryText: String
   var secondaryText: String? = nil
   var waveformSamples: [CGFloat] = []
+  var waveformNoiseFloor: CGFloat = 0
   var artifacts: [ArtifactCardModel] = []
   var isMuted = false
   var onToggleMute: (() -> Void)? = nil
   var onCancel: (() -> Void)? = nil
   var onOpenDetails: (() -> Void)? = nil
   var onToggleArtifact: ((UUID) -> Void)? = nil
+  /// How many earlier turns of this conversation exist but are not drawn.
+  var earlierTurnCount: Int = 0
+  var onLoadEarlierTurns: (() -> Void)? = nil
   var onDismissArtifact: ((UUID) -> Void)? = nil
   var onArtifactAction: ((UUID, ArtifactActionModel) -> Void)? = nil
   var quickText: Binding<String>? = nil
@@ -192,6 +196,7 @@ struct OverlayRootView: View {
         primaryText: primaryText,
         secondaryText: secondaryText,
         waveformSamples: waveformSamples,
+        waveformNoiseFloor: waveformNoiseFloor,
         isMuted: isMuted,
         isAnimating: chrome.isVisible && chrome.animatesLogo,
         onToggleMute: onToggleMute,
@@ -211,6 +216,26 @@ struct OverlayRootView: View {
     if !artifacts.isEmpty {
       ScrollView(.vertical) {
         LazyVStack(spacing: 9) {
+          // At the top of the list rather than in a menu: scrolling up to look
+          // for what was said earlier is the gesture that means "show me more",
+          // and this is where that gesture ends.
+          if earlierTurnCount > 0, let onLoadEarlierTurns {
+            Button(action: onLoadEarlierTurns) {
+              Label(
+                earlierTurnCount == 1
+                  ? "Ver 1 mensagem anterior"
+                  : "Ver \(min(earlierTurnCount, OverlayViewModel.artifactPageSize)) mensagens anteriores",
+                systemImage: "arrow.up"
+              )
+              .font(.system(size: 11, weight: .medium))
+              .foregroundStyle(.secondary)
+              .frame(maxWidth: .infinity)
+              .padding(.vertical, 7)
+            }
+            .buttonStyle(.plain)
+            .background(.quaternary.opacity(0.28), in: Capsule())
+          }
+
           ForEach(artifacts) { artifact in
             ArtifactCardView(
               artifact: artifact,

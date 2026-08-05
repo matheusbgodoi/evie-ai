@@ -24,6 +24,12 @@ final class OverlayViewModel: ObservableObject {
   /// Called when an answer is complete, so it can be spoken. Only set when the
   /// user has asked Evie to speak.
   var onAnswerReady: (@MainActor (EvieRichText) -> Void)?
+  /// The ambient level the microphone is currently reporting, so the trace can
+  /// be drawn against the room instead of against zero.
+  @Published private(set) var waveformNoiseFloor: CGFloat = 0
+  /// Whether the question being answered was spoken rather than typed. Read by
+  /// the coordinator to decide whether the answer is read out loud.
+  private(set) var lastPromptWasSpoken = false
   /// The folders Evie may look in, asked for at the start of every turn rather
   /// than held: a folder revoked in Settings has to stop working on the next
   /// question, not on the next launch.
@@ -146,34 +152,10 @@ final class OverlayViewModel: ObservableObject {
       conversation =
         [ChatMessage(role: .system, content: systemPrompt)]
         + stored.messages
-      artifacts = stored.messages
-        .filter { $0.role == .user || $0.role == .assistant }
-        .suffix(12)
-        .map { message in
-          message.role == .user
-            ? ArtifactCardModel(
-              id: message.id,
-              kind: .prompt,
-              title: Self.title(for: message.content),
-              summary: message.content,
-              isExpanded: false
-            )
-            : ArtifactCardModel(
-              id: message.id,
-              kind: .answer,
-              title: stored.title,
-              summary: message.content,
-              isExpanded: false,
-              actions: [
-                ArtifactActionModel(
-                  id: "copy",
-                  title: "Copiar",
-                  systemImage: "doc.on.doc",
-                  role: .secondary
-                )
-              ]
-            )
-        }
+      artifacts = Self.cards(
+        for: Array(Self.shownMessages(in: stored.messages).suffix(Self.artifactPageSize)),
+        title: stored.title
+      )
       visualState = .ready
       primaryText = stored.title
       secondaryText = "Conversa restaurada deste Mac"
@@ -414,6 +396,9 @@ final class OverlayViewModel: ObservableObject {
       return
     }
     waveformSamples = levels
+    // Her own voice is played at a level Evie chose, so there is no room noise
+    // to subtract from it.
+    waveformNoiseFloor = 0
   }
 
   func endSpeaking() {
@@ -428,17 +413,22 @@ final class OverlayViewModel: ObservableObject {
     onLayoutInvalidated?()
   }
 
-  func updateInputLevels(_ levels: [CGFloat]) {
+  func updateInputLevels(_ levels: [CGFloat], noiseFloor: CGFloat = 0) {
     guard visualState == .listening else {
       return
     }
     waveformSamples = levels
+    waveformNoiseFloor = noiseFloor
   }
 
   /// Capture stopped. `transcript` is `nil` while speech recognition is not wired,
   /// and the interface says so rather than pretending the audio was understood.
   func endListening(transcript: String?) {
     waveformSamples = []
+    // Remembered so the answer can follow the way the question was asked. Set
+    // before the guard, because a failed transcription still came from someone
+    // talking.
+    lastPromptWasSpoken = true
     guard let transcript, !transcript.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     else {
       visualState = .ready
@@ -477,6 +467,13 @@ final class OverlayViewModel: ObservableObject {
     isQuickTextEntryPresented = false
     presentReadyState()
     onDismissRequested?()
+  }
+
+  /// Submits what was typed. Typing is typing however the field was reached, so
+  /// this is the one path that marks the turn as written.
+  func submitTypedText() {
+    lastPromptWasSpoken = false
+    submitQuickText()
   }
 
   func submitQuickText() {
@@ -1082,5 +1079,79 @@ extension OverlayViewModel {
     if messages.count > 1, messages[1].role == .assistant {
       messages.remove(at: 1)
     }
+  }
+}
+
+extension OverlayViewModel {
+  /// How many turns are drawn at once, and how many more each request adds.
+  static let artifactPageSize = 12
+
+  /// The messages a person would call "the conversation". Tool calls and their
+  /// results are real turns to the model and noise to a reader.
+  static func shownMessages(in messages: [ChatMessage]) -> [ChatMessage] {
+    messages.filter { message in
+      switch message.role {
+      case .user:
+        return true
+      case .assistant:
+        // An assistant turn that only asked for a tool has nothing to show.
+        return message.toolCalls == nil && !message.content.isEmpty
+      case .system, .developer, .tool:
+        return false
+      }
+    }
+  }
+
+  static func cards(for messages: [ChatMessage], title: String) -> [ArtifactCardModel] {
+    messages.map { message in
+      message.role == .user
+        ? ArtifactCardModel(
+          id: message.id,
+          kind: .prompt,
+          title: Self.title(for: message.content),
+          summary: message.content,
+          isExpanded: false
+        )
+        : ArtifactCardModel(
+          id: message.id,
+          kind: .answer,
+          title: title,
+          summary: message.content,
+          isExpanded: false,
+          actions: [
+            ArtifactActionModel(
+              id: "copy",
+              title: "Copiar",
+              systemImage: "doc.on.doc",
+              role: .secondary
+            )
+          ]
+        )
+    }
+  }
+
+  /// Turns of this conversation that exist but are not drawn.
+  ///
+  /// The whole conversation is always in memory; the card list is a window onto
+  /// it. Rebuilding every card on every turn would be wasteful and would reset
+  /// the expansion state of cards the user had opened.
+  var earlierTurnCount: Int {
+    let shown = Set(artifacts.map(\.id))
+    return Self.shownMessages(in: conversation).filter { !shown.contains($0.id) }.count
+  }
+
+  /// Brings back the previous page of turns, oldest-last.
+  func loadEarlierTurns() {
+    let shown = Set(artifacts.map(\.id))
+    let hidden = Self.shownMessages(in: conversation).filter { !shown.contains($0.id) }
+    guard !hidden.isEmpty else {
+      return
+    }
+    let page = Array(hidden.suffix(Self.artifactPageSize))
+    artifacts.insert(
+      contentsOf: Self.cards(for: page, title: activeConversationTitle),
+      at: 0
+    )
+    onLayoutInvalidated?()
   }
 }

@@ -11,6 +11,7 @@ struct EvieOverlayView: View {
       primaryText: viewModel.primaryText,
       secondaryText: viewModel.secondaryText,
       waveformSamples: viewModel.waveformSamples,
+      waveformNoiseFloor: viewModel.waveformNoiseFloor,
       artifacts: viewModel.artifacts,
       onCancel: viewModel.hasActiveRequest
         ? { viewModel.cancelCurrentInteraction() }
@@ -19,13 +20,15 @@ struct EvieOverlayView: View {
         ? nil
         : { viewModel.expandLatestArtifact() },
       onToggleArtifact: { id in viewModel.toggleArtifact(id) },
+      earlierTurnCount: viewModel.earlierTurnCount,
+      onLoadEarlierTurns: { viewModel.loadEarlierTurns() },
       onDismissArtifact: { id in viewModel.dismissArtifact(id) },
       onArtifactAction: { id, action in
         viewModel.performArtifactAction(id, action: action)
       },
       quickText: viewModel.isQuickTextEntryPresented ? $viewModel.quickText : nil,
       onSubmitQuickText: viewModel.isQuickTextEntryPresented
-        ? { viewModel.submitQuickText() }
+        ? { viewModel.submitTypedText() }
         : nil,
       onCancelQuickText: viewModel.isQuickTextEntryPresented
         ? { viewModel.dismissQuickText() }

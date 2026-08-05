@@ -118,10 +118,16 @@ struct ArtifactCardView: View {
         : EdgeInsets(top: 13, leading: 14, bottom: 13, trailing: 12),
       tint: artifact.kind.tint
     ) {
-      VStack(alignment: .leading, spacing: 11) {
+      VStack(alignment: .leading, spacing: isPrompt && !artifact.isExpanded ? 0 : 11) {
         header
 
-        if artifact.isSensitive, !artifact.isExpanded {
+        // A collapsed prompt shows nothing but its header. Seeing your own
+        // question repeated back is noise on every turn; the header keeps a
+        // one-line trace so a long conversation is still navigable, and the
+        // chevron brings the whole thing back.
+        if isPrompt, !artifact.isExpanded {
+          EmptyView()
+        } else if artifact.isSensitive, !artifact.isExpanded {
           sensitivePreview
         } else {
           content
@@ -151,9 +157,18 @@ struct ArtifactCardView: View {
 
       VStack(alignment: .leading, spacing: 1) {
         if isPrompt {
-          Text("Você perguntou")
-            .font(.system(size: 10, weight: .semibold))
-            .foregroundStyle(.secondary)
+          HStack(spacing: 6) {
+            Text("Você perguntou")
+              .font(.system(size: 10, weight: .semibold))
+              .foregroundStyle(.secondary)
+            if !artifact.isExpanded {
+              Text(artifact.summary)
+                .font(.system(size: 10))
+                .foregroundStyle(.secondary.opacity(0.75))
+                .lineLimit(1)
+                .truncationMode(.tail)
+            }
+          }
         } else {
           Text(artifact.kind.title.uppercased())
             .font(.system(size: 9, weight: .bold))
@@ -170,7 +185,8 @@ struct ArtifactCardView: View {
 
       if onToggleExpanded != nil {
         iconButton(
-          symbol: artifact.isExpanded ? "chevron.down" : "chevron.up",
+          // Points the way it will move: down opens, up closes.
+          symbol: artifact.isExpanded ? "chevron.up" : "chevron.down",
           label: artifact.isExpanded ? "Recolher" : "Expandir",
           action: { onToggleExpanded?() }
         )

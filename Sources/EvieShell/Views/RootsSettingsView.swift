@@ -60,6 +60,31 @@ struct RootsSettingsView: View {
         .foregroundStyle(.secondary)
       }
 
+      if !viewModel.untrackedObsidianVaults.isEmpty {
+        Section {
+          ForEach(viewModel.untrackedObsidianVaults, id: \.self) { url in
+            Button {
+              viewModel.add(url)
+            } label: {
+              Label(
+                "Usar meu Obsidian (\(url.lastPathComponent))",
+                systemImage: "book.closed"
+              )
+            }
+          }
+        } footer: {
+          Text(
+            """
+            Ela lê suas notas para responder — engenharia, Cluemed, Keymatic, o que \
+            estiver escrito lá. Nunca escreve, nunca edita, nunca apaga: não existe \
+            ferramenta capaz disso.
+            """
+          )
+          .font(.footnote)
+          .foregroundStyle(.secondary)
+        }
+      }
+
       Section {
         Button {
           viewModel.grant()
