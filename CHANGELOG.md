@@ -22,6 +22,11 @@ All notable changes to Evie are documented here. Dates use `YYYY-MM-DD`.
 - Credentials stay out of reach even inside a folder you granted. A `.env` planted
   in a granted folder was withheld from the listing and from the search, and Evie
   reported not finding it rather than inventing a value.
+- One switch in Settings › Pastas authorises your whole home folder, for when
+  picking folder by folder is the annoying part. It replaces the individual
+  grants, since the home folder already contains them. It does not, and cannot,
+  bypass macOS itself: the system still asks once each for Desktop, Documents,
+  Downloads, and iCloud Drive, and the switch says so.
 
 - Voices can be designed rather than cloned: a controlled vocabulary of gender,
   age, pitch, style, and accent, with the engine rendering its own reference. Three
@@ -68,6 +73,17 @@ All notable changes to Evie are documented here. Dates use `YYYY-MM-DD`.
 - Every menu-bar item shows the shortcut currently bound to it, and every
   configurable action now has a menu item — a shortcut the system refused, or one
   turned off, can no longer make a feature unreachable.
+
+### Security
+
+- `~/Library` is unreadable even inside an authorised folder. Mail's message
+  store, Messages' chat database, Safari history, browser cookies, and the OAuth
+  tokens applications leave in Application Support all live there; none of it is
+  what anyone means by "my files", and authorising a whole home folder would
+  otherwise hand over the lot.
+- Fixed: a folder was treated as being inside another by plain string prefix, so
+  authorising `projeto` would silently revoke `projeto2`. Paths are now compared
+  with the separator attached.
 
 ### Fixed
 

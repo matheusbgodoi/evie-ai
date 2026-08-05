@@ -135,9 +135,10 @@ public struct EvieRootRegistry: Sendable {
       throw RegistryError.duplicatePath(root.displayName)
     }
 
-    var updated = existing.filter { !Self.canonicalPath($0.path).hasPrefix(canonical) }
+    var updated = existing.filter { !Self.contains(canonical, Self.canonicalPath($0.path)) }
     // A folder already inside a granted one adds nothing and confuses revoking.
-    guard !updated.contains(where: { canonical.hasPrefix(Self.canonicalPath($0.path)) }) else {
+    guard !updated.contains(where: { Self.contains(Self.canonicalPath($0.path), canonical) })
+    else {
       throw RegistryError.duplicatePath(root.displayName)
     }
     updated.append(root)
@@ -156,9 +157,18 @@ public struct EvieRootRegistry: Sendable {
 
   /// A trailing slash and a symlinked parent are the two ways the same folder
   /// gets recorded twice.
-  static func canonicalPath(_ path: String) -> String {
+  public static func canonicalPath(_ path: String) -> String {
     let resolved = URL(fileURLWithPath: path).resolvingSymlinksInPath().path
     return resolved.hasSuffix("/") ? String(resolved.dropLast()) : resolved
+  }
+
+  /// Whether `descendant` lies inside `ancestor`.
+  ///
+  /// Compared with the separator attached rather than by plain prefix, because
+  /// `/Users/x/projeto2` starts with `/Users/x/projeto` and is not inside it.
+  /// Getting this wrong silently revokes a folder the user never touched.
+  static func contains(_ ancestor: String, _ descendant: String) -> Bool {
+    descendant == ancestor || descendant.hasPrefix(ancestor + "/")
   }
 }
 

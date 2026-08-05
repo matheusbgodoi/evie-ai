@@ -94,10 +94,18 @@ public struct EvieScopedFileReader: Sendable {
   ///
   /// Granting a folder is not consent to hand over the credentials that happen to
   /// live in it. The list is applied to every path component, not just the last.
+  /// A folder named `Library` is refused because of what the user's own
+  /// `~/Library` contains: Mail's message store, Messages' chat database, Safari
+  /// history, browser cookies, and the OAuth tokens every application leaves in
+  /// Application Support. None of that is the user's documents, all of it is far
+  /// more sensitive than the folder someone meant to share, and granting a home
+  /// folder wholesale would otherwise hand over the lot. The cost is that a
+  /// project folder that happens to contain a directory called `Library` is
+  /// unreadable — a small failure, in the safe direction.
   public static let deniedNames: Set<String> = [
     ".ssh", ".gnupg", ".aws", ".azure", ".kube", ".docker", ".netrc", ".npmrc",
     ".pypirc", ".git-credentials", ".gitconfig", ".env", ".envrc",
-    "Keychains", "Cookies", "Cookies.binarycookies", "login.keychain-db",
+    "Library", "Keychains", "Cookies", "Cookies.binarycookies", "login.keychain-db",
     "id_rsa", "id_dsa", "id_ecdsa", "id_ed25519", "authorized_keys", "known_hosts",
     "credentials", "secrets", "shadow", "master.key",
   ]

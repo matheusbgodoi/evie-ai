@@ -116,6 +116,37 @@ struct EvieRootRegistryTests {
     #expect(!updated.contains { $0.displayName == "Downloads" })
   }
 
+  /// `/tmp/projeto2` starts with `/tmp/projeto` and is a different folder.
+  /// Comparing by plain prefix would silently revoke a grant the user never
+  /// touched.
+  @Test("a sibling whose name merely starts the same is left alone")
+  func siblingIsNotADescendant() throws {
+    let registry = EvieRootRegistry(fileURL: temporaryFileURL())
+    let sibling = EvieFileRoot(displayName: "Projeto2", path: "/tmp/evie-test/projeto2")
+    let child = EvieFileRoot(displayName: "Dentro", path: "/tmp/evie-test/projeto/docs")
+
+    let updated = try registry.grant(
+      EvieFileRoot(displayName: "Projeto", path: "/tmp/evie-test/projeto"),
+      to: [sibling, child]
+    )
+
+    #expect(updated.contains { $0.id == sibling.id })
+    #expect(!updated.contains { $0.id == child.id })
+  }
+
+  @Test("a sibling does not make a new grant look nested")
+  func siblingDoesNotBlockAGrant() throws {
+    let registry = EvieRootRegistry(fileURL: temporaryFileURL())
+    let existing = [EvieFileRoot(displayName: "Projeto", path: "/tmp/evie-test/projeto")]
+
+    let updated = try registry.grant(
+      EvieFileRoot(displayName: "Projeto2", path: "/tmp/evie-test/projeto2"),
+      to: existing
+    )
+
+    #expect(updated.count == 2)
+  }
+
   @Test("a trailing slash is the same folder")
   func canonicalisesPaths() {
     #expect(

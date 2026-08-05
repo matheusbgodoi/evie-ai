@@ -12,6 +12,33 @@ struct RootsSettingsView: View {
   var body: some View {
     Form {
       Section {
+        Toggle(
+          "Liberar minha pasta pessoal inteira",
+          isOn: Binding(
+            get: { viewModel.isHomeGranted },
+            set: { viewModel.setHomeGranted($0) }
+          )
+        )
+      } header: {
+        Text("Sem escolher pasta por pasta")
+      } footer: {
+        Text(
+          """
+          Libera tudo de uma vez, e substitui as autorizações individuais — a \
+          pasta pessoal já contém todas elas. Senhas, chaves e a pasta Biblioteca \
+          (Mail, Mensagens, cookies, tokens) continuam fora do alcance dela.
+
+          Isto libera o lado da Evie. O macOS continua com o dele: na primeira vez \
+          que ela olhar Mesa, Documentos, Transferências ou iCloud Drive, o \
+          sistema vai pedir sua permissão uma vez para cada. Escolher a pasta no \
+          painel já traz essa permissão junto; este botão não tem como.
+          """
+        )
+        .font(.footnote)
+        .foregroundStyle(.secondary)
+      }
+
+      Section {
         if viewModel.roots.isEmpty {
           emptyState
         } else {

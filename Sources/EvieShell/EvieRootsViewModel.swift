@@ -68,8 +68,11 @@ final class EvieRootsViewModel: ObservableObject {
   /// Separated from the panel so the decision can be tested without a window on
   /// screen.
   func add(_ url: URL) {
+    let isHome =
+      EvieRootRegistry.canonicalPath(url.path)
+      == EvieRootRegistry.canonicalPath(Self.homeURL.path)
     let root = EvieFileRoot(
-      displayName: url.lastPathComponent,
+      displayName: isHome ? "Toda a minha pasta pessoal" : url.lastPathComponent,
       path: url.path,
       // Not security-scoped: Evie is not sandboxed, so a plain bookmark is what
       // applies here. It buys resilience to the folder being renamed or moved,
@@ -121,5 +124,46 @@ final class EvieRootsViewModel: ObservableObject {
   /// Re-reads the file, for when it changed underneath.
   func reload() {
     roots = registry.load()
+  }
+
+  // MARK: - The whole home folder
+
+  static var homeURL: URL {
+    FileManager.default.homeDirectoryForCurrentUser
+  }
+
+  var isHomeGranted: Bool {
+    let home = EvieRootRegistry.canonicalPath(Self.homeURL.path)
+    return roots.contains { EvieRootRegistry.canonicalPath($0.path) == home }
+  }
+
+  /// Grants or revokes the entire home folder in one switch.
+  ///
+  /// Turning it on replaces every other grant, because the home folder contains
+  /// them and two doors to the same file would mean revoking one leaves the other
+  /// open. `~/Library` stays unreadable regardless — Mail, Messages, cookies, and
+  /// application tokens live there, and none of it is what anyone means by "my
+  /// files".
+  ///
+  /// It does not, and cannot, bypass macOS itself. Desktop, Documents,
+  /// Downloads, and iCloud Drive are gated by the system, which will ask once for
+  /// each the first time Evie looks. Choosing a folder in the open panel carries
+  /// that consent with it; a switch cannot.
+  func setHomeGranted(_ isGranted: Bool) {
+    guard isGranted else {
+      if let existing = roots.first(
+        where: {
+          EvieRootRegistry.canonicalPath($0.path)
+            == EvieRootRegistry.canonicalPath(Self.homeURL.path)
+        }
+      ) {
+        revoke(existing)
+      }
+      return
+    }
+    guard !isHomeGranted else {
+      return
+    }
+    add(Self.homeURL)
   }
 }

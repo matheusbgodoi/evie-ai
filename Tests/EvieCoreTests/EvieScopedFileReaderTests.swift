@@ -161,6 +161,31 @@ struct EvieScopedFileReaderTests {
     #expect(!EvieScopedFileReader.isDenied("environment.md"))
   }
 
+  /// Granting the whole home folder must not hand over Mail, Messages, browser
+  /// cookies, or the OAuth tokens applications leave in Application Support.
+  @Test("the Library folder is refused, so a home grant does not include it")
+  func withholdsLibrary() throws {
+    #expect(EvieScopedFileReader.isDenied("Library"))
+
+    let home = try makeRoot([
+      "Library/Mail/V10/mensagem.emlx": "De: banco\nAssunto: sua senha\n",
+      "nota.txt": "visível\n",
+    ])
+    defer { try? FileManager.default.removeItem(at: home) }
+
+    let listing = try EvieScopedFileReader().list(root: home)
+    #expect(!listing.entries.contains { $0.name == "Library" })
+    #expect(listing.entries.contains { $0.name == "nota.txt" })
+    #expect(listing.withheldCount == 1)
+
+    #expect(throws: EvieScopedFileReader.ReaderError.denied("Library")) {
+      _ = try EvieScopedFileReader().read(
+        root: home,
+        relativePath: "Library/Mail/V10/mensagem.emlx"
+      )
+    }
+  }
+
   // MARK: - Limits
 
   @Test("truncates a long file and says that it did")

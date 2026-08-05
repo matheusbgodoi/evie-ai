@@ -656,3 +656,34 @@
 - Next: the approval card (`UI-011`/`POL-002`) before anything writes, and the
   bypass switch the user asked for — whose exact scope is still an open question
   put to them, because "liberado" can mean several different things.
+
+## 2026-08-05 — the bypass, first half
+
+- The user was asked what "bypass" should cover now that the design exists, since
+  reading already asks for nothing after a folder is granted. He chose both:
+  skip the folder-picking step, and skip confirmation for writing once writing
+  exists.
+- Built the first half. One switch in Settings › Pastas authorises the whole home
+  folder, replacing the individual grants because the home folder contains them.
+- Deliberately did **not** build the second half. Nothing writes yet, and a
+  settings switch describing something unbuilt is the exact mistake this project
+  already made with voice. It ships with the write tools, and with the rule the
+  user's answer implies: deleting always goes to the Trash, never a permanent
+  removal, so "no confirmation" never becomes "no undo".
+- The switch cannot bypass macOS, only Evie. Desktop, Documents, Downloads, and
+  iCloud Drive stay behind TCC and the system will ask once for each on first
+  access; choosing a folder in the open panel carries that consent with it and a
+  programmatic grant does not. Said plainly in the interface rather than
+  discovered later.
+- Consequence handled before shipping: `~/Library` is now denied wherever it
+  appears. Authorising a home folder would otherwise have handed over Mail's
+  store, Messages' chat database, Safari history, cookies, and every OAuth token
+  in Application Support. Verified by test with a planted `.emlx`.
+- Bug found while reviewing the registry for this: containment was decided by
+  plain string prefix, so authorising `projeto` would have silently revoked
+  `projeto2`. Now compared with the separator attached, with a test for the
+  sibling case in both directions.
+- Validation: `Scripts/test` 192/192 in 19 suites; release build.
+- Not validated by eye: the Pastas tab, the switch, and the progress lines during
+  a lookup. The home switch was left off — turning it on is the user's decision
+  to make, not one to make for him.
