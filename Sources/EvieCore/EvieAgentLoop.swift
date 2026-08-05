@@ -23,6 +23,11 @@ public struct EvieAgentLoop: Sendable {
   /// Set only when the user switched web search on. Absent means the tools are
   /// never offered, which is the truth rather than a refusal she has to explain.
   public var web: (any EvieWebSearching)?
+  /// The vault, chunked and embedded. When present, grounding uses hybrid
+  /// retrieval over it instead of scanning files for a substring — which finds
+  /// nothing when the note says "valor da minha hora" and the question said
+  /// "quanto eu cobro".
+  public var vault: (@Sendable (String) async -> [EvieRetrievedPassage])?
   /// Whether she may suggest changing a file. Off unless the user switched it on,
   /// and even then the tool only ever raises a card.
   public var offersChanges: Bool
@@ -31,11 +36,13 @@ public struct EvieAgentLoop: Sendable {
   public init(
     toolbox: EvieFileToolbox = EvieFileToolbox(),
     web: (any EvieWebSearching)? = nil,
+    vault: (@Sendable (String) async -> [EvieRetrievedPassage])? = nil,
     offersChanges: Bool = false,
     maximumIterations: Int = EvieAgentLoop.maximumIterations
   ) {
     self.toolbox = toolbox
     self.web = web
+    self.vault = vault
     self.offersChanges = offersChanges
     self.maximumIterations = maximumIterations
   }
@@ -241,7 +248,16 @@ extension EvieAgentLoop {
     var result = EvieGroundingResult()
     let query = EvieGrounding.query(from: question)
 
-    if !roots.isEmpty {
+    if let vault {
+      // Hybrid retrieval over the indexed vault: words and meaning, fused.
+      await emit(.status(message: "Procurando nas suas anotações…"))
+      let retrieved = await vault(query)
+      if !retrieved.isEmpty {
+        result.localFindings = EvieVaultRetriever.describe(retrieved, query: query)
+      }
+    } else if !roots.isEmpty {
+      // No index yet — the first launch, or a Mac with no embedding model. A
+      // substring scan is worse and is better than nothing.
       await emit(.status(message: "Procurando nas suas anotações…"))
       let found = roots.compactMap { root -> String? in
         let call = EvieToolCall(

@@ -42,9 +42,10 @@ public enum EviePassageRanker {
   public static func rank(
     _ passages: [EvieWebPassage],
     for question: String,
-    limit: Int = 6
+    limit: Int = 6,
+    queryTerms: [String]? = nil
   ) -> [EvieWebPassage] {
-    let queryTerms = terms(in: question)
+    let queryTerms = queryTerms ?? terms(in: question)
     guard !queryTerms.isEmpty, !passages.isEmpty else {
       return Array(passages.prefix(limit))
     }
@@ -133,7 +134,7 @@ public enum EviePassageRanker {
 
   /// Words worth matching on: folded, lowercased, with the words that appear in
   /// every sentence removed.
-  static func terms(in text: String) -> [String] {
+  public static func terms(in text: String) -> [String] {
     text
       .folding(
         options: [.diacriticInsensitive, .caseInsensitive],

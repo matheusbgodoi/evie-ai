@@ -26,6 +26,7 @@ final class AppCoordinator: NSObject {
   private var voiceLibraryViewModel: EvieVoiceLibraryViewModel?
   private let memoryViewModel = EvieMemoryViewModel()
   private let skillsViewModel = EvieSkillsViewModel()
+  private let vaultIndex = EvieVaultIndex()
   private let audioCapture = EvieAudioCapture()
   private let speechOutput = EvieSpeechOutput()
   /// True while push-to-talk is holding the microphone open, so releasing the key
@@ -126,6 +127,16 @@ final class AppCoordinator: NSObject {
     viewModel.grantedRoots = { [rootsViewModel] in rootsViewModel.roots }
     viewModel.memories = { [memoryViewModel] in memoryViewModel.entries }
     viewModel.installedSkills = { [skillsViewModel] in skillsViewModel.skills }
+    // Snapshotted per call rather than captured once: the index rebuilds when a
+    // folder is granted, and a stale snapshot would search yesterday's vault.
+    viewModel.retrieveFromVault = { [weak self] query in
+      guard let self else { return [] }
+      let (passages, vectors, retriever) = await MainActor.run {
+        (vaultIndex.passages, vaultIndex.vectors, vaultIndex.retriever)
+      }
+      guard !passages.isEmpty else { return [] }
+      return retriever.retrieve(query, from: passages, vectors: vectors)
+    }
     viewModel.onSkillProposed = { [weak self] skill in
       self?.skillsViewModel.install(skill)
     }
@@ -176,6 +187,7 @@ final class AppCoordinator: NSObject {
       viewModel.applyCapabilities(
         Self.capabilities(for: preferences, hasGrantedFolders: !roots.isEmpty)
       )
+      vaultIndex.rebuild(roots: roots)
     }
   }
 

@@ -6,6 +6,18 @@ All notable changes to Evie are documented here. Dates use `YYYY-MM-DD`.
 
 ### Added
 
+- Retrieval over your notes finds things by meaning, not only by the words you
+  happened to type. Ask "quanto eu cobro" and a note saying "valor da minha hora"
+  is reachable. Three signals are fused: the note's title, the words themselves,
+  and an embedding of the passage — using the language model macOS already ships,
+  so no download and no extra memory.
+- Passages carry where they came from. A paragraph deep in a note now arrives
+  labelled "Cluemed › Captação › Eurofarma", so she can cite the note and section
+  rather than "nas suas anotações", and a paragraph that only says "eles" is
+  still findable.
+- The index is built once and kept, so a question costs about 700 ms of searching
+  rather than re-reading the whole vault.
+
 - You can teach her. A habilidade is a markdown file in
   `~/Library/Application Support/Evie/Skills/` — a name, the words that make it
   load, and your instructions. She only loads what matches, so a folder full of

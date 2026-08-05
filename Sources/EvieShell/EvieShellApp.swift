@@ -287,9 +287,80 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
       return
     }
 
+    // Builds the index over a real folder and asks it real questions, including
+    // the paraphrase kind that substring search cannot answer at all.
+    if let index = CommandLine.arguments.firstIndex(of: "--rag-check"),
+      index + 1 < CommandLine.arguments.count
+    {
+      let folder = URL(fileURLWithPath: CommandLine.arguments[index + 1])
+      let questions = Array(CommandLine.arguments.dropFirst(index + 2))
+      Task { @MainActor in
+        await Self.runRagCheck(folder: folder, questions: questions)
+        NSApp.terminate(nil)
+      }
+      return
+    }
+
     let coordinator = AppCoordinator()
     self.coordinator = coordinator
     coordinator.start()
+  }
+
+  static func runRagCheck(folder: URL, questions: [String]) async {
+    let root = EvieFileRoot(displayName: folder.lastPathComponent, path: folder.path)
+    let embedder = EvieContextualEmbedder()
+    print("busca por significado disponível: \(embedder.isAvailable)")
+
+    var started = Date()
+    let passages = EvieVaultIndex.collect(from: [root])
+    print(String(format: "%d passagens em %.1f s", passages.count, Date().timeIntervalSince(started)))
+
+    started = Date()
+    let vectors = passages.map { embedder.vector(for: $0.searchableText) }
+    let embedded = vectors.compactMap { $0 }.count
+    print(String(format: "%d vetores em %.1f s", embedded, Date().timeIntervalSince(started)))
+
+    let retriever = EvieVaultRetriever(embedder: embedder.isAvailable ? embedder : nil)
+
+    // The two rankers separately before the fusion, because a bad fused result
+    // says nothing about which half is wrong.
+    for question in questions {
+      print("")
+      print("=== \(question) ===")
+      let terms = EvieQueryTerms.extract(from: question)
+      print("termos analisados: \(terms)")
+      let containing = passages.filter { passage in
+        terms.contains { passage.searchableText.lowercased().contains($0) }
+      }
+      print("passagens contendo algum termo: \(containing.count)")
+
+      let words = retriever.rankByWords(question, in: passages).prefix(3)
+      print("só palavras:")
+      for index in words {
+        print("   \(passages[index].breadcrumb.prefix(70))")
+      }
+      let meaning = retriever.rankByMeaning(question, in: passages, vectors: vectors).prefix(3)
+      print("só significado:")
+      for index in meaning {
+        print("   \(passages[index].breadcrumb.prefix(70))")
+      }
+    }
+
+    for question in questions {
+      print("")
+      print("— \(question)")
+      started = Date()
+      let found = retriever.retrieve(question, from: passages, vectors: vectors, limit: 3)
+      print(String(format: "  %d trechos em %.0f ms", found.count, Date().timeIntervalSince(started) * 1000))
+      for item in found {
+        let how = [
+          item.matchedByWords ? "palavras" : nil,
+          item.matchedByMeaning ? "significado" : nil,
+        ].compactMap { $0 }.joined(separator: "+")
+        print("  [\(how)] \(item.passage.breadcrumb)")
+        print("     \(item.passage.text.prefix(90).replacingOccurrences(of: "\n", with: " "))…")
+      }
+    }
   }
 
   static func runSkillCheck(question: String) async {

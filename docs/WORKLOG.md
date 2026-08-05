@@ -1067,3 +1067,61 @@ previous day of building. Everything here came from that.
   hardcoded how many tools exist, so every new tool broke them — a test that has
   to be edited on every change is not catching anything.
 - Validation: `Scripts/test` 340/340 in 32 suites.
+
+## 2026-08-05 — RAG-002: retrieval that finds things by meaning
+
+Asked whether the retrieval was agentic and whether it had embeddings. It was
+neither: a substring scan, which is why it found "Cluemed" (a rare exact token)
+and would find nothing for "quanto eu cobro" against a note saying "valor da
+minha hora". Rebuilt properly, and the measurements decided every choice.
+
+**What this Mac already had, measured before designing anything.**
+`NLContextualEmbedding` for Portuguese is present, 512 dimensions, assets
+available. A paraphrase test discriminated: "quanto eu cobro pela consultoria" ↔
+"o valor da minha hora" scored 0.796 against 0.933 for an unrelated sentence.
+And the counter-intuitive one — the contextual model took **8 ms** per passage
+against **30 ms** for the static `sentenceEmbedding`. Better *and* four times
+faster, which settled it.
+
+**Architecture follows from the timings.** 6,112 passages at 8 ms is 136 s: far
+too slow per question, fine once. So the index is cached and only re-embeds
+passages whose text changed. A question then costs ~700 ms.
+
+**Three signals, fused with Reciprocal Rank Fusion**, because their scores are
+not on a common scale and never will be — RRF uses only the order each produced.
+Title, words (BM25), meaning (cosine). Title is weighted double: the person named
+the note themselves, which makes it the most reliable of the three.
+
+**The first attempt was worse than what it replaced**, and the reason is worth
+keeping. Asked "o que eu tenho sobre a Cluemed", it returned a chemistry lesson
+first. The extracted terms were `["tenho", "cluemed"]` — "tenho" survived the
+stopword list, and because the vault is technical notes it is *rare* there, so
+inverse document frequency gave it a **high** weight. That is the general flaw in
+stopword lists: they assume the meaningless words can be enumerated, and IDF
+assumes rare means informative.
+- Replaced with `NLTagger`: part of speech decides, so a pronoun is a pronoun
+  whether or not anybody listed it. Lemmatising came nearly free with it, which
+  matters more in Portuguese than in English — "cobro", "cobrei" and "cobrar" are
+  one idea, and both the lemma and the surface form are kept so no passage needs
+  re-analysing.
+- After that and the title ranker, the same question returns three Cluemed notes.
+
+**Three bugs found by running it rather than reasoning about it:**
+- The vault indexed as *empty*. `.skipsHiddenFiles` discards everything beneath a
+  hidden ancestor, and `~/Library` carries the hidden flag — so an Obsidian vault
+  in iCloud, which is exactly where this one lives, enumerated as nothing.
+  Measured: 701 entries without the option, 0 with it. Dotfiles are filtered by
+  hand instead, which is what was wanted.
+- The credential denylist was applied to the *absolute* path, so the same
+  `Library` component refused the vault outright. It belongs inside the granted
+  folder, not on the way to it.
+- The fallback for "the tagger recognised nothing" also fired when the tagger
+  recognised everything and filtered it all — putting every function word back.
+  A question that is entirely grammar correctly yields no terms. Caught by the
+  test for dropping auxiliaries.
+
+**Not built, deliberately:** an inverted index. The retrieval is ~700 ms of a
+~60 s turn; the model is the cost. Building an index would be effort spent where
+nothing is measurable.
+
+- Validation: `Scripts/test` 357/357 in 33 suites.

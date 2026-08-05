@@ -46,6 +46,10 @@ final class OverlayViewModel: ObservableObject {
   var installedSkills: @MainActor () -> [EvieSkill] = { [] }
   /// Raised when she suggests a new one. Nothing is installed by this.
   var onSkillProposed: (@MainActor (EvieSkill) -> Void)?
+  /// Hybrid retrieval over the indexed vault, when there is an index. Absent
+  /// falls back to scanning for a substring, which is worse and is better than
+  /// nothing.
+  var retrieveFromVault: (@Sendable (String) async -> [EvieRetrievedPassage])?
   /// What she has been allowed to remember. Asked for when a turn starts rather
   /// than held, so a memory deleted in Settings stops applying to the next
   /// question rather than to the next launch.
@@ -601,7 +605,11 @@ final class OverlayViewModel: ObservableObject {
         // Captured again, weakly, rather than reaching for the enclosing `self`:
         // the loop's callback is `@Sendable` and runs off this actor, so it may
         // not close over the outer closure's mutable binding.
-        let outcome = try await EvieAgentLoop(web: web, offersChanges: changePolicy.offers).run(
+        let outcome = try await EvieAgentLoop(
+          web: web,
+          vault: self?.retrieveFromVault,
+          offersChanges: changePolicy.offers
+        ).run(
           messages: requestMessages,
           roots: roots,
           client: client

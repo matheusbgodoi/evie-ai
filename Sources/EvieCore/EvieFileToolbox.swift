@@ -578,7 +578,7 @@ extension EvieFileToolbox {
   ///
   /// By extension rather than by sniffing content, because the point is to avoid
   /// opening the file at all. The reader still refuses binary it is handed.
-  static func isProbablyText(_ name: String) -> Bool {
+  public static func isProbablyText(_ name: String) -> Bool {
     let searchable: Set<String> = [
       "md", "markdown", "txt", "text", "org", "rst", "canvas",
       "json", "yaml", "yml", "toml", "csv", "tsv",
