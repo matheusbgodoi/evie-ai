@@ -110,8 +110,10 @@ struct EvieScopedFileReaderTests {
   func refusesDeniedNames() throws {
     let root = try makeRoot([
       "normal.txt": "ok",
-      ".env": "SENHA=123",
-      "chave.pem": "-----BEGIN PRIVATE KEY-----",
+      ".env": "VALOR_SINTETICO=1",
+      // Deliberately not shaped like a real key: this fixture only has to
+      // exist, and a credential scanner should never have to think about it.
+      "chave.pem": "conteudo-sintetico-de-teste",
     ])
     defer { try? FileManager.default.removeItem(at: root) }
 
@@ -127,8 +129,8 @@ struct EvieScopedFileReaderTests {
   func withholdsDeniedEntriesFromListings() throws {
     let root = try makeRoot([
       "normal.txt": "ok",
-      ".env": "SENHA=123",
-      "id_rsa": "chave",
+      ".env": "VALOR_SINTETICO=1",
+      "id_rsa": "conteudo-sintetico",
     ])
     defer { try? FileManager.default.removeItem(at: root) }
 

@@ -34,6 +34,11 @@ system's own text recognition with no model downloaded, verified end to end
 against the model in Portuguese and against a document attempting prompt
 injection.
 
+The first half of filesystem access exists: a reader contained by the kernel
+rather than by path-string checks, with the escapes proven by test. Nothing can
+grant it a folder yet, so it is unreachable from the interface — that is the next
+piece.
+
 The Phase 0 planning foundation is complete enough to support bounded code work.
 VS-001 and VS-002 are implemented at source level: the native shell now supports
 continuous quick text, complete local visible-history records, resume/delete UI,
