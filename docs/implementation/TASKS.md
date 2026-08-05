@@ -169,10 +169,10 @@ complete request set, what shipped, and the measurements are in
 
 | ID | Status | Depends on | Deliverable and definition of done |
 |---|---|---|---|
-| `VIS-007` | `PLANNED` | `CORE-003` | Native text recognition through Vision, with `RecognizeDocumentsRequest` structure where available, feeding a structured observation. `minimumTextHeightFraction` is set explicitly, because the default silently returns nothing for ordinary screenshot-sized text. |
-| `VIS-008` | `PLANNED` | `VIS-007` | PDFs resolve per page: the embedded text layer when it is trustworthy, rendered pages through recognition when it is not, with the provenance of each page recorded. |
-| `VIS-009` | `PLANNED` | `VIS-007` | Images arrive by drag, paste, or explicit screen capture, with type and size limits, and Retina resolution preserved because downscaling loses diacritics. |
-| `VIS-010` | `PLANNED` | `VIS-009`, `AGT-003` | The observation reaches the model as untrusted evidence that cannot grant authority, and the card separates observed text from interpretation. |
+| `VIS-007` | `DONE` | `CORE-003` | Native text recognition through Vision, with `RecognizeDocumentsRequest` structure where available, feeding a structured observation. `minimumTextHeightFraction` is set explicitly, because the default silently returns nothing for ordinary screenshot-sized text. |
+| `VIS-008` | `DONE` | `VIS-007` | PDFs resolve per page: the embedded text layer when it is trustworthy, rendered pages through recognition when it is not, with the provenance of each page recorded. |
+| `VIS-009` | `DONE` | `VIS-007` | Images arrive by drag, paste, or explicit screen capture, with type and size limits, and Retina resolution preserved because downscaling loses diacritics. |
+| `VIS-010` | `DONE` | `VIS-009`, `AGT-003` | The observation reaches the model as untrusted evidence that cannot grant authority, and the card separates observed text from interpretation. |
 
 
 ## Dependency map

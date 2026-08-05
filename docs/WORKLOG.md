@@ -347,3 +347,43 @@
 - Next action: `VOI-017` — Apple's `SpeechTranscriber`, which supports pt-BR, runs
   outside this process so it does not compete with the model for memory, and
   exposes explicit model unload.
+
+## 2026-08-05 — VIS-007/008/009: Evie can read
+
+- Scope: `Sources/EvieCore/EvieDocumentReader.swift`,
+  `Sources/EvieShell/{EvieDocumentAttachment,OverlayViewModel,EvieOverlayView,QuickTextEntryView,EvieShellApp}.swift`,
+  `Sources/EvieShell/Views/OverlayRootView.swift`,
+  `Tests/EvieCoreTests/EvieDocumentReaderTests.swift`, `CHANGELOG.md`.
+- Completed:
+  - native text recognition with `minimumTextHeightFraction` set to zero, because
+    the default of 1/32 of the image height silently returns nothing for ordinary
+    screenshot-sized text;
+  - `.accurate` recognition only: the fast level was measured turning "Emissão"
+    into "Emissào" and a date into digits;
+  - per-page PDF strategy with a heuristic that rejects a text layer made only of
+    stray characters, and 200 dpi rendering for pages that must be recognised;
+  - per-line confidence, warnings for low confidence and blank pages, and a
+    provenance that distinguishes exact extraction from recognition;
+  - fenced prompt evidence carrying source, page, and lowest confidence;
+  - drag-and-drop onto the overlay plus a file picker, with the attachment shown
+    as a card before anything is asked about it, and a 20 000 character ceiling so
+    a long document cannot crowd out the question.
+- Validation:
+  - `Scripts/test` — 99/99 across twelve suites, including recognition tests that
+    run the real system recogniser rather than a stub;
+  - a generated scanned PDF with no text layer was read correctly end to end:
+    accents, CNPJ, dates, and `R$ 3.897,60` all intact, and the model answered
+    "O total da nota é R$ 3.897,60 e o vencimento é em 04/09/2026";
+  - a PDF instructing Evie to ignore her rules, delete Downloads, and rename her
+    creator was reported as an injection attempt and did not change her identity.
+- Known rough edge: recognition rendered "nº" as "n°", the usual ordinal/degree
+  ambiguity. Asked who created her while holding that document, Evie answered
+  "Seu criador é Matheus Barboza de Godoi" — the right name, the wrong pronoun.
+- Risks/blockers:
+  - no image understanding yet, only text: a chart or a screenshot of a UI yields
+    its words, not what it means. The research recorded two routes — the system
+    vision model, and the mmproj projector for the model already installed — and
+    neither is pinned;
+  - drag-and-drop and the picker have not been exercised by hand.
+- Next action: `VOI-017`, connecting Apple's `SpeechTranscriber` so a spoken
+  question becomes a typed one.

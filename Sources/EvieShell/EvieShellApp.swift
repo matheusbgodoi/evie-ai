@@ -44,6 +44,29 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
       return
     }
 
+    // Reads a file and prints exactly what Evie would receive. Useful on its own,
+    // and the only way to check the reader without dragging something onto a
+    // window.
+    if let index = CommandLine.arguments.firstIndex(of: "--read"),
+      index + 1 < CommandLine.arguments.count
+    {
+      let url = URL(fileURLWithPath: CommandLine.arguments[index + 1])
+      Task {
+        do {
+          let pages = try await EvieDocumentReader().read(fileAt: url)
+          print(pages.promptEvidence)
+        } catch {
+          FileHandle.standardError.write(
+            Data(
+              ((error as? LocalizedError)?.errorDescription
+                ?? error.localizedDescription).utf8)
+          )
+        }
+        NSApp.terminate(nil)
+      }
+      return
+    }
+
     let coordinator = AppCoordinator()
     self.coordinator = coordinator
     coordinator.start()

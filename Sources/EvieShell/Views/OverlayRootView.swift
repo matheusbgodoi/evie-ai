@@ -31,6 +31,8 @@ struct OverlayRootView: View {
   var onSubmitQuickText: (() -> Void)? = nil
   var onCancelQuickText: (() -> Void)? = nil
   var onActivateVoice: (() -> Void)? = nil
+  var onAttachFiles: (([URL]) -> Void)? = nil
+  var onBrowseForFiles: (() -> Void)? = nil
 
   @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
@@ -47,6 +49,13 @@ struct OverlayRootView: View {
     .fixedSize(horizontal: false, vertical: true)
     .onHover { hovering in
       chrome.setShowingHandles(hovering)
+    }
+    .dropDestination(for: URL.self) { urls, _ in
+      guard let onAttachFiles, !urls.isEmpty else {
+        return false
+      }
+      onAttachFiles(urls)
+      return true
     }
     .onGeometryChange(for: CGFloat.self) { proxy in
       proxy.size.height
@@ -109,7 +118,8 @@ struct OverlayRootView: View {
         isAnimating: chrome.isVisible && chrome.animatesLogo,
         onSubmit: onSubmitQuickText,
         onCancel: onCancelQuickText,
-        onActivateVoice: onActivateVoice
+        onActivateVoice: onActivateVoice,
+        onBrowseForFiles: onBrowseForFiles
       )
       .transition(.move(edge: .bottom).combined(with: .opacity))
     } else {

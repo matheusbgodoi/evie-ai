@@ -6,6 +6,18 @@ All notable changes to Evie are documented here. Dates use `YYYY-MM-DD`.
 
 ### Added
 
+- Evie can read images and PDFs. `EvieDocumentReader` uses the system's own text
+  recognition — no model downloaded, nothing leaving the Mac — and chooses per
+  page between a PDF's embedded text layer and recognising the pixels, because a
+  typed report with a scanned annex is an ordinary document.
+- Drop a file on the overlay or use the paperclip to attach it. Attaching does not
+  ask anything: the card shows what was read and with what confidence, and the
+  text travels with the next question.
+- Document text reaches the model fenced and labelled untrusted, with its source,
+  page, and lowest confidence. Verified against a PDF that instructs Evie to
+  ignore her rules and delete a folder: she reported it as an injection attempt
+  and kept her own identity.
+- `evie-shell --read <file>` prints exactly what Evie would receive from a file.
 - `Scripts/evie-app`: builds `Evie.app` from the SwiftPM product with a stable
   bundle identifier, usage descriptions, and a signature, then installs, launches,
   and reports on it. This clears the hard blocker for voice — measured on this

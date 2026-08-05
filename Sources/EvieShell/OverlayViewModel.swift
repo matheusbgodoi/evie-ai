@@ -13,6 +13,8 @@ final class OverlayViewModel: ObservableObject {
   @Published var quickText = ""
   @Published private(set) var activeConversationID = UUID()
   @Published private(set) var activeConversationTitle = "Nova conversa"
+  /// Documents read but not yet asked about. They travel with the next message.
+  @Published private(set) var attachments: [EvieDocumentAttachment] = []
 
   var onLayoutInvalidated: (@MainActor () -> Void)?
   var onDismissRequested: (@MainActor () -> Void)?
@@ -33,6 +35,10 @@ final class OverlayViewModel: ObservableObject {
   private var activeArtifactID: UUID?
   private var streamedResponse = ""
   private var pendingPrompt: String?
+  private let documentReader = EvieDocumentReader()
+  /// Ceiling on how much document text one turn may carry, so a long PDF cannot
+  /// silently push the actual question out of the model's context.
+  private static let attachmentCharacterLimit = 20_000
 
   init(
     agentClient: any AgentClient,
@@ -231,6 +237,103 @@ final class OverlayViewModel: ObservableObject {
     onVoiceActivationRequested()
   }
 
+  /// Reads dropped or pasted files and holds them for the next question.
+  ///
+  /// Attaching does not ask anything by itself: you attach, then say what you
+  /// want. Sending immediately would guess at a question the user has not asked.
+  func attachFiles(at urls: [URL]) {
+    let readable = urls.filter(EvieDocumentReader.canRead)
+    let rejected = urls.filter { !EvieDocumentReader.canRead($0) }
+
+    if !rejected.isEmpty {
+      secondaryText =
+        "Ainda leio só imagens e PDFs — "
+        + rejected.map(\.lastPathComponent).joined(separator: ", ") + " ficou de fora."
+    }
+    guard !readable.isEmpty else {
+      onLayoutInvalidated?()
+      return
+    }
+
+    visualState = .usingTool
+    primaryText = readable.count == 1 ? "Lendo o arquivo…" : "Lendo os arquivos…"
+    onLayoutInvalidated?()
+
+    Task { @MainActor [weak self] in
+      guard let self else { return }
+      for url in readable {
+        do {
+          let pages = try await documentReader.read(fileAt: url)
+          appendAttachment(
+            EvieDocumentAttachment(name: url.lastPathComponent, pages: pages)
+          )
+        } catch {
+          artifacts.append(
+            ArtifactCardModel(
+              kind: .error,
+              title: "Não consegui ler \(url.lastPathComponent)",
+              summary: (error as? LocalizedError)?.errorDescription
+                ?? error.localizedDescription,
+              isExpanded: true
+            )
+          )
+        }
+      }
+      visualState = .ready
+      primaryText = attachments.isEmpty ? "Evie está pronta" : "Li o que você mandou"
+      isQuickTextEntryPresented = true
+      onLayoutInvalidated?()
+    }
+  }
+
+  /// Opens the system file picker.
+  ///
+  /// Evie is an accessory application with no key window of her own, so she has
+  /// to be activated first or the panel opens behind whatever is in front.
+  func browseForFiles() {
+    let panel = NSOpenPanel()
+    panel.allowsMultipleSelection = true
+    panel.canChooseDirectories = false
+    panel.allowedContentTypes = EvieDocumentReader.supportedContentTypes
+    panel.prompt = "Anexar"
+    panel.message = "Escolha uma imagem ou um PDF para a Evie ler."
+
+    NSApp.activate(ignoringOtherApps: true)
+    guard panel.runModal() == .OK else {
+      return
+    }
+    attachFiles(at: panel.urls)
+  }
+
+  func removeAttachment(id: UUID) {
+    attachments.removeAll { $0.id == id }
+    onLayoutInvalidated?()
+  }
+
+  private func appendAttachment(_ attachment: EvieDocumentAttachment) {
+    attachments.append(attachment)
+    artifacts.append(
+      ArtifactCardModel(
+        id: attachment.id,
+        kind: .answer,
+        title: attachment.name,
+        summary: attachment.summary,
+        detail: attachment.preview,
+        source: attachment.provenanceDescription,
+        isExpanded: false,
+        actions: [
+          ArtifactActionModel(
+            id: "copy",
+            title: "Copiar texto",
+            systemImage: "doc.on.doc",
+            role: .secondary
+          )
+        ]
+      )
+    )
+    secondaryText = "Agora me pergunte o que você quer saber sobre isso."
+  }
+
   /// The microphone is open. This is only ever called after capture actually
   /// started, so the listening indicator can never be shown over a closed
   /// microphone.
@@ -306,7 +409,11 @@ final class OverlayViewModel: ObservableObject {
     let requestID = UUID()
     let artifactID = UUID()
     let userMessage = ChatMessage(role: .user, content: prompt)
-    let requestMessages = conversationPrefix(adding: userMessage)
+    let evidence = takeAttachmentEvidence()
+    let requestMessages = conversationPrefix(
+      adding: userMessage,
+      evidence: evidence
+    )
     let client = agentClient
 
     activeRequestID = requestID
@@ -732,20 +839,45 @@ extension OverlayViewModel {
     }
   }
 
-  fileprivate func conversationPrefix(adding userMessage: ChatMessage) -> [ChatMessage] {
+  fileprivate func conversationPrefix(
+    adding userMessage: ChatMessage,
+    evidence: ChatMessage? = nil
+  ) -> [ChatMessage] {
     var prefix = conversation
     let characterBudget = max(
       8_000,
       (agentClient.configuration.contextWindowTokens
         - agentClient.configuration.maxCompletionTokens) * 2
     )
+    let tailLength = userMessage.content.count + (evidence?.content.count ?? 0)
 
     while prefix.count > 1,
-      prefix.reduce(0, { $0 + $1.content.count }) + userMessage.content.count > characterBudget
+      prefix.reduce(0, { $0 + $1.content.count }) + tailLength > characterBudget
     {
       removeOldestTurn(from: &prefix)
     }
-    return prefix + [userMessage]
+    // Evidence goes immediately before the question so the model reads the
+    // document, then what is being asked about it.
+    return prefix + [evidence, userMessage].compactMap { $0 }
+  }
+
+  /// Consumes the pending attachments into one message, bounded so a long
+  /// document cannot crowd out the question itself.
+  fileprivate func takeAttachmentEvidence() -> ChatMessage? {
+    guard !attachments.isEmpty else {
+      return nil
+    }
+    let pages = attachments.flatMap(\.pages)
+    attachments = []
+
+    var evidence = pages.promptEvidence
+    if evidence.count > Self.attachmentCharacterLimit {
+      let cut = evidence.index(evidence.startIndex, offsetBy: Self.attachmentCharacterLimit)
+      evidence = String(evidence[..<cut])
+      evidence +=
+        "\n<<<CORTADO AQUI — o documento é maior do que cabe nesta conversa>>>"
+    }
+    return ChatMessage(role: .user, content: evidence)
   }
 
   fileprivate func removeOldestTurn(from messages: inout [ChatMessage]) {

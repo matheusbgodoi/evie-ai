@@ -8,6 +8,7 @@ struct QuickTextEntryView: View {
   var onSubmit: () -> Void
   var onCancel: () -> Void
   var onActivateVoice: (() -> Void)? = nil
+  var onBrowseForFiles: (() -> Void)? = nil
 
   @FocusState private var isFocused: Bool
 
@@ -34,6 +35,19 @@ struct QuickTextEntryView: View {
           .focused($isFocused)
           .onSubmit(onSubmit)
           .accessibilityLabel("Comando para Evie")
+
+        if let onBrowseForFiles {
+          Button(action: onBrowseForFiles) {
+            Image(systemName: "paperclip")
+              .font(.system(size: 11, weight: .semibold))
+              .frame(width: 24, height: 24)
+              .contentShape(Circle())
+          }
+          .buttonStyle(.plain)
+          .foregroundStyle(.secondary)
+          .help("Anexar uma imagem ou PDF — ou solte o arquivo aqui")
+          .accessibilityLabel("Anexar arquivo")
+        }
 
         Button(action: onSubmit) {
           Image(systemName: "arrow.up")
