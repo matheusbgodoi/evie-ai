@@ -6,6 +6,14 @@ All notable changes to Evie are documented here. Dates use `YYYY-MM-DD`.
 
 ### Added
 
+- `EvieScopedFileReader`: reading inside a folder the user granted, contained by
+  the kernel rather than by inspecting path strings. A descriptor for the root
+  plus `O_RESOLVE_BENEATH` and `O_NOFOLLOW_ANY`, walking one component at a time,
+  so a symlink partway along the path is refused too. Verified: symlink escapes
+  fail with `ELOOP`, `..` and absolute paths fail with `ENOTCAPABLE`.
+- A denylist that applies inside granted folders, because granting a folder is not
+  consent to hand over the credentials that live in it. Denied entries are
+  withheld from listings with a count rather than named.
 - Speech recognition through the system's own recogniser. It supports Brazilian
   Portuguese, streams a partial transcript while you are still speaking, and runs
   in a system daemon rather than inside Evie — so it does not compete with the

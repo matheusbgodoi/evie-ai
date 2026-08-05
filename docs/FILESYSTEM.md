@@ -1,7 +1,8 @@
 # Reaching the Mac
 
-Status: designed and researched, not implemented. Evie currently answers "essa
-parte ainda não está ligada" when asked to open a folder, and that is accurate.
+Status: the contained reader is implemented and tested. Nothing is wired to the
+interface yet, no root can be granted, and Evie still answers "essa parte ainda
+não está ligada" when asked to open a folder — which remains accurate.
 
 This is the design for `SEC-002`, `INT-008`, `WRT-003`, and `POL-001`–`POL-003`.
 It exists because the user asked for something specific: Evie should be able to
@@ -69,7 +70,10 @@ The registry lives beside the existing local files with `0700`/`0600`
 permissions, versioned and written atomically, exactly like the conversation
 store and the preferences.
 
-## Reading, contained by the kernel
+## Reading, contained by the kernel — implemented
+
+`EvieScopedFileReader` in `EvieCore`. Seventeen tests cover it, and the ones that
+matter are the escapes rather than the happy path.
 
 Path string checks lose to symlinks, `..`, and races. The containment is a file
 descriptor for the root plus `openat` with:
@@ -81,12 +85,21 @@ descriptor for the root plus `openat` with:
 Then `fstat` on the descriptor, never `stat` on the path, so what was checked is
 what was opened.
 
-Inside an allowed root there is still a denylist: `.ssh`, `.gnupg`, keychains,
-`.env` and its variants, private keys, browser profiles. A root the user granted
-is not a licence to read their credentials.
+The path is walked one component at a time, so a symlink in the *middle* is
+refused rather than only at the end — the version of this bug people forget.
+Verified on this Mac: a symlink to `/etc/hosts` fails with `ELOOP`, a symlinked
+`etc` directory partway along fails the same way, and both `../../etc/hosts` and
+`/etc/hosts` fail with `ENOTCAPABLE`.
 
-Also bounded: bytes read per file, results per page (128 entries), and binary
-detection so a listing does not return megabytes of unreadable bytes as text.
+Inside an allowed root there is still a denylist: `.ssh`, `.gnupg`, keychains,
+`.env` and its variants, private keys, browser cookies. A root the user granted is
+not a licence to read their credentials. It applies to every path component rather
+than only the last, and denied entries are withheld from listings with a count, so
+the interface can say something was hidden without naming it.
+
+Also bounded and implemented: 512 KiB per read with truncation reported, 128
+entries per listing page, and binary detection by NUL byte so a listing never
+returns megabytes of noise as text.
 
 Two specific traps. iCloud Drive placeholders are *dataless* — reading one starts
 a download and can hang; check the downloading status and refuse or queue rather
@@ -134,8 +147,8 @@ non-streaming turns when tools are present.
 
 ## Order of work
 
-1. `SEC-002` — the root registry: pick, store, list, revoke.
-2. `INT-008` — the contained reader with the denylist and the limits.
+1. ~~`INT-008` — the contained reader with the denylist and the limits.~~ **Done.**
+2. `SEC-002` — the root registry: pick, store, list, revoke.
 3. `AGT-003` — the five read-only tools and a minimal executor.
 4. `UI-011` / `POL-002` — the approval card, with expiry and single use.
 5. `WRT-003` — move and trash as proposals only.

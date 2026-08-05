@@ -422,3 +422,35 @@
 - Next action: `VOI-018` — connect the existing OmniVoice adapter to playback so
   she can answer out loud, which is the last switch in the settings that still
   describes something unbuilt.
+
+## 2026-08-05 — INT-008: reading, contained by the kernel
+
+- Scope: `Sources/EvieCore/EvieScopedFileReader.swift`,
+  `Tests/EvieCoreTests/EvieScopedFileReaderTests.swift`, `docs/FILESYSTEM.md`,
+  `CHANGELOG.md`.
+- Completed:
+  - listing and reading inside a granted root, contained with `O_RESOLVE_BENEATH`
+    and `O_NOFOLLOW_ANY`, walked one component at a time;
+  - `fstat` on the descriptor rather than `stat` on the path, so a file swapped
+    between check and open cannot be substituted;
+  - a denylist applied to every component, with denied entries withheld from
+    listings and counted rather than named;
+  - 512 KiB read ceiling with truncation reported, 128-entry pages, and binary
+    detection by NUL byte.
+- Validation:
+  - `Scripts/test` — 116/116 across thirteen suites;
+  - the containment is proven by test rather than asserted: a symlink to
+    `/etc/hosts` fails, a symlinked directory partway along the path fails, and
+    both `../../etc/hosts` and `/etc/hosts` fail;
+  - a standalone probe confirmed the same three refusals directly against the
+    kernel before the reader was written.
+- Note: `ENOTCAPABLE` (107) is not exposed as a Swift constant and is spelled out
+  with a comment.
+- Risks/blockers:
+  - nothing grants a root yet, so the reader has no way to be reached from the
+    interface; `SEC-002` is next;
+  - iCloud Drive placeholders are not handled — reading a dataless file starts a
+    download and can hang. It must check the downloading status before opening;
+  - writing and deleting do not exist, and deliberately will not until the
+    approval card does.
+- Next action: `SEC-002` — the root registry, so a folder can actually be granted.
