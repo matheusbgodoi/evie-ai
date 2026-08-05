@@ -49,6 +49,60 @@ struct OverlayRootView: View {
   }
 
   var body: some View {
+    Group {
+      if chrome.isCallMode {
+        callSurface
+      } else {
+        writtenSurface
+      }
+    }
+    .fixedSize(horizontal: false, vertical: true)
+    // The window controls live in the transparent margin as overlays, so they
+    // take no layout space and the resting overlay is exactly what it was before
+    // they existed.
+    .overlay(alignment: .top) { gripControls }
+    .overlay(alignment: .leading) { widthHandle(.leading) }
+    .overlay(alignment: .trailing) { widthHandle(.trailing) }
+    .onHover { hovering in
+      chrome.setShowingHandles(hovering)
+    }
+    .onGeometryChange(for: CGFloat.self) { proxy in
+      proxy.size.height
+    } action: { height in
+      chrome.onMeasuredHeight?(height)
+    }
+    .dropDestination(for: URL.self) { urls, _ in
+      guard let onAttachFiles, !urls.isEmpty else {
+        return false
+      }
+      onAttachFiles(urls)
+      return true
+    }
+    .animation(
+      reduceMotion ? nil : .snappy(duration: 0.32, extraBounce: 0.05),
+      value: artifacts.map(\.id)
+    )
+    .animation(reduceMotion ? nil : .smooth(duration: 0.2), value: state)
+    .animation(reduceMotion ? nil : .easeOut(duration: 0.16), value: chrome.isShowingHandles)
+    .animation(reduceMotion ? nil : .smooth(duration: 0.28), value: chrome.isCallMode)
+  }
+
+  /// A call: her mark and the waves around it, and nothing else on screen. No
+  /// transcript, no cards, no field — which is the entire point of the mode.
+  private var callSurface: some View {
+    EvieMarkView(
+      state: state,
+      waveformSamples: waveformSamples,
+      diameter: 92,
+      isAnimating: chrome.isVisible && chrome.animatesLogo,
+      onActivate: onActivateVoice
+    )
+    .frame(width: contentWidth, height: 150)
+    .padding(Self.outerPadding)
+    .transition(.scale(scale: 0.9).combined(with: .opacity))
+  }
+
+  private var writtenSurface: some View {
     VStack(spacing: 10) {
       artifactStack
 

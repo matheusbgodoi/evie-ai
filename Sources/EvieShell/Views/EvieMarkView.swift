@@ -75,8 +75,10 @@ struct EvieMarkView: View {
       .frame(width: diameter * 1.5, height: diameter * 1.5)
       .allowsHitTesting(false)
 
+      // No `allowsHitTesting(false)` here: the badge handles its own hover and
+      // click inside the layer view, and blocking hits made pressing the mark do
+      // nothing at all.
       breathingBadge
-        .allowsHitTesting(false)
     }
     .frame(width: diameter, height: diameter)
     .help(helpText)

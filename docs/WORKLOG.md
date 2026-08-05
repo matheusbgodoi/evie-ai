@@ -589,3 +589,24 @@
   though they appear in the system list. Filtered out of the picker. Recorded in
   `docs/VOICE.md` as the argument for cloned voices.
 - Next: `AGT-003` — tool calling, which the local server was confirmed to support.
+
+## 2026-08-05 — VOI-019: call mode
+
+- Trigger: the user turned call mode on, pressed the mark, and nothing happened.
+- Two causes, both real:
+  - `allowsHitTesting(false)` was still on the badge from the version where the
+    SwiftUI stack owned the tap. Once the badge handled its own mouse events, that
+    modifier swallowed every one of them. Pressing the mark had been dead since.
+  - Call mode saved a preference and selected no behaviour. It now switches the
+    overlay to the mark alone, opens the line on entry, and reopens the microphone
+    when she stops speaking.
+- End-of-speech detection was the missing piece: without it a call opens the
+  microphone and never closes it. Implemented in `EvieAudioCapture` beside the
+  levels it already computes — a turn ends after 1.1 s below the silence level,
+  and only after speech has been heard, so opening in a quiet room submits
+  nothing. Enabled for calls only.
+- Validation: `Scripts/test` 135/135; strict lint; release build; installed.
+- Not validated: the silence thresholds were chosen from the measured room floor
+  (ambient near 0.05, speech peaking above 0.4) and have not been tried in a noisy
+  room or against a quiet speaker. They are the first thing to adjust if a turn
+  ends too early or hangs open.

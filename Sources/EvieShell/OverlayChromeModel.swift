@@ -19,6 +19,9 @@ final class OverlayChromeModel: ObservableObject {
   /// When false the mark holds a single static frame. Some people simply do not
   /// want a moving thing on screen all day.
   @Published private(set) var animatesLogo: Bool
+  /// In call mode the overlay is only the mark and its ring — no field, no cards,
+  /// nothing written.
+  @Published private(set) var isCallMode = false
   /// True while the pointer is over the overlay, which reveals the handles.
   @Published private(set) var isShowingHandles = false
   /// Height of the artifact list as SwiftUI actually laid it out.
@@ -43,6 +46,13 @@ final class OverlayChromeModel: ObservableObject {
     contentWidth = appearance.resolvedOverlayWidth
     isUsingDefaultPlacement = appearance.isUsingDefaultPlacement
     animatesLogo = appearance.animatesLogo
+  }
+
+  func setCallMode(_ isOn: Bool) {
+    guard isOn != isCallMode else {
+      return
+    }
+    isCallMode = isOn
   }
 
   func setVisible(_ visible: Bool) {

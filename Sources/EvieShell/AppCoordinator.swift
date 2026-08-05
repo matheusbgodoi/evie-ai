@@ -88,6 +88,7 @@ final class AppCoordinator: NSObject {
       capabilities: Self.capabilities(for: preferencesResult.preferences)
     )
     let chrome = OverlayChromeModel(appearance: preferencesResult.preferences.appearance)
+    chrome.setCallMode(preferencesResult.preferences.voice.callModeEnabled)
 
     self.conversationStore = conversationStore
     self.configurationLoader = configurationLoader
@@ -135,6 +136,9 @@ final class AppCoordinator: NSObject {
     audioCapture.onLevels = { [weak self] levels in
       self?.viewModel.updateInputLevels(levels)
     }
+    audioCapture.onEndOfSpeech = { [weak self] in
+      self?.stopListening()
+    }
     viewModel.onVoiceActivationRequested = { [weak self] in
       self?.toggleListening()
     }
@@ -145,7 +149,13 @@ final class AppCoordinator: NSObject {
       self?.viewModel.beginSpeaking()
     }
     speechOutput.onFinished = { [weak self] in
-      self?.viewModel.endSpeaking()
+      guard let self else { return }
+      viewModel.endSpeaking()
+      // A call keeps going. When she stops talking the microphone opens again,
+      // which is the difference between a call and a sequence of questions.
+      if preferences.voice.callModeEnabled {
+        startListening()
+      }
     }
     viewModel.onAnswerReady = { [weak self] answer in
       self?.speak(answer)
@@ -531,6 +541,9 @@ extension AppCoordinator {
       do {
         let format = try await audioCapture.prepareInputFormat()
         let sink = try await startTranscription(inputFormat: format)
+        // Only a call ends its own turns. Push-to-talk ends when the key is
+        // released, and a click ends when it is clicked again.
+        audioCapture.detectsEndOfSpeech = preferences.voice.callModeEnabled
         try await audioCapture.start(sink: sink)
         viewModel.beginListening()
       } catch {
@@ -614,16 +627,21 @@ extension AppCoordinator {
     do {
       try preferencesStore.save(updated)
       preferencesDidChange(updated)
-      // The preference is real and saved; the behaviour it selects is not built
-      // yet. Saying so is better than flipping a switch that appears to do
-      // nothing.
-      viewModel.presentRuntimeWarning(
-        updated.voice.callModeEnabled
-          ? "Modo ligação guardado. Ele passa a valer quando a voz estiver ligada."
-          : "Modo ligação desligado."
-      )
     } catch {
       viewModel.presentRuntimeError(title: "Não consegui mudar o modo", error: error)
+      return
+    }
+
+    if updated.voice.callModeEnabled {
+      // Entering a call opens the line. Waiting for a second gesture would make
+      // the mode a setting rather than an action.
+      panelController.showPassive()
+      startListening()
+    } else {
+      speechOutput.stop()
+      viewModel.endSpeaking()
+      stopListening()
+      openQuickText()
     }
   }
 
@@ -635,6 +653,7 @@ extension AppCoordinator {
     if appearanceChanged {
       panelController.applyAppearance(updated.appearance)
     }
+    chrome.setCallMode(updated.voice.callModeEnabled)
     if shortcutsChanged {
       applyShortcuts()
     }

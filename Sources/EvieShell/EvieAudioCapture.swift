@@ -35,6 +35,13 @@ final class EvieAudioCapture: ObservableObject {
   /// Called on every published level update, so the overlay does not need a
   /// Combine subscription just to draw a ring.
   var onLevels: (@MainActor ([CGFloat]) -> Void)?
+  /// Reports that the person stopped talking, once. Only fires when
+  /// `detectsEndOfSpeech` is on, and only after speech was actually heard.
+  var onEndOfSpeech: (@MainActor () -> Void)?
+
+  /// Turns on silence detection, which is what makes a call end a turn without
+  /// anyone pressing anything.
+  var detectsEndOfSpeech = false
 
   /// How many level samples the ring and the waveform draw.
   private static let historyLength = 44
@@ -42,10 +49,22 @@ final class EvieAudioCapture: ObservableObject {
   private static let publishInterval = Duration.milliseconds(40)
   /// Below this the microphone is treated as silent.
   private static let noiseFloorDecibels: Float = -55
+  /// A normalised level above this counts as someone talking. Set from the
+  /// measured room floor rather than guessed: ambient noise sat near 0.05 while
+  /// speech peaked above 0.4.
+  private static let speechLevel: CGFloat = 0.16
+  /// Below this, and for long enough, the turn is over.
+  private static let silenceLevel: CGFloat = 0.09
+  /// How much silence ends a turn. Long enough to survive a pause for breath,
+  /// short enough that a finished sentence does not sit there.
+  private static let silenceToEndTurn = Duration.milliseconds(1_100)
 
   private let meter = EvieLevelMeter()
   private var engine: AVAudioEngine?
   private var publishTask: Task<Void, Never>?
+  private var hasHeardSpeech = false
+  private var silentSamples = 0
+  private var hasReportedEndOfSpeech = false
 
   init(permission: Permission = EvieAudioCapture.currentPermission()) {
     self.permission = permission
@@ -167,6 +186,9 @@ final class EvieAudioCapture: ObservableObject {
 
     isCapturing = true
     levels = Array(repeating: 0, count: Self.historyLength)
+    hasHeardSpeech = false
+    silentSamples = 0
+    hasReportedEndOfSpeech = false
     startPublishing()
   }
 
@@ -212,6 +234,34 @@ final class EvieAudioCapture: ObservableObject {
     levels = []
   }
 
+  /// Decides whether the turn is over.
+  ///
+  /// It waits for speech before it will ever end a turn, so opening the
+  /// microphone in a quiet room does not immediately submit nothing.
+  private func considerEndOfSpeech(level: CGFloat) {
+    guard detectsEndOfSpeech, !hasReportedEndOfSpeech else {
+      return
+    }
+    if level >= Self.speechLevel {
+      hasHeardSpeech = true
+      silentSamples = 0
+      return
+    }
+    guard hasHeardSpeech, level < Self.silenceLevel else {
+      return
+    }
+
+    silentSamples += 1
+    let needed = Int(
+      Self.silenceToEndTurn / Self.publishInterval
+    )
+    guard silentSamples >= needed else {
+      return
+    }
+    hasReportedEndOfSpeech = true
+    onEndOfSpeech?()
+  }
+
   private func startPublishing() {
     publishTask?.cancel()
     publishTask = Task { @MainActor [weak self] in
@@ -228,6 +278,7 @@ final class EvieAudioCapture: ObservableObject {
         updated.append(level)
         self.levels = updated
         self.onLevels?(updated)
+        self.considerEndOfSpeech(level: level)
       }
     }
   }
