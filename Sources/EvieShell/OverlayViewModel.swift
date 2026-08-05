@@ -524,8 +524,14 @@ final class OverlayViewModel: ObservableObject {
     }
 
     let requestID = UUID()
-    let artifactID = UUID()
     let userMessage = ChatMessage(role: .user, content: prompt)
+    // The card is keyed on the question, not on a fresh identifier, because the
+    // question is the one thing both this path and the restoring path know.
+    // They used to disagree — a live card got a new UUID while a restored one
+    // was keyed on the answer's — so every turn looked unshown the moment it
+    // finished. That put "Ver 1 mensagem anterior" on screen after every answer,
+    // and pressing it added a second copy of the turn just given.
+    let artifactID = userMessage.id
     let evidence = takeAttachmentEvidence()
     let requestMessages = conversationPrefix(
       adding: userMessage,
@@ -1438,8 +1444,8 @@ extension OverlayViewModel {
   ) -> [ArtifactCardModel] {
     turns.map { turn in
       ArtifactCardModel(
-        // Keyed on the answer, because that is what the card is.
-        id: turn.answer.id,
+        // Keyed on the question, which is what `submitQuickText` keys on too.
+        id: turn.question.id,
         kind: .answer,
         title: Self.title(for: turn.question.content),
         question: turn.question.content,
@@ -1463,14 +1469,22 @@ extension OverlayViewModel {
   /// it. Rebuilding every card on every turn would be wasteful and would reset
   /// the expansion state of cards the user had opened.
   var earlierTurnCount: Int {
+    Self.turns(in: conversation).filter { !isShown($0) }.count
+  }
+
+  /// Whether a turn already has a card.
+  ///
+  /// Either identifier counts. Keying on the question is the rule, and matching
+  /// the answer too means a divergence like the one that caused duplicate cards
+  /// cannot produce them again.
+  fileprivate func isShown(_ turn: (question: ChatMessage, answer: ChatMessage)) -> Bool {
     let shown = Set(artifacts.map(\.id))
-    return Self.turns(in: conversation).filter { !shown.contains($0.answer.id) }.count
+    return shown.contains(turn.question.id) || shown.contains(turn.answer.id)
   }
 
   /// Brings back the previous page of turns, oldest-last, all closed.
   func loadEarlierTurns() {
-    let shown = Set(artifacts.map(\.id))
-    let hidden = Self.turns(in: conversation).filter { !shown.contains($0.answer.id) }
+    let hidden = Self.turns(in: conversation).filter { !isShown($0) }
     guard !hidden.isEmpty else {
       return
     }
