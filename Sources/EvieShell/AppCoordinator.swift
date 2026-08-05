@@ -194,42 +194,57 @@ extension AppCoordinator {
       systemSymbolName: "sparkles",
       accessibilityDescription: "Evie"
     )
-    item.button?.toolTip = "Evie · IA pessoal local"
+    item.button?.toolTip = "Evie · assistente pessoal"
 
     let menu = NSMenu()
     menu.delegate = self
-    let toggleItem = NSMenuItem(
-      title: "Conversar com a Evie…",
-      action: #selector(openQuickText),
-      keyEquivalent: ""
-    )
-    toggleItem.target = self
-    menu.addItem(toggleItem)
+    item.menu = menu
+    statusItem = item
+    rebuildMenu()
+  }
 
-    let newConversationItem = NSMenuItem(
-      title: "Nova conversa",
-      action: #selector(newConversation),
-      keyEquivalent: ""
-    )
-    newConversationItem.target = self
-    menu.addItem(newConversationItem)
+  /// Rebuilds the menu so every item shows the shortcut currently bound to it.
+  ///
+  /// Every action lives here as well as on a key combination: a shortcut the
+  /// system refused, or one the user disabled, must never make a feature
+  /// unreachable.
+  fileprivate func rebuildMenu() {
+    guard let menu = statusItem?.menu else {
+      return
+    }
+    menu.removeAllItems()
 
-    let historyItem = NSMenuItem(
-      title: "Histórico…",
-      action: #selector(openHistory),
-      keyEquivalent: ""
+    add(
+      to: menu, title: "Conversar com a Evie…", action: #selector(openQuickText),
+      shortcut: .quickText)
+    add(to: menu, title: "Falar com a Evie", action: #selector(speakToEvie), shortcut: .pushToTalk)
+    add(
+      to: menu,
+      title: preferences.voice.callModeEnabled ? "Sair do modo ligação" : "Entrar no modo ligação",
+      action: #selector(toggleCallModeFromMenu),
+      shortcut: .toggleCallMode
     )
-    historyItem.target = self
-    menu.addItem(historyItem)
 
-    let hideItem = NSMenuItem(
-      title: "Ocultar Evie",
+    menu.addItem(.separator())
+
+    add(
+      to: menu, title: "Nova conversa", action: #selector(newConversation),
+      shortcut: .newConversation)
+    add(to: menu, title: "Histórico…", action: #selector(openHistory), shortcut: .openHistory)
+    let visibility = add(
+      to: menu,
+      title: panelController.isVisible ? "Ocultar Evie" : "Mostrar Evie",
       action: #selector(toggleOverlay),
-      keyEquivalent: ""
+      shortcut: .toggleOverlay
     )
-    hideItem.target = self
-    menu.addItem(hideItem)
-    visibilityMenuItem = hideItem
+    visibilityMenuItem = visibility
+
+    menu.addItem(.separator())
+
+    add(
+      to: menu, title: "Parar tudo agora", action: #selector(stopEverythingFromMenu),
+      shortcut: .emergencyStop)
+    add(to: menu, title: "Configurações…", action: #selector(openSettings), shortcut: .openSettings)
 
     menu.addItem(.separator())
 
@@ -241,26 +256,51 @@ extension AppCoordinator {
     identityItem.isEnabled = false
     menu.addItem(identityItem)
 
-    let settingsItem = NSMenuItem(
-      title: "Configurações…",
-      action: #selector(openSettings),
-      keyEquivalent: ""
-    )
-    settingsItem.target = self
-    menu.addItem(settingsItem)
-
-    menu.addItem(.separator())
-
-    let quitItem = NSMenuItem(
-      title: "Encerrar Evie",
-      action: #selector(quit),
-      keyEquivalent: "q"
-    )
+    let quitItem = NSMenuItem(title: "Encerrar Evie", action: #selector(quit), keyEquivalent: "q")
     quitItem.target = self
     menu.addItem(quitItem)
+  }
 
-    item.menu = menu
-    statusItem = item
+  @discardableResult
+  fileprivate func add(
+    to menu: NSMenu,
+    title: String,
+    action: Selector,
+    shortcut: EvieShortcutAction
+  ) -> NSMenuItem {
+    let item = NSMenuItem(title: title, action: action, keyEquivalent: "")
+    item.target = self
+    if let binding = preferences.shortcuts.shortcut(for: shortcut),
+      let character = binding.menuCharacter
+    {
+      item.keyEquivalent = character
+      item.keyEquivalentModifierMask = Self.modifierMask(for: binding.modifiers)
+    }
+    menu.addItem(item)
+    return item
+  }
+
+  fileprivate static func modifierMask(
+    for modifiers: EvieModifierFlags
+  ) -> NSEvent.ModifierFlags {
+    var mask: NSEvent.ModifierFlags = []
+    if modifiers.contains(.command) { mask.insert(.command) }
+    if modifiers.contains(.option) { mask.insert(.option) }
+    if modifiers.contains(.control) { mask.insert(.control) }
+    if modifiers.contains(.shift) { mask.insert(.shift) }
+    return mask
+  }
+
+  @objc fileprivate func speakToEvie() {
+    viewModel.requestVoiceActivation()
+  }
+
+  @objc fileprivate func toggleCallModeFromMenu() {
+    toggleCallMode()
+  }
+
+  @objc fileprivate func stopEverythingFromMenu() {
+    stopEverything()
   }
 
   @objc fileprivate func toggleOverlay() {
@@ -522,6 +562,7 @@ extension AppCoordinator {
     if shortcutsChanged {
       applyShortcuts()
     }
+    refreshMenuShortcuts()
     preferencesViewModel?.adopt(updated)
     viewModel.applyCapabilities(Self.capabilities(for: updated))
   }
@@ -546,6 +587,13 @@ extension AppCoordinator {
 
   fileprivate func updateToggleMenuTitle() {
     visibilityMenuItem?.title = panelController.isVisible ? "Ocultar Evie" : "Mostrar Evie"
+  }
+
+  /// Only the shortcut labels change, but rebuilding is cheap and keeps one
+  /// definition of the menu instead of two that can drift.
+  fileprivate func refreshMenuShortcuts() {
+    rebuildMenu()
+    updateToggleMenuTitle()
   }
 }
 

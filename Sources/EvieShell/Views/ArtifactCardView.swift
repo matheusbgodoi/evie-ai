@@ -1,3 +1,4 @@
+import EvieCore
 import SwiftUI
 
 enum ArtifactKind: String, Hashable {
@@ -76,6 +77,12 @@ struct ArtifactCardModel: Identifiable, Hashable {
   var kind: ArtifactKind
   var title: String
   var summary: String
+
+  /// The answer with its markdown and LaTeX resolved. Parsed once here rather
+  /// than on every redraw of a streaming card.
+  var richSummary: EvieRichText {
+    EvieRichText(summary)
+  }
   var detail: String? = nil
   var source: String? = nil
   var isExpanded = false
@@ -156,11 +163,17 @@ struct ArtifactCardView: View {
 
   @ViewBuilder
   private var content: some View {
-    Text(artifact.summary)
-      .font(.callout)
-      .foregroundStyle(.primary.opacity(0.88))
-      .lineLimit(artifact.isExpanded ? nil : 3)
-      .textSelection(.enabled)
+    if artifact.isExpanded {
+      EvieRichTextView(text: artifact.richSummary)
+    } else {
+      // Collapsed, the card is a glance: plain text reads better than a stack of
+      // headings squeezed into three lines.
+      Text(artifact.richSummary.plainText)
+        .font(.callout)
+        .foregroundStyle(.primary.opacity(0.88))
+        .lineLimit(3)
+        .textSelection(.enabled)
+    }
 
     if artifact.isExpanded {
       if let detail = artifact.detail, !detail.isEmpty {
@@ -231,17 +244,14 @@ struct ArtifactCardView: View {
     label: String,
     action: @escaping () -> Void
   ) -> some View {
-    Button(action: action) {
-      Image(systemName: symbol)
-        .font(.system(size: 9, weight: .semibold))
-        .frame(width: 23, height: 23)
-        .contentShape(Circle())
-    }
-    .buttonStyle(.plain)
-    .foregroundStyle(.secondary)
-    .background(.white.opacity(0.05), in: Circle())
-    .help(label)
-    .accessibilityLabel(label)
+    EvieGlowButton(
+      systemImage: symbol,
+      label: label,
+      tint: artifact.kind.tint,
+      diameter: 23,
+      glyphSize: 9,
+      action: action
+    )
   }
 
   private func actionForeground(_ role: ArtifactActionRole) -> Color {

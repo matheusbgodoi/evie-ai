@@ -448,7 +448,10 @@ final class OverlayViewModel: ObservableObject {
     interactionState = EvieInteractionState(phase: .thinking)
     pendingPrompt = prompt
     quickText = ""
-    isQuickTextEntryPresented = false
+    // The field stays. Hiding it mid-answer made the layout jump and moved the
+    // cancel control somewhere else at the exact moment it is wanted; now the
+    // send button becomes a stop button in place.
+    isQuickTextEntryPresented = true
     visualState = .thinking
     primaryText = "Pensando…"
     secondaryText = nil
@@ -547,13 +550,16 @@ final class OverlayViewModel: ObservableObject {
 
     switch action.id {
     case "copy":
+      // What lands on the clipboard is the answer without its syntax: no hashes,
+      // no asterisks, no LaTeX. Pasting it anywhere should need no cleanup.
       NSPasteboard.general.clearContents()
       NSPasteboard.general.setString(
-        artifact.detail ?? artifact.summary,
+        EvieRichText(artifact.detail ?? artifact.summary).plainText,
         forType: .string
       )
       primaryText = "Resposta copiada"
-      secondaryText = nil
+      secondaryText = "Sem marcações — pronta para colar"
+
     default:
       break
     }

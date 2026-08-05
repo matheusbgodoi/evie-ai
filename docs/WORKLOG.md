@@ -529,3 +529,29 @@
   the appearance preference turn it off.
 - Method note: screen captures taken during this work were deleted; they contained
   the user's own screen.
+
+## 2026-08-05 — readable answers, live buttons, and a stop
+
+- Trigger: the scroll fade made answers unreadable, the model's markdown and LaTeX
+  were showing as punctuation, buttons were inert, there was no way to stop a
+  running answer, and the menu did not show its shortcuts.
+- `EvieRichText` in `EvieCore` parses an answer into headings, paragraphs,
+  bullets, numbered items, code, and rules; converts LaTeX to characters; and
+  produces marker-free plain text for the clipboard. A lone `$` is left alone
+  because in Brazilian text it is nearly always currency.
+  - A regression suite runs the exact answer from the user's screenshot and
+    asserts that none of `###`, `**`, `$`, `\rightarrow`, or `---` survives, and
+    that `Isolar → Descrever → Analisar.` comes out right.
+- `EvieRichTextView` renders those blocks; `EvieGlowButton` is an AppKit button
+  whose hover glow is a layer shadow, chosen after the earlier measurement that
+  SwiftUI re-renders a button on every frame of a transition.
+- The entry field now stays visible while an answer streams, and its send button
+  becomes a stop button. Hiding the field mid-answer moved the cancel control away
+  at the exact moment it is wanted.
+- The menu is rebuilt from the preferences, so every item shows its current
+  shortcut, and every configurable action has an item.
+- Validation: `Scripts/test` 135/135 across fifteen suites; strict lint; release
+  build with warnings-as-errors.
+- Next: tool calling. Every remaining request — reading folders, the web, email,
+  automations — depends on the model being able to call a function, and today the
+  inference client neither sends nor executes tools.

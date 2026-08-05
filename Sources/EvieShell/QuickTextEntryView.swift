@@ -5,12 +5,20 @@ struct QuickTextEntryView: View {
   var state: EvieVisualState = .ready
   var waveformSamples: [CGFloat] = []
   var isAnimating = true
+  /// While true the send button is a stop button, because the thing you most
+  /// want to do to a running answer is end it.
+  var isProcessing = false
   var onSubmit: () -> Void
   var onCancel: () -> Void
+  var onStop: (() -> Void)? = nil
   var onActivateVoice: (() -> Void)? = nil
   var onBrowseForFiles: (() -> Void)? = nil
 
   @FocusState private var isFocused: Bool
+
+  private var isEmpty: Bool {
+    text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+  }
 
   var body: some View {
     GlassSurface(
@@ -37,35 +45,53 @@ struct QuickTextEntryView: View {
           .accessibilityLabel("Comando para Evie")
 
         if let onBrowseForFiles {
-          Button(action: onBrowseForFiles) {
-            Image(systemName: "paperclip")
-              .font(.system(size: 11, weight: .semibold))
-              .frame(width: 24, height: 24)
-              .contentShape(Circle())
-          }
-          .buttonStyle(.plain)
-          .foregroundStyle(.secondary)
-          .help("Anexar uma imagem ou PDF — ou solte o arquivo aqui")
-          .accessibilityLabel("Anexar arquivo")
+          EvieGlowButton(
+            systemImage: "paperclip",
+            label: "Anexar uma imagem ou PDF — ou solte o arquivo aqui",
+            tint: EvieVoiceTint.idle,
+            diameter: 25,
+            glyphSize: 11,
+            action: onBrowseForFiles
+          )
+          .frame(width: 25, height: 25)
         }
 
-        Button(action: onSubmit) {
-          Image(systemName: "arrow.up")
-            .font(.system(size: 10, weight: .bold))
-            .frame(width: 27, height: 27)
-        }
-        .buttonStyle(.plain)
-        .foregroundStyle(.white)
-        .background(EvieVoiceTint.idle, in: Circle())
-        .disabled(text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-        .opacity(text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? 0.42 : 1)
-        .help("Enviar")
-        .accessibilityLabel("Enviar comando")
+        trailingButton
       }
     }
     .onAppear {
       isFocused = true
     }
     .onExitCommand(perform: onCancel)
+  }
+
+  @ViewBuilder
+  private var trailingButton: some View {
+    if isProcessing, let onStop {
+      EvieGlowButton(
+        systemImage: "stop.fill",
+        label: "Parar a resposta",
+        tint: .red,
+        style: .filled,
+        diameter: 27,
+        glyphSize: 9,
+        action: onStop
+      )
+      .frame(width: 27, height: 27)
+      .transition(.scale.combined(with: .opacity))
+    } else {
+      EvieGlowButton(
+        systemImage: "arrow.up",
+        label: "Enviar",
+        tint: EvieVoiceTint.idle,
+        style: .filled,
+        diameter: 27,
+        glyphSize: 10,
+        isEnabled: !isEmpty,
+        action: onSubmit
+      )
+      .frame(width: 27, height: 27)
+      .transition(.scale.combined(with: .opacity))
+    }
   }
 }

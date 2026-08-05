@@ -33,6 +33,7 @@ struct OverlayRootView: View {
   var quickText: Binding<String>? = nil
   var onSubmitQuickText: (() -> Void)? = nil
   var onCancelQuickText: (() -> Void)? = nil
+  var isProcessing = false
   var onActivateVoice: (() -> Void)? = nil
   var onAttachFiles: (([URL]) -> Void)? = nil
   var onBrowseForFiles: (() -> Void)? = nil
@@ -123,8 +124,10 @@ struct OverlayRootView: View {
         state: state,
         waveformSamples: waveformSamples,
         isAnimating: chrome.isVisible && chrome.animatesLogo,
+        isProcessing: isProcessing,
         onSubmit: onSubmitQuickText,
         onCancel: onCancelQuickText,
+        onStop: onCancel,
         onActivateVoice: onActivateVoice,
         onBrowseForFiles: onBrowseForFiles
       )
@@ -184,7 +187,6 @@ struct OverlayRootView: View {
       .scrollBounceBehavior(.basedOnSize)
       .defaultScrollAnchor(.bottom)
       .frame(height: artifactViewportHeight)
-      .mask(scrollMask)
     }
   }
 
@@ -193,31 +195,5 @@ struct OverlayRootView: View {
       return Self.artifactViewportLimit
     }
     return min(chrome.artifactContentHeight, Self.artifactViewportLimit)
-  }
-
-  private var isArtifactListOverflowing: Bool {
-    chrome.artifactContentHeight > Self.artifactViewportLimit + 0.5
-  }
-
-  /// A long, symmetric fade. The previous 2.5% stop read as a hard cut because
-  /// the gradient had no room to actually fade.
-  @ViewBuilder
-  private var scrollMask: some View {
-    if isArtifactListOverflowing {
-      LinearGradient(
-        stops: [
-          .init(color: .black.opacity(0), location: 0),
-          .init(color: .black.opacity(0.35), location: 0.035),
-          .init(color: .black, location: 0.13),
-          .init(color: .black, location: 0.94),
-          .init(color: .black.opacity(0.55), location: 0.985),
-          .init(color: .black.opacity(0.2), location: 1),
-        ],
-        startPoint: .top,
-        endPoint: .bottom
-      )
-    } else {
-      Rectangle()
-    }
   }
 }

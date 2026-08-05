@@ -105,6 +105,13 @@ public struct EvieShortcut: Codable, Hashable, Sendable {
     modifiers.displayString + Self.keyName(for: keyCode)
   }
 
+  /// The character AppKit wants for a menu item's key equivalent, so a menu can
+  /// show the same combination the global registration uses. `nil` for keys that
+  /// have no character, which a menu cannot display anyway.
+  public var menuCharacter: String? {
+    Self.menuCharacters[keyCode]
+  }
+
   public enum ValidationError: Error, Equatable, Sendable {
     case missingModifier
   }
@@ -144,4 +151,17 @@ extension EvieShortcut {
   fileprivate static func keyName(for keyCode: UInt16) -> String {
     namedKeys[keyCode] ?? "Tecla \(keyCode)"
   }
+
+  /// Lower-case characters, which is what `NSMenuItem` expects; the modifier mask
+  /// carries the rest.
+  fileprivate static let menuCharacters: [UInt16: String] = {
+    var characters: [UInt16: String] = [
+      49: " ", 36: "\r", 48: "\t", 53: "\u{1B}", 51: "\u{8}",
+      123: "\u{2190}", 124: "\u{2192}", 125: "\u{2193}", 126: "\u{2191}",
+    ]
+    for (code, name) in namedKeys where name.count == 1 {
+      characters[code] = name.lowercased()
+    }
+    return characters
+  }()
 }

@@ -4,8 +4,27 @@ All notable changes to Evie are documented here. Dates use `YYYY-MM-DD`.
 
 ## [Unreleased]
 
+### Added
+
+- Answers are parsed and rendered instead of shown as raw markdown. `###` becomes
+  a heading, `**` becomes weight, bullets become bullets, and `$\rightarrow$`
+  becomes `→`. Copying gives plain text with no markers at all, ready to paste
+  anywhere.
+- Every icon button lights up under the pointer — the mark, the paperclip, send,
+  expand, and close. The glow is a layer shadow that Core Animation fades, so it
+  costs nothing while nothing is hovered.
+- The send button becomes a stop button while an answer is streaming, and the
+  entry field no longer disappears mid-answer, so cancelling is where you are
+  already looking.
+- Every menu-bar item shows the shortcut currently bound to it, and every
+  configurable action now has a menu item — a shortcut the system refused, or one
+  turned off, can no longer make a feature unreachable.
+
 ### Fixed
 
+- The overlay no longer fades its own content. A scroll mask at the top and bottom
+  of the answer list made text unreadable; the window fades nothing, and only the
+  shadow is soft.
 - Clicking the mark crashed Evie once the microphone was granted. The audio tap's
   closure was written inside a `@MainActor` method, so it inherited main-actor
   isolation whatever its type said; the tap invokes it on a real-time audio

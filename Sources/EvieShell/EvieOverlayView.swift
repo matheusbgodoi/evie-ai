@@ -30,6 +30,7 @@ struct EvieOverlayView: View {
       onCancelQuickText: viewModel.isQuickTextEntryPresented
         ? { viewModel.dismissQuickText() }
         : nil,
+      isProcessing: viewModel.hasActiveRequest,
       onActivateVoice: { viewModel.requestVoiceActivation() },
       onAttachFiles: { urls in viewModel.attachFiles(at: urls) },
       onBrowseForFiles: { viewModel.browseForFiles() }
