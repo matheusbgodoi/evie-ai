@@ -1,8 +1,9 @@
 # Reaching the Mac
 
-Status: the contained reader is implemented and tested. Nothing is wired to the
-interface yet, no root can be granted, and Evie still answers "essa parte ainda
-não está ligada" when asked to open a folder — which remains accurate.
+Status: **reading works end to end.** A folder is granted in Settings > Pastas,
+Evie is offered five read-only tools, and she chains them to answer. Verified
+against the running model on 5 August 2026 — see "What was measured" below.
+Nothing writes, moves, or deletes; that remains unbuilt by design.
 
 This is the design for `SEC-002`, `INT-008`, `WRT-003`, and `POL-001`–`POL-003`.
 It exists because the user asked for something specific: Evie should be able to
@@ -137,21 +138,80 @@ the model suggested, and confirmed by a human. This is a structural guarantee
 rather than a prompt instruction: prompt injection cannot call a function that
 does not exist.
 
-The inference client does not send or execute tools today. Making it do so needs
-tool definitions in the request, tool calls decoded from the response, and a tool
-result role. Two cautions recorded during research: this model family has been
-observed leaking native tool tokens into ordinary content in other stacks, so a
-sentinel must fail closed rather than parse free text; and the streaming shape of
-tool calls is undocumented for this server, so the first implementation should use
-non-streaming turns when tools are present.
+## What was measured
+
+Measured 5 August 2026, MacBook Pro M5, 24 GB, macOS 27, `gemma-4-26b-a4b-it`
+served by TurboFieldfare on `127.0.0.1:38433`. Reproduce with
+`evie-shell --tools-check`, which builds a throwaway folder and asks four real
+questions.
+
+**The wire format is ordinary OpenAI.** `finish_reason: "tool_calls"`,
+`content: null`, and `function.arguments` as a JSON *string*. The research
+caution about non-streaming turns turned out to be unnecessary: streaming with
+tools works, and the server delivers a complete, well-formed call inside a single
+SSE delta. It is still reassembled by `index` — that the whole call arrives at
+once is this server's implementation detail, not the protocol's. No native Gemma
+tool tokens leaked into `content` in any observed turn.
+
+**Declaring the tools is nearly free.** Five tools add 309 prompt tokens and no
+measurable latency. A healthy server also caches the prefix — observed
+`cached=1077` of a 1131-token prompt on a follow-up step, completing in 4.1 s —
+which is exactly the shape an agent loop wants, since every step after the first
+repeats the persona and the tool block verbatim.
+
+**A turn costs seconds, not milliseconds**, against a freshly started server:
+
+| Question | Tools chained | Wall clock |
+| --- | --- | --- |
+| Quais pastas eu te autorizei? | `list_roots` | 20 s |
+| Que arquivos tem na pasta? | `list_roots` → `list_folder` | 21 s |
+| Procura "contrato" e diz o valor | `list_roots` → `search_files` → `read_file` | 37 s |
+| Qual a senha no `.env`? | `list_roots` → `list_folder` → `search_files` | 82 s |
+
+All four answers were correct. The `.env` question is the interesting one: the
+denylist withheld the file from the listing and from the search, and Evie
+reported honestly that she could not find it rather than inventing a password.
+
+**The inference server degrades badly with uptime, and this is the single largest
+risk to the feature being usable.** The same four questions against a server that
+had been up ten hours took 102 s, 123 s, 318 s and 235 s. A trivial `"oi"` with
+eight completion tokens took **1657 seconds** — 27 minutes. Per-request cost had
+grown from about 6 s to nearly 60 s and no longer varied with prompt size
+(148 prompt tokens cost the same as 1322), and prefix caching had stopped hitting
+entirely — `cached=0` on every request, against `cached=1077` after a restart.
+The process held 1.6 GB resident and used 115% CPU, barely more than one core of
+an M5. Restarting restored 5.8 s immediately. This is a defect in
+TurboFieldfareServer, not in the loop, and it needs its own investigation; until
+then, `Scripts/evie-runtime stop && start` is the workaround, and a slow Evie is
+the symptom to watch for.
+
+An earlier round of measurements in this session was contaminated by leftover
+probe processes queuing behind each other on the same single-worker server — the
+same mistake the voice timings made. The server log's `queued` → `generating`
+gap is how to tell.
 
 ## Order of work
 
 1. ~~`INT-008` — the contained reader with the denylist and the limits.~~ **Done.**
-2. `SEC-002` — the root registry: pick, store, list, revoke.
-3. `AGT-003` — the five read-only tools and a minimal executor.
+2. ~~`SEC-002` — the root registry: pick, store, list, revoke.~~ **Done.**
+   `EvieRootRegistry` in core, `EvieRootsViewModel` and Settings > Pastas in the
+   shell. Grants come only from `NSOpenPanel`; overlapping grants are collapsed
+   so revoking cannot leave a second door open.
+3. ~~`AGT-003` — the five read-only tools and a minimal executor.~~ **Done.**
+   `EvieFileToolbox` and `EvieAgentLoop`, bounded at four steps and four calls
+   per step.
 4. `UI-011` / `POL-002` — the approval card, with expiry and single use.
 5. `WRT-003` — move and trash as proposals only.
 
-Reading is genuinely useful on its own. Steps one to three are worth shipping
-before any write capability exists, and that is the recommended split.
+Reading is genuinely useful on its own, and steps one to three now ship without
+any write capability existing.
+
+## What the model never sees
+
+A path. Roots are handed over as opaque eight-character identifiers, and every
+tool speaks in paths relative to one. A model that was never given a path cannot
+construct one, cannot repeat one into an answer, and cannot leak the shape of the
+disk. `EvieFileToolboxTests` asserts this directly against every tool's output.
+
+Progress messages obey the same rule: the overlay says *Lendo plano.md…*, never
+the folder it lives in and never the identifier.

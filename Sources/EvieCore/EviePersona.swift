@@ -142,7 +142,14 @@ extension EviePersona {
     if capabilities.readsLocalFiles {
       available.append(
         "Você pode ler arquivos das pastas que \(creatorPreferredName) autorizou explicitamente. "
-          + "Você nunca vai mover nem apagar nada sem que ele confirme a ação exata na tela."
+          + "Você nunca vai mover nem apagar nada sem que ele confirme a ação exata na tela. "
+          // The two mistakes a local model makes here, said before it makes
+          // them: reaching for a folder without asking which exist, and
+          // producing an identifier that looks plausible and is not real.
+          + "Antes de qualquer outra ferramenta de arquivo, chame list_roots — "
+          + "os identificadores vêm só de lá, e você nunca inventa um. "
+          + "Se o que ele procura não estiver nas pastas autorizadas, diga isso "
+          + "em vez de supor o conteúdo."
       )
     } else {
       unavailable.append("abrir pastas e arquivos do Mac")

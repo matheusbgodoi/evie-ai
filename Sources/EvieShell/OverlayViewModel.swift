@@ -24,6 +24,10 @@ final class OverlayViewModel: ObservableObject {
   /// Called when an answer is complete, so it can be spoken. Only set when the
   /// user has asked Evie to speak.
   var onAnswerReady: (@MainActor (EvieRichText) -> Void)?
+  /// The folders Evie may look in, asked for at the start of every turn rather
+  /// than held: a folder revoked in Settings has to stop working on the next
+  /// question, not on the next launch.
+  var grantedRoots: @MainActor () -> [EvieFileRoot] = { [] }
 
   private var agentClient: any AgentClient
   private var capabilities: EvieCapabilitySnapshot
@@ -538,16 +542,33 @@ final class OverlayViewModel: ObservableObject {
     )
     onLayoutInvalidated?()
 
+    // Only offered the tools when there is somewhere to use them. With no folder
+    // granted, every tool call can only fail, and paying a whole extra round trip
+    // to be told so is a slower answer for nothing.
+    let roots = grantedRoots()
+
     requestTask = Task { @MainActor [weak self] in
       do {
-        for try await event in client.stream(messages: requestMessages) {
-          try Task.checkCancellation()
-          self?.receive(
-            event,
-            requestID: requestID,
-            userMessage: userMessage
-          )
+        guard !roots.isEmpty else {
+          for try await event in client.stream(messages: requestMessages) {
+            try Task.checkCancellation()
+            self?.receive(event, requestID: requestID, userMessage: userMessage)
+          }
+          return
         }
+
+        // Captured again, weakly, rather than reaching for the enclosing `self`:
+        // the loop's callback is `@Sendable` and runs off this actor, so it may
+        // not close over the outer closure's mutable binding.
+        let outcome = try await EvieAgentLoop().run(
+          messages: requestMessages,
+          roots: roots,
+          client: client
+        ) { [weak self] event in
+          await self?.receiveDuringLoop(event, requestID: requestID)
+        }
+        try Task.checkCancellation()
+        self?.finishLoop(outcome, requestID: requestID, userMessage: userMessage)
       } catch is CancellationError {
         self?.finishCancellation(requestID: requestID)
       } catch {
@@ -721,10 +742,13 @@ extension OverlayViewModel {
     }
   }
 
+  /// `userMessage` is absent for events forwarded from inside the agent loop,
+  /// which never carry the `.completed` that closes a turn — that turn is closed
+  /// by `finishLoop` instead.
   fileprivate func receive(
     _ event: EvieInteractionEvent,
     requestID: UUID,
-    userMessage: ChatMessage
+    userMessage: ChatMessage?
   ) {
     guard activeRequestID == requestID else {
       return
@@ -759,6 +783,9 @@ extension OverlayViewModel {
       secondaryText = "\(usage.totalTokens) tokens · somente local"
 
     case .completed(let message, _):
+      guard let userMessage else {
+        return
+      }
       let content = message.content.trimmingCharacters(in: .whitespacesAndNewlines)
       if content.isEmpty {
         finishFailure(
@@ -794,6 +821,77 @@ extension OverlayViewModel {
     case .failed(let failure):
       finishFailure(failure, requestID: requestID)
     }
+  }
+
+  /// Events arriving mid-loop.
+  ///
+  /// A `.completed` here means one step finished, not the turn — feeding it to
+  /// `receive` would end the answer while Evie was still looking things up. The
+  /// streamed text is dropped for the same reason: a step that ends in a tool
+  /// call has nothing to show, and whatever it did say is not the answer.
+  fileprivate func receiveDuringLoop(_ event: EvieInteractionEvent, requestID: UUID) {
+    guard activeRequestID == requestID else {
+      return
+    }
+    switch event {
+    case .completed:
+      streamedResponse = ""
+    case .phaseChanged(.usingTool):
+      visualState = .thinking
+      primaryText = "Evie está procurando…"
+    default:
+      receive(event, requestID: requestID, userMessage: nil)
+    }
+  }
+
+  /// Closes a turn that used tools.
+  ///
+  /// The intermediate turns go into the conversation as well as the answer. They
+  /// are what lets a follow-up question — "e o outro contrato?" — work without
+  /// starting the search over, and dropping them would leave the model holding an
+  /// answer it cannot account for.
+  fileprivate func finishLoop(
+    _ outcome: EvieAgentLoop.Outcome,
+    requestID: UUID,
+    userMessage: ChatMessage
+  ) {
+    guard activeRequestID == requestID else {
+      return
+    }
+
+    let answer = outcome.answer.trimmingCharacters(in: .whitespacesAndNewlines)
+    guard !answer.isEmpty else {
+      finishFailure(
+        outcome.exhausted
+          ? EvieAgentLoopFailure.exhausted
+          : TurboFieldfareClientError.emptyStream,
+        requestID: requestID
+      )
+      return
+    }
+
+    updateActiveArtifact(with: answer)
+    onAnswerReady?(EvieRichText(answer))
+    if conversation.count == 1 {
+      activeConversationTitle = Self.title(for: userMessage.content)
+    }
+    conversation.append(userMessage)
+    conversation.append(contentsOf: outcome.appended)
+    persistConversation()
+
+    visualState = .completed
+    primaryText = "Resposta concluída"
+    secondaryText =
+      outcome.toolCallCount == 1
+      ? "Olhei em 1 lugar · somente local"
+      : "Olhei em \(outcome.toolCallCount) lugares · somente local"
+    activeRequestID = nil
+    activeArtifactID = nil
+    streamedResponse = ""
+    pendingPrompt = nil
+    requestTask = nil
+    isQuickTextEntryPresented = true
+    onLayoutInvalidated?()
   }
 
   fileprivate func finishCancellation(requestID: UUID) {

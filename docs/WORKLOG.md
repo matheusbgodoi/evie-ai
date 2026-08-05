@@ -610,3 +610,49 @@
   (ambient near 0.05, speech peaking above 0.4) and have not been tried in a noisy
   room or against a quiet speaker. They are the first thing to adjust if a turn
   ends too early or hangs open.
+
+## 2026-08-05 — SEC-002 and AGT-003: she can read the Mac
+
+- Trigger: the user asked to move on to tool calling, being agentic, and touching
+  the Mac. Reading is the whole of this entry; nothing writes.
+- `SEC-002` — the root registry. `EvieRootRegistry` stores grants beside
+  `preferences.json` at `0600`, versioned and atomic, and a damaged or
+  future-schema file grants **nothing** rather than everything. Overlapping
+  grants are collapsed: granting a parent removes the children it contains, and
+  granting a child of a granted folder is refused, so revoking can never leave a
+  second door open to the same file. `EvieRootsViewModel` and Settings > Pastas
+  are the only way in, and the only source is `NSOpenPanel`.
+- `AGT-003` — five read-only tools (`list_roots`, `list_folder`, `read_file`,
+  `search_files`, `file_info`) over the existing contained reader, and a loop
+  bounded at four steps and four calls per step. The last step withdraws the
+  tools so the model has to produce words instead of asking again.
+- The model is never given a filesystem path. Roots are opaque eight-character
+  identifiers; every tool speaks relative to one. Asserted per tool in
+  `EvieFileToolboxTests`, and the overlay's progress lines obey the same rule.
+- Wire format verified against the running server rather than assumed. It is
+  ordinary OpenAI: `finish_reason: tool_calls`, `content: null`, arguments as a
+  JSON string. The earlier research caution that streaming tool calls were
+  undocumented and should be avoided proved unnecessary — streaming works and
+  delivers a complete call in one delta. Calls are still reassembled by `index`,
+  because arriving whole is this server's choice and not the protocol's.
+- Validation: `Scripts/test` 189/189 in 19 suites; release build; installed;
+  and `evie-shell --tools-check`, which runs four real questions against the
+  live model over a throwaway folder. All four answered correctly, including a
+  three-tool chain, and the `.env` planted in the granted folder stayed
+  withheld — she reported not finding it rather than inventing a password.
+- **Measured, and the largest risk to this being usable:** the inference server
+  degrades severely with uptime. Ten hours in, a trivial eight-token request took
+  1657 s (27 minutes), per-request cost no longer varied with prompt size, and
+  prefix caching had stopped hitting. A restart restored 5.8 s. Full numbers in
+  `docs/FILESYSTEM.md`. Workaround is `Scripts/evie-runtime stop && start`;
+  the defect itself is unfixed and belongs to the server.
+- Earlier timings in this session were contaminated by leftover probe processes
+  queuing on the same single-worker server — the same mistake the voice timings
+  made in July. The `queued` → `generating` gap in the server log is the tell.
+- Known flake, pre-existing and untouched: "task cancellation terminates the
+  isolated child process group" in `OmniVoiceBatchTTSAdapterTests` failed once
+  with `.childIdentifierMissing` under full-suite load and passed 4/4 after. It
+  is a race between cancelling and the child registering its process group.
+- Next: the approval card (`UI-011`/`POL-002`) before anything writes, and the
+  bypass switch the user asked for — whose exact scope is still an open question
+  put to them, because "liberado" can mean several different things.

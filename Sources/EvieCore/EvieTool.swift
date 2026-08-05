@@ -41,6 +41,35 @@ public struct EvieToolDefinition: Hashable, Sendable {
     self.summary = summary
     self.parameters = parameters
   }
+
+  /// The tool as the server expects it, in OpenAI's `tools` shape.
+  ///
+  /// Built as a plain dictionary rather than through `Encodable`. JSON Schema is
+  /// an open-ended shape and modelling it in the type system buys nothing here:
+  /// the flat subset this project uses is four keys deep and verified against the
+  /// running server by `EvieToolWireTests`.
+  public var wireRepresentation: [String: Any] {
+    var properties: [String: Any] = [:]
+    for parameter in parameters {
+      properties[parameter.name] = [
+        "type": parameter.type.rawValue,
+        "description": parameter.summary,
+      ]
+    }
+
+    return [
+      "type": "function",
+      "function": [
+        "name": name,
+        "description": summary,
+        "parameters": [
+          "type": "object",
+          "properties": properties,
+          "required": parameters.filter(\.isRequired).map(\.name),
+        ] as [String: Any],
+      ] as [String: Any],
+    ]
+  }
 }
 
 /// A call the model asked for.

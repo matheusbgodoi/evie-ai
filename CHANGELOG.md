@@ -6,6 +6,23 @@ All notable changes to Evie are documented here. Dates use `YYYY-MM-DD`.
 
 ### Added
 
+- Evie can read the folders you authorise. Settings › Pastas is where a folder is
+  granted, through the system's own open panel, and where it is taken back. With
+  nothing granted she says so instead of offering to look.
+- She looks things up before answering. Given a granted folder she can list it,
+  search it by name, read a text file, and check a size or a date — chaining them
+  when a question needs it, and saying what she is doing while she does. Verified
+  against the running model: "procura um arquivo com contrato no nome e me diz
+  quanto foi combinado" was answered correctly in 37 s through three tools.
+- Nothing she can do changes anything. There is no tool that writes, moves, or
+  deletes, so no document, filename, or web page can talk her into one.
+- The model is never given a filesystem path. Folders are opaque identifiers and
+  every lookup is relative to one, so a path it was not handed is a path it cannot
+  name — or repeat back into an answer.
+- Credentials stay out of reach even inside a folder you granted. A `.env` planted
+  in a granted folder was withheld from the listing and from the search, and Evie
+  reported not finding it rather than inventing a value.
+
 - Voices can be designed rather than cloned: a controlled vocabulary of gender,
   age, pitch, style, and accent, with the engine rendering its own reference. Three
   Portuguese female profiles were created this way, and they synthesise faster than

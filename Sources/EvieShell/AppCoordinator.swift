@@ -19,6 +19,10 @@ final class AppCoordinator: NSObject {
   private var statusItem: NSStatusItem?
   private var settingsWindowController: SettingsWindowController?
   private var preferencesViewModel: EviePreferencesViewModel?
+  /// Owned here rather than by the settings window: the folders decide what Evie
+  /// can reach on every turn, so they have to outlive a window that is usually
+  /// closed.
+  private let rootsViewModel = EvieRootsViewModel()
   private let audioCapture = EvieAudioCapture()
   private let speechOutput = EvieSpeechOutput()
   /// True while push-to-talk is holding the microphone open, so releasing the key
@@ -89,7 +93,10 @@ final class AppCoordinator: NSObject {
     let viewModel = OverlayViewModel(
       agentClient: TurboFieldfareClient(configuration: loadResult.configuration),
       conversationStore: conversationStore,
-      capabilities: Self.capabilities(for: preferencesResult.preferences)
+      capabilities: Self.capabilities(
+        for: preferencesResult.preferences,
+        hasGrantedFolders: !EvieRootRegistry().load().isEmpty
+      )
     )
     // Evie never launches into a call: that is an action, and actions are taken
     // by the person, not restored from a file.
@@ -112,6 +119,14 @@ final class AppCoordinator: NSObject {
       preferencesStore: preferencesStore
     )
     super.init()
+
+    viewModel.grantedRoots = { [rootsViewModel] in rootsViewModel.roots }
+    rootsViewModel.onChange = { [weak self] roots in
+      guard let self else { return }
+      viewModel.applyCapabilities(
+        Self.capabilities(for: preferences, hasGrantedFolders: !roots.isEmpty)
+      )
+    }
   }
 
   /// Evie only claims a capability whose code path is actually wired up.
@@ -120,10 +135,15 @@ final class AppCoordinator: NSObject {
   /// not make her able to. Listening additionally requires a bundle identity,
   /// because without one macOS will never hand over the microphone.
   fileprivate static func capabilities(
-    for preferences: EviePreferences
+    for preferences: EviePreferences,
+    hasGrantedFolders: Bool
   ) -> EvieCapabilitySnapshot {
     var capabilities = EvieCapabilitySnapshot.textOnly
     capabilities.readsImagesAndDocuments = true
+    // Told the truth about her own reach: with nothing granted she must not
+    // offer to look, and the moment a folder is authorised she must know she
+    // can. Claiming either wrongly is the fastest way to make her useless.
+    capabilities.readsLocalFiles = hasGrantedFolders
     capabilities.speaksAnswers =
       preferences.voice.speechOutputEnabled && !EvieSpeechOutput.availableVoices().isEmpty
     if EvieAudioCapture.isBundled, preferences.voice.pushToTalkEnabled {
@@ -453,6 +473,7 @@ extension AppCoordinator {
       settingsWindowController = SettingsWindowController(
         modelViewModel: modelViewModel,
         preferencesViewModel: preferencesViewModel,
+        rootsViewModel: rootsViewModel,
         preferencesPath: preferencesStore.fileURL.path,
         configurationPath: configurationStore.fileURL.path
       )
@@ -708,7 +729,9 @@ extension AppCoordinator {
     }
     refreshMenuShortcuts()
     preferencesViewModel?.adopt(updated)
-    viewModel.applyCapabilities(Self.capabilities(for: updated))
+    viewModel.applyCapabilities(
+      Self.capabilities(for: updated, hasGrantedFolders: !rootsViewModel.roots.isEmpty)
+    )
   }
 
   /// Re-registers every shortcut and reports the ones the system refused.

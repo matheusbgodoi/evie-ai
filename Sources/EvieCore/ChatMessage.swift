@@ -19,6 +19,10 @@ public struct ChatMessage: Identifiable, Codable, Hashable, Sendable {
   public var content: String
   public var name: String?
   public var toolCallID: String?
+  /// Set on an assistant message that asked for tools. The calls must be sent
+  /// back verbatim on the next turn: the model matches its own results by these
+  /// identifiers, and a rewritten one produces an answer about nothing.
+  public var toolCalls: [EvieToolCall]?
   public var createdAt: Date
 
   public init(
@@ -27,6 +31,7 @@ public struct ChatMessage: Identifiable, Codable, Hashable, Sendable {
     content: String,
     name: String? = nil,
     toolCallID: String? = nil,
+    toolCalls: [EvieToolCall]? = nil,
     createdAt: Date = Date()
   ) {
     self.id = id
@@ -34,6 +39,7 @@ public struct ChatMessage: Identifiable, Codable, Hashable, Sendable {
     self.content = content
     self.name = name
     self.toolCallID = toolCallID
+    self.toolCalls = toolCalls
     self.createdAt = createdAt
   }
 }

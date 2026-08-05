@@ -65,9 +65,16 @@ state, configuration, PID state, and logs also remain under `~/Library`.
 - `EvieCore` provides backend-neutral messages, phases, artifacts, reducer state,
   configuration, and an `AgentClient` protocol.
 - `TurboFieldfareClient` streams Chat Completions from
-  `http://127.0.0.1:8080/v1`, requires loopback, supports cancellation, and does
-  not send or execute tools. Its byte-level SSE framing preserves empty event
-  separators across arbitrary transport fragmentation and CR/LF variants.
+  `http://127.0.0.1:38433/v1`, requires loopback, supports cancellation, and can
+  declare tools and reassemble the calls the model asks for. It never executes
+  one — that is `EvieAgentLoop`'s job, outside the client, so prompt injection
+  cannot reach an executor through the transport. Its byte-level SSE framing
+  preserves empty event separators across arbitrary transport fragmentation and
+  CR/LF variants.
+- `EvieRootRegistry`, `EvieFileToolbox`, and `EvieAgentLoop` let Evie read the
+  folders the user granted, through five read-only tools over the contained
+  reader. Nothing in the schema writes. The model is handed opaque root
+  identifiers and never a filesystem path.
 - `evie-shell` is a SwiftUI/AppKit menu-bar development executable with a
   transparent floating `NSPanel`, launch-focused and repeatable quick text, native
   glass result cards, a deliberate history window, and a model-settings window.
@@ -224,11 +231,19 @@ readiness only; they are not the Phase 1 performance suite.
 - No audio has been transcribed. Speech recognition is implemented and the system
   reports Brazilian Portuguese available with a one-time language pack, but
   accuracy, latency after that download, barge-in, and energy cost are unmeasured.
-- Evie cannot speak, cannot reach folders, and cannot search the web. The
-  preferences for the first exist and save; the interface says they are inactive.
+- Evie cannot search the web. She speaks, and she reads the folders granted in
+  Settings › Pastas.
+- The inference server gets dramatically slower the longer it runs: ten hours of
+  uptime turned a 6 s request into 60 s, and one eight-token answer took 27
+  minutes. A restart fixes it immediately. Undiagnosed; tracked as `RUN-001`.
+  Every timing in this repository assumes a freshly started server.
+- Nothing that writes, moves, or trashes exists, and nothing should until the
+  approval card does. The bypass switch the user asked for is unwritten pending
+  his answer on its scope.
 - Nothing in VS-003 has been accepted by eye on the target display. Dragging,
-  resizing, the reset control, the corrected fade, the legibility of the ASCII key
-  at 30 points, and the light/dark palette are all `QA-006`.
+  resizing, the reset control, the corrected fade, the legibility of the mark, the
+  light/dark palette, and now the Pastas tab and the progress lines shown during a
+  lookup are all `QA-006`.
 - The development controller can explicitly health-check/start/stop the pinned
   TurboFieldfare server at `--max-context 65536`, but Evie's application does not
   own lifecycle, idle unload, crash recovery, power policy, or automatic startup.
@@ -251,20 +266,22 @@ readiness only; they are not the Phase 1 performance suite.
 
 Three things, in this order.
 
-**`VOI-018` — let her speak.** The OmniVoice adapter exists, is defensively
-written, and is connected to nothing. Native playback with sentence chunking,
-output metering, cancellation, and barge-in closes the voice loop and removes the
-last switch in Settings that describes something unbuilt.
+**`RUN-001` — the server that gets slower the longer it runs.** New, and now the
+largest thing standing between Evie and being pleasant to use. Ten hours of
+uptime turned a 6 s request into a 60 s one, and an eight-token answer took 27
+minutes; prefix caching stopped hitting entirely. A restart fixes it instantly.
+Measurements in `docs/FILESYSTEM.md`. Until it is diagnosed, every other timing
+in this repository should be read as conditional on a freshly started server.
 
-**`SEC-002` and `INT-008` — let her read the Mac.** This is the user's own
-standing request; she currently answers that folders are not connected, which is
-accurate but is the gap he most wants closed. `docs/FILESYSTEM.md` carries the
-full design. Reading is worth shipping before any write capability exists, and
-there is deliberately no commit tool in the schema.
+**`UI-011` / `POL-002` — the approval card.** Reading shipped without needing one.
+Nothing should write, move, or trash before it exists. The user has also asked
+for a bypass switch so he never has to approve anything by hand; its exact scope
+is an open question put to him, and no code for it has been written.
 
-**`QA-006` — the human pass.** Nothing in the last four slices has been accepted
+**`QA-006` — the human pass.** Nothing in the last five slices has been accepted
 by eye. Dragging, resizing, the reset control, the corrected fade, the legibility
-of the ASCII key at 30 points, and the palette in light and dark are all unproven.
+of the mark, the palette in light and dark, and now the Pastas tab and the
+progress lines during a lookup are all unproven.
 
 Do not configure email, WhatsApp, Drive, file mutation, automatic microphone, or
 workflow activation before their permission and validation gates pass.

@@ -9,6 +9,7 @@ import SwiftUI
 struct SettingsView: View {
   @ObservedObject var modelViewModel: ModelSettingsViewModel
   @ObservedObject var preferencesViewModel: EviePreferencesViewModel
+  @ObservedObject var rootsViewModel: EvieRootsViewModel
   var preferencesPath: String = EviePreferencesStore.defaultFileURL.path
   var configurationPath: String = EvieConfigurationLoader.defaultFileURL.path
 
@@ -16,6 +17,9 @@ struct SettingsView: View {
     TabView {
       ShortcutSettingsView(viewModel: preferencesViewModel)
         .tabItem { Label("Atalhos", systemImage: "keyboard") }
+
+      RootsSettingsView(viewModel: rootsViewModel)
+        .tabItem { Label("Pastas", systemImage: "folder") }
 
       VoiceSettingsView(viewModel: preferencesViewModel)
         .tabItem { Label("Voz", systemImage: "waveform") }

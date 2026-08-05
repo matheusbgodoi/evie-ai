@@ -65,6 +65,19 @@ public final class TurboFieldfareClient: AgentClient, Sendable {
   public func stream(
     messages: [ChatMessage]
   ) -> AsyncThrowingStream<EvieInteractionEvent, any Error> {
+    stream(messages: messages, tools: [])
+  }
+
+  /// The same turn, with a set of functions the model may ask for.
+  ///
+  /// Streaming is kept for tool turns rather than falling back to a plain
+  /// request: the running server was measured emitting a complete, well-formed
+  /// tool call inside a normal SSE delta, so there is no reason to maintain two
+  /// request paths, and ordinary text still arrives token by token.
+  public func stream(
+    messages: [ChatMessage],
+    tools: [EvieToolDefinition]
+  ) -> AsyncThrowingStream<EvieInteractionEvent, any Error> {
     let configuration = configuration
     let session = session
 
@@ -77,6 +90,7 @@ public final class TurboFieldfareClient: AgentClient, Sendable {
 
           let request = try Self.makeRequest(
             messages: messages,
+            tools: tools,
             configuration: configuration
           )
           continuation.yield(.phaseChanged(.thinking))
@@ -142,6 +156,7 @@ extension TurboFieldfareClient {
 
   fileprivate static func makeRequest(
     messages: [ChatMessage],
+    tools: [EvieToolDefinition],
     configuration: EvieConfiguration
   ) throws -> URLRequest {
     var request = URLRequest(url: configuration.chatCompletionsURL)
@@ -164,7 +179,26 @@ extension TurboFieldfareClient {
     )
 
     do {
-      request.httpBody = try JSONEncoder().encode(body)
+      let encoded = try JSONEncoder().encode(body)
+      guard tools.isEmpty else {
+        // JSON Schema is open-ended, so the tools are built as dictionaries and
+        // grafted onto the encoded body. Keeping the other fields in `Encodable`
+        // means there is still one description of them.
+        guard
+          var object = try JSONSerialization.jsonObject(with: encoded) as? [String: Any]
+        else {
+          throw TurboFieldfareClientError.requestEncoding("body was not an object")
+        }
+        object["tools"] = tools.map(\.wireRepresentation)
+        request.httpBody = try JSONSerialization.data(
+          withJSONObject: object,
+          options: [.sortedKeys]
+        )
+        return request
+      }
+      request.httpBody = encoded
+    } catch let error as TurboFieldfareClientError {
+      throw error
     } catch {
       throw TurboFieldfareClientError.requestEncoding(error.localizedDescription)
     }
@@ -181,6 +215,8 @@ extension TurboFieldfareClient {
     var finishReason: String?
     var receivedEvent = false
     var receivedDone = false
+    var toolCalls = EvieToolCallAccumulator()
+    var announcedToolPhase = false
 
     func processPayload(_ payload: String) throws -> Bool {
       switch try decodeStreamPayload(payload) {
@@ -203,6 +239,18 @@ extension TurboFieldfareClient {
           if let delta = choice.delta.content, !delta.isEmpty {
             fullText += delta
             continuation.yield(.responseTextDelta(delta))
+          }
+          for fragment in choice.delta.toolCalls ?? [] {
+            toolCalls.absorb(
+              index: fragment.index,
+              id: fragment.id,
+              name: fragment.function?.name,
+              argumentsFragment: fragment.function?.arguments
+            )
+            if !announcedToolPhase {
+              announcedToolPhase = true
+              continuation.yield(.phaseChanged(.usingTool))
+            }
           }
           if let reason = choice.finishReason {
             finishReason = reason
@@ -251,7 +299,12 @@ extension TurboFieldfareClient {
     }
 
     try Task.checkCancellation()
-    let message = ChatMessage(role: .assistant, content: fullText)
+    let assembled = toolCalls.calls()
+    let message = ChatMessage(
+      role: .assistant,
+      content: fullText,
+      toolCalls: assembled.isEmpty ? nil : assembled
+    )
     continuation.yield(
       .completed(message: message, finishReason: finishReason)
     )
@@ -331,12 +384,14 @@ private struct APIMessage: Encodable {
   let content: String
   let name: String?
   let toolCallID: String?
+  let toolCalls: [APIToolCall]?
 
   init(_ message: ChatMessage) {
     role = message.role.rawValue
     content = message.content
     name = message.name
     toolCallID = message.toolCallID
+    toolCalls = message.toolCalls.map { $0.map(APIToolCall.init) }
   }
 
   enum CodingKeys: String, CodingKey {
@@ -344,6 +399,28 @@ private struct APIMessage: Encodable {
     case content
     case name
     case toolCallID = "tool_call_id"
+    case toolCalls = "tool_calls"
+  }
+}
+
+/// A call being sent back so the model can see what it asked for.
+///
+/// The identifier is carried through untouched — it is how the model pairs its
+/// own request with the result that follows it.
+private struct APIToolCall: Encodable {
+  let id: String
+  let type: String
+  let function: Function
+
+  init(_ call: EvieToolCall) {
+    id = call.id
+    type = "function"
+    function = Function(name: call.name, arguments: call.argumentsJSON)
+  }
+
+  struct Function: Encodable {
+    let name: String
+    let arguments: String
   }
 }
 
@@ -370,6 +447,38 @@ private struct StreamChoice: Decodable {
 
 private struct StreamDelta: Decodable {
   let content: String?
+  let toolCalls: [StreamToolCall]?
+
+  enum CodingKeys: String, CodingKey {
+    case content
+    case toolCalls = "tool_calls"
+  }
+}
+
+private struct StreamToolCall: Decodable {
+  /// Which call this fragment belongs to. A server that sends one call per chunk
+  /// may omit it; a single call is index zero either way.
+  let index: Int
+  let id: String?
+  let function: StreamToolFunction?
+
+  init(from decoder: any Decoder) throws {
+    let container = try decoder.container(keyedBy: CodingKeys.self)
+    index = try container.decodeIfPresent(Int.self, forKey: .index) ?? 0
+    id = try container.decodeIfPresent(String.self, forKey: .id)
+    function = try container.decodeIfPresent(StreamToolFunction.self, forKey: .function)
+  }
+
+  enum CodingKeys: String, CodingKey {
+    case index
+    case id
+    case function
+  }
+}
+
+private struct StreamToolFunction: Decodable {
+  let name: String?
+  let arguments: String?
 }
 
 private struct APIUsage: Decodable {
