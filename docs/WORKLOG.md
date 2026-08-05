@@ -569,3 +569,23 @@
   correct: visible with opacity and scale at 1 after every show, and reset to 1
   after the hide so the next arrival starts clean.
 - Reduce Motion skips the movement entirely rather than skipping the window.
+
+## 2026-08-05 — VOI-018: Evie speaks
+
+- Scope: `Sources/EvieShell/{EvieSpeechOutput,EvieLevelMeter,AppCoordinator,OverlayViewModel,EvieShellApp}.swift`,
+  `Sources/EvieShell/Views/VoiceSettingsView.swift`,
+  `Sources/EvieCore/{EvieRichText,EviePreferences}.swift`, `docs/VOICE.md`.
+- Completed: sentence-chunked synthesis played through an audio engine with a
+  mixer tap for real output levels; voice, rate, and a sample button in Settings;
+  barge-in on opening the microphone; speech reads resolved text so no markup is
+  pronounced; the level meter was extracted so capture and playback share it.
+- Validation: `Scripts/test` 135/135; `--speak-check` from the bundle reported
+  first audio at 0.42 s, 6.77 s of speech, peak level 0.656, 149 level samples.
+- Two bugs found by that check rather than by reading: an engine connected before
+  the buffer format was known never played and hung the wait; and `isSpeaking`
+  read immediately after `speak()` is always false, which would have left the
+  speaking indicator permanently off.
+- Finding: the natural Siri voices cannot be instantiated by a third-party app,
+  though they appear in the system list. Filtered out of the picker. Recorded in
+  `docs/VOICE.md` as the argument for cloned voices.
+- Next: `AGT-003` — tool calling, which the local server was confirmed to support.

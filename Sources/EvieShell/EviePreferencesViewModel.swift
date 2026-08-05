@@ -18,6 +18,7 @@ final class EviePreferencesViewModel: ObservableObject {
   @Published private(set) var unavailableActions: Set<EvieShortcutAction> = []
 
   private let store: EviePreferencesStore
+  private let onTestVoice: @MainActor (String?, Double) -> Void
   private let onChange: @MainActor (EviePreferences) -> Void
   private var keyMonitor: Any?
 
@@ -25,10 +26,12 @@ final class EviePreferencesViewModel: ObservableObject {
     preferences: EviePreferences,
     store: EviePreferencesStore,
     loadFailure: EviePreferencesStore.LoadFailure? = nil,
+    onTestVoice: @escaping @MainActor (String?, Double) -> Void = { _, _ in },
     onChange: @escaping @MainActor (EviePreferences) -> Void
   ) {
     self.preferences = preferences
     self.store = store
+    self.onTestVoice = onTestVoice
     self.onChange = onChange
     if let loadFailure {
       feedback = Feedback(message: loadFailure.message, isError: true)
@@ -198,6 +201,20 @@ final class EviePreferencesViewModel: ObservableObject {
 
   func setWakePhrase(_ phrase: String) {
     apply { $0.voice.wakePhrase = phrase }
+  }
+
+  func setVoiceIdentifier(_ identifier: String?) {
+    apply { $0.voice.voiceIdentifier = identifier }
+  }
+
+  /// Speaks a sample with whatever is selected right now, so the choice can be
+  /// heard before it is lived with.
+  func testVoice() {
+    onTestVoice(preferences.voice.voiceIdentifier, preferences.voice.resolvedSpeechRate)
+  }
+
+  func setSpeechRate(_ rate: Double) {
+    apply { $0.voice.speechRate = rate }
   }
 
   func setRetainsRawAudio(_ retains: Bool) {

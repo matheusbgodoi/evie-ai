@@ -6,6 +6,17 @@ All notable changes to Evie are documented here. Dates use `YYYY-MM-DD`.
 
 ### Added
 
+- Evie speaks. Answers are synthesised sentence by sentence and played through an
+  audio engine, so the ring around her mark shows the real amplitude of what is
+  being heard rather than a decoration standing in for one. Measured: audio starts
+  0.42 s after the answer completes, and the level peaked at 0.66 across 149
+  samples.
+- Speaking out loud is a switch in Settings › Voz, with the voice, the rate, and a
+  button that speaks a sample so a choice can be heard before it is lived with.
+- Opening the microphone cuts whatever she is saying. Being talked over is the
+  point of being able to interrupt.
+- What she reads is the answer with its markup already resolved, so no asterisk or
+  hash is ever pronounced, and code blocks are skipped entirely.
 - Evie arrives and leaves the way Spotlight does: a short scale from just under
   full size carried by a fade, easing out in 0.17 s and dismissing faster in
   0.11 s. A dismissal already in flight is abandoned the moment she is summoned

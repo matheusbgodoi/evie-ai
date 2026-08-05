@@ -1,8 +1,45 @@
 # Voice architecture
 
-Status: the microphone and speech recognition are implemented; the spoken answer
-is not. Nothing about voice has been exercised with real audio, because that
-requires a microphone grant that is the user's to give.
+Status: the loop is closed. The microphone, speech recognition, and the spoken
+answer all work. Wake word and call mode do not.
+
+## The output path — 2026-08-05
+
+`EvieSpeechOutput` synthesises each sentence to buffers and plays them through an
+`AVAudioEngine`, rather than calling `speak()` and letting the system play. The
+extra step buys the honest ring — a tap on the mixer gives the real amplitude of
+what is audible — and makes swapping in a cloned voice later a change of where the
+buffers come from and nothing else.
+
+Measured on this Mac: first audio 0.42 s after the answer completed, 6.77 s of
+speech, output level peaking at 0.656 across 149 published samples.
+
+### Two failures worth remembering
+
+**The engine must be built from the buffer's own format.** Connecting the player
+before knowing it made the engine adopt the hardware's stereo layout, and a mono
+buffer scheduled onto a stereo connection never plays — the wait for playback
+never returned and the process hung with an idle main thread.
+
+**`isSpeaking` cannot be read straight after `speak()`.** Synthesis happens first,
+so the flag is still false; the visual state follows an `onStarted` callback
+instead. Claiming she is speaking before any audio exists is exactly the dishonest
+indicator this project refuses.
+
+### The natural Siri voices are not available to third-party applications
+
+`AVSpeechSynthesisVoice.speechVoices()` lists `com.apple.siri.natural.Sandra` and
+`…Nando` at enhanced quality in `pt-BR`. Inside the signed bundle,
+`AVSpeechSynthesisVoice(identifier:)` returns **nil** for both. Verified directly.
+
+They are therefore filtered out of the picker rather than offered and then
+failing. What remains is `com.apple.voice.compact.pt-BR.Luciana` — ranked first
+deliberately, because the `eloquence` family are novelty voices that are fine to
+choose and wrong to default to.
+
+This is the concrete argument for OmniVoice. A cloned voice is not a nicety here;
+it is the only route to Evie sounding like anything other than a 2005 screen
+reader.
 
 ## What is implemented — 2026-08-05
 

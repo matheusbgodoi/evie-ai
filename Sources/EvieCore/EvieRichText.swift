@@ -350,3 +350,78 @@ extension EvieRichText {
       .trimmingCharacters(in: .whitespaces)
   }
 }
+
+extension EvieRichText {
+  /// The answer split into what a voice should say, one sentence at a time.
+  ///
+  /// Chunking is what lets the first words start while the rest is still being
+  /// synthesised, and what makes an interruption land within a sentence instead
+  /// of at the end of a paragraph. Code blocks are skipped: reading punctuation
+  /// aloud helps nobody.
+  public var spokenSentences: [String] {
+    var spoken: [String] = []
+
+    for block in blocks {
+      switch block {
+      case .code, .rule:
+        continue
+      case .heading(_, let text), .paragraph(let text):
+        spoken.append(contentsOf: Self.sentences(in: Self.strippedInlineMarkers(text)))
+      case .bullet(_, let text):
+        spoken.append(contentsOf: Self.sentences(in: Self.strippedInlineMarkers(text)))
+      case .numbered(_, _, let text):
+        spoken.append(contentsOf: Self.sentences(in: Self.strippedInlineMarkers(text)))
+      }
+    }
+    return spoken
+  }
+
+  /// Splits on sentence ends, and further on length, so no single utterance is so
+  /// long that stopping it feels unresponsive.
+  static func sentences(in text: String) -> [String] {
+    let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+    guard !trimmed.isEmpty else {
+      return []
+    }
+
+    var sentences: [String] = []
+    var current = ""
+    for character in trimmed {
+      current.append(character)
+      if character == "." || character == "!" || character == "?" || character == ":" {
+        let candidate = current.trimmingCharacters(in: .whitespaces)
+        // "R$ 1.234,56" and "3.5" are not sentence ends.
+        if candidate.count > 12 || character != "." {
+          sentences.append(candidate)
+          current = ""
+        }
+      }
+    }
+    let tail = current.trimmingCharacters(in: .whitespaces)
+    if !tail.isEmpty {
+      sentences.append(tail)
+    }
+
+    return sentences.flatMap(Self.splitLongSentence)
+  }
+
+  private static func splitLongSentence(_ sentence: String) -> [String] {
+    let limit = 220
+    guard sentence.count > limit else {
+      return [sentence]
+    }
+    var parts: [String] = []
+    var current = ""
+    for word in sentence.split(separator: " ") {
+      if current.count + word.count + 1 > limit, !current.isEmpty {
+        parts.append(current)
+        current = ""
+      }
+      current += current.isEmpty ? String(word) : " \(word)"
+    }
+    if !current.isEmpty {
+      parts.append(current)
+    }
+    return parts
+  }
+}

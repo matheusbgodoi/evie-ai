@@ -360,6 +360,10 @@ public struct EvieVoicePreferences: Codable, Hashable, Sendable {
   public var callModeEnabled: Bool
   public var retainsRawAudio: Bool
   public var voiceProfileAlias: String?
+  /// Which installed voice she speaks with. `nil` means the best one available.
+  public var voiceIdentifier: String?
+  /// `AVSpeechUtterance` rate, where 0.5 is the system default.
+  public var speechRate: Double
 
   public init(
     wakeWordEnabled: Bool = false,
@@ -368,7 +372,9 @@ public struct EvieVoicePreferences: Codable, Hashable, Sendable {
     speechOutputEnabled: Bool = true,
     callModeEnabled: Bool = false,
     retainsRawAudio: Bool = false,
-    voiceProfileAlias: String? = nil
+    voiceProfileAlias: String? = nil,
+    voiceIdentifier: String? = nil,
+    speechRate: Double = 0.5
   ) {
     self.wakeWordEnabled = wakeWordEnabled
     self.wakePhrase = wakePhrase
@@ -377,6 +383,13 @@ public struct EvieVoicePreferences: Codable, Hashable, Sendable {
     self.callModeEnabled = callModeEnabled
     self.retainsRawAudio = retainsRawAudio
     self.voiceProfileAlias = voiceProfileAlias
+    self.voiceIdentifier = voiceIdentifier
+    self.speechRate = speechRate
+  }
+
+  /// Clamped so a hand-edited file cannot produce speech nobody can follow.
+  public var resolvedSpeechRate: Double {
+    min(max(speechRate, 0.3), 0.75)
   }
 
   public var presentation: EvieVoicePresentation {

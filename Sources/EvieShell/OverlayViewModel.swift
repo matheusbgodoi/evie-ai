@@ -21,6 +21,9 @@ final class OverlayViewModel: ObservableObject {
   /// Set once a real capture path exists. While it is `nil` the mark says so
   /// instead of pretending the microphone opened.
   var onVoiceActivationRequested: (@MainActor () -> Void)?
+  /// Called when an answer is complete, so it can be spoken. Only set when the
+  /// user has asked Evie to speak.
+  var onAnswerReady: (@MainActor (EvieRichText) -> Void)?
 
   private var agentClient: any AgentClient
   private var capabilities: EvieCapabilitySnapshot
@@ -381,6 +384,37 @@ final class OverlayViewModel: ObservableObject {
     secondaryText = volatile.isEmpty ? nil : "ainda ouvindo…"
   }
 
+  /// She started speaking. Only ever called once audio is actually playing.
+  func beginSpeaking() {
+    guard !hasActiveRequest else {
+      return
+    }
+    visualState = .speaking
+    primaryText = "Falando…"
+    secondaryText = "Fale por cima para interromper"
+    waveformSamples = []
+    onLayoutInvalidated?()
+  }
+
+  func updateOutputLevels(_ levels: [CGFloat]) {
+    guard visualState == .speaking else {
+      return
+    }
+    waveformSamples = levels
+  }
+
+  func endSpeaking() {
+    guard visualState == .speaking else {
+      return
+    }
+    visualState = .ready
+    primaryText = "Evie está pronta"
+    secondaryText = nil
+    waveformSamples = []
+    isQuickTextEntryPresented = true
+    onLayoutInvalidated?()
+  }
+
   func updateInputLevels(_ levels: [CGFloat]) {
     guard visualState == .listening else {
       return
@@ -726,6 +760,7 @@ extension OverlayViewModel {
       }
 
       updateActiveArtifact(with: content)
+      onAnswerReady?(EvieRichText(content))
       if conversation.count == 1 {
         activeConversationTitle = Self.title(for: userMessage.content)
       }

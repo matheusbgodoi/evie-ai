@@ -20,6 +20,7 @@ final class AppCoordinator: NSObject {
   private var settingsWindowController: SettingsWindowController?
   private var preferencesViewModel: EviePreferencesViewModel?
   private let audioCapture = EvieAudioCapture()
+  private let speechOutput = EvieSpeechOutput()
   /// True while push-to-talk is holding the microphone open, so releasing the key
   /// stops it but a click on the mark toggles instead.
   private var isHoldingToTalk = false
@@ -117,6 +118,8 @@ final class AppCoordinator: NSObject {
   ) -> EvieCapabilitySnapshot {
     var capabilities = EvieCapabilitySnapshot.textOnly
     capabilities.readsImagesAndDocuments = true
+    capabilities.speaksAnswers =
+      preferences.voice.speechOutputEnabled && !EvieSpeechOutput.availableVoices().isEmpty
     if EvieAudioCapture.isBundled, preferences.voice.pushToTalkEnabled {
       if #available(macOS 26, *) {
         capabilities.listensToSpeech = EvieSpeechTranscription.isSupported
@@ -134,6 +137,18 @@ final class AppCoordinator: NSObject {
     }
     viewModel.onVoiceActivationRequested = { [weak self] in
       self?.toggleListening()
+    }
+    speechOutput.onLevels = { [weak self] levels in
+      self?.viewModel.updateOutputLevels(levels)
+    }
+    speechOutput.onStarted = { [weak self] in
+      self?.viewModel.beginSpeaking()
+    }
+    speechOutput.onFinished = { [weak self] in
+      self?.viewModel.endSpeaking()
+    }
+    viewModel.onAnswerReady = { [weak self] answer in
+      self?.speak(answer)
     }
 
     do {
@@ -181,6 +196,7 @@ final class AppCoordinator: NSObject {
 
   func stop() {
     audioCapture.stop()
+    speechOutput.stop()
     viewModel.cancelCurrentInteraction()
     hotKeyController = nil
     if let statusItem {
@@ -195,6 +211,7 @@ final class AppCoordinator: NSObject {
 
   func prepareForTermination() async {
     audioCapture.stop()
+    speechOutput.stop()
     viewModel.cancelCurrentInteraction()
     await viewModel.waitForHistoryPersistence()
   }
@@ -403,10 +420,18 @@ extension AppCoordinator {
       let preferencesViewModel = EviePreferencesViewModel(
         preferences: preferences,
         store: preferencesStore,
-        loadFailure: preferencesLoadFailure
-      ) { [weak self] updated in
-        self?.preferencesDidChange(updated)
-      }
+        loadFailure: preferencesLoadFailure,
+        onTestVoice: { [weak self] identifier, rate in
+          self?.speechOutput.speak(
+            EvieRichText("Oi, Matheus. É assim que eu vou falar com você."),
+            voiceIdentifier: identifier,
+            rate: rate
+          )
+        },
+        onChange: { [weak self] updated in
+          self?.preferencesDidChange(updated)
+        }
+      )
       self.preferencesViewModel = preferencesViewModel
       settingsWindowController = SettingsWindowController(
         modelViewModel: modelViewModel,
@@ -461,10 +486,32 @@ extension AppCoordinator {
     }
   }
 
+  /// Speaks an answer, if that is what the user asked for.
+  ///
+  /// Reads the text with its markup already resolved, so no asterisk or hash is
+  /// ever pronounced.
+  fileprivate func speak(_ answer: EvieRichText) {
+    guard preferences.voice.speechOutputEnabled else {
+      return
+    }
+    // The visual state follows `onStarted`, not this call: synthesis happens
+    // first, and claiming she is speaking before any audio exists would be the
+    // exact kind of dishonest indicator this project refuses.
+    speechOutput.speak(
+      answer,
+      voiceIdentifier: preferences.voice.voiceIdentifier,
+      rate: preferences.voice.resolvedSpeechRate
+    )
+  }
+
   fileprivate func startListening() {
     guard !audioCapture.isCapturing else {
       return
     }
+    // Barge-in: opening the microphone always cuts whatever she is saying. Being
+    // talked over is the whole point of being able to interrupt.
+    speechOutput.stop()
+    viewModel.endSpeaking()
     Task { @MainActor [weak self] in
       guard let self else { return }
       do {
@@ -537,6 +584,8 @@ extension AppCoordinator {
   fileprivate func stopEverything() {
     isHoldingToTalk = false
     audioCapture.stop()
+    speechOutput.stop()
+    viewModel.endSpeaking()
     Task { @MainActor [weak self] in
       await self?.cancelTranscription()
     }

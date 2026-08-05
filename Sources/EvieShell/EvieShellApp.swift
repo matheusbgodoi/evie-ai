@@ -1,3 +1,4 @@
+import AVFoundation
 import EvieCore
 import SwiftUI
 
@@ -61,6 +62,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         } else {
           print("Este macOS não tem o reconhecimento de fala do sistema.")
         }
+        NSApp.terminate(nil)
+      }
+      return
+    }
+
+    // Speaks one sentence out loud through the whole path — synthesis, playback,
+    // and metering — and reports what happened. You hear it; the file says
+    // whether the level was real.
+    if CommandLine.arguments.contains("--speak-check") {
+      Task { @MainActor in
+        await Self.runSpeakCheck()
         NSApp.terminate(nil)
       }
       return
@@ -145,6 +157,70 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     let coordinator = AppCoordinator()
     self.coordinator = coordinator
     coordinator.start()
+  }
+
+  static func runSpeakCheck() async {
+    var report: [String] = []
+    let voices = EvieSpeechOutput.availableVoices()
+    report.append("vozes pt-BR instaladas: \(voices.count)")
+    for voice in voices.prefix(4) {
+      report.append("  \(voice.displayName)  [\(voice.id)]")
+    }
+
+    // The natural Siri voices appear in the system list. Whether a third-party
+    // app can actually instantiate one is a different question, and the answer
+    // decides how good Evie can sound without a cloned voice.
+    for identifier in ["com.apple.siri.natural.Sandra", "com.apple.siri.natural.Nando"] {
+      let resolved = AVSpeechSynthesisVoice(identifier: identifier) != nil
+      report.append("\(identifier): \(resolved ? "utilizável" : "INDISPONÍVEL para este app")")
+    }
+
+    let output = EvieSpeechOutput()
+    var peak: CGFloat = 0
+    var updates = 0
+    var started = false
+    output.onStarted = { started = true }
+    output.onLevels = { levels in
+      peak = max(peak, levels.max() ?? 0)
+      updates += 1
+    }
+
+    let start = Date()
+    output.speak(
+      EvieRichText(
+        "Oi, Matheus. Agora eu falo. Interrompa quando quiser, é só falar por cima."
+      ),
+      voiceIdentifier: voices.first?.id,
+      rate: 0.5
+    )
+    while !started, Date().timeIntervalSince(start) < 20 {
+      try? await Task.sleep(for: .milliseconds(50))
+    }
+    report.append(
+      String(
+        format: "áudio começou depois de %.2f s: %@",
+        Date().timeIntervalSince(start), started ? "sim" : "NÃO"))
+
+    while output.isSpeaking, Date().timeIntervalSince(start) < 40 {
+      try? await Task.sleep(for: .milliseconds(100))
+    }
+    report.append(String(format: "duração: %.2f s", Date().timeIntervalSince(start)))
+    report.append(String(format: "pico de nível de saída: %.3f", Double(peak)))
+    report.append("amostras de nível publicadas: \(updates)")
+    report.append(
+      peak > 0.05
+        ? "RESULTADO: falou, e o anel tem nível real para mostrar."
+        : "RESULTADO: terminou sem nível audível — investigar."
+    )
+
+    let directory = FileManager.default.homeDirectoryForCurrentUser
+      .appendingPathComponent("Library/Logs/Evie", isDirectory: true)
+    try? FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+    try? report.joined(separator: "\n").appending("\n").write(
+      to: directory.appendingPathComponent("speak-check.txt"),
+      atomically: true,
+      encoding: .utf8
+    )
   }
 
   /// Result goes to a file because a bundle launched by Launch Services has no

@@ -13,18 +13,21 @@ struct VoiceSettingsView: View {
     viewModel.preferences.voice
   }
 
+  private var voices: [EvieVoiceOption] {
+    EvieSpeechOutput.availableVoices()
+  }
+
+  private var rateDescription: String {
+    switch voice.resolvedSpeechRate {
+    case ..<0.42: "devagar"
+    case ..<0.56: "normal"
+    case ..<0.66: "rápida"
+    default: "bem rápida"
+    }
+  }
+
   var body: some View {
     Form {
-      Section {
-        Label(
-          "Nada de voz está ligado ainda neste build: microfone, transcrição e fala "
-            + "chegam na próxima etapa. O que você ajustar aqui já fica guardado.",
-          systemImage: "hourglass"
-        )
-        .font(.caption)
-        .foregroundStyle(.secondary)
-      }
-
       Section("Como você chama a Evie") {
         Toggle(
           "Segurar o atalho para falar",
@@ -61,7 +64,7 @@ struct VoiceSettingsView: View {
         )
         captionRow(
           voice.speechOutputEnabled
-            ? "As respostas saem em áudio além do texto."
+            ? "As respostas saem em áudio além do texto. Falar com ela por cima interrompe."
             : "As respostas ficam só escritas, mesmo quando você perguntar falando."
         )
 
@@ -81,6 +84,67 @@ struct VoiceSettingsView: View {
         Text(presentationSummary)
           .font(.caption)
           .foregroundStyle(.secondary)
+      }
+
+      Section {
+        if voices.isEmpty {
+          Label(
+            "Este Mac não tem nenhuma voz em português instalada. Ajustes do Sistema › "
+              + "Acessibilidade › Conteúdo Falado › Vozes do sistema.",
+            systemImage: "exclamationmark.triangle"
+          )
+          .font(.caption)
+          .foregroundStyle(.secondary)
+        } else {
+          Picker(
+            "Voz",
+            selection: Binding(
+              get: { voice.voiceIdentifier ?? voices.first?.id ?? "" },
+              set: { viewModel.setVoiceIdentifier($0) }
+            )
+          ) {
+            ForEach(voices) { option in
+              Text(option.displayName).tag(option.id)
+            }
+          }
+          .disabled(!voice.speechOutputEnabled)
+
+          VStack(alignment: .leading, spacing: 7) {
+            HStack {
+              Text("Velocidade")
+              Spacer()
+              Text(rateDescription)
+                .foregroundStyle(.secondary)
+            }
+            Slider(
+              value: Binding(
+                get: { voice.resolvedSpeechRate },
+                set: viewModel.setSpeechRate
+              ),
+              in: 0.3...0.75
+            )
+          }
+          .disabled(!voice.speechOutputEnabled)
+
+          HStack {
+            Button("Ouvir uma frase") {
+              viewModel.testVoice()
+            }
+            .disabled(!voice.speechOutputEnabled)
+            Spacer()
+          }
+        }
+      } header: {
+        Text("A voz dela")
+      } footer: {
+        Text(
+          "As vozes naturais da Siri aparecem no sistema mas o macOS não deixa um "
+            + "aplicativo de terceiros usá-las, então a lista acima é o que sobra. "
+            + "Uma voz própria, clonada a partir de alguns segundos da sua, é o "
+            + "caminho para ela soar bem — e ainda não existe aqui."
+        )
+        .font(.caption)
+        .foregroundStyle(.secondary)
       }
 
       Section("Privacidade do áudio") {
