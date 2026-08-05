@@ -104,6 +104,24 @@ struct VoiceSettingsView: View {
             : "Perguntou escrevendo, ela responde escrevendo. Perguntou falando, ela fala."
         )
 
+        Picker(
+          "Capricho da voz treinada",
+          selection: Binding(
+            get: { viewModel.preferences.voice.resolvedQualitySteps },
+            set: viewModel.setVoiceQualitySteps
+          )
+        ) {
+          Text("Rápida").tag(8)
+          Text("Equilibrada").tag(16)
+          Text("Caprichada").tag(32)
+        }
+        .pickerStyle(.segmented)
+        captionRow(
+          "Quantas passadas o motor dá em cada frase. Mais passadas soam mais "
+            + "perto da gravação de referência e demoram mais. Só vale para vozes "
+            + "treinadas; as do sistema ignoram isto."
+        )
+
         Toggle(
           "Modo ligação",
           isOn: Binding(get: { voice.callModeEnabled }, set: viewModel.setCallModeEnabled)

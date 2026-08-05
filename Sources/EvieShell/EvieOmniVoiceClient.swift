@@ -1,14 +1,6 @@
 import AVFoundation
 import Foundation
 
-/// A voice the engine offers ready-made, designed from attributes.
-struct EvieVoiceArchetype: Identifiable, Hashable, Sendable {
-  var id: String
-  var name: String
-  var useCase: String
-  var instruction: String
-}
-
 /// A cloned voice already stored by the OmniVoice backend.
 struct EvieClonedVoice: Identifiable, Hashable, Sendable {
   var id: String
@@ -224,73 +216,6 @@ extension EvieOmniVoiceClient {
     guard
       let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
       let identifier = (object["id"] ?? object["profile_id"]) as? String
-    else {
-      throw ClientError.unexpectedResponse
-    }
-    return identifier
-  }
-
-  /// Voices the engine ships, designed from attributes rather than cloned from
-  /// anybody. That is what makes them usable here: no real person's voice is
-  /// involved, so adopting one takes nothing from anyone.
-  func archetypes() async -> [EvieVoiceArchetype] {
-    var request = URLRequest(url: endpoint.appendingPathComponent("archetypes"))
-    request.timeoutInterval = 10
-    guard
-      let (data, response) = try? await URLSession.shared.data(for: request),
-      (response as? HTTPURLResponse)?.statusCode == 200,
-      let envelope = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-      let items = envelope["items"] as? [[String: Any]]
-    else {
-      return []
-    }
-    return items.compactMap { item in
-      guard let id = item["id"] as? String, let name = item["name"] as? String else {
-        return nil
-      }
-      return EvieVoiceArchetype(
-        id: id,
-        name: name,
-        useCase: item["use_case"] as? String ?? "",
-        instruction: item["instruct"] as? String ?? ""
-      )
-    }
-  }
-
-  /// Makes one of them into a voice of her own.
-  func adopt(archetype identifier: String, named name: String) async throws -> String {
-    var components = URLComponents(
-      url: endpoint
-        .appendingPathComponent("archetypes")
-        .appendingPathComponent(identifier)
-        .appendingPathComponent("use"),
-      resolvingAgainstBaseURL: false
-    )
-    components?.queryItems = [URLQueryItem(name: "name", value: name)]
-    guard let url = components?.url else {
-      throw ClientError.unexpectedResponse
-    }
-
-    var request = URLRequest(url: url)
-    request.httpMethod = "POST"
-    request.timeoutInterval = timeout
-
-    let data: Data
-    let response: URLResponse
-    do {
-      (data, response) = try await URLSession.shared.data(for: request)
-    } catch {
-      throw ClientError.unavailable
-    }
-    guard let status = (response as? HTTPURLResponse)?.statusCode else {
-      throw ClientError.unavailable
-    }
-    guard (200...299).contains(status) else {
-      throw ClientError.rejected(status)
-    }
-    guard
-      let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-      let identifier = (object["profile_id"] ?? object["id"]) as? String
     else {
       throw ClientError.unexpectedResponse
     }

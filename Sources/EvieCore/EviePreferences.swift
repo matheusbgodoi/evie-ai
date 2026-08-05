@@ -464,6 +464,14 @@ public struct EvieVoicePreferences: Codable, Hashable, Sendable {
   /// offered, the list becomes the voices actually worth choosing, and nothing
   /// pretends to have deleted a file belonging to the operating system.
   public var hiddenVoiceIdentifiers: Set<String>
+  /// Diffusion steps for a trained voice: how much work the engine does to
+  /// produce each phrase.
+  ///
+  /// More steps sound closer to the reference and take longer. Eight is what the
+  /// engine defaults to and is audibly the cheapest setting; the point of
+  /// exposing it is that "fast enough" and "good enough" are not the same
+  /// judgement for everybody, and only the person listening can make it.
+  public var voiceQualitySteps: Int
   /// `AVSpeechUtterance` rate, where 0.5 is the system default.
   public var speechRate: Double
 
@@ -479,6 +487,7 @@ public struct EvieVoicePreferences: Codable, Hashable, Sendable {
     voiceIdentifier: String? = nil,
     clonedVoiceID: String? = nil,
     hiddenVoiceIdentifiers: Set<String> = [],
+    voiceQualitySteps: Int = 16,
     speechRate: Double = 0.5
   ) {
     self.wakeWordEnabled = wakeWordEnabled
@@ -492,6 +501,7 @@ public struct EvieVoicePreferences: Codable, Hashable, Sendable {
     self.voiceIdentifier = voiceIdentifier
     self.clonedVoiceID = clonedVoiceID
     self.hiddenVoiceIdentifiers = hiddenVoiceIdentifiers
+    self.voiceQualitySteps = voiceQualitySteps
     self.speechRate = speechRate
   }
 
@@ -537,6 +547,7 @@ public struct EvieVoicePreferences: Codable, Hashable, Sendable {
     case voiceIdentifier = "voice_identifier"
     case clonedVoiceID = "cloned_voice_id"
     case hiddenVoiceIdentifiers = "hidden_voice_identifiers"
+    case voiceQualitySteps = "voice_quality_steps"
     case speechRate = "speech_rate"
   }
 
@@ -577,8 +588,17 @@ public struct EvieVoicePreferences: Codable, Hashable, Sendable {
     clonedVoiceID = try container.decodeIfPresent(String.self, forKey: .clonedVoiceID)
     hiddenVoiceIdentifiers =
       try container.decodeIfPresent(Set<String>.self, forKey: .hiddenVoiceIdentifiers) ?? []
+    voiceQualitySteps =
+      try container.decodeIfPresent(Int.self, forKey: .voiceQualitySteps)
+      ?? defaults.voiceQualitySteps
     speechRate =
       try container.decodeIfPresent(Double.self, forKey: .speechRate) ?? defaults.speechRate
+  }
+
+  /// Clamped, because a hand-edited file asking for a thousand steps would make
+  /// every sentence take minutes.
+  public var resolvedQualitySteps: Int {
+    min(max(voiceQualitySteps, 4), 48)
   }
 
   /// Clamped so a hand-edited file cannot produce speech nobody can follow.

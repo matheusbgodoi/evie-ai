@@ -38,6 +38,11 @@ final class EvieSpeechOutput: ObservableObject {
   private static let historyLength = 44
   private static let publishInterval = Duration.milliseconds(40)
   private static let noiseFloorDecibels: Float = -50
+  /// How long to let the output drain before stopping the engine. Taken from the
+  /// device's reported latency when it is sensible, with a floor that covers the
+  /// devices that under-report it. It is silence, so being generous costs
+  /// nothing that can be heard.
+  private static var drainSeconds: Double { 0.28 }
 
   private let synthesizer = AVSpeechSynthesizer()
   private let meter = EvieLevelMeter()
@@ -47,7 +52,17 @@ final class EvieSpeechOutput: ObservableObject {
   private var speechTask: Task<Void, Never>?
   private var levels: [CGFloat] = []
   private var engineFormat: AVAudioFormat?
-  private let clonedEngine = EvieOmniVoiceClient()
+  /// Rebuilt when the quality preference changes, since the step count is what
+  /// the engine is asked for per phrase.
+  private var clonedEngine = EvieOmniVoiceClient()
+
+  /// How much work the engine does per phrase for a trained voice.
+  func setQualitySteps(_ steps: Int) {
+    guard steps != clonedEngine.steps else {
+      return
+    }
+    clonedEngine = EvieOmniVoiceClient(steps: steps)
+  }
 
   /// Which engine speaks.
   enum Voice: Hashable, Sendable {
@@ -310,6 +325,15 @@ extension EvieSpeechOutput {
 
     Self.queue(usable.dropLast(), on: player)
     await player.scheduleBuffer(last, completionCallbackType: .dataPlayedBack)
+
+    // `.dataPlayedBack` fires when the engine has finished *rendering* the
+    // buffer, not when the last sample has left the speaker. There is still a
+    // hardware buffer's worth of audio in flight, and tearing the engine down at
+    // this instant cuts it — which is heard as the end of the last word being
+    // clipped. Measured: the engine's own audio ends cleanly, with the final
+    // 120 ms at 0.001 of peak against 0.167 in the middle, so the loss was
+    // entirely on this side.
+    try? await Task.sleep(for: .seconds(Self.drainSeconds))
   }
 
   /// Queues without awaiting. Kept out of the async function because calling the

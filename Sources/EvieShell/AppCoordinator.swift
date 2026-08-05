@@ -125,6 +125,7 @@ final class AppCoordinator: NSObject {
     viewModel.grantedRoots = { [rootsViewModel] in rootsViewModel.roots }
     viewModel.memories = { [memoryViewModel] in memoryViewModel.entries }
     viewModel.isWebSearchEnabled = { [weak self] in self?.preferences.webSearchEnabled ?? false }
+    speechOutput.setQualitySteps(preferences.voice.resolvedQualitySteps)
     viewModel.onMemoryDecided = { [weak self] fact, keep in
       guard let self, keep else { return }
       memoryViewModel.remember(fact)
@@ -763,6 +764,7 @@ extension AppCoordinator {
     let appearanceChanged = updated.appearance != preferences.appearance
     let shortcutsChanged = updated.shortcuts != preferences.shortcuts
     preferences = updated
+    speechOutput.setQualitySteps(updated.voice.resolvedQualitySteps)
 
     if appearanceChanged {
       panelController.applyAppearance(updated.appearance)

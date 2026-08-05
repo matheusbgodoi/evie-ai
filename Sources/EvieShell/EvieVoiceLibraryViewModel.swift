@@ -39,11 +39,6 @@ final class EvieVoiceLibraryViewModel: ObservableObject {
   @Published var newVoiceName = ""
   @Published var newVoiceReferenceText = ""
   @Published private(set) var pendingAudioURL: URL?
-  /// Ready-made voices the engine ships, designed from attributes rather than
-  /// cloned from a person.
-  @Published private(set) var archetypes: [EvieVoiceArchetype] = []
-  /// A description of a voice, in the user's own words.
-  @Published var wantedVoice = ""
 
   var pendingAudioName: String? {
     pendingAudioURL?.lastPathComponent
@@ -72,62 +67,8 @@ final class EvieVoiceLibraryViewModel: ObservableObject {
     self.mutate = mutate
   }
 
-  /// What was understood from the description, and what was not.
-  var design: EvieVoiceDesign {
-    EvieVoiceDesign.parse(wantedVoice)
-  }
-
-  var ignoredFromDescription: [String] {
-    EvieVoiceDesign.ignoredWords(in: wantedVoice)
-  }
-
-  /// The ready-made voices that fit the description, best first.
-  ///
-  /// Matched on the engine's own attribute string rather than on the name, so
-  /// "feminina grave" surfaces the voices that actually are, not the ones called
-  /// something evocative.
-  var suggestedArchetypes: [EvieVoiceArchetype] {
-    let wanted = design
-    guard !wanted.isEmpty else {
-      return archetypes
-    }
-    let terms = [wanted.gender, wanted.age, wanted.pitch, wanted.style].compactMap { $0 }
-    return
-      archetypes
-      .map { archetype -> (EvieVoiceArchetype, Int) in
-        let instruction = archetype.instruction.lowercased()
-        return (archetype, terms.filter { instruction.contains($0) }.count)
-      }
-      .filter { $0.1 > 0 }
-      .sorted { $0.1 > $1.1 }
-      .map(\.0)
-  }
-
-  func adopt(_ archetype: EvieVoiceArchetype) {
-    isBusy = true
-    Task { @MainActor in
-      defer { isBusy = false }
-      do {
-        let identifier = try await engine.adopt(archetype: archetype.id, named: archetype.name)
-        mutate { $0.clonedVoiceID = identifier }
-        feedback = Feedback(
-          message: "\(archetype.name) agora é uma voz sua, e já está selecionada.",
-          isError: false
-        )
-      } catch {
-        feedback = Feedback(
-          message: (error as? LocalizedError)?.errorDescription
-            ?? "Não consegui adotar essa voz.",
-          isError: true
-        )
-      }
-      await refresh()
-    }
-  }
-
   func refresh() async {
     isEngineRunning = await engine.isHealthy()
-    archetypes = isEngineRunning ? await engine.archetypes() : []
     let cloned = isEngineRunning ? await engine.voices() : []
     let voice = preferences()
 

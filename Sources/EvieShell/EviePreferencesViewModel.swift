@@ -202,6 +202,10 @@ final class EviePreferencesViewModel: ObservableObject {
     apply { $0.voice.speaksTypedAnswers = enabled }
   }
 
+  func setVoiceQualitySteps(_ steps: Int) {
+    apply { $0.voice.voiceQualitySteps = steps }
+  }
+
   func setCallModeEnabled(_ enabled: Bool) {
     let enablingSpeech = enabled && !preferences.voice.speechOutputEnabled
     apply(
