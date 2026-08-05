@@ -139,8 +139,11 @@ struct EvieAgentLoopTests {
 
     let offered = await client.toolsPerCall
     #expect(offered.count == 2)
-    // The file tools plus the one that proposes a memory.
-    #expect(offered[0] == EvieFileToolbox.definitions.count + 1)
+    // What matters is that the last pass has none, not the exact count of the
+    // first — that number changes every time a tool is added, and asserting it
+    // only produces a test that has to be edited rather than one that catches
+    // anything.
+    #expect(offered[0] > 0)
     #expect(offered[1] == 0)
   }
 
@@ -217,32 +220,66 @@ struct EvieAgentLoopTests {
 
   // MARK: - The web
 
-  @Test("the web tools are not offered when the web is off")
-  func webToolsAbsentByDefault() async throws {
-    let client = ScriptedClient(turns: [.text("Sei lá.")])
-
+  /// Asserted as a difference rather than as a count. The absolute number
+  /// changes whenever a tool is added; what this test is about is that switching
+  /// the web on is what adds the web tools.
+  @Test("switching the web on adds exactly the two web tools")
+  func webToolsFollowTheSwitch() async throws {
+    let without = ScriptedClient(turns: [.text("Sei lá.")])
     _ = try await EvieAgentLoop().run(
       messages: [ChatMessage(role: .user, content: "quem ganhou ontem?")],
       roots: [],
-      client: client,
+      client: without,
       emit: { _ in }
     )
 
-    #expect(await client.toolsPerCall[0] == EvieFileToolbox.definitions.count + 1)
+    let with = ScriptedClient(turns: [.text("Ok.")])
+    _ = try await EvieAgentLoop(web: StubWeb()).run(
+      messages: [ChatMessage(role: .user, content: "quem ganhou ontem?")],
+      roots: [],
+      client: with,
+      emit: { _ in }
+    )
+
+    let offeredWithout = await without.toolsPerCall[0]
+    let offeredWith = await with.toolsPerCall[0]
+    #expect(offeredWith == offeredWithout + EvieWebTool.definitions.count)
   }
 
-  @Test("switching the web on offers exactly two more tools")
-  func webToolsOffered() async throws {
-    let client = ScriptedClient(turns: [.text("Ok.")])
+  /// The tool that can change a file follows its own switch, and needs somewhere
+  /// to change something.
+  @Test("changing files is only offered when switched on and a folder exists")
+  func changeToolFollowsItsSwitch() async throws {
+    let root = EvieFileRoot(id: "r1", displayName: "Downloads", path: "/tmp/nao-existe")
 
-    _ = try await EvieAgentLoop(web: StubWeb()).run(
-      messages: [ChatMessage(role: .user, content: "oi")],
-      roots: [],
-      client: client,
+    let off = ScriptedClient(turns: [.text("Ok.")])
+    _ = try await EvieAgentLoop().run(
+      messages: [ChatMessage(role: .user, content: "apaga isso")],
+      roots: [root],
+      client: off,
       emit: { _ in }
     )
 
-    #expect(await client.toolsPerCall[0] == EvieFileToolbox.definitions.count + 3)
+    let on = ScriptedClient(turns: [.text("Ok.")])
+    _ = try await EvieAgentLoop(offersChanges: true).run(
+      messages: [ChatMessage(role: .user, content: "apaga isso")],
+      roots: [root],
+      client: on,
+      emit: { _ in }
+    )
+
+    // And with no folder granted there is nothing to change, so it is absent
+    // even when the switch is on.
+    let noFolder = ScriptedClient(turns: [.text("Ok.")])
+    _ = try await EvieAgentLoop(offersChanges: true).run(
+      messages: [ChatMessage(role: .user, content: "apaga isso")],
+      roots: [],
+      client: noFolder,
+      emit: { _ in }
+    )
+
+    #expect(await on.toolsPerCall[0] == (await off.toolsPerCall[0]) + 1)
+    #expect(await noFolder.toolsPerCall[0] == (await off.toolsPerCall[0]))
   }
 
   /// A page is the least trustworthy text Evie reads. What comes back has to

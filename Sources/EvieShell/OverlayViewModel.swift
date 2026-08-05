@@ -41,6 +41,11 @@ final class OverlayViewModel: ObservableObject {
   }
   /// Carries out a change the user approved, and reports what happened.
   var onChangeApproved: (@MainActor (EvieFileChange) -> String)?
+  /// The skills installed right now, asked for per turn so a skill dropped into
+  /// the folder works on the next question rather than the next launch.
+  var installedSkills: @MainActor () -> [EvieSkill] = { [] }
+  /// Raised when she suggests a new one. Nothing is installed by this.
+  var onSkillProposed: (@MainActor (EvieSkill) -> Void)?
   /// What she has been allowed to remember. Asked for when a turn starts rather
   /// than held, so a memory deleted in Settings stops applying to the next
   /// question rather than to the next launch.
@@ -68,6 +73,7 @@ final class OverlayViewModel: ObservableObject {
   private let documentReader = EvieDocumentReader()
   /// Changes shown but not yet answered, so a button press knows what it means.
   private var pendingChanges: [UUID: EvieFileChange] = [:]
+  private var pendingSkills: [UUID: EvieSkill] = [:]
   private let visionDescriber = EvieVisionDescriber()
   /// Ceiling on how much document text one turn may carry, so a long PDF cannot
   /// silently push the actual question out of the model's context.
@@ -686,6 +692,24 @@ final class OverlayViewModel: ObservableObject {
       return
     }
 
+    if action.id == "skill-keep" {
+      if let skill = pendingSkills[id] {
+        onSkillProposed?(skill)
+      }
+      pendingSkills[id] = nil
+      artifacts.removeAll { $0.id == id }
+      primaryText = "Aprendido"
+      secondaryText = "Vou seguir isso quando o assunto voltar"
+      onLayoutInvalidated?()
+      return
+    }
+    if action.id == "skill-discard" {
+      pendingSkills[id] = nil
+      artifacts.removeAll { $0.id == id }
+      onLayoutInvalidated?()
+      return
+    }
+
     switch action.id {
     case "memory-keep":
       onMemoryDecided?(artifact.summary, true)
@@ -989,6 +1013,43 @@ extension OverlayViewModel {
     onLayoutInvalidated?()
   }
 
+  /// Puts a suggested skill on screen with its instructions visible.
+  ///
+  /// The instructions are shown in full rather than summarised, because agreeing
+  /// to a skill is agreeing to instructions that will steer future answers. A
+  /// summary would be asking someone to sign a page they were not shown.
+  fileprivate func presentSkillProposal(_ skill: EvieSkill) {
+    artifacts.append(
+      ArtifactCardModel(
+        id: UUID(),
+        kind: .workflow,
+        title: "Guardo isto como uma habilidade?",
+        summary: """
+          **\(skill.name)** — carrega quando você falar de: \(skill.when)
+
+          \(skill.instructions)
+          """,
+        isExpanded: true,
+        actions: [
+          ArtifactActionModel(
+            id: "skill-keep",
+            title: "Guardar",
+            systemImage: "checkmark",
+            role: .primary
+          ),
+          ArtifactActionModel(
+            id: "skill-discard",
+            title: "Agora não",
+            systemImage: "xmark",
+            role: .secondary
+          ),
+        ]
+      )
+    )
+    pendingSkills[artifacts.last?.id ?? UUID()] = skill
+    onLayoutInvalidated?()
+  }
+
   /// Puts "guardar isto?" on screen.
   ///
   /// A card rather than a dialog: a modal in the middle of reading an answer is
@@ -1059,6 +1120,9 @@ extension OverlayViewModel {
     setProvenance(outcome.provenance, on: activeArtifactID)
     for proposal in outcome.memoryProposals {
       presentMemoryProposal(proposal)
+    }
+    for skill in outcome.skillProposals {
+      presentSkillProposal(skill)
     }
     for change in outcome.changeProposals {
       if autoApproveChanges {
@@ -1243,6 +1307,17 @@ extension OverlayViewModel {
     {
       removeOldestTurn(from: &prefix)
     }
+    // Skills are instructions, so they go with the instructions — at the front,
+    // before any turn of the conversation. Putting them next to the question
+    // instead would place guidance after the conversation started, which this
+    // server refuses, and would read as something the user said.
+    if let guidance = EvieSkillLibrary.guidance(
+      for: EvieSkillLibrary.matching(userMessage.content, in: installedSkills())
+    ) {
+      let position = prefix.first?.role == .system ? 1 : 0
+      prefix.insert(ChatMessage(role: .system, content: guidance), at: position)
+    }
+
     // Evidence goes immediately before the question so the model reads the
     // document, then what is being asked about it.
     return prefix + [evidence, userMessage].compactMap { $0 }

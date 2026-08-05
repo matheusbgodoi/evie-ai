@@ -1034,3 +1034,36 @@ previous day of building. Everything here came from that.
   captured, **the file was still present before approval**, and after performing
   it was gone from the folder while the other file was untouched.
 - Validation: `Scripts/test` 322/322 in 31 suites.
+
+## 2026-08-05 — SKL-001: skills, as instructions rather than as programs
+
+- The multiplier: without it, every new capability is code somebody has to write.
+- **A skill is instructions.** That is the design decision, and it is what makes
+  installing one safe: a skill teaches her to use abilities she already has for a
+  particular job, and grants no new authority. The alternative — a skill carrying
+  a command to run — would undo the thing this project spends most of its effort
+  on, which is that no tool the model can call changes anything. If that is ever
+  needed it should be a separate mechanism with its own confirmation, not a field
+  on this one.
+- Markdown with frontmatter in `Skills/`, so one can be written in any editor,
+  kept in the vault, copied between machines, and read by somebody who has never
+  heard of this application. The parser takes its keys in Portuguese or English:
+  a skill that silently fails to load because `quando` was written `when` is a
+  worse experience than four lines of leniency.
+- Matching is by words, not by asking the model — a decision costing a round trip
+  before every answer would double the wait. It is deliberately stricter than the
+  web ranker: a loosely relevant passage costs a few tokens, while a skill that
+  loads wrongly puts instructions in front of her for a job she is not doing, and
+  she follows them. Words shared by every skill count for almost nothing.
+- She can propose one, same shape as memory and as changing a file: she writes it,
+  the card shows the instructions **in full** rather than summarised, and a click
+  installs. Agreeing to a summary would be signing a page you were not shown.
+- Removing a skill sends the file to the Trash. Somebody may have spent an hour on
+  it, and the rule that applies to the user's files applies to their instructions.
+- Verified with `--skill-check` against the running model: a commit-message skill
+  loaded for a question about commit messages, cost 448 characters of prompt, and
+  she answered saying she would follow "o padrão que você me ensinou".
+- Two loop tests were rewritten to assert *differences* rather than counts. They
+  hardcoded how many tools exist, so every new tool broke them — a test that has
+  to be edited on every change is not catching anything.
+- Validation: `Scripts/test` 340/340 in 32 suites.

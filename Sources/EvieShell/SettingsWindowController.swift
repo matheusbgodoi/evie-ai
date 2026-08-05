@@ -11,6 +11,7 @@ final class SettingsWindowController: NSWindowController, NSWindowDelegate {
     rootsViewModel: EvieRootsViewModel,
     voiceLibraryViewModel: EvieVoiceLibraryViewModel,
     memoryViewModel: EvieMemoryViewModel,
+    skillsViewModel: EvieSkillsViewModel,
     preferencesPath: String,
     configurationPath: String
   ) {
@@ -31,6 +32,7 @@ final class SettingsWindowController: NSWindowController, NSWindowDelegate {
         rootsViewModel: rootsViewModel,
         voiceLibraryViewModel: voiceLibraryViewModel,
         memoryViewModel: memoryViewModel,
+        skillsViewModel: skillsViewModel,
         preferencesPath: preferencesPath,
         configurationPath: configurationPath
       )

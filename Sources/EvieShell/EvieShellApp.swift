@@ -274,9 +274,62 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
       return
     }
 
+    // Shows which skills a question loads, and answers it with them, so
+    // "she learned it" is something seen rather than assumed.
+    if let index = CommandLine.arguments.firstIndex(of: "--skill-check"),
+      index + 1 < CommandLine.arguments.count
+    {
+      let question = CommandLine.arguments[index + 1]
+      Task { @MainActor in
+        await Self.runSkillCheck(question: question)
+        NSApp.terminate(nil)
+      }
+      return
+    }
+
     let coordinator = AppCoordinator()
     self.coordinator = coordinator
     coordinator.start()
+  }
+
+  static func runSkillCheck(question: String) async {
+    let store = EvieSkillStore()
+    let installed = store.load()
+    print("pasta: \(store.directory.path)")
+    print("instaladas: \(installed.map(\.name))")
+
+    let matched = EvieSkillLibrary.matching(question, in: installed)
+    print("pergunta: \(question)")
+    print("carregou: \(matched.isEmpty ? "(nenhuma)" : matched.map(\.name).joined(separator: ", "))")
+    guard let guidance = EvieSkillLibrary.guidance(for: matched) else {
+      print("→ nenhuma habilidade se aplica; ela responde normalmente")
+      return
+    }
+    print("custo no prompt: \(guidance.count) caracteres")
+    print("")
+
+    let capabilities = EvieCapabilitySnapshot.textOnly
+    let configuration = (try? EvieConfigurationLoader().load()) ?? EvieConfiguration()
+    let started = Date()
+    do {
+      let outcome = try await EvieAgentLoop().run(
+        messages: [
+          ChatMessage(
+            role: .system,
+            content: EviePersona.evie.systemPrompt(capabilities: capabilities)
+          ),
+          ChatMessage(role: .system, content: guidance),
+          ChatMessage(role: .user, content: question),
+        ],
+        roots: [],
+        client: TurboFieldfareClient(configuration: configuration),
+        emit: { _ in }
+      )
+      print("resposta em \(String(format: "%.0f", Date().timeIntervalSince(started))) s:")
+      print(outcome.answer)
+    } catch {
+      print("FALHOU: \((error as? LocalizedError)?.errorDescription ?? "\(error)")")
+    }
   }
 
   static func runChangeCheck() async {

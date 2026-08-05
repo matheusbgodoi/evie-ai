@@ -60,6 +60,8 @@ public struct EvieAgentLoop: Sendable {
     /// Changes she asked to make. Nothing has happened: these are proposals, and
     /// each one is a button the user has not pressed.
     public var changeProposals: [EvieFileChange] = []
+    /// Ways of working she asked to keep. Nothing installed.
+    public var skillProposals: [EvieSkill] = []
   }
 
   /// Runs the turn.
@@ -80,11 +82,13 @@ public struct EvieAgentLoop: Sendable {
     var toolCallCount = 0
     var memoryProposals: [String] = []
     var changeProposals: [EvieFileChange] = []
+    var skillProposals: [EvieSkill] = []
     var toolNames: [String] = []
     var readAddresses: [String] = []
     // Memory is offered alongside the file tools, and is the only one of them
     // that is about her rather than about the disk. It still changes nothing.
-    var tools = EvieFileToolbox.definitions + [EvieMemoryTool.definition]
+    var tools =
+      EvieFileToolbox.definitions + [EvieMemoryTool.definition, EvieSkillTool.definition]
     if web != nil {
       tools += EvieWebTool.definitions
     }
@@ -138,7 +142,8 @@ public struct EvieAgentLoop: Sendable {
           exhausted: false,
           memoryProposals: memoryProposals,
           provenance: .from(toolCalls: toolNames, readAddresses: readAddresses),
-          changeProposals: changeProposals
+          changeProposals: changeProposals,
+          skillProposals: skillProposals
         )
       }
 
@@ -162,6 +167,25 @@ public struct EvieAgentLoop: Sendable {
           result = outcome
           if let proposal {
             changeProposals.append(proposal)
+          }
+        } else if call.name == EvieSkillTool.name {
+          if let skill = EvieSkillTool.skill(from: call) {
+            skillProposals.append(skill)
+            result = EvieToolResult(
+              callID: call.id,
+              name: call.name,
+              content: """
+                Sugestão de skill "\(skill.name)" mostrada ao Matheus. NADA foi \
+                instalado — só acontece se ele confirmar. Não diga que já aprendeu.
+                """
+            )
+          } else {
+            result = EvieToolResult(
+              callID: call.id,
+              name: call.name,
+              content: "Faltou nome ou instruções.",
+              isFailure: true
+            )
           }
         } else if call.name == EvieMemoryTool.name {
           let fact = ((try? call.arguments()) ?? [:])["fact"] ?? ""
@@ -197,7 +221,8 @@ public struct EvieAgentLoop: Sendable {
       exhausted: true,
       memoryProposals: memoryProposals,
       provenance: .from(toolCalls: toolNames, readAddresses: readAddresses),
-      changeProposals: changeProposals
+      changeProposals: changeProposals,
+      skillProposals: skillProposals
     )
   }
 }
@@ -335,6 +360,9 @@ extension EvieAgentLoop {
       }
       if call.name == EvieChangeTool.name {
         return "Preparando uma sugestão para você aprovar…"
+      }
+      if call.name == EvieSkillTool.name {
+        return "Escrevendo um jeito de fazer isso da próxima vez…"
       }
       switch EvieWebTool(rawValue: call.name) {
       case .search:

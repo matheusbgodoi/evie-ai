@@ -6,6 +6,15 @@ All notable changes to Evie are documented here. Dates use `YYYY-MM-DD`.
 
 ### Added
 
+- You can teach her. A habilidade is a markdown file in
+  `~/Library/Application Support/Evie/Skills/` — a name, the words that make it
+  load, and your instructions. She only loads what matches, so a folder full of
+  them costs nothing until one applies. Settings › O que ela sabe › Habilidades
+  lists them, switches them off, and opens the folder.
+- Instructions, not programs. A skill teaches her to use what she can already do,
+  and grants no new authority. She can suggest one too — when you correct how she
+  did something — and you read it before it is installed.
+
 - Evie can move, rename, and trash files in the folders you authorised — off by
   default, in Settings › O que ela sabe. She never does it herself: the tool she
   calls only raises a card naming the exact file and the exact action, and the

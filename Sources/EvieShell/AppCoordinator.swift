@@ -25,6 +25,7 @@ final class AppCoordinator: NSObject {
   private let rootsViewModel = EvieRootsViewModel()
   private var voiceLibraryViewModel: EvieVoiceLibraryViewModel?
   private let memoryViewModel = EvieMemoryViewModel()
+  private let skillsViewModel = EvieSkillsViewModel()
   private let audioCapture = EvieAudioCapture()
   private let speechOutput = EvieSpeechOutput()
   /// True while push-to-talk is holding the microphone open, so releasing the key
@@ -124,6 +125,10 @@ final class AppCoordinator: NSObject {
 
     viewModel.grantedRoots = { [rootsViewModel] in rootsViewModel.roots }
     viewModel.memories = { [memoryViewModel] in memoryViewModel.entries }
+    viewModel.installedSkills = { [skillsViewModel] in skillsViewModel.skills }
+    viewModel.onSkillProposed = { [weak self] skill in
+      self?.skillsViewModel.install(skill)
+    }
     viewModel.isWebSearchEnabled = { [weak self] in self?.preferences.webSearchEnabled ?? false }
     viewModel.fileChangePolicy = { [weak self] in
       guard let self else { return (false, false) }
@@ -536,6 +541,7 @@ extension AppCoordinator {
         rootsViewModel: rootsViewModel,
         voiceLibraryViewModel: voiceLibraryViewModel,
         memoryViewModel: memoryViewModel,
+        skillsViewModel: skillsViewModel,
         preferencesPath: preferencesStore.fileURL.path,
         configurationPath: configurationStore.fileURL.path
       )

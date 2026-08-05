@@ -103,12 +103,12 @@ twenty-three seconds the first time she uses it.
 - Seeing what a photo, chart or screenshot shows, not only the text in it
 - Reading, searching, and searching inside folders you authorise
 - Memory of what you told her, when you confirm it
+- Skills you write, loaded only when they match what you asked
 - Web search, if you switch it on — off by default
 - A movable, resizable overlay, and configurable everything
 
 ## What does not, yet
 
-- Anything that writes, moves, or deletes a file
 - Email, calendar, Drive, WhatsApp
 - Automations and scheduled work
 
@@ -134,6 +134,8 @@ evie-shell --voices-check <audio.wav>      # train a throwaway voice, speak with
 evie-shell --web-check "<query>"           # search, read a page, and show what is refused
 evie-shell --ask-web "<question>"          # a real turn with the web switched on
 evie-shell --see <image>                   # what she sees in a picture, and reads in it
+evie-shell --skill-check "<question>"      # which skills a question loads, and the answer
+evie-shell --change-check                  # the whole propose-approve-perform path
 ```
 
 Server lifecycle:
@@ -155,6 +157,7 @@ Scripts/test                                # the Swift test suite
 | Model configuration | `~/Library/Application Support/Evie/config.json` |
 | Authorised folders | `~/Library/Application Support/Evie/roots.json` |
 | What she remembers | `~/Library/Application Support/Evie/memory.json` |
+| Skills you wrote | `~/Library/Application Support/Evie/Skills/` |
 | Conversations | `~/Library/Application Support/Evie/Conversations/` |
 | Logs | `~/Library/Logs/Evie/` |
 

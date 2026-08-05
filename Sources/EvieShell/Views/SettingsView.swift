@@ -14,6 +14,7 @@ struct SettingsView: View {
   @ObservedObject var rootsViewModel: EvieRootsViewModel
   @ObservedObject var voiceLibraryViewModel: EvieVoiceLibraryViewModel
   @ObservedObject var memoryViewModel: EvieMemoryViewModel
+  @ObservedObject var skillsViewModel: EvieSkillsViewModel
   var preferencesPath: String = EviePreferencesStore.defaultFileURL.path
   var configurationPath: String = EvieConfigurationLoader.defaultFileURL.path
 
@@ -30,7 +31,8 @@ struct SettingsView: View {
 
       KnowledgeTabView(
         rootsViewModel: rootsViewModel,
-        memoryViewModel: memoryViewModel
+        memoryViewModel: memoryViewModel,
+        skillsViewModel: skillsViewModel
       )
       .tabItem { Label("O que ela sabe", systemImage: "books.vertical") }
 
@@ -110,17 +112,21 @@ private struct VoiceTabView: View {
 private struct KnowledgeTabView: View {
   @ObservedObject var rootsViewModel: EvieRootsViewModel
   @ObservedObject var memoryViewModel: EvieMemoryViewModel
+  @ObservedObject var skillsViewModel: EvieSkillsViewModel
 
   var body: some View {
     VStack(spacing: 0) {
       PaneSelector(
-        titles: ["Pastas", "Memória"],
+        titles: ["Pastas", "Memória", "Habilidades"],
         selection: $memoryViewModel.knowledgePane
       )
-      if memoryViewModel.knowledgePane == 0 {
+      switch memoryViewModel.knowledgePane {
+      case 0:
         RootsSettingsView(viewModel: rootsViewModel)
-      } else {
+      case 1:
         MemorySettingsView(viewModel: memoryViewModel)
+      default:
+        SkillsSettingsView(viewModel: skillsViewModel)
       }
     }
   }
