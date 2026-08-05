@@ -74,6 +74,16 @@ struct EvieGlowButton: NSViewRepresentable {
 
     override var isFlipped: Bool { true }
 
+    /// Without this the view has no size of its own and SwiftUI hands it every
+    /// point available, which turned three small icon buttons into three huge
+    /// circles spread across the card.
+    override var intrinsicContentSize: NSSize {
+      guard let identity else {
+        return NSSize(width: 24, height: 24)
+      }
+      return NSSize(width: identity.diameter, height: identity.diameter)
+    }
+
     override func updateTrackingAreas() {
       super.updateTrackingAreas()
       if let trackingArea {
@@ -135,6 +145,7 @@ struct EvieGlowButton: NSViewRepresentable {
         return
       }
       identity = requested
+      invalidateIntrinsicContentSize()
       effectiveAppearance.performAsCurrentDrawingAppearance {
         layOut(requested)
       }

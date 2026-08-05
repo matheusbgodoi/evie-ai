@@ -2,6 +2,10 @@ import EvieCore
 import SwiftUI
 
 enum ArtifactKind: String, Hashable {
+  /// What you asked. Shown so the conversation reads as a conversation and you
+  /// can find your place in it, rather than a column of answers to questions
+  /// that vanished.
+  case prompt
   case answer
   case research
   case email
@@ -15,6 +19,7 @@ enum ArtifactKind: String, Hashable {
 
   var title: String {
     switch self {
+    case .prompt: "Você"
     case .answer: "Resposta"
     case .research: "Pesquisa"
     case .email: "E-mail"
@@ -30,6 +35,7 @@ enum ArtifactKind: String, Hashable {
 
   var symbolName: String {
     switch self {
+    case .prompt: "quote.opening"
     case .answer: "sparkles"
     case .research: "globe"
     case .email: "envelope.fill"
@@ -45,6 +51,7 @@ enum ArtifactKind: String, Hashable {
 
   var tint: Color {
     switch self {
+    case .prompt: .gray
     case .answer: .indigo
     case .research: .cyan
     case .email: .blue
@@ -98,11 +105,17 @@ struct ArtifactCardView: View {
 
   @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
+  private var isPrompt: Bool {
+    artifact.kind == .prompt
+  }
+
   var body: some View {
     GlassSurface(
-      cornerRadius: 20,
+      cornerRadius: isPrompt ? 16 : 20,
       material: .popover,
-      contentPadding: EdgeInsets(top: 13, leading: 14, bottom: 13, trailing: 12),
+      contentPadding: isPrompt
+        ? EdgeInsets(top: 9, leading: 12, bottom: 9, trailing: 10)
+        : EdgeInsets(top: 13, leading: 14, bottom: 13, trailing: 12),
       tint: artifact.kind.tint
     ) {
       VStack(alignment: .leading, spacing: 11) {
@@ -127,22 +140,30 @@ struct ArtifactCardView: View {
   }
 
   private var header: some View {
-    HStack(spacing: 10) {
-      Image(systemName: artifact.kind.symbolName)
-        .font(.system(size: 12, weight: .semibold))
-        .foregroundStyle(artifact.kind.tint)
-        .frame(width: 28, height: 28)
-        .background(artifact.kind.tint.opacity(0.12), in: RoundedRectangle(cornerRadius: 9))
+    HStack(spacing: isPrompt ? 8 : 10) {
+      if !isPrompt {
+        Image(systemName: artifact.kind.symbolName)
+          .font(.system(size: 12, weight: .semibold))
+          .foregroundStyle(artifact.kind.tint)
+          .frame(width: 28, height: 28)
+          .background(artifact.kind.tint.opacity(0.12), in: RoundedRectangle(cornerRadius: 9))
+      }
 
       VStack(alignment: .leading, spacing: 1) {
-        Text(artifact.kind.title.uppercased())
-          .font(.system(size: 9, weight: .bold))
-          .foregroundStyle(artifact.kind.tint)
-          .tracking(0.75)
+        if isPrompt {
+          Text("Você perguntou")
+            .font(.system(size: 10, weight: .semibold))
+            .foregroundStyle(.secondary)
+        } else {
+          Text(artifact.kind.title.uppercased())
+            .font(.system(size: 9, weight: .bold))
+            .foregroundStyle(artifact.kind.tint)
+            .tracking(0.75)
 
-        Text(artifact.title)
-          .font(.subheadline.weight(.semibold))
-          .lineLimit(artifact.isExpanded ? 3 : 1)
+          Text(artifact.title)
+            .font(.subheadline.weight(.semibold))
+            .lineLimit(artifact.isExpanded ? 3 : 1)
+        }
       }
 
       Spacer(minLength: 8)
@@ -163,7 +184,14 @@ struct ArtifactCardView: View {
 
   @ViewBuilder
   private var content: some View {
-    if artifact.isExpanded {
+    if isPrompt {
+      Text(artifact.summary)
+        .font(.callout)
+        .foregroundStyle(.primary.opacity(0.78))
+        .lineLimit(artifact.isExpanded ? nil : 2)
+        .textSelection(.enabled)
+        .frame(maxWidth: .infinity, alignment: .leading)
+    } else if artifact.isExpanded {
       EvieRichTextView(text: artifact.richSummary)
     } else {
       // Collapsed, the card is a glance: plain text reads better than a stack of
@@ -186,12 +214,6 @@ struct ArtifactCardView: View {
           .transition(.opacity)
       }
 
-      if let source = artifact.source, !source.isEmpty {
-        Label(source, systemImage: "link")
-          .font(.caption)
-          .foregroundStyle(.secondary)
-          .lineLimit(1)
-      }
     }
   }
 
@@ -252,6 +274,7 @@ struct ArtifactCardView: View {
       glyphSize: 9,
       action: action
     )
+    .frame(width: 23, height: 23)
   }
 
   private func actionForeground(_ role: ArtifactActionRole) -> Color {

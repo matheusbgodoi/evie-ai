@@ -79,20 +79,6 @@ struct EvieMarkView: View {
         .allowsHitTesting(false)
     }
     .frame(width: diameter, height: diameter)
-    .contentShape(Circle())
-    .onTapGesture {
-      onActivate?()
-    }
-    .onHover { hovering in
-      guard isInteractive, onActivate != nil else {
-        return
-      }
-      if hovering {
-        NSCursor.pointingHand.push()
-      } else {
-        NSCursor.pop()
-      }
-    }
     .help(helpText)
     .accessibilityAddTraits(onActivate == nil ? [] : .isButton)
     .accessibilityLabel(accessibilityLabel)
@@ -105,7 +91,9 @@ struct EvieMarkView: View {
       symbolName: "sparkles",
       tint: tint,
       diameter: diameter,
-      isAnimating: isMoving
+      isAnimating: isMoving,
+      isInteractive: isInteractive && onActivate != nil,
+      action: onActivate
     )
     .frame(width: diameter, height: diameter)
   }

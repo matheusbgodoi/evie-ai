@@ -140,25 +140,32 @@ final class OverlayViewModel: ObservableObject {
         [ChatMessage(role: .system, content: systemPrompt)]
         + stored.messages
       artifacts = stored.messages
-        .filter { $0.role == .assistant }
-        .suffix(8)
+        .filter { $0.role == .user || $0.role == .assistant }
+        .suffix(12)
         .map { message in
-          ArtifactCardModel(
-            id: message.id,
-            kind: .answer,
-            title: stored.title,
-            summary: message.content,
-            source: "Histórico local",
-            isExpanded: false,
-            actions: [
-              ArtifactActionModel(
-                id: "copy",
-                title: "Copiar",
-                systemImage: "doc.on.doc",
-                role: .secondary
-              )
-            ]
-          )
+          message.role == .user
+            ? ArtifactCardModel(
+              id: message.id,
+              kind: .prompt,
+              title: Self.title(for: message.content),
+              summary: message.content,
+              isExpanded: false
+            )
+            : ArtifactCardModel(
+              id: message.id,
+              kind: .answer,
+              title: stored.title,
+              summary: message.content,
+              isExpanded: false,
+              actions: [
+                ArtifactActionModel(
+                  id: "copy",
+                  title: "Copiar",
+                  systemImage: "doc.on.doc",
+                  role: .secondary
+                )
+              ]
+            )
         }
       visualState = .ready
       primaryText = stored.title
@@ -456,6 +463,18 @@ final class OverlayViewModel: ObservableObject {
     primaryText = "Pensando…"
     secondaryText = nil
     waveformSamples = []
+    // Your own question, kept on screen. Without it the overlay is a column of
+    // answers to questions that disappeared, and there is no way to find your
+    // place in a long conversation.
+    artifacts.append(
+      ArtifactCardModel(
+        id: userMessage.id,
+        kind: .prompt,
+        title: Self.title(for: prompt),
+        summary: prompt,
+        isExpanded: false
+      )
+    )
     artifacts.append(
       ArtifactCardModel(
         id: artifactID,

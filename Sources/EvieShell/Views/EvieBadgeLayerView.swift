@@ -17,6 +17,8 @@ struct EvieBadgeLayerView: NSViewRepresentable {
   var tint: Color
   var diameter: CGFloat
   var isAnimating: Bool
+  var isInteractive: Bool
+  var action: (() -> Void)?
 
   func makeNSView(context: Context) -> BadgeView {
     BadgeView()
@@ -27,7 +29,9 @@ struct EvieBadgeLayerView: NSViewRepresentable {
       symbolName: symbolName,
       tint: NSColor(tint),
       diameter: diameter,
-      isAnimating: isAnimating
+      isAnimating: isAnimating,
+      isInteractive: isInteractive,
+      action: action
     )
   }
 
@@ -36,6 +40,10 @@ struct EvieBadgeLayerView: NSViewRepresentable {
     private let rim = CAShapeLayer()
     private let symbol = CALayer()
     private var configuration: (String, NSColor, CGFloat, Bool)?
+    private var isInteractive = false
+    private var isHovering = false
+    private var action: (() -> Void)?
+    private var trackingArea: NSTrackingArea?
 
     override init(frame: NSRect) {
       super.init(frame: frame)
@@ -53,6 +61,74 @@ struct EvieBadgeLayerView: NSViewRepresentable {
 
     override var isFlipped: Bool { true }
 
+    override var intrinsicContentSize: NSSize {
+      let diameter = configuration?.2 ?? 30
+      return NSSize(width: diameter, height: diameter)
+    }
+
+    override func updateTrackingAreas() {
+      super.updateTrackingAreas()
+      if let trackingArea {
+        removeTrackingArea(trackingArea)
+      }
+      let area = NSTrackingArea(
+        rect: bounds,
+        options: [.mouseEnteredAndExited, .activeAlways, .inVisibleRect],
+        owner: self
+      )
+      addTrackingArea(area)
+      trackingArea = area
+    }
+
+    /// The mark is the voice button, so it has to react like one. The glow is a
+    /// layer shadow and a scale, both interpolated by the render server.
+    override func mouseEntered(with event: NSEvent) {
+      guard isInteractive else {
+        return
+      }
+      isHovering = true
+      animateHover()
+      NSCursor.pointingHand.push()
+    }
+
+    override func mouseExited(with event: NSEvent) {
+      guard isHovering else {
+        return
+      }
+      isHovering = false
+      animateHover()
+      NSCursor.pop()
+    }
+
+    override func mouseDown(with event: NSEvent) {
+      guard isInteractive else {
+        return
+      }
+      action?()
+    }
+
+    override func accessibilityPerformPress() -> Bool {
+      guard isInteractive else {
+        return false
+      }
+      action?()
+      return true
+    }
+
+    private func animateHover() {
+      guard let tint = configuration?.1 else {
+        return
+      }
+      CATransaction.begin()
+      CATransaction.setAnimationDuration(0.16)
+      CATransaction.setAnimationTimingFunction(CAMediaTimingFunction(name: .easeOut))
+      circle.shadowOpacity = isHovering ? 0.85 : 0.38
+      circle.shadowRadius = isHovering ? 11 : 7
+      circle.shadowColor = tint.cgColor
+      rim.strokeColor = NSColor.white.withAlphaComponent(isHovering ? 0.55 : 0.22).cgColor
+      CATransaction.commit()
+    }
+
     /// Layers do not participate in AppKit's automatic appearance updates, so the
     /// colour is resolved again whenever the system switches between light and
     /// dark.
@@ -66,16 +142,30 @@ struct EvieBadgeLayerView: NSViewRepresentable {
         symbolName: configuration.0,
         tint: configuration.1,
         diameter: configuration.2,
-        isAnimating: configuration.3
+        isAnimating: configuration.3,
+        isInteractive: isInteractive,
+        action: action
       )
     }
 
-    func configure(symbolName: String, tint: NSColor, diameter: CGFloat, isAnimating: Bool) {
+    func configure(
+      symbolName: String,
+      tint: NSColor,
+      diameter: CGFloat,
+      isAnimating: Bool,
+      isInteractive: Bool,
+      action: (() -> Void)?
+    ) {
+      self.isInteractive = isInteractive
+      self.action = action
+      setAccessibilityRole(isInteractive ? .button : .image)
+
       let requested = (symbolName, tint, diameter, isAnimating)
       guard configuration.map({ $0 != requested }) ?? true else {
         return
       }
       configuration = requested
+      invalidateIntrinsicContentSize()
 
       effectiveAppearance.performAsCurrentDrawingAppearance {
         layOut(symbolName: symbolName, tint: tint, diameter: diameter)

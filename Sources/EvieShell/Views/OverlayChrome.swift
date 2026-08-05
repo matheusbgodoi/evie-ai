@@ -30,9 +30,11 @@ struct OverlayGripHandle: View {
   var isHighlighted: Bool
 
   var body: some View {
-    Capsule(style: .continuous)
-      .fill(.secondary.opacity(isHighlighted ? 0.34 : 0))
-      .frame(width: 32, height: 3.5)
+    // Draws nothing at all. The cursor turning into an open hand over the top
+    // margin is the affordance; a grey dash floating above the capsule was just
+    // debris on screen.
+    Color.clear
+      .frame(width: 96, height: 16)
       .overlay {
         WindowDragArea()
           .frame(width: 96, height: 18)
