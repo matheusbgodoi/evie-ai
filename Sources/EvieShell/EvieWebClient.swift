@@ -61,6 +61,60 @@ struct EvieWebClient: EvieWebSearching, Sendable {
     return EvieWebSearch.parseResults(from: html)
   }
 
+  /// Searches, reads the best few results at once, and returns only the passages
+  /// that answer the question.
+  ///
+  /// Three pages instead of one, fetched concurrently so it costs about what one
+  /// costs, and a page that fails is simply absent rather than fatal. Reading
+  /// more sources is what makes the answer better; sending only the matching
+  /// passages is what makes it cheaper at the same time.
+  func gather(_ query: String, pages: Int = 3, passages: Int = 6) async throws
+    -> [EvieWebPassage]
+  {
+    let results = try await search(query)
+    guard !results.isEmpty else {
+      return []
+    }
+
+    let candidates = Array(results.prefix(pages))
+    let harvested = await withTaskGroup(of: [EvieWebPassage].self) { group in
+      for result in candidates {
+        group.addTask {
+          guard let html = try? await self.fetchPage(result.url) else {
+            // One unreachable page must not lose the other two.
+            return []
+          }
+          return EvieWebPassages.extract(fromHTML: html, source: result.url)
+        }
+      }
+      var all: [EvieWebPassage] = []
+      for await page in group {
+        all.append(contentsOf: page)
+      }
+      return all
+    }
+
+    // Falling back to the snippets is better than falling back to nothing: they
+    // are short and written for search, but they are on topic.
+    guard !harvested.isEmpty else {
+      return results.prefix(passages).map {
+        EvieWebPassage(text: "\($0.title). \($0.snippet)", source: $0.url)
+      }
+    }
+    return EviePassageRanker.rank(harvested, for: query, limit: passages)
+  }
+
+  /// The raw markup of a page, for the passage extractor to work on.
+  func fetchPage(_ address: String) async throws -> String {
+    guard let url = Self.validate(address) else {
+      throw WebError.unsafeAddress(address)
+    }
+    var request = URLRequest(url: url)
+    request.timeoutInterval = timeout
+    request.setValue(Self.userAgent, forHTTPHeaderField: "User-Agent")
+    return try await fetchText(request)
+  }
+
   /// Downloads one page and returns its readable text.
   func read(_ address: String) async throws -> String {
     guard let url = Self.validate(address) else {

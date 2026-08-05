@@ -13,6 +13,14 @@ All notable changes to Evie are documented here. Dates use `YYYY-MM-DD`.
   happened: a model asked to report on itself will sometimes claim to have
   checked your notes, and will more often forget to mention it was going from
   memory.
+- Web results are read properly instead of skimmed. Three pages are fetched at
+  once and only the passages that match your question are kept, ranked with BM25
+  and stripped of near-duplicates, each carrying the address it came from so a
+  citation can sit next to the claim. The version before took the first 3,500
+  characters of one page, which on a real result began "Home Linux Tutoriais
+  Linux Comandos Linux…". Measured: 1,872 characters from three sites instead of
+  3,500 from one, the prompt down from 4,054 tokens to 2,450, and the turn from
+  82.6 s to 58.6 s.
 - Questions of fact are looked up before she answers, in the order you asked for:
   your notes and folders first, the web only if they came up empty, and her own
   knowledge last. The application does the looking — telling her to was tried

@@ -913,3 +913,34 @@ previous day of building. Everything here came from that.
   file the user was shown; and the credential denylist applied to moving exactly
   as to reading. Sixteen tests, of which the ones that matter are the refusals.
 - Validation: `Scripts/test` 300/300 in 28 suites.
+
+## 2026-08-05 — WEB-002: read three pages properly instead of skimming one
+
+- The user pointed out that loading a whole page carries a lot of useless
+  information, and asked whether it could be both faster and more reliable. It
+  can, and the two are the same change rather than a trade: the question is
+  already known, so passages can be *selected* instead of a prefix being taken.
+- `EvieWebPassages` extracts `<article>`/`<main>` when a page has one, drops
+  script, style, nav, footer, aside and form, and merges lines into ~420-character
+  passages. `EviePassageRanker` scores them with BM25 plus a coverage bonus and
+  removes near-duplicates, because search results copy each other and three
+  paraphrases look like three sources agreeing.
+- Two departures from textbook BM25, both earned by what this text is. The
+  coverage bonus, because a passage repeating one query word ten times is worth
+  less than one containing all of them once. And a minimum passage length —
+  measured, not guessed: BM25 normalises by length, so a nine-word navigation
+  link scored *first* on a page about HTTP/3, with the text "Termo Anterior: Qual
+  a diferença entre HTTP e HTTPS".
+- Three pages are fetched concurrently, and one that fails is absent rather than
+  fatal. Falling back to snippets is better than falling back to nothing.
+- Measured on the same question and network, with `--passage-check`:
+  - before: 3,500 chars, one source, opening with a hundred and fifty characters
+    of site navigation;
+  - after: 1,872 chars, three sources, every passage prose about the question;
+  - end to end: prompt 4,054 → 2,450 tokens, turn 82.6 s → 58.6 s.
+- **Where the remaining time goes**, because it bounds how much further this is
+  worth pushing: fetching and ranking is 1.8 s of the 58.6 s. The rest is the
+  model reading its own instructions and writing 322 tokens. Trimming evidence
+  further buys almost nothing; the levers left are the persona's size and the
+  answer's length.
+- Validation: `Scripts/test` 311/311 in 29 suites.

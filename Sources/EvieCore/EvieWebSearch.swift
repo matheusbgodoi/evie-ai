@@ -274,6 +274,28 @@ extension EvieWebSearch {
 public protocol EvieWebSearching: Sendable {
   func search(_ query: String) async throws -> [EvieSearchResult]
   func read(_ address: String) async throws -> String
+  /// Search, read the best few results, and return only the passages that match.
+  /// This is what grounding uses; `search` and `read` remain for the tools the
+  /// model calls itself.
+  func gather(_ query: String, pages: Int, passages: Int) async throws -> [EvieWebPassage]
+}
+
+extension EvieWebSearching {
+  /// A backend that can only search and read still grounds, one page at a time.
+  public func gather(_ query: String, pages: Int, passages: Int) async throws
+    -> [EvieWebPassage]
+  {
+    let results = try await search(query)
+    guard let first = results.first else {
+      return []
+    }
+    let text = try await read(first.url)
+    return EviePassageRanker.rank(
+      EvieWebPassages.extract(fromHTML: text, source: first.url),
+      for: query,
+      limit: passages
+    )
+  }
 }
 
 /// The two things Evie may do on the web, both of them reading.

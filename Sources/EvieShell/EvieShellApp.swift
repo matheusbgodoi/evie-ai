@@ -221,6 +221,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
       return
     }
 
+    // Measures the claim that selecting passages is both smaller and better than
+    // taking a prefix, rather than asserting it.
+    if let index = CommandLine.arguments.firstIndex(of: "--passage-check"),
+      index + 1 < CommandLine.arguments.count
+    {
+      let query = CommandLine.arguments[index + 1]
+      Task { @MainActor in
+        await Self.runPassageCheck(query: query)
+        NSApp.terminate(nil)
+      }
+      return
+    }
+
     let coordinator = AppCoordinator()
     self.coordinator = coordinator
     coordinator.start()
@@ -263,6 +276,56 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
       print(outcome.answer.isEmpty ? "(sem resposta — laço esgotado)" : outcome.answer)
     } catch {
       print("FALHOU: \((error as? LocalizedError)?.errorDescription ?? "\(error)")")
+    }
+  }
+
+  /// Compares taking a prefix of one page against selecting passages from three.
+  ///
+  /// Both numbers on the same question and the same network, because the claim
+  /// being made — smaller *and* better — is only worth anything if it is measured.
+  static func runPassageCheck(query: String) async {
+    let client = EvieWebClient()
+    print("pergunta: \(query)")
+    print("")
+
+    let searchStart = Date()
+    guard let results = try? await client.search(query), let first = results.first else {
+      print("busca não trouxe nada")
+      return
+    }
+    print(String(format: "busca: %d resultados em %.1f s", results.count, Date().timeIntervalSince(searchStart)))
+
+    // What the previous version sent.
+    let oldStart = Date()
+    let whole = (try? await client.read(first.url)) ?? ""
+    let prefix = String(whole.prefix(3_500))
+    print(
+      String(
+        format: "ANTES  1 página, prefixo: %d chars em %.1f s — %@",
+        prefix.count, Date().timeIntervalSince(oldStart), first.url
+      )
+    )
+    print("  começo: \(prefix.prefix(150).replacingOccurrences(of: "\n", with: " "))…")
+
+    // What it sends now.
+    let newStart = Date()
+    let passages = (try? await client.gather(query, pages: 3, passages: 6)) ?? []
+    let total = passages.reduce(0) { $0 + $1.text.count }
+    let sources = Set(passages.map { URL(string: $0.source)?.host ?? $0.source })
+    print(
+      String(
+        format: "DEPOIS %d trechos de %d sites: %d chars em %.1f s",
+        passages.count, sources.count, total, Date().timeIntervalSince(newStart)
+      )
+    )
+    for passage in passages.prefix(3) {
+      let host = URL(string: passage.source)?.host ?? ""
+      print("  [\(host)] \(passage.text.prefix(110))…")
+    }
+    if total > 0, prefix.count > 0 {
+      print("")
+      print(String(format: "prompt: %.0f%% do tamanho anterior, de %d fontes em vez de 1",
+                   Double(total) / Double(prefix.count) * 100, sources.count))
     }
   }
 

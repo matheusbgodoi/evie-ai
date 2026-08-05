@@ -217,19 +217,21 @@ extension EvieAgentLoop {
     // Only when his own writing did not answer it.
     if result.localFindings == nil, let web {
       await emit(.status(message: "Procurando na web…"))
-      if let results = try? await web.search(query), !results.isEmpty {
-        result.webFindings = EvieWebSearch.describe(results, query: query)
-        // The first result is opened, because a snippet is a headline and the
-        // page is the claim. Answering from snippets is how she gets things
-        // subtly wrong.
-        // A slice of the page, not the whole thing. Measured: grounding with the
-        // full 12,000-character excerpt took 136 s end to end, almost all of it
-        // the model reading a page whose first few paragraphs already answered
-        // the question.
-        if let first = results.first, let text = try? await web.read(first.url) {
-          result.webFindings? += "\n\n--- \(first.url) ---\n\(text.prefix(3_500))"
-          result.citedPages.append(first.url)
-        }
+      // Three pages read at once, and only the passages that match the question
+      // sent on. The version this replaces took the first 3,500 characters of the
+      // first result — mostly menu and cookie banner, from a single source that
+      // might be wrong, while the paragraph that answered could sit past the cut.
+      if let passages = try? await web.gather(query, pages: 3, passages: 6),
+        !passages.isEmpty
+      {
+        result.webFindings = EvieWebPassages.describe(passages, query: query)
+        result.citedPages = passages
+          .map(\.source)
+          .reduce(into: [String]()) { unique, source in
+            if !unique.contains(source) {
+              unique.append(source)
+            }
+          }
       }
     }
     return result
