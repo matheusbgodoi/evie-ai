@@ -1,6 +1,64 @@
 # Voice architecture
 
-Status: proposed and benchmark-gated.
+Status: the microphone and speech recognition are implemented; the spoken answer
+is not. Nothing about voice has been exercised with real audio, because that
+requires a microphone grant that is the user's to give.
+
+## What is implemented — 2026-08-05
+
+`EvieAudioCapture` owns the microphone. `EvieSpeechTranscription` turns what it
+hears into text using the system recogniser. Clicking the mark toggles listening,
+push-to-talk holds it open, and stopping everything closes it.
+
+### The blocker that had to fall first
+
+A bare SwiftPM executable cannot obtain the microphone, and the failure is worse
+than an error. Measured on this Mac: touching `AVAudioEngine().inputNode` from an
+unbundled binary **hangs the main thread indefinitely** inside `coreaudiod`. TCC
+identified the process by executable name, attributed the request to the terminal
+that launched it, found no usage description to render in a dialog, and waited for
+a decision that could never be made.
+
+Three consequences, all now enforced by `Scripts/evie-app`:
+
+1. Evie must be a bundle with a stable identifier and usage descriptions.
+2. She must be launched through Launch Services. Running the executable *inside*
+   the bundle from a terminal still attributes the grant to the terminal.
+3. An ad-hoc signature loses the grant on every rebuild, because ad-hoc code has
+   no stable designated requirement. A self-signed certificate fixes it.
+
+The order in code matters too: `AVCaptureDevice.authorizationStatus` never blocks
+and is safe to call first; `requestAccess` comes second; the engine is built
+third; and the input node is touched only after access is actually granted.
+
+### Speech recognition
+
+The system recogniser was chosen over the cached Whisper checkpoints for one
+reason above accuracy: **it runs in a system daemon, so its model never enters
+Evie's address space** and never competes with the 26B model for the 24 GB of
+unified memory that is the real constraint on this machine.
+
+Measured on this Mac: recognition is available, 45 locales are supported including
+`pt-BR` — and `pt-PT`, unusually — with `pt-BR` reporting `needsDownload`, meaning
+supported with a one-time language pack. That download runs before capture starts
+rather than lazily, so the first sentence anyone speaks does not vanish into it.
+
+`SpeechModels.endRetention()` is called on both finish and cancel. That is the
+idle unload the engineering contract requires of every heavy worker.
+
+Its weakness is auditability: Apple's model revision cannot be pinned and changes
+with the operating system. The published challenger is FluidAudio's Parakeet in
+Core ML, at **6.14% WER and 141× real time** on Apple silicon — the best published
+Brazilian Portuguese number found — with a pinnable revision, at the cost of one
+to two gigabytes resident. `VOI-005` remains the gate that decides between them,
+and no Brazilian Portuguese WER has been measured here.
+
+### Not measured, not claimed
+
+No audio has been transcribed. Accuracy in real rooms, latency after the language
+download, barge-in behaviour, and energy cost are all unknown.
+
+## Original research
 
 ## Target-Mac discovery — 2026-08-04
 
@@ -151,6 +209,15 @@ Time to first useful audio is the primary metric.
 - OmniVoice on battery: exit after each completed response until measured otherwise.
 - If TTS is still loading, show text/caption immediately and an honest loading state.
 - The user can select text-only, automatic voice, or voice-on-request behavior.
+
+## Echo, and the call mode
+
+macOS provides real acoustic echo cancellation through the Voice Processing I/O
+unit, which is what makes a continuous call mode possible without the speaker's
+output being heard as the user's input. It is enabled per audio unit rather than
+per application, and requires input and output to agree on a device. Where they do
+not, the fallback is half-duplex: pause capture while speaking, and rely on the
+level threshold to detect a genuine interruption.
 
 ## Barge-in and cancellation
 

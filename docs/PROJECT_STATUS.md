@@ -7,17 +7,32 @@ Last updated: 2026-08-05
 **Phase 1 inference validation and Phase 2 native-shell prototyping are in
 progress.**
 
-VS-003 is implemented at source level. Evie now has her own identity rather than
-presenting as a front end for a local server: the hidden persona names her creator
-and how he is addressed, no surface mentions the model or the inference server,
-and the loopback port moved to 38433 so it cannot collide with another project.
-The overlay can be moved, resized, and reset; its height follows what SwiftUI
-actually measured, which is what fixes the clipped background fade. The
-placeholder glyph became an ASCII key that tilts in three dimensions and lights up
-only while something real is happening — idle CPU with the overlay visible
-measured 0.0%, down from 8.1% in the first attempt. Preferences for appearance,
-eight configurable shortcuts, and the voice switches exist and are validated, but
-they have no settings UI yet, and voice itself is still unwired.
+VS-003 through VS-006 are implemented at source level.
+
+Evie now has her own identity rather than presenting as a front end for a local
+server: the hidden persona names her creator and how he is addressed, no surface
+mentions the model or the inference server, and the loopback port moved to 38433
+so it cannot collide with another project. The overlay can be moved, resized, and
+reset; its height follows what SwiftUI actually measured, which is what fixed the
+clipped background fade. The placeholder glyph became an ASCII key that tilts in
+three dimensions and lights up only while something real is happening — idle CPU
+with the overlay visible measured 0.0%, down from 8.1% in the first attempt.
+
+Everything configurable is now reachable: a five-tab settings window covering
+shortcuts, voice, appearance, model, and diagnostics, with every shortcut
+recordable, disableable, and resettable, and conflicts or system refusals named in
+place.
+
+`Evie.app` exists with a stable bundle identifier. That was the hard blocker for
+every permission Evie will ever need — measured, an unbundled binary touching the
+microphone hangs forever rather than failing. The microphone and speech
+recognition are implemented on top of it, but no audio has been transcribed: that
+needs a grant which is deliberately left for the user.
+
+She can also read. Images and PDFs, including scanned ones, are read through the
+system's own text recognition with no model downloaded, verified end to end
+against the model in Portuguese and against a document attempting prompt
+injection.
 
 The Phase 0 planning foundation is complete enough to support bounded code work.
 VS-001 and VS-002 are implemented at source level: the native shell now supports
@@ -170,7 +185,12 @@ See the ADR index for decision status.
    input.
 5. Benchmark OmniVoice MPS cold start, warm generation, peak memory, real-time
    factor, and sentence chunking on this Mac.
-6. Select a local VLM only after image/OCR tasks and resource ceilings are defined.
+6. Text recognition is settled and measured; see `docs/VISION.md`. What remains
+   open is image *understanding* — a chart, a screenshot, a photograph. Two routes
+   exist and neither is pinned: the system vision model, measured at +15 MB in
+   this process because it runs in a daemon, and the 0.81 GB projector for the
+   model already installed, which would need the inference server to accept
+   multimodal input.
 7. Validate the source-implemented bottom-centered overlay and global command
    shortcuts without productizing them yet; focus, Spaces, full-screen,
    multiple-display, and accessibility behavior still require target QA.
@@ -191,9 +211,16 @@ readiness only; they are not the Phase 1 performance suite.
 - The SwiftPM shell launches and remains resident, but has not been manually
   accepted for shortcuts, focus, Spaces, displays, accessibility, cancellation,
   or rendered response behavior.
-- The current shell is not a signed/notarized `.app`, login item, or packaged
-  utility. This is now the critical-path blocker: without a bundle identity macOS
-  will not grant microphone access, so no part of the voice loop can be validated.
+- `Evie.app` exists but its signature is ad-hoc, which has no stable designated
+  requirement, so the first permission granted will not survive a rebuild until
+  `Scripts/evie-app identity` is run and the certificate is trusted for code
+  signing in Keychain Access. That step cannot be scripted.
+- The application is not notarized and is not a login item.
+- No audio has been transcribed. Speech recognition is implemented and the system
+  reports Brazilian Portuguese available with a one-time language pack, but
+  accuracy, latency after that download, barge-in, and energy cost are unmeasured.
+- Evie cannot speak, cannot reach folders, and cannot search the web. The
+  preferences for the first exist and save; the interface says they are inactive.
 - Nothing in VS-003 has been accepted by eye on the target display. Dragging,
   resizing, the reset control, the corrected fade, the legibility of the ASCII key
   at 30 points, and the light/dark palette are all `QA-006`.
@@ -217,21 +244,22 @@ readiness only; they are not the Phase 1 performance suite.
 
 ## Next recommended action
 
-Build the tabbed settings window (`UI-017`/`UI-018`), because the preference model
-from VS-003 is complete but unreachable: shortcuts, the voice switches, and the
-appearance controls all exist and validate, and none of them can be changed from
-the interface.
+Three things, in this order.
 
-Then package `Evie.app` (`PKG-001`). It is the hard blocker for everything to do
-with voice — a bare SwiftPM binary has no bundle identity, so macOS will not grant
-it the microphone, and an ad-hoc signature makes the system re-ask on every
-rebuild. Push-to-talk comes before wake word.
+**`VOI-018` — let her speak.** The OmniVoice adapter exists, is defensively
+written, and is connected to nothing. Native playback with sentence chunking,
+output metering, cancellation, and barge-in closes the voice loop and removes the
+last switch in Settings that describes something unbuilt.
 
-Sight is cheaper than it looked. Native text recognition needs no model download,
-handles Brazilian Portuguese correctly, and costs about 90 ms and 75 MB per page,
-so `VIS-007` can land well before any local vision model is pinned. Note the
-measured trap: `minimumTextHeightFraction` defaults to 1/32 of the image height
-and silently returns nothing for ordinary screenshot-sized text.
+**`SEC-002` and `INT-008` — let her read the Mac.** This is the user's own
+standing request; she currently answers that folders are not connected, which is
+accurate but is the gap he most wants closed. `docs/FILESYSTEM.md` carries the
+full design. Reading is worth shipping before any write capability exists, and
+there is deliberately no commit tool in the schema.
+
+**`QA-006` — the human pass.** Nothing in the last four slices has been accepted
+by eye. Dragging, resizing, the reset control, the corrected fade, the legibility
+of the ASCII key at 30 points, and the palette in light and dark are all unproven.
 
 Do not configure email, WhatsApp, Drive, file mutation, automatic microphone, or
 workflow activation before their permission and validation gates pass.

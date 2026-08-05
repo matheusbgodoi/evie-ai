@@ -4,13 +4,61 @@ Evie is a local-first personal AI assistant for macOS, pronounced **"ee-vee"**
 ("ívi"). It is intended to be available by voice or a global shortcut without
 behaving like a permanent chat window.
 
-The project now has two **source-implemented vertical slices** and a bounded local
-development-runtime controller. A native menu-bar/overlay shell opens ready for
-text, streams Gemma into glass result cards, supports continuous follow-ups, and
-stores visible sessions locally for a deliberate history window. Model sampling
-preferences have a native settings window. The controller pins and prepares the
-server/model outside Git; it is development tooling, not the future supervisor or
-a persistent background service. Target-Mac UI acceptance remains open.
+She runs entirely on one Mac. Nothing is sent anywhere.
+
+## Running her
+
+```bash
+Scripts/evie-runtime start     # the local model server
+Scripts/evie-app build         # assemble Evie.app
+Scripts/evie-app install       # copy it to ~/Applications
+Scripts/evie-app run           # launch it — always this way, never the binary
+```
+
+`run` matters: launching the executable directly makes macOS attribute
+permissions to the terminal instead of to Evie.
+
+Once, so that permissions survive rebuilds:
+
+```bash
+Scripts/evie-app identity      # then trust the certificate in Keychain Access
+```
+
+Default shortcuts, all configurable in Settings › Atalhos:
+
+| Shortcut | Action |
+|---|---|
+| `⌥Space` | show or hide Evie |
+| `⌥⇧Space` | open the text field |
+| `⌥V` | hold to speak |
+| `⌥⇧C` | enter or leave call mode |
+| `⌥⇧N` | new conversation |
+| `⌥⇧H` | history |
+| `⌥⇧,` | settings |
+| `⌥⇧Esc` | stop everything now |
+
+Diagnostics, none of which ask for permission or open a window:
+
+```bash
+evie-shell --print-persona          # exactly what Evie is told about herself
+evie-shell --audio-check            # bundle identity and microphone status
+evie-shell --speech-check           # whether this Mac can transcribe Portuguese
+evie-shell --read <file>            # what Evie would read from an image or PDF
+evie-shell --open-settings          # settings without using the menu bar
+```
+
+## Where it stands
+
+Working: continuous conversation with a local model, local history, a settings
+window covering shortcuts, voice preferences, appearance and diagnostics, a
+movable and resizable overlay, and reading text out of images and PDFs — including
+scanned ones — in Portuguese.
+
+Built but unproven: the microphone and speech recognition. They need a microphone
+grant, which is deliberately left for the user to give.
+
+Not built: speaking out loud, wake word, reaching folders, web search, and any
+action with an effect outside this Mac.
 
 ## Product intent
 
