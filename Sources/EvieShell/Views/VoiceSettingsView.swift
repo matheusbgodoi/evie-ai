@@ -95,8 +95,10 @@ struct VoiceSettingsView: View {
           isOn: Binding(get: { voice.callModeEnabled }, set: viewModel.setCallModeEnabled)
         )
         captionRow(
-          "Some com o texto: fica só a marca da Evie e as ondas em volta, "
-            + "de um lado quando você fala e de outro quando ela fala."
+          "Com isto ligado, clicar na marca troca a tela inteira por voz — só a "
+            + "Evie e as ondas em volta, nada escrito. Clicar de novo volta para o "
+            + "texto. Durante a ligação, quando ela para de falar o microfone "
+            + "reabre sozinho."
         )
 
         dependencyNote

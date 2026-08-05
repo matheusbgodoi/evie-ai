@@ -384,6 +384,15 @@ final class OverlayViewModel: ObservableObject {
     secondaryText = volatile.isEmpty ? nil : "ainda ouvindo…"
   }
 
+  /// The overlay became the voice-only surface. Nothing is written there, so the
+  /// text state is cleared rather than left behind it.
+  func presentCallSurface() {
+    isQuickTextEntryPresented = false
+    quickText = ""
+    waveformSamples = []
+    onLayoutInvalidated?()
+  }
+
   /// She started speaking. Only ever called once audio is actually playing.
   func beginSpeaking() {
     guard !hasActiveRequest else {

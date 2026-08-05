@@ -24,6 +24,10 @@ final class AppCoordinator: NSObject {
   /// True while push-to-talk is holding the microphone open, so releasing the key
   /// stops it but a click on the mark toggles instead.
   private var isHoldingToTalk = false
+  /// Whether the overlay is currently showing the voice-only surface. Distinct
+  /// from the preference: the preference says the mark may switch into a call,
+  /// this says it did.
+  private var isInCall = false
   /// Held as `AnyObject` because speech recognition needs macOS 26 and the
   /// coordinator does not. Every use is inside an availability check.
   private var transcription: AnyObject?
@@ -87,8 +91,9 @@ final class AppCoordinator: NSObject {
       conversationStore: conversationStore,
       capabilities: Self.capabilities(for: preferencesResult.preferences)
     )
+    // Evie never launches into a call: that is an action, and actions are taken
+    // by the person, not restored from a file.
     let chrome = OverlayChromeModel(appearance: preferencesResult.preferences.appearance)
-    chrome.setCallMode(preferencesResult.preferences.voice.callModeEnabled)
 
     self.conversationStore = conversationStore
     self.configurationLoader = configurationLoader
@@ -140,7 +145,7 @@ final class AppCoordinator: NSObject {
       self?.stopListening()
     }
     viewModel.onVoiceActivationRequested = { [weak self] in
-      self?.toggleListening()
+      self?.activateVoice()
     }
     speechOutput.onLevels = { [weak self] levels in
       self?.viewModel.updateOutputLevels(levels)
@@ -153,7 +158,7 @@ final class AppCoordinator: NSObject {
       viewModel.endSpeaking()
       // A call keeps going. When she stops talking the microphone opens again,
       // which is the difference between a call and a sequence of questions.
-      if preferences.voice.callModeEnabled {
+      if isInCall {
         startListening()
       }
     }
@@ -489,6 +494,46 @@ extension AppCoordinator {
     }
   }
 
+  /// What pressing the mark does.
+  ///
+  /// With call mode on, the mark switches the whole overlay between voice and
+  /// text: press once for the voice-only surface, press again to come back. With
+  /// it off, the mark just opens and closes the microphone and the text stays
+  /// where it is.
+  fileprivate func activateVoice() {
+    guard preferences.voice.callModeEnabled else {
+      toggleListening()
+      return
+    }
+    if isInCall {
+      leaveCall()
+    } else {
+      enterCall()
+    }
+  }
+
+  fileprivate func enterCall() {
+    guard !isInCall else {
+      return
+    }
+    isInCall = true
+    chrome.setCallMode(true)
+    viewModel.presentCallSurface()
+    startListening()
+  }
+
+  fileprivate func leaveCall() {
+    guard isInCall else {
+      return
+    }
+    isInCall = false
+    chrome.setCallMode(false)
+    speechOutput.stop()
+    viewModel.endSpeaking()
+    stopListening()
+    openQuickText()
+  }
+
   /// Clicking the mark toggles; holding push-to-talk does not.
   fileprivate func toggleListening() {
     if audioCapture.isCapturing {
@@ -543,7 +588,7 @@ extension AppCoordinator {
         let sink = try await startTranscription(inputFormat: format)
         // Only a call ends its own turns. Push-to-talk ends when the key is
         // released, and a click ends when it is clicked again.
-        audioCapture.detectsEndOfSpeech = preferences.voice.callModeEnabled
+        audioCapture.detectsEndOfSpeech = isInCall
         try await audioCapture.start(sink: sink)
         viewModel.beginListening()
       } catch {
@@ -610,6 +655,10 @@ extension AppCoordinator {
   /// shortcut is registered now so the reflex is already in the user's hands.
   fileprivate func stopEverything() {
     isHoldingToTalk = false
+    if isInCall {
+      isInCall = false
+      chrome.setCallMode(false)
+    }
     audioCapture.stop()
     speechOutput.stop()
     viewModel.endSpeaking()
@@ -621,28 +670,24 @@ extension AppCoordinator {
     updateToggleMenuTitle()
   }
 
+  /// The shortcut does what the mark does, and switches the mode on first if it
+  /// was off — a shortcut named after the mode should reach it in one press.
   fileprivate func toggleCallMode() {
-    var updated = preferences
-    updated.voice.setCallModeEnabled(!updated.voice.callModeEnabled)
-    do {
-      try preferencesStore.save(updated)
-      preferencesDidChange(updated)
-    } catch {
-      viewModel.presentRuntimeError(title: "Não consegui mudar o modo", error: error)
+    if !preferences.voice.callModeEnabled {
+      var updated = preferences
+      updated.voice.setCallModeEnabled(true)
+      do {
+        try preferencesStore.save(updated)
+        preferencesDidChange(updated)
+      } catch {
+        viewModel.presentRuntimeError(title: "Não consegui mudar o modo", error: error)
+        return
+      }
+      panelController.showPassive()
+      enterCall()
       return
     }
-
-    if updated.voice.callModeEnabled {
-      // Entering a call opens the line. Waiting for a second gesture would make
-      // the mode a setting rather than an action.
-      panelController.showPassive()
-      startListening()
-    } else {
-      speechOutput.stop()
-      viewModel.endSpeaking()
-      stopListening()
-      openQuickText()
-    }
+    activateVoice()
   }
 
   fileprivate func preferencesDidChange(_ updated: EviePreferences) {
@@ -653,7 +698,11 @@ extension AppCoordinator {
     if appearanceChanged {
       panelController.applyAppearance(updated.appearance)
     }
-    chrome.setCallMode(updated.voice.callModeEnabled)
+    // Switching the mode off while a call is on screen has to end the call; the
+    // surface it selected must not outlive the permission to show it.
+    if !updated.voice.callModeEnabled, isInCall {
+      leaveCall()
+    }
     if shortcutsChanged {
       applyShortcuts()
     }
