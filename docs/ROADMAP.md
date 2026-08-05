@@ -7,13 +7,20 @@ measured and documented; elapsed time alone is not completion.
 
 - Phase 0 has a documented architecture, threat model, resource hypotheses,
   evaluation gates, ADRs, and multi-agent handoff contract.
-- Phase 1 is open. The TurboFieldfare streaming client exists, but no model or
-  context benchmark has been run on the target Mac.
+- Phase 1 is open. The streaming client and a pinned development-runtime controller
+  exist; TurboFieldfare's release products built, the 14.3 GB Gemma installation
+  verified, and non-streaming plus SSE synthetic inference passed at a declared
+  64K on the target Mac. The 16K/32K/64K correctness/performance matrix remains
+  open.
 - Phase 2 has an early source implementation through VS-001: menu bar, floating
   panel, shortcuts, quick text, native visual components, cancellation, and error
   presentation. Supervisor/lifecycle work and target UI acceptance remain open.
 - `QA-001` is intentionally deferred at the user's request. No phase exit gate is
   inferred from a successful compile.
+
+The development controller is a readiness aid, not a Phase 2 supervisor. Its
+explicit `start`/`stop` workflow does not satisfy idle unload, recovery, power,
+packaging, or background-service gates.
 
 ## Phase 0 — feasibility and architecture
 

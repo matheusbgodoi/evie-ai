@@ -1,0 +1,13 @@
+{
+  "schema_version": 1,
+  "model": {
+    "endpoint": "http://127.0.0.1:8080/v1",
+    "name": "gemma-4-26b-a4b-it",
+    "context_tokens": 65536,
+    "max_completion_tokens": 4096,
+    "temperature": 0.2,
+    "top_p": 0.95,
+    "stop_sequences": [],
+    "request_timeout_seconds": 300
+  }
+}

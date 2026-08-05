@@ -91,6 +91,28 @@ through a proxy, tunnel, wildcard bind, or remote interface. Future tools cannot
 added to the direct UI adapter; they require the supervisor/policy boundary and
 separate read/propose/commit capabilities.
 
+### Development runtime boundary
+
+`Scripts/evie-runtime` is an explicit local test controller, not an authorization
+or security broker. It:
+
+- pins the expected TurboFieldfare source revision and refuses an unexpected or
+  locally modified runtime checkout;
+- binds/checks only `127.0.0.1:8080` and refuses to start when the port or another
+  known model-owning process conflicts;
+- validates a recorded PID and command/model path before sending `SIGTERM`, and
+  never escalates automatically to a force kill;
+- creates runtime state under `~/Library/Application Support/Evie/` and its server
+  log under `~/Library/Logs/Evie/` with a user-only umask;
+- does not create a LaunchAgent, login item, credential, remote listener, or
+  automatic restart policy.
+
+The local JSON config contains only model endpoint/generation settings. Its
+versioned tracked example is intentionally non-secret, while the real file remains
+outside Git and is created with user-only permissions. Supported environment
+overrides are also non-secret; future credentials must not be added to this loader
+or passed through the model process environment.
+
 ## Secrets
 
 Preferred order:
@@ -135,6 +157,12 @@ addresses.
 
 User-facing history and low-level diagnostic logs have separate retention and
 redaction policies.
+
+The current TurboFieldfare development log is local operational output and is not
+committed. Evie's smoke prompts are fixed synthetic strings. Verification and
+handoff output must record only status/metrics—not model assets, personal prompt
+bodies, or the full local configuration. Rotation and purge remain `OPS-003`; the
+development controller does not claim production log management.
 
 ## Update and dependency policy
 

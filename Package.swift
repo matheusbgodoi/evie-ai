@@ -17,5 +17,9 @@ let package = Package(
       name: "EvieShell",
       dependencies: ["EvieCore"]
     ),
+    .testTarget(
+      name: "EvieCoreTests",
+      dependencies: ["EvieCore"]
+    ),
   ]
 )

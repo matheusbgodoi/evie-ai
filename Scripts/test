@@ -1,0 +1,33 @@
+#!/bin/zsh
+
+set -euo pipefail
+
+readonly developer_directory="$(xcode-select -p)"
+readonly clt_testing_plugin="${developer_directory}/usr/lib/swift/host/plugins/testing/libTestingMacros.dylib"
+readonly xcode_testing_plugin="${developer_directory}/Toolchains/XcodeDefault.xctoolchain/usr/lib/swift/host/plugins/testing/libTestingMacros.dylib"
+readonly testing_frameworks="${developer_directory}/Library/Developer/Frameworks"
+readonly testing_libraries="${developer_directory}/Library/Developer/usr/lib"
+
+typeset -a swift_test_arguments
+swift_test_arguments=(-Xswiftc -warnings-as-errors)
+
+# The macOS 27 Command Line Tools ship Swift Testing, but SwiftPM 6.4 does not
+# automatically discover its macro plugin or runtime rpaths. Full Xcode handles
+# these itself. Keep this compatibility shim local to the test command.
+if [[ -f "${clt_testing_plugin}" ]]; then
+  swift_test_arguments+=(
+    -Xswiftc -load-plugin-library
+    -Xswiftc "${clt_testing_plugin}"
+    -Xlinker -rpath
+    -Xlinker "${testing_frameworks}"
+    -Xlinker -rpath
+    -Xlinker "${testing_libraries}"
+  )
+elif [[ -f "${xcode_testing_plugin}" ]]; then
+  swift_test_arguments+=(
+    -Xswiftc -load-plugin-library
+    -Xswiftc "${xcode_testing_plugin}"
+  )
+fi
+
+exec swift test "${swift_test_arguments[@]}" "$@"

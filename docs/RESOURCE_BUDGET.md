@@ -1,6 +1,7 @@
 # Resource and standby budget
 
-Status: targets and estimates pending measurement on the base M5/24 GB machine.
+Status: targets plus one bounded first-wiring measurement on the base M5/24 GB
+machine; full resource benchmark pending.
 
 ## Goals
 
@@ -16,7 +17,7 @@ Status: targets and estimates pending measurement on the base M5/24 GB machine.
 |---|---|---:|
 | Dormant | UI, supervisor, shortcut, optional wake word, gateway, Node-RED | <500 MB total incremental memory; near-zero idle CPU excluding keyword detection |
 | Listening | Dormant plus audio capture/VAD/KWS | low single-digit CPU percentage; visible mic state |
-| Warm text | Dormant plus TurboFieldfare 64K | source-derived estimate ~3.2 GB process footprint; measure |
+| Warm text | Dormant plus TurboFieldfare 64K | first synthetic 64K wiring sample: 3,215 MB server physical footprint; full benchmark pending |
 | Active text | Warm text plus prompt/decode activity | interactive decode target >=15 tok/s; no severe system memory pressure |
 | Voice | Active text plus STT or TTS worker | workers serialized where possible; first audio target defined after benchmark |
 | Vision | Warm text plus on-demand VLM | remain below pressure threshold or temporarily evict nonessential workers |
@@ -24,6 +25,19 @@ Status: targets and estimates pending measurement on the base M5/24 GB machine.
 
 The dormant memory number is a design target, not a promise. Node-RED, Hermes
 gateway, and a wake-word runtime must be measured individually.
+
+### Bounded target-Mac sample — 2026-08-04
+
+With the verified Gemma 4 26B-A4B IT model, FP16 KV, and TurboFieldfare launched at
+65,536 tokens on AC power, one non-streaming and one streaming synthetic request
+left the server at a 3,215 MB physical footprint and the Swift shell at 18 MB.
+Both sampled at 0.0% CPU after completion, while macOS reported 53% system-wide
+memory free. The server remains loaded until explicitly stopped in this
+development slice, so this is a warm-state measurement—not dormant behavior.
+
+The input/output counts were too small for throughput or energy conclusions. See
+[Model strategy](MODEL_STRATEGY.md) for exact revisions, flags, timings, and the
+remaining `INF-003` gate.
 
 ## Lifecycle policy
 

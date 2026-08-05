@@ -4,11 +4,14 @@ Evie is a local-first personal AI assistant for macOS, pronounced **"ee-vee"**
 ("ívi"). It is intended to be available by voice or a global shortcut without
 behaving like a permanent chat window.
 
-The project now has its first **source-implemented vertical slice**: a native
-menu-bar/overlay shell can send quick text to a separately started local
-TurboFieldfare server and stream Gemma's response into a glass result card. Target
-Mac acceptance is deliberately deferred; no model, agent runtime, messaging
-bridge, workflow engine, or background service is installed by this repository.
+The project now has its first **source-implemented vertical slice** and a bounded
+local development-runtime controller. A native menu-bar/overlay shell can send
+quick text to a separately managed TurboFieldfare server and stream Gemma's
+response into a glass result card. The controller pins and prepares that server
+and model outside Git; it is development tooling, not the future supervisor or a
+persistent background service. Target-Mac UI acceptance and the initial real
+inference smoke test are separate gates; the smoke test now passes, while manual
+shortcut/focus/visual acceptance remains with the user.
 
 ## Product intent
 
@@ -50,24 +53,63 @@ VS-001 contains:
   expandable artifact cards inspired by CLUI CC's interaction grammar;
 - cancellation and explicit unavailable/malformed-server states;
 - an honest system prompt that cannot claim tools or integrations that do not yet
-  exist.
+  exist;
+- typed non-secret configuration with precedence `defaults < local JSON <
+  environment`;
+- a pinned `Scripts/evie-runtime` development workflow for setup, verification,
+  explicit start/stop, health, synthetic inference smoke testing, and launch.
 
 The slice does not yet contain voice capture, STT/TTS, tools, web search, RAG,
 Hermes, supervisor lifecycle, automations, personal integrations, or persistent
 memory. See the [VS-001 implementation guide](docs/implementation/VS_001.md) for
 the exact boundary and deferred manual acceptance checklist.
 
-## Development build
+## First local test workflow
 
-Building the shell does not install or launch a model:
+The setup command clones TurboFieldfare at revision
+`7a99f2a635e3adf7ed0720b882d2edb600f2f0da`, builds its release server and
+repacker, downloads/repackages Gemma, verifies the installed model, and creates a
+local configuration. The model ID is `gemma-4-26b-a4b-it`; the server is launched
+on loopback with a declared 65,536-token context.
 
 ```bash
-swift build -Xswiftc -warnings-as-errors
+Scripts/evie-runtime setup
+Scripts/evie-runtime doctor
+Scripts/evie-runtime smoke
+Scripts/evie-runtime launch
 ```
 
-When a compatible TurboFieldfare server has been prepared manually, the shell can
-be launched with `swift run evie-shell`. The server must remain on loopback and be
-started with `--max-context 65536` to match Evie's current 64K expectation.
+`setup` is resumable when TurboFieldfare leaves its `.partial` and resume metadata.
+It requires at least 25 GiB free before starting and never places runtime source,
+model weights, local configuration, PID state, or logs in this checkout. Use
+`Scripts/evie-runtime doctor`, `status`, `start`, `stop`, and `verify` provide
+explicit preflight, lifecycle, and integrity checks. `Scripts/test` runs the Swift
+tests with the compatibility flags needed by the current macOS 27 Command Line
+Tools installation.
+
+The current target Mac successfully built the pinned TurboFieldfare release
+products using Apple Command Line Tools alone. Upstream still documents Xcode 26
+as its supported prerequisite, so this observation is not a portability guarantee
+for other machines.
+
+On 2026-08-04, this base M5/24 GB Mac verified all 37 installed model files and
+passed model discovery, a non-streaming response, and an SSE response ending in
+`[DONE]` at a declared 65,536-token context. This establishes first-test wiring,
+not long-context correctness or a full performance benchmark; exact evidence is
+in [Project status](docs/PROJECT_STATUS.md).
+
+## Local configuration
+
+Evie loads built-in defaults, then the versioned JSON file at
+`~/Library/Application Support/Evie/config.json`, then supported environment
+overrides. `EVIE_CONFIG_FILE` may select another absolute JSON path. See
+[`config/examples/model.example.json`](config/examples/model.example.json) and
+[`.env.example`](.env.example) for the non-secret schema and implemented model
+override names.
+
+Invalid configuration is shown in the overlay instead of being silently accepted.
+The development controller creates the default file with user-only permissions.
+No credential belongs in either example or the model configuration.
 
 ## Documentation map
 
@@ -94,7 +136,10 @@ started with `--max-context 65536` to match Evie's current 64K expectation.
 
 This repository contains source code, documentation, schemas, sanitized workflow
 definitions, and configuration examples. Runtime state and private data must stay
-outside Git:
+outside Git. The current development layout uses
+`~/Library/Application Support/Evie/` for the pinned runtime, model,
+configuration, and process state, plus `~/Library/Logs/Evie/` for the local server
+log. Private/runtime material includes:
 
 - OAuth tokens and API credentials;
 - WhatsApp session material;
@@ -108,6 +153,8 @@ integration.
 
 ## Status
 
-VS-001 is implemented and compiles, while target-hardware behavior remains
-unvalidated under `QA-001`. Phase 1 inference benchmarks and the Phase 2
-supervisor/lifecycle gates are still open; estimates are not measurements.
+VS-001 and the local runtime/configuration tooling are implemented at source
+level. The pinned TurboFieldfare runtime, verified Gemma installation, 64K server,
+synthetic inference, and native process launch have passed on the target Mac. The
+user's shortcut/focus/visual acceptance, Phase 1 benchmark matrix, and Phase 2
+supervisor/lifecycle gates remain open.

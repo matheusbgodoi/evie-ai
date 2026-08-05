@@ -65,6 +65,10 @@ Explicitly excluded from VS-001:
 - RAG, vision, Node-RED, accounts, credentials, and personal integrations;
 - persistent chat/history and write-capable actions.
 
+Adjacent development tooling now prepares the same text-only path for its first
+local test. It does not expand VS-001 into a supervisor or add any excluded user
+capability.
+
 The waveform in this slice is a data-driven visual component with no internal
 timer, but the application supplies no audio samples yet. It must not claim that
 the microphone is listening. Real input and output metering begins at `VOI-002`.
@@ -93,6 +97,34 @@ build and their source checks pass. It may be called **validated on target
 hardware** only after `QA-001`. Deferring user-run testing does not permit recording
 estimated latency, memory, or UI behavior as measured.
 
+### First-test local runtime handoff — `DONE`
+
+The repository now contains `Scripts/evie-runtime`, an explicit development-only
+controller with `doctor`, `setup`, `configure`, `verify`, `start`, `stop`, `status`,
+`smoke`, and `launch` commands. It pins TurboFieldfare revision
+`7a99f2a635e3adf7ed0720b882d2edb600f2f0da`, model ID
+`gemma-4-26b-a4b-it`, and a 65,536-token launch configuration. Runtime source,
+model assets, config, process state, and logs stay outside Git under `~/Library`.
+
+Current evidence on the base M5/24 GB target Mac:
+
+| Check | State |
+|---|---|
+| Pinned TurboFieldfare checkout | Present, clean, and verified at the pinned revision outside Git |
+| Release repacker/server build | Passed with macOS 27 Apple Command Line Tools; full Xcode was not required on this machine |
+| Gemma download/repack | Passed; installed size verified as 14,291,915,755 bytes across 37 files |
+| Upstream install verification | Passed in 10.65 s; receipt written outside Git |
+| Loopback health at 64K | Passed; server readiness observed in 3.14 s |
+| Synthetic non-streaming + SSE completion | Passed; 5.393 s then 0.882 s in the recorded shell/server measurement run |
+| Automated Swift fixtures | 12/12 passed; configuration and fragmented SSE/protocol behavior covered |
+| Native development process launch | Passed; shell and server remained resident and healthy |
+| UI/manual acceptance | Deferred to `QA-001` |
+
+The Command Line Tools result is a machine-specific observation; upstream still
+documents Xcode 26. The bounded first-test result measured a 3,215 MB warm server
+and 18 MB shell footprint with 53% system-wide memory free and 0.0% sampled idle
+CPU. It does not establish throughput, energy, quality, or long-context behavior.
+
 ## Dependency map
 
 The critical path is intentionally sequential at capability boundaries:
@@ -117,14 +149,14 @@ lifecycle dependencies listed below.
 
 | ID | Status | Depends on | Deliverable and definition of done |
 |---|---|---|---|
-| `FND-002` | `READY` | `FND-001` | Establish target/test directory conventions and fixture boundaries; generated state, private fixtures, and model artifacts remain ignored. |
-| `FND-003` | `READY` | `CORE-001` | Typed configuration precedence for defaults, environment, and an ignored local file; invalid endpoints/timeouts/model IDs produce actionable errors and secrets are never printable. |
+| `FND-002` | `DONE` | `FND-001` | Test targets and deterministic fixture boundaries are established; generated state, private fixtures, and model artifacts remain ignored or outside Git. |
+| `FND-003` | `DONE` | `CORE-001` | Typed configuration precedence for defaults, environment, and an ignored local file; invalid endpoints/timeouts/model IDs produce actionable errors, secrets are never printable, and four deterministic loader fixtures pass. |
 | `FND-004` | `PLANNED` | `FND-002` | Structured local logging with privacy levels and redaction tests; prompt bodies, credentials, voice data, and personal content are excluded by default. |
 | `CORE-002` | `READY` | `CORE-001` | Versioned backend-neutral command/event envelope covering state, deltas, artifacts, cancellation, permissions, and errors; unknown future events fail safely. |
 | `CORE-003` | `PLANNED` | `CORE-002` | Artifact protocol for text, sources, email/calendar proposals, files, images, workflows, and permission cards; payloads carry provenance/trust metadata. |
 | `CORE-004` | `PLANNED` | `CORE-002` | Cancellation, timeout, retry classification, and request identity contracts; stale deltas cannot update a newer interaction. |
 | `CORE-005` | `PLANNED` | `CORE-003` | Capability types encode read/propose/commit separately; commit authority cannot be constructed from untrusted model/tool output. |
-| `QA-002` | `DEFERRED` | `CORE-001`, `INF-001` | Deterministic unit fixtures for state transitions, SSE fragmentation, malformed data, HTTP errors, cancellation, and redaction pass locally. |
+| `QA-002` | `DEFERRED` | `CORE-001`, `INF-001` | Eight deterministic TurboFieldfare protocol fixtures now cover SSE fragmentation, CR/LF, malformed/unfinished streams, errors, loopback, and routes; state-transition, cancellation, and redaction coverage still gates full completion. |
 
 ## Phase B — Native shell completion
 
@@ -169,6 +201,7 @@ model, and remains excluded from VS-001.
 | `INF-002` | `PLANNED` | `INF-001`, `SUP-005` | Pin TurboFieldfare/model revisions and record reproducible launch configuration for 65,536 declared tokens with Q4 weights/router Q8/KV FP16. |
 | `INF-003` | `DEFERRED` | `INF-002` | Target-M5 harness records 16K/32K/64K cold/warm startup, prompt/decode rate, RSS/peak, idle CPU, energy conditions, correctness, and exact revisions. |
 | `INF-004` | `PLANNED` | `INF-001`, `CORE-004` | Request budgeting truncates/pages oversized results, protects system/tool budget, and reports overflow rather than silently losing the user's instruction. |
+| `INF-005` | `DONE` | `INF-001` | Development-only runtime controller pins TurboFieldfare/model/context, keeps all runtime state outside Git, resumes setup safely, verifies the install, owns explicit doctor/start/stop/status, and passed model discovery plus synthetic non-streaming/SSE smoke requests at 64K on the target Mac. |
 | `AGT-001` | `PLANNED` | `SUP-003`, `INF-002` | Pin Hermes Agent and create an Evie profile with all runtime state outside Git and no enabled personal tools. |
 | `AGT-002` | `PLANNED` | `AGT-001` | Verify TurboFieldfare's OpenAI/schema subset against Hermes core requests at 64K; incompatibilities have fixtures and adapter decisions. |
 | `AGT-003` | `PLANNED` | `AGT-002`, `CORE-005` | Minimal tool-search surface exposes only task-relevant read/propose tools; shell and unrestricted filesystem tools are absent by default. |
@@ -377,7 +410,8 @@ The incoming agent must be able to continue without conversation history:
 
 Do not start these until the current slice is coherently integrated:
 
-1. Keep `QA-001` deferred until the user chooses to run the target-hardware checks.
+1. Keep `QA-001` deferred until the user chooses to run the target-hardware UI
+   checks.
 2. Implement `CORE-002`, the versioned command/event envelope required by IPC.
 3. Begin `SUP-001` with a narrow daemon/IPC decision spike.
 4. Implement `SUP-002`–`SUP-005` so Evie can own lifecycle without coupling the UI

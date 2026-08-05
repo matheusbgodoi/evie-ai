@@ -1,0 +1,464 @@
+#!/bin/zsh
+
+set -euo pipefail
+
+readonly EVIE_TURBO_REVISION="7a99f2a635e3adf7ed0720b882d2edb600f2f0da"
+readonly EVIE_MODEL_ID="gemma-4-26b-a4b-it"
+readonly EVIE_CONTEXT_TOKENS="65536"
+readonly EVIE_PORT="8080"
+
+readonly EVIE_SCRIPT_DIR="${0:A:h}"
+readonly EVIE_REPOSITORY_DIR="${EVIE_SCRIPT_DIR:h}"
+readonly EVIE_SUPPORT_DIR="${EVIE_SUPPORT_DIR_OVERRIDE:-${HOME}/Library/Application Support/Evie}"
+readonly EVIE_LOG_DIR="${EVIE_LOG_DIR_OVERRIDE:-${HOME}/Library/Logs/Evie}"
+readonly EVIE_RUNTIME_DIR="${EVIE_SUPPORT_DIR}/Runtimes/turbo-fieldfare"
+readonly EVIE_MODEL_DIR="${EVIE_SUPPORT_DIR}/Models/gemma4.gturbo"
+readonly EVIE_STATE_DIR="${EVIE_SUPPORT_DIR}/State"
+readonly EVIE_CONFIG_FILE="${EVIE_SUPPORT_DIR}/config.json"
+readonly EVIE_SERVER_BINARY="${EVIE_RUNTIME_DIR}/.build/release/TurboFieldfareServer"
+readonly EVIE_REPACK_BINARY="${EVIE_RUNTIME_DIR}/.build/release/TurboFieldfareRepack"
+readonly EVIE_PID_FILE="${EVIE_STATE_DIR}/turbo-fieldfare-server.pid"
+readonly EVIE_SERVER_LOG="${EVIE_LOG_DIR}/turbo-fieldfare-server.log"
+readonly EVIE_HEALTH_URL="http://127.0.0.1:${EVIE_PORT}/health"
+readonly EVIE_MODELS_URL="http://127.0.0.1:${EVIE_PORT}/v1/models"
+readonly EVIE_CHAT_URL="http://127.0.0.1:${EVIE_PORT}/v1/chat/completions"
+
+function usage() {
+  print "Usage: Scripts/evie-runtime <doctor|setup|configure|verify|start|stop|status|smoke|launch>"
+}
+
+function ensure_directories() {
+  umask 077
+  mkdir -p \
+    "${EVIE_SUPPORT_DIR}/Runtimes" \
+    "${EVIE_SUPPORT_DIR}/Models" \
+    "${EVIE_STATE_DIR}" \
+    "${EVIE_LOG_DIR}"
+  chmod 700 \
+    "${EVIE_SUPPORT_DIR}" \
+    "${EVIE_SUPPORT_DIR}/Runtimes" \
+    "${EVIE_SUPPORT_DIR}/Models" \
+    "${EVIE_STATE_DIR}" \
+    "${EVIE_LOG_DIR}"
+}
+
+function require_free_space() {
+  local available_kib
+  available_kib=$(df -Pk "${EVIE_SUPPORT_DIR}" | awk 'NR == 2 {print $4}')
+  local required_kib=$((25 * 1024 * 1024))
+  if (( available_kib < required_kib )); then
+    print -u2 "Evie setup requires at least 25 GiB free before downloading the model."
+    return 1
+  fi
+}
+
+function require_clean_runtime() {
+  if ! git -C "${EVIE_RUNTIME_DIR}" diff --quiet \
+    || [[ -n "$(git -C "${EVIE_RUNTIME_DIR}" status --short --untracked-files=all)" ]]; then
+    print -u2 "TurboFieldfare checkout has local changes; refusing to use an unverified runtime."
+    return 1
+  fi
+}
+
+function doctor() {
+  local failures=0
+  local command_name
+  for command_name in git swift curl jq lsof; do
+    if ! command -v "${command_name}" >/dev/null 2>&1; then
+      print -u2 "Missing required command: ${command_name}"
+      failures=$((failures + 1))
+    fi
+  done
+
+  local architecture
+  architecture=$(uname -m)
+  if [[ "${architecture}" != "arm64" ]]; then
+    print -u2 "Unsupported architecture: ${architecture} (Apple silicon is required)."
+    failures=$((failures + 1))
+  else
+    print "Architecture: arm64"
+  fi
+
+  local macos_version
+  macos_version=$(sw_vers -productVersion)
+  if (( ${macos_version%%.*} < 26 )); then
+    print -u2 "Unsupported macOS version: ${macos_version} (26 or newer is required)."
+    failures=$((failures + 1))
+  else
+    print "macOS: ${macos_version}"
+  fi
+
+  local memory_gib
+  memory_gib=$(( $(sysctl -n hw.memsize) / 1024 / 1024 / 1024 ))
+  print "Unified memory: ${memory_gib} GiB"
+  df -h "${HOME}" | awk 'NR == 2 {print "Free storage: " $4}'
+
+  if [[ ! -d "${EVIE_RUNTIME_DIR}/.git" ]]; then
+    print -u2 "TurboFieldfare checkout is missing."
+    failures=$((failures + 1))
+  else
+    local installed_revision
+    installed_revision=$(git -C "${EVIE_RUNTIME_DIR}" rev-parse HEAD)
+    if [[ "${installed_revision}" != "${EVIE_TURBO_REVISION}" ]]; then
+      print -u2 "Unexpected TurboFieldfare revision: ${installed_revision}"
+      failures=$((failures + 1))
+    elif ! require_clean_runtime; then
+      failures=$((failures + 1))
+    else
+      print "TurboFieldfare: ${EVIE_TURBO_REVISION} (clean)"
+    fi
+  fi
+
+  if [[ -x "${EVIE_SERVER_BINARY}" && -x "${EVIE_REPACK_BINARY}" ]]; then
+    print "Runtime binaries: built"
+  else
+    print -u2 "TurboFieldfare release binaries are missing."
+    failures=$((failures + 1))
+  fi
+
+  if [[ -f "${EVIE_MODEL_DIR}/manifest.json" ]]; then
+    print "Gemma installation: present"
+  else
+    print -u2 "Completed Gemma installation is missing."
+    failures=$((failures + 1))
+  fi
+
+  if [[ -f "${EVIE_CONFIG_FILE}" ]]; then
+    local config_mode
+    config_mode=$(stat -f '%Lp' "${EVIE_CONFIG_FILE}")
+    if [[ "${config_mode}" != "600" ]]; then
+      print -u2 "Local configuration permissions are ${config_mode}; expected 600."
+      failures=$((failures + 1))
+    else
+      print "Local configuration: present (mode 600)"
+    fi
+  else
+    print -u2 "Local configuration is missing."
+    failures=$((failures + 1))
+  fi
+
+  if (( failures > 0 )); then
+    print -u2 "Doctor found ${failures} blocking issue(s)."
+    return 1
+  fi
+  print "Doctor found no installation blockers."
+}
+
+function configure() {
+  ensure_directories
+  if [[ -e "${EVIE_CONFIG_FILE}" ]]; then
+    print "Configuration already exists: ${EVIE_CONFIG_FILE}"
+    return
+  fi
+
+  umask 077
+  print -r -- '{
+  "schema_version": 1,
+  "model": {
+    "endpoint": "http://127.0.0.1:8080/v1",
+    "name": "gemma-4-26b-a4b-it",
+    "context_tokens": 65536,
+    "max_completion_tokens": 4096,
+    "temperature": 0.2,
+    "top_p": 0.95,
+    "stop_sequences": [],
+    "request_timeout_seconds": 300
+  }
+}' > "${EVIE_CONFIG_FILE}"
+  chmod 600 "${EVIE_CONFIG_FILE}"
+  print "Created local configuration: ${EVIE_CONFIG_FILE}"
+}
+
+function setup() {
+  ensure_directories
+  if [[ ! -f "${EVIE_MODEL_DIR}/manifest.json" ]]; then
+    require_free_space
+  fi
+
+  if [[ -d "${EVIE_RUNTIME_DIR}/.git" ]]; then
+    local installed_revision
+    installed_revision=$(git -C "${EVIE_RUNTIME_DIR}" rev-parse HEAD)
+    if [[ "${installed_revision}" != "${EVIE_TURBO_REVISION}" ]]; then
+      print -u2 "Refusing to rewrite an existing TurboFieldfare checkout at ${EVIE_RUNTIME_DIR}."
+      print -u2 "Expected ${EVIE_TURBO_REVISION}, found ${installed_revision}."
+      return 1
+    fi
+    require_clean_runtime
+  elif [[ -e "${EVIE_RUNTIME_DIR}" ]]; then
+    print -u2 "Runtime path exists but is not a Git checkout: ${EVIE_RUNTIME_DIR}"
+    return 1
+  else
+    git clone https://github.com/drumih/turbo-fieldfare.git "${EVIE_RUNTIME_DIR}"
+    git -C "${EVIE_RUNTIME_DIR}" checkout --detach "${EVIE_TURBO_REVISION}"
+  fi
+
+  swift build \
+    --package-path "${EVIE_RUNTIME_DIR}" \
+    -c release \
+    --product TurboFieldfareRepack
+  swift build \
+    --package-path "${EVIE_RUNTIME_DIR}" \
+    -c release \
+    --product TurboFieldfareServer
+
+  if [[ -f "${EVIE_MODEL_DIR}/manifest.json" ]]; then
+    print "Completed model installation already exists. Verifying it."
+  elif [[ -e "${EVIE_MODEL_DIR}.partial" || -e "${EVIE_MODEL_DIR}.resume.json" ]]; then
+    "${EVIE_REPACK_BINARY}" \
+      --output "${EVIE_MODEL_DIR}" \
+      --overwrite \
+      --resume
+  else
+    "${EVIE_REPACK_BINARY}" \
+      --output "${EVIE_MODEL_DIR}" \
+      --overwrite
+  fi
+
+  "${EVIE_REPACK_BINARY}" --verify-install --input-gturbo "${EVIE_MODEL_DIR}"
+  configure
+  print "Evie local Gemma runtime is installed and verified."
+}
+
+function health_ready() {
+  /usr/bin/curl --fail --silent --max-time 2 "${EVIE_HEALTH_URL}" >/dev/null 2>&1
+}
+
+function model_ready() {
+  /usr/bin/curl --fail --silent --max-time 2 "${EVIE_MODELS_URL}" 2>/dev/null \
+    | /usr/bin/jq -e --arg model "${EVIE_MODEL_ID}" \
+      '.data | any(.id == $model)' >/dev/null 2>&1
+}
+
+function process_is_running() {
+  local process_pid="$1"
+  local process_state
+  kill -0 "${process_pid}" 2>/dev/null || return 1
+  process_state=$(ps -p "${process_pid}" -o state= 2>/dev/null) || return 1
+  [[ "${process_state}" != Z* ]]
+}
+
+function status() {
+  if health_ready && model_ready; then
+    print "TurboFieldfare: ready at ${EVIE_HEALTH_URL}"
+    /usr/bin/curl --fail --silent --show-error "${EVIE_HEALTH_URL}"
+    print
+    return
+  fi
+
+  if [[ -f "${EVIE_PID_FILE}" ]]; then
+    local server_pid
+    server_pid=$(<"${EVIE_PID_FILE}")
+    if [[ "${server_pid}" == <-> ]] && process_is_running "${server_pid}"; then
+      print "TurboFieldfare: process ${server_pid} is starting or unhealthy."
+      return 1
+    fi
+  fi
+  print "TurboFieldfare: stopped"
+  return 1
+}
+
+function start() {
+  ensure_directories
+  configure
+
+  if health_ready; then
+    if model_ready; then
+      print "TurboFieldfare is already ready."
+      return
+    fi
+    print -u2 "Port ${EVIE_PORT} has a healthy server, but it does not expose ${EVIE_MODEL_ID}."
+    return 1
+  fi
+  if [[ ! -x "${EVIE_SERVER_BINARY}" ]]; then
+    print -u2 "Missing server binary. Run Scripts/evie-runtime setup first."
+    return 1
+  fi
+  if [[ ! -f "${EVIE_MODEL_DIR}/manifest.json" ]]; then
+    print -u2 "Missing completed model. Run Scripts/evie-runtime setup first."
+    return 1
+  fi
+
+  local port_owner
+  port_owner=$(/usr/sbin/lsof -nP -iTCP:"${EVIE_PORT}" -sTCP:LISTEN 2>/dev/null || true)
+  if [[ -n "${port_owner}" ]]; then
+    print -u2 "TCP port ${EVIE_PORT} is already in use:"
+    print -u2 -- "${port_owner}"
+    return 1
+  fi
+
+  local conflicting_processes
+  conflicting_processes=$(pgrep -fl \
+    'TurboFieldfareServer|TurboFieldfareMac|TurboFieldfareDecodeService|TurboFieldfareCLI|mlx_lm|mlx-lm' \
+    || true)
+  if [[ -n "${conflicting_processes}" ]]; then
+    print -u2 "Another model-owning process is already running:"
+    print -u2 -- "${conflicting_processes}"
+    return 1
+  fi
+
+  : > "${EVIE_SERVER_LOG}"
+  nohup "${EVIE_SERVER_BINARY}" \
+    --model "${EVIE_MODEL_DIR}" \
+    --port "${EVIE_PORT}" \
+    --model-id "${EVIE_MODEL_ID}" \
+    --max-context "${EVIE_CONTEXT_TOKENS}" \
+    --queue-limit 4 \
+    --prompt-cache-mode single-prefix \
+    >> "${EVIE_SERVER_LOG}" 2>&1 </dev/null &
+  local server_pid=$!
+  print -r -- "${server_pid}" > "${EVIE_PID_FILE}"
+  chmod 600 "${EVIE_PID_FILE}" "${EVIE_SERVER_LOG}"
+
+  local attempt
+  for attempt in {1..180}; do
+    if health_ready && model_ready; then
+      print "TurboFieldfare is ready (PID ${server_pid}, context ${EVIE_CONTEXT_TOKENS})."
+      return
+    fi
+    if ! process_is_running "${server_pid}"; then
+      print -u2 "TurboFieldfare exited during startup."
+      tail -40 "${EVIE_SERVER_LOG}" >&2
+      return 1
+    fi
+    sleep 1
+  done
+
+  print -u2 "TurboFieldfare did not become ready within 180 seconds."
+  print -u2 "Inspect ${EVIE_SERVER_LOG}"
+  return 1
+}
+
+function stop() {
+  if [[ ! -f "${EVIE_PID_FILE}" ]]; then
+    print "TurboFieldfare PID file is absent; nothing was stopped."
+    return
+  fi
+
+  local server_pid
+  server_pid=$(<"${EVIE_PID_FILE}")
+  if [[ "${server_pid}" != <-> ]] || ! process_is_running "${server_pid}"; then
+    rm -f "${EVIE_PID_FILE}"
+    print "Removed a stale TurboFieldfare PID file."
+    return
+  fi
+
+  local command_line
+  command_line=$(ps -p "${server_pid}" -o command=)
+  if [[ "${command_line}" != *"TurboFieldfareServer"* || "${command_line}" != *"${EVIE_MODEL_DIR}"* ]]; then
+    print -u2 "PID ${server_pid} does not match Evie's configured server; refusing to stop it."
+    return 1
+  fi
+
+  kill -TERM "${server_pid}"
+  local attempt
+  for attempt in {1..30}; do
+    if ! process_is_running "${server_pid}"; then
+      rm -f "${EVIE_PID_FILE}"
+      print "TurboFieldfare stopped cleanly."
+      return
+    fi
+    sleep 1
+  done
+
+  print -u2 "TurboFieldfare did not stop within 30 seconds; no force-kill was sent."
+  return 1
+}
+
+function verify() {
+  if [[ ! -x "${EVIE_REPACK_BINARY}" ]]; then
+    print -u2 "Missing verifier binary. Run Scripts/evie-runtime setup first."
+    return 1
+  fi
+  "${EVIE_REPACK_BINARY}" --verify-install --input-gturbo "${EVIE_MODEL_DIR}"
+  require_clean_runtime
+  local installed_revision
+  installed_revision=$(git -C "${EVIE_RUNTIME_DIR}" rev-parse HEAD)
+  if [[ "${installed_revision}" != "${EVIE_TURBO_REVISION}" ]]; then
+    print -u2 "Unexpected TurboFieldfare revision: ${installed_revision}"
+    return 1
+  fi
+  print "Runtime revision and model installation are verified."
+}
+
+function smoke() {
+  start
+  model_ready
+  print "Model discovery returned ${EVIE_MODEL_ID}."
+
+  local response
+  response=$(/usr/bin/curl --fail --silent --show-error \
+    "${EVIE_CHAT_URL}" \
+    -H 'Content-Type: application/json' \
+    -d '{
+      "model": "gemma-4-26b-a4b-it",
+      "messages": [{"role": "user", "content": "Responda somente com a palavra PRONTA."}],
+      "temperature": 0,
+      "max_completion_tokens": 16
+    }')
+  print -r -- "${response}" | /usr/bin/jq -e \
+    '.choices[0].message.content | strings | length > 0' >/dev/null
+  print "Synthetic Gemma response:"
+  print -r -- "${response}" | /usr/bin/jq -r '.choices[0].message.content'
+
+  local stream_response
+  stream_response=$(/usr/bin/curl --fail --silent --show-error --no-buffer \
+    "${EVIE_CHAT_URL}" \
+    -H 'Content-Type: application/json' \
+    -d '{
+      "model": "gemma-4-26b-a4b-it",
+      "messages": [{"role": "user", "content": "Responda somente com a palavra STREAM."}],
+      "temperature": 0,
+      "max_completion_tokens": 16,
+      "stream": true,
+      "stream_options": {"include_usage": true}
+    }')
+  if ! print -r -- "${stream_response}" | grep -q '^data: \[DONE\]'; then
+    print -u2 "Streaming smoke test ended without the required [DONE] marker."
+    return 1
+  fi
+  print "Streaming completion finished with [DONE]."
+}
+
+function launch() {
+  start
+  local shell_binary_directory
+  shell_binary_directory=$(swift build \
+    --package-path "${EVIE_REPOSITORY_DIR}" \
+    -c release \
+    --show-bin-path)
+  local shell_binary="${shell_binary_directory}/evie-shell"
+
+  if [[ ! -x "${shell_binary}" ]] \
+    || find "${EVIE_REPOSITORY_DIR}/Package.swift" "${EVIE_REPOSITORY_DIR}/Sources" \
+      -type f -newer "${shell_binary}" -print -quit | grep -q .
+  then
+    swift build \
+      --package-path "${EVIE_REPOSITORY_DIR}" \
+      -c release \
+      --product evie-shell \
+      -Xswiftc -warnings-as-errors
+  fi
+
+  "${shell_binary}"
+}
+
+if (( $# != 1 )); then
+  usage
+  exit 64
+fi
+
+case "$1" in
+  doctor) doctor ;;
+  setup) setup ;;
+  configure) configure ;;
+  verify) verify ;;
+  start) start ;;
+  stop) stop ;;
+  status) status ;;
+  smoke) smoke ;;
+  launch) launch ;;
+  *)
+    usage
+    exit 64
+    ;;
+esac

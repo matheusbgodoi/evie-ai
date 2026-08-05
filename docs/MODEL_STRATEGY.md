@@ -12,6 +12,51 @@ TurboFieldfare is attractive because it streams routed experts from storage and
 keeps a bounded resident set. Its installed weights are already 4-bit; changing the
 KV format is a separate concern.
 
+## Pinned first-test manifest
+
+The development runtime pins:
+
+| Component | First-test value |
+|---|---|
+| TurboFieldfare revision | `7a99f2a635e3adf7ed0720b882d2edb600f2f0da` |
+| OpenAI-compatible model ID | `gemma-4-26b-a4b-it` |
+| Source checkpoint revision | `0d77464eeb233a2da68ebf9d7dc4edaac7db956d` |
+| Verified source snapshot | `sha256:bf198c9f5ea6462addca1966e5dd669c407537a876e82cf06db9084c5c850b13` |
+| Declared server context | 65,536 tokens |
+| Weight format | Upstream repacked `.gturbo` assets; no weights enter Git |
+| KV baseline | FP16 |
+| Endpoint | `http://127.0.0.1:8080/v1` only |
+
+The pinned release server and repacker built on the exact base M5/24 GB Mac using
+macOS 27 Apple Command Line Tools. The upstream verifier passed 37 files totaling
+14,291,915,755 bytes, and model discovery plus non-streaming/SSE synthetic
+inference passed on loopback at the declared 64K. This is reproducible first-test
+evidence, not a quality, long-context, energy, or full performance validation.
+
+### First wiring measurement — 2026-08-04
+
+Conditions: base Apple M5 MacBook Pro with 24 GB unified memory, macOS 27.0, AC
+power, TurboFieldfare revision and model snapshot above, FP16 KV, 65,536 declared
+tokens, queue limit 4, and single-prefix prompt cache. The prompt was fixed and
+synthetic; no personal content was used or recorded.
+
+| Observation | Measured result |
+|---|---:|
+| Loopback server ready | 3.14 s |
+| Fresh non-streaming request | 5.393 s; 24 prompt / 4 completion tokens |
+| Immediately following SSE request | 0.882 s; 22 prompt / 2 completion tokens; `[DONE]` received |
+| Warm server physical footprint | 3,215 MB |
+| Warm server RSS reported by `ps` | 1,181,552 KiB |
+| Native shell physical footprint | 18 MB |
+| Server/shell sampled idle CPU | 0.0% each |
+| System-wide memory free after requests | 53% |
+
+These very short completions are unsuitable for tokens-per-second or quality
+claims. They show that 64K allocation, Metal execution, the OpenAI-compatible
+route, and the native development process can coexist without immediate memory
+pressure on this machine. `INF-003` still owns cold/warm, 16K/32K/64K, sustained
+decode, long-context correctness, battery, and energy measurements.
+
 ## Context strategy
 
 - Configure the server and Hermes provider for **65,536 tokens**.
@@ -36,7 +81,9 @@ complete user/assistant turns with a conservative character budget.
 The OpenAI-compatible request cannot change server capacity. TurboFieldfare must be
 started separately with `--max-context 65536`; its upstream default is 16K. This
 configuration is not yet proof that 64K is performant or reliable on the target
-Mac.
+Mac. The small synthetic responses that passed at this launch setting establish
+wiring only; they cannot replace long-context correctness or the 16K/32K/64K
+benchmark matrix.
 
 ## What is already quantized
 

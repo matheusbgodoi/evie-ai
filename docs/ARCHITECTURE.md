@@ -68,10 +68,12 @@ application composition root is the only place that chooses the concrete
 TurboFieldfare adapter.
 
 This direct connection is accepted only for VS-001 under
-[ADR 0006](adr/0006-direct-turbo-vertical-slice.md). It starts no process, executes
-no tools, persists no session, carries no credential, and rejects non-loopback
-hosts. The separately started server must use `--max-context 65536`; the client
-cannot increase a server launched at its 16K default.
+[ADR 0006](adr/0006-direct-turbo-vertical-slice.md). The application starts no
+process, executes no tools, persists no session, carries no credential, and
+rejects non-loopback hosts. The adjacent `Scripts/evie-runtime` development tool
+can explicitly prepare and manage the process for testing, but it is not linked
+into the application. The server must use `--max-context 65536`; the client cannot
+increase a server launched at its 16K default.
 
 The waveform view is data-driven but receives no microphone or output-audio samples
 in this slice. Voice states exist in the stable event vocabulary for future workers,
@@ -155,9 +157,11 @@ Initial candidate: TurboFieldfare serving Gemma 4 26B-A4B IT on loopback with 64
 declared context. One process owns the model. The supervisor serializes use and
 applies warm/idle policy.
 
-VS-001 can stream from the server when the user starts it manually, but does not
-yet provide single-owner enforcement, health polling, start/stop, crash recovery,
-or warm/idle policy.
+VS-001 can stream from the server when it is started separately. The development
+controller provides bounded single-owner checks, health, and explicit start/stop
+for first-test readiness. It does not provide application-owned health events,
+automatic restart, crash recovery, idle unload, power policy, or a stable IPC
+contract; those remain supervisor responsibilities.
 
 ### STT worker
 
@@ -201,20 +205,46 @@ Evie receives only a narrow workflow API:
 - trigger an approved flow;
 - read execution status and redacted logs.
 
-## Runtime data locations
+## Configuration and development runtime
 
-Proposed macOS layout, subject to implementation ADR:
+The native shell resolves model configuration in this order:
+
+1. compiled non-secret defaults;
+2. versioned JSON at `~/Library/Application Support/Evie/config.json` (or another
+   absolute path selected through `EVIE_CONFIG_FILE`);
+3. supported non-secret environment overrides.
+
+Invalid model configuration produces a visible startup error. The loader does not
+read credentials or print configuration. Secrets remain a future Keychain/broker
+concern, never part of the model endpoint file.
+
+[ADR 0007](adr/0007-local-development-runtime.md) accepts this development-only
+layout:
 
 ```text
-~/Library/Application Support/Evie/   config, state, sessions, indexes
-~/Library/Caches/Evie/                recreatable caches and extracted pages
-~/Library/Logs/Evie/                  redacted rotating logs
-~/Library/LaunchAgents/               user-scoped service definitions
-macOS Keychain                        secrets and refresh tokens where supported
+~/Library/Application Support/Evie/
+  Runtimes/turbo-fieldfare/           pinned upstream checkout and build products
+  Models/gemma4.gturbo/               installed/repacked model assets
+  State/                              development PID state
+  config.json                         versioned non-secret model configuration
+~/Library/Logs/Evie/
+  turbo-fieldfare-server.log          user-only development server log
 ```
 
-Model weights may use a user-selected models directory. Personal sources and voice
-references require explicit paths and never live in the Git checkout by default.
+All directories are outside Git and created with a user-only umask. There is no
+LaunchAgent or implicit startup. The server log is operational output, not an
+audit/history store, and prompts/results must not be added to it by Evie.
+
+The target Mac built the pinned TurboFieldfare release products with macOS 27
+Apple Command Line Tools alone. That is a local observation, not a replacement for
+upstream's documented Xcode 26 requirement. The eventual supervisor may migrate
+these paths and lifecycle commands through a documented upgrade rather than
+depending on the development script.
+
+The broader target layout still reserves `~/Library/Caches/Evie/` for recreatable
+caches, macOS Keychain for future secrets, and explicitly selected paths for
+personal sources and voice references. None of those capabilities is implemented
+by this slice.
 
 ## Failure containment
 

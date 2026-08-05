@@ -11,3 +11,4 @@ supersede rather than silently rewrite them when the decision changes.
 | [0004](0004-specialist-workers.md) | On-demand specialist workers | Accepted for planning |
 | [0005](0005-node-red-workflow-plane.md) | Node-RED as visual deterministic workflow plane | Accepted for planning |
 | [0006](0006-direct-turbo-vertical-slice.md) | Backend-neutral core with direct TurboFieldfare prototype adapter | Accepted for VS-001 |
+| [0007](0007-local-development-runtime.md) | Pinned local development runtime outside Git | Accepted for first-test development |

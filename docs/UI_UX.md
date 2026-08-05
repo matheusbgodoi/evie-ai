@@ -193,7 +193,8 @@ confirmed by its target.
 2. Global quick-text shortcut and no-focus-steal behavior. **Source implemented;
    target behavior pending `QA-001`.**
 3. Backend-neutral state machine and real local text stream. **Implemented through
-   the temporary TurboFieldfare adapter; target inference pending.**
+   the temporary TurboFieldfare adapter; backend smoke passed and manual target UI
+   acceptance remains pending.**
 4. Local microphone metering and push-to-talk. **Not started.**
 5. Real supervisor IPC.
 6. Partial transcript, cancellation, and TTS output metering.

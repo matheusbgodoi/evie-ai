@@ -1,5 +1,5 @@
-# Planning example only. VS-001 does not load this file; the runtime schema and
-# configuration precedence will be defined by FND-003.
+# Planning example for the broader product. VS-001 deliberately does not load this
+# YAML file; its implemented model-only schema is `model.example.json`.
 # Do not copy secrets into this tracked file.
 
 identity:

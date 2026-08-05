@@ -175,24 +175,17 @@ extension TurboFieldfareClient {
     _ bytes: URLSession.AsyncBytes,
     continuation: AsyncThrowingStream<EvieInteractionEvent, any Error>.Continuation
   ) async throws {
+    var lineBuffer = SSELineBuffer()
     var eventBuffer = SSEDataBuffer()
     var fullText = ""
     var finishReason: String?
     var receivedEvent = false
     var receivedDone = false
 
-    streamLoop: for try await line in bytes.lines {
-      try Task.checkCancellation()
-
-      guard let payload = eventBuffer.consume(line: line) else {
-        continue
-      }
-      receivedEvent = true
-
+    func processPayload(_ payload: String) throws -> Bool {
       switch try decodeStreamPayload(payload) {
       case .done:
-        receivedDone = true
-        break streamLoop
+        return true
 
       case .chunk(let chunk):
         if let error = chunk.error {
@@ -215,34 +208,39 @@ extension TurboFieldfareClient {
             finishReason = reason
           }
         }
+        return false
+      }
+    }
+
+    streamLoop: for try await byte in bytes {
+      try Task.checkCancellation()
+
+      guard let line = try lineBuffer.consume(byte: byte) else {
+        continue
+      }
+      guard let payload = eventBuffer.consume(line: line) else {
+        continue
+      }
+      receivedEvent = true
+      if try processPayload(payload) {
+        receivedDone = true
+        break streamLoop
+      }
+    }
+
+    if !receivedDone,
+      let line = try lineBuffer.finish(),
+      let payload = eventBuffer.consume(line: line)
+    {
+      receivedEvent = true
+      if try processPayload(payload) {
+        receivedDone = true
       }
     }
 
     if !receivedDone, let payload = eventBuffer.finish() {
       receivedEvent = true
-      switch try decodeStreamPayload(payload) {
-      case .done:
-        receivedDone = true
-      case .chunk(let chunk):
-        if let error = chunk.error {
-          throw TurboFieldfareClientError.server(
-            message: error.message,
-            code: error.code
-          )
-        }
-        if let usage = chunk.usage {
-          continuation.yield(.usage(usage.normalized))
-        }
-        for choice in chunk.choices ?? [] {
-          if let delta = choice.delta.content, !delta.isEmpty {
-            fullText += delta
-            continuation.yield(.responseTextDelta(delta))
-          }
-          if let reason = choice.finishReason {
-            finishReason = reason
-          }
-        }
-      }
+      receivedDone = try processPayload(payload)
     }
 
     guard receivedEvent else {
@@ -412,6 +410,45 @@ private struct APIErrorEnvelope: Decodable {
 private struct APIError: Decodable {
   let message: String
   let code: String?
+}
+
+private struct SSELineBuffer {
+  private var bytes = Data()
+  private var ignoresNextLineFeed = false
+
+  mutating func consume(byte: UInt8) throws -> String? {
+    switch byte {
+    case 0x0A:
+      if ignoresNextLineFeed {
+        ignoresNextLineFeed = false
+        return nil
+      }
+      return try finishLine()
+
+    case 0x0D:
+      ignoresNextLineFeed = true
+      return try finishLine()
+
+    default:
+      ignoresNextLineFeed = false
+      bytes.append(byte)
+      return nil
+    }
+  }
+
+  mutating func finish() throws -> String? {
+    ignoresNextLineFeed = false
+    guard !bytes.isEmpty else { return nil }
+    return try finishLine()
+  }
+
+  private mutating func finishLine() throws -> String {
+    defer { bytes.removeAll(keepingCapacity: true) }
+    guard let line = String(data: bytes, encoding: .utf8) else {
+      throw TurboFieldfareClientError.malformedStreamEvent
+    }
+    return line
+  }
 }
 
 private struct SSEDataBuffer {

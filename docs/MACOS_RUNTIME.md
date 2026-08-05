@@ -21,6 +21,29 @@ overlay. The core building blocks are:
 The overlay is removed with `orderOut` when hidden; a transparent window must not
 redraw continuously.
 
+## Current development runtime
+
+The first-test implementation deliberately stops short of the recommended service
+architecture. `Scripts/evie-runtime` prepares a pinned TurboFieldfare checkout and
+Gemma model outside Git, then exposes explicit doctor/health/start/stop/smoke/launch
+commands. It creates no `SMAppService`, LaunchAgent, login item, or `KeepAlive`
+process. The native shell still connects directly to loopback under ADR 0006.
+
+Current local paths and constraints are recorded in
+[ADR 0007](adr/0007-local-development-runtime.md). The server starts only on
+request, validates port/model-owner conflicts, and can be stopped with a validated
+`SIGTERM`; automatic restart, idle unload, power-state handling, and sleep/wake
+recovery remain Phase 2 work.
+
+On the base M5/24 GB target Mac running macOS 27, Apple Command Line Tools were
+sufficient to build pinned TurboFieldfare release products. Upstream still
+documents Xcode 26, so a full Xcode installation remains the portability fallback
+if another environment cannot reproduce this local result. On 2026-08-04, the
+upstream verifier passed all 37 model files and both synthetic response modes
+completed at a declared 64K. After those small requests, the server's measured
+physical footprint was 3,215 MB and the native shell's was 18 MB; this is first-test
+evidence, not the full Phase 1 resource/energy benchmark.
+
 ## Wake-word candidates
 
 ### LiveKit WakeWord

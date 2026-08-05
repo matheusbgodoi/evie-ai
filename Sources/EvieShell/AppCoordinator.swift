@@ -5,13 +5,27 @@ import EvieCore
 final class AppCoordinator: NSObject {
   private let viewModel: OverlayViewModel
   private let panelController: OverlayPanelController
+  private let startupConfigurationError: (any Error)?
   private var hotKeyController: GlobalHotKeyController?
   private var statusItem: NSStatusItem?
   private weak var toggleMenuItem: NSMenuItem?
 
   override init() {
-    let viewModel = OverlayViewModel(agentClient: TurboFieldfareClient())
+    let configuration: EvieConfiguration
+    let startupConfigurationError: (any Error)?
+    do {
+      configuration = try EvieConfigurationLoader().load()
+      startupConfigurationError = nil
+    } catch {
+      configuration = EvieConfiguration()
+      startupConfigurationError = error
+    }
+
+    let viewModel = OverlayViewModel(
+      agentClient: TurboFieldfareClient(configuration: configuration)
+    )
     self.viewModel = viewModel
+    self.startupConfigurationError = startupConfigurationError
     panelController = OverlayPanelController(viewModel: viewModel)
     super.init()
   }
@@ -32,6 +46,14 @@ final class AppCoordinator: NSObject {
       hotKeyController = controller
     } catch {
       viewModel.presentRuntimeError(title: "Atalho global indisponível", error: error)
+      panelController.showPassive()
+    }
+
+    if let startupConfigurationError {
+      viewModel.presentRuntimeError(
+        title: "Configuração local inválida",
+        error: startupConfigurationError
+      )
       panelController.showPassive()
     }
   }
