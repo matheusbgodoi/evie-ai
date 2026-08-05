@@ -190,7 +190,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
       EvieRichText(
         "Oi, Matheus. Agora eu falo. Interrompa quando quiser, é só falar por cima."
       ),
-      voiceIdentifier: voices.first?.id,
+      using: .system(identifier: voices.first?.id),
       rate: 0.5
     )
     while !started, Date().timeIntervalSince(start) < 20 {
@@ -209,9 +209,52 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     report.append("amostras de nível publicadas: \(updates)")
     report.append(
       peak > 0.05
-        ? "RESULTADO: falou, e o anel tem nível real para mostrar."
-        : "RESULTADO: terminou sem nível audível — investigar."
+        ? "RESULTADO (voz do sistema): falou, e o anel tem nível real."
+        : "RESULTADO (voz do sistema): terminou sem nível audível — investigar."
     )
+
+    // Now the cloned engine, if it is running.
+    let cloned = EvieOmniVoiceClient()
+    report.append("")
+    if await cloned.isHealthy() {
+      let profiles = await cloned.voices()
+      report.append("motor de voz clonada: no ar, \(profiles.count) perfil(is)")
+      for profile in profiles {
+        report.append("  \(profile.name) [\(profile.id)] \(profile.language)")
+      }
+      // Prefer a profile whose reference text is stored: without it the backend
+      // transcribes the reference with Whisper on first use, which is a one-time
+      // cost measured at over thirty seconds.
+      let chosen =
+        profiles.first { $0.name.localizedCaseInsensitiveContains("matheus") }
+        ?? profiles.first
+      if let profile = chosen {
+        var clonedPeak: CGFloat = 0
+        var clonedStarted = false
+        let output = EvieSpeechOutput()
+        output.onLevels = { levels in clonedPeak = max(clonedPeak, levels.max() ?? 0) }
+        output.onStarted = { clonedStarted = true }
+        let clonedStart = Date()
+        output.speak(
+          EvieRichText("Oi Matheus. Agora sou eu falando com a sua voz clonada."),
+          using: .cloned(profileID: profile.id),
+          rate: 0.5
+        )
+        while !clonedStarted, Date().timeIntervalSince(clonedStart) < 90 {
+          try? await Task.sleep(for: .milliseconds(100))
+        }
+        report.append(
+          String(
+            format: "primeiro áudio clonado em %.2f s: %@",
+            Date().timeIntervalSince(clonedStart), clonedStarted ? "sim" : "NÃO"))
+        while output.isSpeaking, Date().timeIntervalSince(clonedStart) < 120 {
+          try? await Task.sleep(for: .milliseconds(100))
+        }
+        report.append(String(format: "pico de nível clonado: %.3f", Double(clonedPeak)))
+      }
+    } else {
+      report.append("motor de voz clonada: desligado (Scripts/evie-voice start)")
+    }
 
     let directory = FileManager.default.homeDirectoryForCurrentUser
       .appendingPathComponent("Library/Logs/Evie", isDirectory: true)

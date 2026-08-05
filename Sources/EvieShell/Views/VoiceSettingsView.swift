@@ -17,6 +17,28 @@ struct VoiceSettingsView: View {
     EvieSpeechOutput.availableVoices()
   }
 
+  /// Says plainly whether the cloned engine is available, and what it costs.
+  @ViewBuilder
+  private var engineStatus: some View {
+    if viewModel.isVoiceEngineRunning {
+      Label(
+        "Motor de voz clonada no ar, \(viewModel.clonedVoices.count) voz(es) sua(s). "
+          + "Ele segura cerca de 2,4 GB enquanto estiver ligado.",
+        systemImage: "waveform.circle.fill"
+      )
+      .font(.caption)
+      .foregroundStyle(.secondary)
+    } else {
+      Label(
+        "Motor de voz clonada desligado — só as vozes do sistema aparecem. "
+          + "Ligue com Scripts/evie-voice start.",
+        systemImage: "powerplug"
+      )
+      .font(.caption)
+      .foregroundStyle(.secondary)
+    }
+  }
+
   private var rateDescription: String {
     switch voice.resolvedSpeechRate {
     case ..<0.42: "devagar"
@@ -99,15 +121,26 @@ struct VoiceSettingsView: View {
           Picker(
             "Voz",
             selection: Binding(
-              get: { voice.voiceIdentifier ?? voices.first?.id ?? "" },
-              set: { viewModel.setVoiceIdentifier($0) }
+              get: { viewModel.selectedVoiceKey },
+              set: { viewModel.selectVoice(key: $0) }
             )
           ) {
-            ForEach(voices) { option in
-              Text(option.displayName).tag(option.id)
+            if !viewModel.clonedVoices.isEmpty {
+              Section("Clonadas") {
+                ForEach(viewModel.clonedVoices) { cloned in
+                  Text(cloned.name).tag("cloned:\(cloned.id)")
+                }
+              }
+            }
+            Section("Do sistema") {
+              ForEach(voices) { option in
+                Text(option.displayName).tag("system:\(option.id)")
+              }
             }
           }
           .disabled(!voice.speechOutputEnabled)
+
+          engineStatus
 
           VStack(alignment: .leading, spacing: 7) {
             HStack {
@@ -139,9 +172,10 @@ struct VoiceSettingsView: View {
       } footer: {
         Text(
           "As vozes naturais da Siri aparecem no sistema mas o macOS não deixa um "
-            + "aplicativo de terceiros usá-las, então a lista acima é o que sobra. "
-            + "Uma voz própria, clonada a partir de alguns segundos da sua, é o "
-            + "caminho para ela soar bem — e ainda não existe aqui."
+            + "aplicativo de terceiros usá-las, então a lista do sistema é o que sobra "
+            + "e soa datada. Uma voz clonada é criada uma vez e vira um arquivo: a "
+            + "referência não é reenviada a cada fala. Medido aqui: 2,3 s até o "
+            + "primeiro som contra 0,6 s da voz do sistema."
         )
         .font(.caption)
         .foregroundStyle(.secondary)
@@ -160,6 +194,9 @@ struct VoiceSettingsView: View {
       }
     }
     .formStyle(.grouped)
+    .task {
+      await viewModel.refreshVoiceEngine()
+    }
   }
 
   /// Spelled out rather than enforced silently: the switch the user cannot turn

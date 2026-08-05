@@ -16,6 +16,9 @@ final class EviePreferencesViewModel: ObservableObject {
   @Published private(set) var recordingAction: EvieShortcutAction?
   /// Actions the system refused to register, so the row can say so.
   @Published private(set) var unavailableActions: Set<EvieShortcutAction> = []
+  /// Cloned voices offered by the local voice engine, empty when it is down.
+  @Published private(set) var clonedVoices: [EvieClonedVoice] = []
+  @Published private(set) var isVoiceEngineRunning = false
 
   private let store: EviePreferencesStore
   private let onTestVoice: @MainActor (String?, Double) -> Void
@@ -204,7 +207,42 @@ final class EviePreferencesViewModel: ObservableObject {
   }
 
   func setVoiceIdentifier(_ identifier: String?) {
-    apply { $0.voice.voiceIdentifier = identifier }
+    apply {
+      $0.voice.voiceIdentifier = identifier
+      // Choosing a system voice means not using a cloned one.
+      $0.voice.clonedVoiceID = nil
+    }
+  }
+
+  func setClonedVoiceID(_ identifier: String) {
+    apply { $0.voice.clonedVoiceID = identifier }
+  }
+
+  /// Asks the voice engine whether it is up and what it has. Cheap, and called
+  /// whenever the voice settings appear, because the engine is started and
+  /// stopped outside Evie.
+  func refreshVoiceEngine() async {
+    let client = EvieOmniVoiceClient()
+    let healthy = await client.isHealthy()
+    isVoiceEngineRunning = healthy
+    clonedVoices = healthy ? await client.voices() : []
+  }
+
+  /// The value the picker binds to: one list holding both engines.
+  var selectedVoiceKey: String {
+    if let cloned = preferences.voice.clonedVoiceID, !cloned.isEmpty {
+      return "cloned:\(cloned)"
+    }
+    return "system:\(preferences.voice.voiceIdentifier ?? "")"
+  }
+
+  func selectVoice(key: String) {
+    if key.hasPrefix("cloned:") {
+      setClonedVoiceID(String(key.dropFirst("cloned:".count)))
+    } else {
+      let identifier = String(key.dropFirst("system:".count))
+      setVoiceIdentifier(identifier.isEmpty ? nil : identifier)
+    }
   }
 
   /// Speaks a sample with whatever is selected right now, so the choice can be

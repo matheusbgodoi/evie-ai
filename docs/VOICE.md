@@ -37,9 +37,56 @@ failing. What remains is `com.apple.voice.compact.pt-BR.Luciana` — ranked firs
 deliberately, because the `eloquence` family are novelty voices that are fine to
 choose and wrong to default to.
 
-This is the concrete argument for OmniVoice. A cloned voice is not a nicety here;
-it is the only route to Evie sounding like anything other than a 2005 screen
-reader.
+This is the concrete argument for a cloned voice. It is not a nicety here; it is
+the only route to Evie sounding like anything other than a 2005 screen reader.
+
+## The cloned voice — measured 2026-08-05
+
+The local OmniVoice engine runs as a separate process on `127.0.0.1:3900`, started
+and stopped by `Scripts/evie-voice`. It holds a 2.4 GB model resident, which is
+why Evie does not start it herself: a heavy worker that starts itself takes a
+resource decision away from the person whose machine it is.
+
+Two profiles already existed on this Mac, both Portuguese clones, including one of
+the user's own voice.
+
+### Timings, warm model, this Mac
+
+| Case | Audio | Synthesis | Ratio |
+|---|---|---|---|
+| Short sentence, 8 steps | 2.12 s | 2.99 s | 1.4× |
+| Short sentence, 16 steps | 2.12 s | 4.03 s | 1.9× |
+| Short sentence, 32 steps | 2.12 s | 7.39 s | 3.5× |
+| Long sentence, 16 steps | 8.68 s | 9.63 s | 1.1× |
+| Through Evie, first audio | — | **2.30 s** | — |
+
+Two conclusions drive the implementation. Eight steps is the setting that keeps a
+conversation moving. And the per-call overhead dominates short text — 1.9× for a
+sentence against 1.1× for a paragraph — so **chunking by sentence is wrong for
+this engine**. Evie synthesises the opening sentence alone, for a fast first word,
+then everything after it in a single block.
+
+### The thirty-seven second trap
+
+A profile stored without its reference text costs a one-off Whisper pass to
+transcribe the reference. Measured: **36.97 s** to first audio on a profile with
+no `ref_text`, against 2.30 s on one that has it. `Scripts/evie-voice voices`
+reports which profiles carry their text, and `warm` pays the cost up front.
+
+### On training a voice instead of cloning one
+
+Asked whether a voice could be *trained* once to save compute later, rather than
+cloned from a reference every time. Three facts settle it:
+
+- The profile already **is** the saved artifact. It is created once and stored as
+  a database row plus a reference file; generation passes only a `profile_id`, and
+  the reference is never re-uploaded. It can also be exported as a portable
+  `.ovsvoice` bundle.
+- Fine-tuning would **not** reduce the cost of speaking. The per-sentence expense
+  is the diffusion, and a fine-tuned model runs exactly the same steps. Fine-tuning
+  buys quality, at hours of GPU time and gigabytes of checkpoint.
+- What genuinely reduces the cost is what is implemented: fewer diffusion steps,
+  fewer calls, and keeping the model warm.
 
 ## What is implemented — 2026-08-05
 

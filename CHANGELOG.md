@@ -6,6 +6,15 @@ All notable changes to Evie are documented here. Dates use `YYYY-MM-DD`.
 
 ### Added
 
+- Evie can speak with a cloned voice. The local voice engine is detected when it
+  is running, its profiles appear in Settings › Voz alongside the system voices,
+  and `Scripts/evie-voice` starts, stops, lists, and warms it. Measured on this
+  Mac: 2.30 s to first audio with a cloned voice against 0.57 s with a system one.
+- Text is divided differently per engine. The system synthesiser gets one sentence
+  at a time so interruption stays responsive; the cloned engine gets the opening
+  sentence alone and then everything else in one block, because its per-call
+  overhead dominates short text — measured at 1.9× real time for a sentence
+  against 1.1× for a paragraph.
 - Evie speaks. Answers are synthesised sentence by sentence and played through an
   audio engine, so the ring around her mark shows the real amplitude of what is
   being heard rather than a decoration standing in for one. Measured: audio starts

@@ -47,6 +47,36 @@ final class EvieSpeechOutput: ObservableObject {
   private var speechTask: Task<Void, Never>?
   private var levels: [CGFloat] = []
   private var engineFormat: AVAudioFormat?
+  private let clonedEngine = EvieOmniVoiceClient()
+
+  /// Which engine speaks.
+  enum Voice: Hashable, Sendable {
+    /// A voice built into macOS. Instant, free, and audibly synthetic.
+    case system(identifier: String?)
+    /// A voice cloned by the local voice engine. Costs a running 2.4 GB model
+    /// and roughly 1.4 times the audio's own duration to produce.
+    case cloned(profileID: String)
+  }
+
+  /// How the text is divided before synthesis, which differs by engine.
+  ///
+  /// The system synthesiser is effectively instant, so one sentence at a time
+  /// keeps interruption responsive. The cloned engine pays a fixed cost per call
+  /// — measured at 1.9 times real time for a short sentence against 1.1 for a
+  /// long one — so everything after the opening sentence goes in one block. That
+  /// buys a fast first word without paying the overhead again on every clause.
+  static func blocks(from sentences: [String], for voice: Voice) -> [String] {
+    switch voice {
+    case .system:
+      return sentences
+    case .cloned:
+      guard let first = sentences.first else {
+        return []
+      }
+      let rest = sentences.dropFirst().joined(separator: " ")
+      return rest.isEmpty ? [first] : [first, rest]
+    }
+  }
 
   /// Portuguese voices this Mac will actually let Evie use, best first.
   ///
@@ -96,7 +126,7 @@ final class EvieSpeechOutput: ObservableObject {
   /// Returns as soon as speaking begins; `onFinished` reports the end. Calling it
   /// again, or `stop()`, interrupts whatever is playing — barge-in has to be
   /// immediate or it is not barge-in.
-  func speak(_ text: EvieRichText, voiceIdentifier: String?, rate: Double) {
+  func speak(_ text: EvieRichText, using voice: Voice, rate: Double) {
     stop()
 
     let sentences = text.spokenSentences
@@ -104,20 +134,38 @@ final class EvieSpeechOutput: ObservableObject {
       return
     }
 
-    let voice =
-      voiceIdentifier.flatMap(AVSpeechSynthesisVoice.init(identifier:))
-      ?? Self.preferredVoiceIdentifier.flatMap(AVSpeechSynthesisVoice.init(identifier:))
-    guard let voice else {
-      return
+    let blocks = Self.blocks(from: sentences, for: voice)
+    let systemVoice: AVSpeechSynthesisVoice?
+    switch voice {
+    case .system(let identifier):
+      systemVoice =
+        identifier.flatMap(AVSpeechSynthesisVoice.init(identifier:))
+        ?? Self.preferredVoiceIdentifier.flatMap(AVSpeechSynthesisVoice.init(identifier:))
+      guard systemVoice != nil else {
+        return
+      }
+    case .cloned:
+      systemVoice = nil
     }
 
     speechTask = Task { @MainActor [weak self] in
-      for sentence in sentences {
+      for block in blocks {
         guard let self, !Task.isCancelled else {
           return
         }
+        let produced: [AVAudioPCMBuffer]?
+        switch voice {
+        case .system:
+          if let systemVoice {
+            produced = await synthesise(block, voice: systemVoice, rate: rate)
+          } else {
+            produced = nil
+          }
+        case .cloned(let profileID):
+          produced = await synthesiseCloned(block, profileID: profileID)
+        }
         guard
-          let buffers = await synthesise(sentence, voice: voice, rate: rate),
+          let buffers = produced,
           let format = buffers.first(where: { $0.frameLength > 0 })?.format
         else {
           continue
@@ -214,6 +262,17 @@ extension EvieSpeechOutput {
     node.installTap(onBus: 0, bufferSize: 1_024, format: nil) { buffer, _ in
       meter.absorb(buffer, noiseFloorDecibels: floor)
     }
+  }
+
+  /// Renders one block with the cloned voice.
+  fileprivate func synthesiseCloned(
+    _ text: String,
+    profileID: String
+  ) async -> [AVAudioPCMBuffer]? {
+    guard let buffer = try? await clonedEngine.synthesise(text, profileID: profileID) else {
+      return nil
+    }
+    return [buffer]
   }
 
   /// Renders one sentence to buffers.

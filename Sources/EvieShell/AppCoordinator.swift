@@ -422,11 +422,13 @@ extension AppCoordinator {
         store: preferencesStore,
         loadFailure: preferencesLoadFailure,
         onTestVoice: { [weak self] identifier, rate in
-          self?.speechOutput.speak(
+          guard let self else { return }
+          speechOutput.speak(
             EvieRichText("Oi, Matheus. É assim que eu vou falar com você."),
-            voiceIdentifier: identifier,
+            using: Self.voice(for: preferences.voice),
             rate: rate
           )
+          _ = identifier
         },
         onChange: { [weak self] updated in
           self?.preferencesDidChange(updated)
@@ -499,9 +501,21 @@ extension AppCoordinator {
     // exact kind of dishonest indicator this project refuses.
     speechOutput.speak(
       answer,
-      voiceIdentifier: preferences.voice.voiceIdentifier,
+      using: Self.voice(for: preferences.voice),
       rate: preferences.voice.resolvedSpeechRate
     )
+  }
+
+  /// A cloned voice is used when one is chosen; whether its engine is running is
+  /// discovered at synthesis time, and failing there falls silent rather than
+  /// pretending a system voice was what you asked for.
+  fileprivate static func voice(
+    for preferences: EvieVoicePreferences
+  ) -> EvieSpeechOutput.Voice {
+    if let cloned = preferences.clonedVoiceID, !cloned.isEmpty {
+      return .cloned(profileID: cloned)
+    }
+    return .system(identifier: preferences.voiceIdentifier)
   }
 
   fileprivate func startListening() {

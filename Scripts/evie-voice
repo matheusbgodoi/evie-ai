@@ -1,0 +1,186 @@
+#!/bin/zsh
+
+# Starts and stops the local voice engine that produces Evie's cloned voice.
+#
+# It is a separate process on purpose. The engine holds a 2.4 GB model resident,
+# and a heavy worker that starts itself takes a resource decision away from the
+# person whose machine it is — the same reasoning as `Scripts/evie-runtime`.
+#
+# Evie detects the engine and uses it when it is up. When it is down she falls
+# back to a system voice and says so rather than failing silently.
+
+set -euo pipefail
+
+readonly EVIE_VOICE_PORT="3900"
+readonly EVIE_VOICE_URL="http://127.0.0.1:${EVIE_VOICE_PORT}"
+readonly EVIE_VOICE_PROJECT="${EVIE_VOICE_PROJECT_OVERRIDE:-${HOME}/Library/Application Support/com.debpalash.omnivoice-studio/project}"
+readonly EVIE_VOICE_STATE="${HOME}/Library/Application Support/Evie/State"
+readonly EVIE_VOICE_PID_FILE="${EVIE_VOICE_STATE}/voice-engine.pid"
+readonly EVIE_VOICE_LOG="${HOME}/Library/Logs/Evie/voice-engine.log"
+
+function usage() {
+  print "Usage: Scripts/evie-voice <status|start|stop|voices|warm>"
+  print ""
+  print "  status  Report whether the engine answers and which voices exist"
+  print "  start   Load the model and serve on ${EVIE_VOICE_URL}"
+  print "  stop    Shut it down and release the memory"
+  print "  voices  List the cloned voice profiles"
+  print "  warm    Synthesise one short line so the first real answer is quick"
+}
+
+function is_healthy() {
+  curl -sf --max-time 3 "${EVIE_VOICE_URL}/health" >/dev/null 2>&1
+}
+
+function require_project() {
+  if [[ ! -d "${EVIE_VOICE_PROJECT}" ]]; then
+    print -u2 "Voice engine is not installed at:"
+    print -u2 "  ${EVIE_VOICE_PROJECT}"
+    print -u2 "Install OmniVoice Studio, or set EVIE_VOICE_PROJECT_OVERRIDE."
+    return 1
+  fi
+  if [[ ! -x "${EVIE_VOICE_PROJECT}/.venv/bin/uvicorn" ]]; then
+    print -u2 "The engine's environment is incomplete: no .venv/bin/uvicorn."
+    return 1
+  fi
+}
+
+function status() {
+  if is_healthy; then
+    print "Voice engine: ready at ${EVIE_VOICE_URL}"
+    curl -sf --max-time 3 "${EVIE_VOICE_URL}/health"
+    print ""
+    local resident
+    resident=$(ps -o rss= -p "$(cat "${EVIE_VOICE_PID_FILE}" 2>/dev/null || echo 0)" 2>/dev/null || true)
+    if [[ -n "${resident}" ]]; then
+      print "Resident memory: $((resident / 1024)) MB"
+    fi
+  else
+    print "Voice engine: stopped"
+    print "Evie falls back to a system voice while it is down."
+  fi
+}
+
+function start() {
+  if is_healthy; then
+    print "Already running."
+    return 0
+  fi
+  require_project
+
+  local port_owner
+  port_owner=$(/usr/sbin/lsof -nP -iTCP:"${EVIE_VOICE_PORT}" -sTCP:LISTEN -t 2>/dev/null || true)
+  if [[ -n "${port_owner}" ]]; then
+    print -u2 "Port ${EVIE_VOICE_PORT} is held by PID ${port_owner} but is not answering."
+    print -u2 "Resolve that before starting."
+    return 1
+  fi
+
+  umask 077
+  mkdir -p "${EVIE_VOICE_STATE}" "$(dirname "${EVIE_VOICE_LOG}")"
+
+  print "Loading the voice model — this takes a few seconds and about 2.4 GB…"
+  (
+    cd "${EVIE_VOICE_PROJECT}"
+    nohup ./.venv/bin/uvicorn main:app --app-dir backend \
+      --host 127.0.0.1 --port "${EVIE_VOICE_PORT}" \
+      > "${EVIE_VOICE_LOG}" 2>&1 &
+    print $! > "${EVIE_VOICE_PID_FILE}"
+  )
+
+  local attempt
+  for attempt in $(seq 1 40); do
+    sleep 2
+    if is_healthy; then
+      print "Voice engine ready at ${EVIE_VOICE_URL}"
+      return 0
+    fi
+  done
+
+  print -u2 "The engine did not answer within 80 s. See ${EVIE_VOICE_LOG}"
+  return 1
+}
+
+function stop() {
+  local pid
+  pid=$(cat "${EVIE_VOICE_PID_FILE}" 2>/dev/null || true)
+  if [[ -z "${pid}" ]]; then
+    pid=$(/usr/sbin/lsof -nP -iTCP:"${EVIE_VOICE_PORT}" -sTCP:LISTEN -t 2>/dev/null || true)
+  fi
+  if [[ -z "${pid}" ]]; then
+    print "Nothing to stop."
+    return 0
+  fi
+
+  kill -TERM "${pid}" 2>/dev/null || true
+  local attempt
+  for attempt in $(seq 1 15); do
+    sleep 1
+    if ! kill -0 "${pid}" 2>/dev/null; then
+      rm -f "${EVIE_VOICE_PID_FILE}"
+      print "Voice engine stopped; its memory is released."
+      return 0
+    fi
+  done
+  print -u2 "PID ${pid} did not exit. Left alone rather than forced."
+  return 1
+}
+
+function voices() {
+  if ! is_healthy; then
+    print -u2 "The engine is not running."
+    return 1
+  fi
+  curl -sf "${EVIE_VOICE_URL}/profiles" | python3 -c '
+import json, sys
+data = json.load(sys.stdin)
+profiles = data if isinstance(data, list) else data.get("profiles", [])
+for profile in profiles:
+    reference = "com texto de referência" if profile.get("ref_text") else "SEM texto de referência"
+    print(f'"'"'  {profile.get("name","?"):<24} {profile.get("id","?"):<12} {reference}'"'"')
+if not profiles:
+    print("  (nenhum perfil criado)")
+'
+  print ""
+  print "A profile without reference text costs a one-off Whisper pass on its"
+  print "first use — measured at over thirty seconds. With it, first audio was 2.3 s."
+}
+
+# Sends one short line so the model, and the chosen profile, are warm before the
+# first real answer needs them.
+function warm() {
+  if ! is_healthy; then
+    print -u2 "The engine is not running."
+    return 1
+  fi
+  local profile
+  profile=$(curl -sf "${EVIE_VOICE_URL}/profiles" | python3 -c '
+import json, sys
+data = json.load(sys.stdin)
+profiles = data if isinstance(data, list) else data.get("profiles", [])
+withText = [p for p in profiles if p.get("ref_text")]
+chosen = (withText or profiles)
+print(chosen[0]["id"] if chosen else "")
+')
+  if [[ -z "${profile}" ]]; then
+    print -u2 "No voice profile to warm."
+    return 1
+  fi
+
+  print "Warming ${profile}…"
+  local started
+  started=$(python3 -c 'import time; print(time.time())')
+  curl -sf -X POST "${EVIE_VOICE_URL}/generate" \
+    -F "text=Pronta." -F "profile_id=${profile}" \
+    -F "language=Portuguese" -F "num_step=8" >/dev/null
+  python3 -c "import time; print(f'Warm in {time.time() - ${started}:.1f} s.')"
+}
+
+case "${1:-}" in
+  status) status ;;
+  start) start ;;
+  stop) stop ;;
+  voices) voices ;;
+  warm) warm ;;
+  *) usage; exit 1 ;;
+esac

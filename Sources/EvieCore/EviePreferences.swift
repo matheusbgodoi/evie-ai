@@ -360,8 +360,11 @@ public struct EvieVoicePreferences: Codable, Hashable, Sendable {
   public var callModeEnabled: Bool
   public var retainsRawAudio: Bool
   public var voiceProfileAlias: String?
-  /// Which installed voice she speaks with. `nil` means the best one available.
+  /// Which installed system voice she speaks with. `nil` means the best one.
   public var voiceIdentifier: String?
+  /// A cloned voice from the local voice engine. When set, and the engine is
+  /// running, it wins over the system voice.
+  public var clonedVoiceID: String?
   /// `AVSpeechUtterance` rate, where 0.5 is the system default.
   public var speechRate: Double
 
@@ -374,6 +377,7 @@ public struct EvieVoicePreferences: Codable, Hashable, Sendable {
     retainsRawAudio: Bool = false,
     voiceProfileAlias: String? = nil,
     voiceIdentifier: String? = nil,
+    clonedVoiceID: String? = nil,
     speechRate: Double = 0.5
   ) {
     self.wakeWordEnabled = wakeWordEnabled
@@ -384,6 +388,7 @@ public struct EvieVoicePreferences: Codable, Hashable, Sendable {
     self.retainsRawAudio = retainsRawAudio
     self.voiceProfileAlias = voiceProfileAlias
     self.voiceIdentifier = voiceIdentifier
+    self.clonedVoiceID = clonedVoiceID
     self.speechRate = speechRate
   }
 
