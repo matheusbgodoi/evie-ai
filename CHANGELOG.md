@@ -6,6 +6,11 @@ All notable changes to Evie are documented here. Dates use `YYYY-MM-DD`.
 
 ### Added
 
+- Evie arrives and leaves the way Spotlight does: a short scale from just under
+  full size carried by a fade, easing out in 0.17 s and dismissing faster in
+  0.11 s. A dismissal already in flight is abandoned the moment she is summoned
+  again, so a quick hide-then-show never leaves the window half faded. Reduce
+  Motion removes the movement and keeps the window.
 - Answers are parsed and rendered instead of shown as raw markdown. `###` becomes
   a heading, `**` becomes weight, bullets become bullets, and `$\rightarrow$`
   becomes `→`. Copying gives plain text with no markers at all, ready to paste

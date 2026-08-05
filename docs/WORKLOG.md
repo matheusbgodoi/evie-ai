@@ -555,3 +555,17 @@
 - Next: tool calling. Every remaining request — reading folders, the web, email,
   automations — depends on the model being able to call a function, and today the
   inference client neither sends nor executes tools.
+
+## 2026-08-05 — a Spotlight-style presentation
+
+- `OverlayPanelController` now animates the content layer's opacity and scale
+  rather than ordering the window in and out bare: 0.93 → 1 over 0.17 s easing
+  out on arrival, 1 → 0.97 over 0.11 s easing in on dismissal.
+- The risky path is a hide interrupted by a show. `cancelDismissal` abandons the
+  in-flight transition and resets the layer, so the window cannot be left half
+  faded or ordered out under a fresh presentation.
+- `--presentation-check` drives show, hide, an interrupting show, hide, and show
+  again, reporting the window and layer state after each. All four end states were
+  correct: visible with opacity and scale at 1 after every show, and reset to 1
+  after the hide so the next arrival starts clean.
+- Reduce Motion skips the movement entirely rather than skipping the window.

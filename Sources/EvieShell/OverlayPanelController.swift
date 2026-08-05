@@ -12,6 +12,7 @@ final class OverlayPanelController: NSObject {
   private var measuredContentHeight: CGFloat = EvieOverlayGeometry.minimumHeight
   private var widthAtDragStart: CGFloat?
   private var isApplyingGeometry = false
+  private var isDismissing = false
 
   init(
     viewModel: OverlayViewModel,
@@ -54,6 +55,10 @@ final class OverlayPanelController: NSObject {
     panel.contentViewController = NSHostingController(
       rootView: EvieOverlayView(viewModel: viewModel, chrome: chrome)
     )
+    // The presentation animates this layer's opacity and scale, so it has to be
+    // layer-backed and has to scale about its own centre.
+    panel.contentView?.wantsLayer = true
+    panel.contentView?.layer?.anchorPoint = CGPoint(x: 0.5, y: 0.5)
 
     super.init()
     panel.delegate = self
@@ -84,28 +89,156 @@ final class OverlayPanelController: NSObject {
     panel.isVisible
   }
 
+  /// What state the window and its animated layer are actually in.
+  var diagnostics: String {
+    let layer = contentLayer
+    return String(
+      format: "visível=%@ alpha=%.2f opacidade da camada=%.2f escala=%.2f animando=%@",
+      panel.isVisible ? "sim" : "não",
+      panel.alphaValue,
+      Double(layer?.opacity ?? -1),
+      Double((layer?.value(forKeyPath: "transform.scale") as? CGFloat) ?? -1),
+      (layer?.animation(forKey: Self.transitionKey) != nil) ? "sim" : "não"
+    )
+  }
+
   func showPassive() {
-    updateGeometry(reselectScreen: true)
-    chrome.setVisible(true)
-    panel.orderFrontRegardless()
+    present(makingKey: false)
   }
 
   func showQuickText() {
-    updateGeometry(reselectScreen: true)
-    chrome.setVisible(true)
-    panel.makeKeyAndOrderFront(nil)
+    present(makingKey: true)
   }
 
-  /// The motion gate is lowered *before* the window leaves the screen.
+  /// Arrives the way Spotlight does: a short scale from just under full size,
+  /// carried by a fade, easing out. The whole thing is under two tenths of a
+  /// second — long enough to read as motion, short enough never to be in the way
+  /// of typing.
+  private func present(makingKey: Bool) {
+    cancelDismissal()
+    let wasVisible = panel.isVisible
+    updateGeometry(reselectScreen: true)
+    chrome.setVisible(true)
+
+    guard let layer = contentLayer, Self.prefersMotion, !wasVisible else {
+      panel.alphaValue = 1
+      order(makingKey: makingKey)
+      return
+    }
+
+    CATransaction.begin()
+    CATransaction.setDisableActions(true)
+    layer.opacity = 0
+    layer.transform = CATransform3DMakeScale(Self.entryScale, Self.entryScale, 1)
+    CATransaction.commit()
+
+    panel.alphaValue = 1
+    order(makingKey: makingKey)
+    animate(layer: layer, toOpacity: 1, scale: 1, duration: 0.17, easeOut: true)
+  }
+
+  /// Leaves faster than it arrives, which is what makes a dismissal feel like a
+  /// dismissal rather than a delay.
   ///
-  /// Ordering a window out does not stop a SwiftUI timeline: measured on this
-  /// Mac, an overlay hidden with `orderOut` kept redrawing at 55 frames per
-  /// second and burned 2.5% of a core invisibly. Only removing the timeline from
-  /// the view tree actually stops it.
+  /// The motion gate is lowered first. Ordering a window out does not stop a
+  /// SwiftUI timeline — measured on this Mac, an overlay hidden with `orderOut`
+  /// kept redrawing at 55 frames per second and burned 2.5% of a core invisibly.
   func hide() {
     chrome.setVisible(false)
-    panel.orderOut(nil)
+
+    guard let layer = contentLayer, Self.prefersMotion, panel.isVisible else {
+      cancelDismissal()
+      panel.orderOut(nil)
+      return
+    }
+
+    isDismissing = true
+    CATransaction.begin()
+    CATransaction.setCompletionBlock { [weak self] in
+      MainActor.assumeIsolated {
+        guard let self, self.isDismissing else {
+          return
+        }
+        self.isDismissing = false
+        self.panel.orderOut(nil)
+        self.resetContentLayer()
+      }
+    }
+    animate(layer: layer, toOpacity: 0, scale: Self.exitScale, duration: 0.11, easeOut: false)
+    CATransaction.commit()
   }
+
+  private func order(makingKey: Bool) {
+    if makingKey {
+      panel.makeKeyAndOrderFront(nil)
+    } else {
+      panel.orderFrontRegardless()
+    }
+  }
+
+  /// A dismissal in flight is abandoned the moment the overlay is summoned again,
+  /// so a quick hide-then-show never leaves the window half faded or ordered out
+  /// underneath a fresh presentation.
+  private func cancelDismissal() {
+    guard isDismissing else {
+      return
+    }
+    isDismissing = false
+    resetContentLayer()
+  }
+
+  private func resetContentLayer() {
+    guard let layer = contentLayer else {
+      return
+    }
+    layer.removeAnimation(forKey: Self.transitionKey)
+    CATransaction.begin()
+    CATransaction.setDisableActions(true)
+    layer.opacity = 1
+    layer.transform = CATransform3DIdentity
+    CATransaction.commit()
+  }
+
+  private func animate(
+    layer: CALayer,
+    toOpacity opacity: Float,
+    scale: CGFloat,
+    duration: CFTimeInterval,
+    easeOut: Bool
+  ) {
+    let group = CAAnimationGroup()
+    let fade = CABasicAnimation(keyPath: "opacity")
+    fade.fromValue = layer.opacity
+    fade.toValue = opacity
+    let zoom = CABasicAnimation(keyPath: "transform.scale")
+    zoom.fromValue = (layer.value(forKeyPath: "transform.scale") as? CGFloat) ?? 1
+    zoom.toValue = scale
+    group.animations = [fade, zoom]
+    group.duration = duration
+    group.timingFunction = CAMediaTimingFunction(name: easeOut ? .easeOut : .easeIn)
+    group.fillMode = .forwards
+
+    CATransaction.begin()
+    CATransaction.setDisableActions(true)
+    layer.opacity = opacity
+    layer.transform = CATransform3DMakeScale(scale, scale, 1)
+    CATransaction.commit()
+    layer.add(group, forKey: Self.transitionKey)
+  }
+
+  private var contentLayer: CALayer? {
+    panel.contentView?.layer
+  }
+
+  /// Reduce Motion removes the movement but keeps the window; a preference about
+  /// animation must never cost someone the feature.
+  private static var prefersMotion: Bool {
+    !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
+  }
+
+  private static let entryScale: CGFloat = 0.93
+  private static let exitScale: CGFloat = 0.97
+  private static let transitionKey = "evie.presentation"
 
   func togglePassive() {
     if isVisible {

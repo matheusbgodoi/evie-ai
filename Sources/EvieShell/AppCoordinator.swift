@@ -166,6 +166,19 @@ final class AppCoordinator: NSObject {
     }
   }
 
+  /// Diagnostics for `--presentation-check`. Not used by the running application.
+  var presentationDiagnostics: String {
+    panelController.diagnostics
+  }
+
+  func diagnosticShow() {
+    openQuickText()
+  }
+
+  func diagnosticHide() {
+    panelController.hide()
+  }
+
   func stop() {
     audioCapture.stop()
     viewModel.cancelCurrentInteraction()

@@ -66,6 +66,47 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
       return
     }
 
+    // Drives the presentation animation through the sequence most likely to break
+    // it — show, hide, and show again before the dismissal has finished — and
+    // reports whether the window survived. A half-faded or ordered-out overlay is
+    // the failure this guards against.
+    if CommandLine.arguments.contains("--presentation-check") {
+      let coordinator = AppCoordinator()
+      self.coordinator = coordinator
+      coordinator.start()
+      Task { @MainActor in
+        var report: [String] = []
+        try? await Task.sleep(for: .milliseconds(400))
+        report.append("depois de abrir: \(coordinator.presentationDiagnostics)")
+
+        coordinator.diagnosticHide()
+        try? await Task.sleep(for: .milliseconds(40))
+        coordinator.diagnosticShow()
+        try? await Task.sleep(for: .milliseconds(400))
+        report.append("depois de esconder e reabrir rápido: \(coordinator.presentationDiagnostics)")
+
+        coordinator.diagnosticHide()
+        try? await Task.sleep(for: .milliseconds(400))
+        report.append("depois de esconder: \(coordinator.presentationDiagnostics)")
+
+        coordinator.diagnosticShow()
+        try? await Task.sleep(for: .milliseconds(400))
+        report.append("depois de reabrir: \(coordinator.presentationDiagnostics)")
+
+        let directory = FileManager.default.homeDirectoryForCurrentUser
+          .appendingPathComponent("Library/Logs/Evie", isDirectory: true)
+        try? FileManager.default.createDirectory(
+          at: directory, withIntermediateDirectories: true)
+        try? report.joined(separator: "\n").appending("\n").write(
+          to: directory.appendingPathComponent("presentation-check.txt"),
+          atomically: true,
+          encoding: .utf8
+        )
+        NSApp.terminate(nil)
+      }
+      return
+    }
+
     // Opens the microphone for a couple of seconds through exactly the path a
     // real activation takes, and writes what happened to a file. Launch Services
     // gives no console, and this is the only way to exercise the audio tap —
