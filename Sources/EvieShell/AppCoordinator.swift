@@ -153,6 +153,7 @@ final class AppCoordinator: NSObject {
   ) -> EvieCapabilitySnapshot {
     var capabilities = EvieCapabilitySnapshot.textOnly
     capabilities.readsImagesAndDocuments = true
+    capabilities.seesImages = EvieVisionDescriber.isAvailable
     // Told the truth about her own reach: with nothing granted she must not
     // offer to look, and the moment a folder is authorised she must know she
     // can. Claiming either wrongly is the fastest way to make her useless.

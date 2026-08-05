@@ -6,6 +6,14 @@ All notable changes to Evie are documented here. Dates use `YYYY-MM-DD`.
 
 ### Added
 
+- Evie can see. Attach a photo, a chart, a screenshot or a diagram and she
+  describes what it shows, alongside the text she already read out of it.
+  Verified on a bar chart: she reported four bars for four months at 120, 190,
+  90 and 260 while the reader pulled the exact labels — the description gives the
+  shape, the text gives the characters, and neither alone is enough.
+- She has an icon. Drawn in `Scripts/evie-icon`, so the shape lives in the
+  repository as numbers rather than as a binary nobody can edit.
+
 - Every answer says where it came from, on a line under it. Your notes, the web
   with the sites she actually opened, or — the one worth noticing — only what she
   already knew, which comes with a warning that it may be wrong. The label is

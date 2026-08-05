@@ -58,6 +58,7 @@ final class OverlayViewModel: ObservableObject {
   private var streamedResponse = ""
   private var pendingPrompt: String?
   private let documentReader = EvieDocumentReader()
+  private let visionDescriber = EvieVisionDescriber()
   /// Ceiling on how much document text one turn may carry, so a long PDF cannot
   /// silently push the actual question out of the model's context.
   private static let attachmentCharacterLimit = 20_000
@@ -273,8 +274,15 @@ final class OverlayViewModel: ObservableObject {
       for url in readable {
         do {
           let pages = try await documentReader.read(fileAt: url)
+          // Sight is best-effort beside reading: a Mac without it still reads
+          // the text, and a failure to describe must not lose the document.
+          let seen = Self.isImage(url) ? try? await visionDescriber.describe(imageAt: url) : nil
           appendAttachment(
-            EvieDocumentAttachment(name: url.lastPathComponent, pages: pages)
+            EvieDocumentAttachment(
+              name: url.lastPathComponent,
+              pages: pages,
+              visualDescription: seen
+            )
           )
         } catch {
           artifacts.append(
@@ -1137,14 +1145,39 @@ extension OverlayViewModel {
 
   /// Consumes the pending attachments into one message, bounded so a long
   /// document cannot crowd out the question itself.
+  /// Whether describing this file makes sense. A PDF is read, not looked at.
+  fileprivate static func isImage(_ url: URL) -> Bool {
+    ["png", "jpg", "jpeg", "heic", "heif", "gif", "tiff", "bmp", "webp"]
+      .contains(url.pathExtension.lowercased())
+  }
+
   fileprivate func takeAttachmentEvidence() -> ChatMessage? {
     guard !attachments.isEmpty else {
       return nil
     }
     let pages = attachments.flatMap(\.pages)
+    // What was seen goes first, because it says what kind of thing this is
+    // before the recognised text arrives. A wall of OCR with no frame around it
+    // is how a chart becomes a list of stray numbers.
+    let seen = attachments.compactMap { attachment -> String? in
+      guard let description = attachment.visualDescription else {
+        return nil
+      }
+      return "\(attachment.name): \(description)"
+    }
     attachments = []
 
-    var evidence = pages.promptEvidence
+    var evidence = ""
+    if !seen.isEmpty {
+      evidence += """
+        <<<O QUE A EVIE VIU NA IMAGEM — descrição, não texto extraído>>>
+        \(seen.joined(separator: "\n"))
+        <<<FIM DA DESCRIÇÃO>>>
+
+
+        """
+    }
+    evidence += pages.promptEvidence
     if evidence.count > Self.attachmentCharacterLimit {
       let cut = evidence.index(evidence.startIndex, offsetBy: Self.attachmentCharacterLimit)
       evidence = String(evidence[..<cut])

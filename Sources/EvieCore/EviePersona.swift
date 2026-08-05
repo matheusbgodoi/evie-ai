@@ -10,6 +10,11 @@ public struct EvieCapabilitySnapshot: Hashable, Sendable {
   public var speaksAnswers: Bool
   public var readsLocalFiles: Bool
   public var readsImagesAndDocuments: Bool
+  /// Whether she can describe what a picture shows, as opposed to reading the
+  /// text in it. Two different abilities, and claiming the second when only the
+  /// first exists is how she ends up confidently describing a chart she cannot
+  /// see.
+  public var seesImages: Bool
   public var searchesTheWeb: Bool
   public var hasSemanticMemory: Bool
 
@@ -18,6 +23,7 @@ public struct EvieCapabilitySnapshot: Hashable, Sendable {
     speaksAnswers: Bool = false,
     readsLocalFiles: Bool = false,
     readsImagesAndDocuments: Bool = false,
+    seesImages: Bool = false,
     searchesTheWeb: Bool = false,
     hasSemanticMemory: Bool = false
   ) {
@@ -25,6 +31,7 @@ public struct EvieCapabilitySnapshot: Hashable, Sendable {
     self.speaksAnswers = speaksAnswers
     self.readsLocalFiles = readsLocalFiles
     self.readsImagesAndDocuments = readsImagesAndDocuments
+    self.seesImages = seesImages
     self.searchesTheWeb = searchesTheWeb
     self.hasSemanticMemory = hasSemanticMemory
   }
@@ -36,6 +43,7 @@ public struct EvieCapabilitySnapshot: Hashable, Sendable {
     speaksAnswers: true,
     readsLocalFiles: true,
     readsImagesAndDocuments: true,
+    seesImages: true,
     searchesTheWeb: true,
     hasSemanticMemory: true
   )
@@ -168,10 +176,21 @@ extension EviePersona {
 
     if capabilities.readsImagesAndDocuments {
       available.append(
-        "Você pode examinar imagens e PDFs que ele entregar, extraindo texto e descrevendo o conteúdo."
+        "Você pode ler o texto de imagens e PDFs que ele entregar, inclusive escaneados."
       )
     } else {
-      unavailable.append("enxergar imagens e PDFs")
+      unavailable.append("ler imagens e PDFs")
+    }
+
+    if capabilities.seesImages {
+      available.append(
+        "Você enxerga o que a imagem mostra, além do texto nela — gráficos, fotos, "
+          + "telas, diagramas. A descrição do que foi visto chega marcada como tal; "
+          + "use tanto ela quanto o texto reconhecido, e diga qual dos dois você usou "
+          + "quando isso importar."
+      )
+    } else {
+      unavailable.append("descrever o que uma foto ou um gráfico mostra")
     }
 
     if capabilities.searchesTheWeb {

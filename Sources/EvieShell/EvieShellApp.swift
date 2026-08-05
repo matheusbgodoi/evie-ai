@@ -234,6 +234,35 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
       return
     }
 
+    // Describes a real image through the real path, so "she can see" is
+    // demonstrated rather than claimed.
+    if let index = CommandLine.arguments.firstIndex(of: "--see"),
+      index + 1 < CommandLine.arguments.count
+    {
+      let url = URL(fileURLWithPath: CommandLine.arguments[index + 1])
+      Task { @MainActor in
+        print("visão disponível: \(EvieVisionDescriber.isAvailable)")
+        if let reason = EvieVisionDescriber.unavailableReason {
+          print("motivo: \(reason)")
+        }
+        let started = Date()
+        do {
+          let seen = try await EvieVisionDescriber().describe(imageAt: url)
+          print(String(format: "descrito em %.2f s:", Date().timeIntervalSince(started)))
+          print("  \(seen)")
+        } catch {
+          print("falhou: \((error as? LocalizedError)?.errorDescription ?? "\(error)")")
+        }
+        // And the text in it, which is the other half.
+        if let pages = try? await EvieDocumentReader().read(fileAt: url) {
+          let text = pages.map(\.text).joined(separator: " ").prefix(200)
+          print("texto reconhecido: \(text.isEmpty ? "(nenhum)" : String(text))")
+        }
+        NSApp.terminate(nil)
+      }
+      return
+    }
+
     let coordinator = AppCoordinator()
     self.coordinator = coordinator
     coordinator.start()

@@ -100,6 +100,7 @@ twenty-three seconds the first time she uses it.
 - Speaking out loud, with system voices or voices you trained
 - Call mode
 - Reading images and PDFs, including scanned ones
+- Seeing what a photo, chart or screenshot shows, not only the text in it
 - Reading, searching, and searching inside folders you authorise
 - Memory of what you told her, when you confirm it
 - Web search, if you switch it on — off by default
@@ -132,6 +133,7 @@ evie-shell --ask-folder <folder> "<question>"   # ask a real question of a real 
 evie-shell --voices-check <audio.wav>      # train a throwaway voice, speak with it, delete it
 evie-shell --web-check "<query>"           # search, read a page, and show what is refused
 evie-shell --ask-web "<question>"          # a real turn with the web switched on
+evie-shell --see <image>                   # what she sees in a picture, and reads in it
 ```
 
 Server lifecycle:

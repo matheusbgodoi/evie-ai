@@ -6,6 +6,13 @@ struct EvieDocumentAttachment: Identifiable, Hashable {
   let id = UUID()
   let name: String
   let pages: [EvieDocumentObservation]
+  /// What the picture shows, when this is a picture and this Mac can see.
+  ///
+  /// Kept beside the recognised text rather than replacing it, because the two
+  /// answer different questions. Reading a screenshot needs the exact characters;
+  /// understanding a photograph, a chart or a diagram needs what it depicts. A
+  /// description alone loses the numbers; the text alone loses the picture.
+  var visualDescription: String?
 
   var characterCount: Int {
     pages.reduce(0) { $0 + $1.text.count }
@@ -14,7 +21,9 @@ struct EvieDocumentAttachment: Identifiable, Hashable {
   /// What the card says at a glance.
   var summary: String {
     guard characterCount > 0 else {
-      return "Não encontrei texto legível neste arquivo."
+      return visualDescription == nil
+        ? "Não encontrei texto legível neste arquivo."
+        : "Sem texto, mas eu vi a imagem."
     }
     let pageDescription =
       pages.count == 1

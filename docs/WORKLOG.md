@@ -944,3 +944,40 @@ previous day of building. Everything here came from that.
   further buys almost nothing; the levers left are the persona's size and the
   answer's length.
 - Validation: `Scripts/test` 311/311 in 29 suites.
+
+## 2026-08-05 — VLM-001: she can see, and it cost nothing
+
+- The user asked for a scheme for vision. The obvious one was to load a
+  vision-language model beside the resident one: two to four gigabytes, a
+  download, a second process to start and stop, and a machine with less room for
+  everything else.
+- That was the plan until this Mac was asked what it already had.
+  `_Vision_FoundationModels.framework` in the system frameworks led to probing
+  `SystemLanguageModel`, which reported `available` and answered a text prompt in
+  1.67 s. The SDK's interface then showed `Attachment(_ cgImage:)`, so it was
+  probed with a picture: a blue circle on yellow, described correctly in 1.52 s.
+- So sight is the system's own model, shared with everything else using it. No
+  download, no process, no memory that was not already spent. Against loading a
+  second model that is worse on every axis, this was not a close call.
+- `Attachment` needs macOS 27, not 26 — the model arrived one release before its
+  eyes did. The probe compiled only because a loose `swiftc` defaults to the
+  running system while the package has a lower floor.
+- Kept **beside** the text reader rather than replacing it, and the chart test is
+  why. Vision reported "four bars for January to April at 120, 190, 90 and 260" —
+  the structure. The reader pulled "Vendas por mês (mil R$)", "190", "120", "Fev"
+  — the exact characters. Alone, the description would risk inventing the
+  numbers and the recognised text is a heap of digits with no shape.
+- Two things fixed by running it rather than reasoning: the system model opens by
+  introducing itself, and asked about an icon it returned a fenced JSON object
+  with a `description` field beside an invented `tool_calls` array. The prompt now
+  forbids both and `tidy` unwraps them anyway, because a prompt is a request and
+  this is a guarantee.
+- **Measured, and it settles the multi-agent question:** the inference server
+  serialises. Three concurrent requests took 23.3 s against 8.1 s for one — 2.9×,
+  not 1×. Agents running "at the same time" would finish no sooner and arrive all
+  at once instead of progressively. Parallelism is not available on this machine;
+  sequential specialised steps are, and are better anyway.
+- Also: the application icon, drawn in `Scripts/evie-icon` so the shape is source
+  rather than a binary. And "Modelo local" is gone from the cards — it named the
+  machinery, and a restored conversation kept it forever.
+- Validation: `Scripts/test` 311/311 in 29 suites.
