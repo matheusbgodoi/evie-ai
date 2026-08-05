@@ -6,6 +6,18 @@ All notable changes to Evie are documented here. Dates use `YYYY-MM-DD`.
 
 ### Added
 
+- Evie can search the web, if you let her. Off by default, and it is the one
+  switch in this application that changes what leaves your Mac — the setting says
+  so instead of burying it. No account, no key, no quota. Verified end to end:
+  asked about the newest Swift release she searched, answered, and named her
+  sources, in 59 seconds.
+- What comes back from the web is fenced as data and labelled as a claim rather
+  than a fact, and she is told to open a page before asserting anything from it.
+- Addresses that are not the public web are refused before any request is made —
+  loopback, private ranges, `.local`, and the cloud metadata endpoint. Without
+  that, "read this page" is a way to make Evie fetch her own model server, or
+  anything on your network that trusts requests coming from your machine.
+
 - Evie reads your Obsidian vault to answer. Settings › Pastas offers the vault
   directly, and `search_content` looks inside the text of your notes rather than
   only at their names. Verified against the real vault: asked what was written

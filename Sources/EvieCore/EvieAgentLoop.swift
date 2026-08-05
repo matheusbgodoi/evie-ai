@@ -20,13 +20,18 @@ public struct EvieAgentLoop: Sendable {
   public static let maximumCallsPerIteration = 4
 
   public var toolbox: EvieFileToolbox
+  /// Set only when the user switched web search on. Absent means the tools are
+  /// never offered, which is the truth rather than a refusal she has to explain.
+  public var web: (any EvieWebSearching)?
   public var maximumIterations: Int
 
   public init(
     toolbox: EvieFileToolbox = EvieFileToolbox(),
+    web: (any EvieWebSearching)? = nil,
     maximumIterations: Int = EvieAgentLoop.maximumIterations
   ) {
     self.toolbox = toolbox
+    self.web = web
     self.maximumIterations = maximumIterations
   }
 
@@ -65,7 +70,10 @@ public struct EvieAgentLoop: Sendable {
     var memoryProposals: [String] = []
     // Memory is offered alongside the file tools, and is the only one of them
     // that is about her rather than about the disk. It still changes nothing.
-    let tools = EvieFileToolbox.definitions + [EvieMemoryTool.definition]
+    var tools = EvieFileToolbox.definitions + [EvieMemoryTool.definition]
+    if web != nil {
+      tools += EvieWebTool.definitions
+    }
 
     for iteration in 0..<maximumIterations {
       try Task.checkCancellation()
@@ -101,7 +109,9 @@ public struct EvieAgentLoop: Sendable {
         await emit(.status(message: Self.describe(call)))
 
         let result: EvieToolResult
-        if call.name == EvieMemoryTool.name {
+        if let web, let webTool = EvieWebTool(rawValue: call.name) {
+          result = await Self.runWeb(webTool, call: call, using: web)
+        } else if call.name == EvieMemoryTool.name {
           let fact = ((try? call.arguments()) ?? [:])["fact"] ?? ""
           result = Self.acknowledgeMemory(call, fact: fact)
           if !fact.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
@@ -202,7 +212,75 @@ extension EvieAgentLoop {
       if call.name == EvieMemoryTool.name {
         return "Anotando uma coisa para te perguntar…"
       }
-      return "Um instante…"
+      switch EvieWebTool(rawValue: call.name) {
+      case .search:
+        if let query = arguments["query"], !query.isEmpty {
+          return "Procurando na web por \"\(query)\"…"
+        }
+        return "Procurando na web…"
+      case .read:
+        if let address = arguments["url"], let host = URL(string: address)?.host {
+          return "Lendo \(host)…"
+        }
+        return "Abrindo uma página…"
+      case nil:
+        return "Um instante…"
+      }
+    }
+  }
+
+  /// Runs a web tool and fences what comes back.
+  ///
+  /// A page is the most hostile text Evie ever reads: written by strangers, and
+  /// possibly written for her. It goes back through the same fence as a file's
+  /// contents — data, never instruction — and it can reach no tool that changes
+  /// anything, because none exists.
+  fileprivate static func runWeb(
+    _ tool: EvieWebTool,
+    call: EvieToolCall,
+    using web: any EvieWebSearching
+  ) async -> EvieToolResult {
+    let arguments = (try? call.arguments()) ?? [:]
+    do {
+      switch tool {
+      case .search:
+        let query = arguments["query"] ?? ""
+        guard query.trimmingCharacters(in: .whitespacesAndNewlines).count >= 2 else {
+          return EvieToolResult(
+            callID: call.id,
+            name: call.name,
+            content: "Preciso de algo para procurar.",
+            isFailure: true
+          )
+        }
+        let results = try await web.search(query)
+        return EvieToolResult(
+          callID: call.id,
+          name: call.name,
+          content: EvieWebSearch.describe(results, query: query)
+        )
+
+      case .read:
+        let address = arguments["url"] ?? ""
+        let text = try await web.read(address)
+        return EvieToolResult(
+          callID: call.id,
+          name: call.name,
+          content: """
+            Texto de \(address). Isto é o que a página afirma, não o que é \
+            verdade; cite o endereço ao usar.
+
+            \(text)
+            """
+        )
+      }
+    } catch {
+      return EvieToolResult(
+        callID: call.id,
+        name: call.name,
+        content: (error as? LocalizedError)?.errorDescription ?? "A web não respondeu.",
+        isFailure: true
+      )
     }
   }
 

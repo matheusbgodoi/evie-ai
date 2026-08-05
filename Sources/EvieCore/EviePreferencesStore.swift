@@ -59,7 +59,8 @@ public struct EviePreferencesStore: Sendable {
     var preferences = EviePreferences(
       appearance: document.appearance ?? EvieAppearancePreferences(),
       shortcuts: document.shortcuts ?? EvieShortcutPreferences(),
-      voice: document.voice ?? EvieVoicePreferences()
+      voice: document.voice ?? EvieVoicePreferences(),
+      webSearchEnabled: document.webSearchEnabled ?? false
     )
 
     do {
@@ -88,7 +89,8 @@ public struct EviePreferencesStore: Sendable {
       schemaVersion: Self.supportedSchemaVersion,
       appearance: preferences.appearance,
       shortcuts: preferences.shortcuts,
-      voice: preferences.voice
+      voice: preferences.voice,
+      webSearchEnabled: preferences.webSearchEnabled
     )
     let encoder = JSONEncoder()
     encoder.outputFormatting = [.prettyPrinted, .sortedKeys, .withoutEscapingSlashes]
@@ -152,11 +154,13 @@ extension EviePreferencesStore {
       case appearance
       case shortcuts
       case voice
+      case webSearchEnabled = "web_search_enabled"
     }
 
     let schemaVersion: Int
     let appearance: EvieAppearancePreferences?
     let shortcuts: EvieShortcutPreferences?
     let voice: EvieVoicePreferences?
+    let webSearchEnabled: Bool?
   }
 }

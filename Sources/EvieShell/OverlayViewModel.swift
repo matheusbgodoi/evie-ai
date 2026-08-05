@@ -30,6 +30,9 @@ final class OverlayViewModel: ObservableObject {
   /// Whether the question being answered was spoken rather than typed. Read by
   /// the coordinator to decide whether the answer is read out loud.
   private(set) var lastPromptWasSpoken = false
+  /// Whether web search is switched on, asked for at the start of every turn so
+  /// turning it off takes effect on the next question.
+  var isWebSearchEnabled: @MainActor () -> Bool = { false }
   /// What she has been allowed to remember. Asked for when a turn starts rather
   /// than held, so a memory deleted in Settings stops applying to the next
   /// question rather than to the next launch.
@@ -557,10 +560,11 @@ final class OverlayViewModel: ObservableObject {
     // granted, every tool call can only fail, and paying a whole extra round trip
     // to be told so is a slower answer for nothing.
     let roots = grantedRoots()
+    let web: (any EvieWebSearching)? = isWebSearchEnabled() ? EvieWebClient() : nil
 
     requestTask = Task { @MainActor [weak self] in
       do {
-        guard !roots.isEmpty else {
+        guard !roots.isEmpty || web != nil else {
           for try await event in client.stream(messages: requestMessages) {
             try Task.checkCancellation()
             self?.receive(event, requestID: requestID, userMessage: userMessage)
@@ -571,7 +575,7 @@ final class OverlayViewModel: ObservableObject {
         // Captured again, weakly, rather than reaching for the enclosing `self`:
         // the loop's callback is `@Sendable` and runs off this actor, so it may
         // not close over the outer closure's mutable binding.
-        let outcome = try await EvieAgentLoop().run(
+        let outcome = try await EvieAgentLoop(web: web).run(
           messages: requestMessages,
           roots: roots,
           client: client

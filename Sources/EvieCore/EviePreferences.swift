@@ -9,15 +9,48 @@ public struct EviePreferences: Codable, Hashable, Sendable {
   public var appearance: EvieAppearancePreferences
   public var shortcuts: EvieShortcutPreferences
   public var voice: EvieVoicePreferences
+  /// Whether Evie may search the web.
+  ///
+  /// Off by default, and it is the one switch in this application that changes
+  /// what leaves the machine. Everything else about Evie is local by
+  /// construction — the inference client refuses a non-loopback address — so
+  /// this is stated plainly in the interface rather than made convenient.
+  public var webSearchEnabled: Bool
 
   public init(
     appearance: EvieAppearancePreferences = EvieAppearancePreferences(),
     shortcuts: EvieShortcutPreferences = EvieShortcutPreferences(),
-    voice: EvieVoicePreferences = EvieVoicePreferences()
+    voice: EvieVoicePreferences = EvieVoicePreferences(),
+    webSearchEnabled: Bool = false
   ) {
     self.appearance = appearance
     self.shortcuts = shortcuts
     self.voice = voice
+    self.webSearchEnabled = webSearchEnabled
+  }
+
+  enum CodingKeys: String, CodingKey {
+    case appearance
+    case shortcuts
+    case voice
+    case webSearchEnabled = "web_search_enabled"
+  }
+
+  /// Every field optional, for the same reason as the sections below: a missing
+  /// key is an older file, not a damaged one.
+  public init(from decoder: any Decoder) throws {
+    let container = try decoder.container(keyedBy: CodingKeys.self)
+    appearance =
+      try container.decodeIfPresent(EvieAppearancePreferences.self, forKey: .appearance)
+      ?? EvieAppearancePreferences()
+    shortcuts =
+      try container.decodeIfPresent(EvieShortcutPreferences.self, forKey: .shortcuts)
+      ?? EvieShortcutPreferences()
+    voice =
+      try container.decodeIfPresent(EvieVoicePreferences.self, forKey: .voice)
+      ?? EvieVoicePreferences()
+    webSearchEnabled =
+      try container.decodeIfPresent(Bool.self, forKey: .webSearchEnabled) ?? false
   }
 
   public func validate() throws {

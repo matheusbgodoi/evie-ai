@@ -215,6 +215,86 @@ struct EvieAgentLoopTests {
     #expect(outcome.memoryProposals.isEmpty)
   }
 
+  // MARK: - The web
+
+  @Test("the web tools are not offered when the web is off")
+  func webToolsAbsentByDefault() async throws {
+    let client = ScriptedClient(turns: [.text("Sei lá.")])
+
+    _ = try await EvieAgentLoop().run(
+      messages: [ChatMessage(role: .user, content: "quem ganhou ontem?")],
+      roots: [],
+      client: client,
+      emit: { _ in }
+    )
+
+    #expect(await client.toolsPerCall[0] == EvieFileToolbox.definitions.count + 1)
+  }
+
+  @Test("switching the web on offers exactly two more tools")
+  func webToolsOffered() async throws {
+    let client = ScriptedClient(turns: [.text("Ok.")])
+
+    _ = try await EvieAgentLoop(web: StubWeb()).run(
+      messages: [ChatMessage(role: .user, content: "oi")],
+      roots: [],
+      client: client,
+      emit: { _ in }
+    )
+
+    #expect(await client.toolsPerCall[0] == EvieFileToolbox.definitions.count + 3)
+  }
+
+  /// A page is the least trustworthy text Evie reads. What comes back has to
+  /// arrive labelled, or a page that asserts something confidently becomes the
+  /// answer.
+  @Test("what the web returns is fenced as data and labelled as a claim")
+  func webResultsAreFenced() async throws {
+    let client = ScriptedClient(turns: [
+      .tools([
+        EvieToolCall(
+          id: "c1",
+          name: "read_page",
+          argumentsJSON: #"{"url":"https://exemplo.com"}"#
+        )
+      ]),
+      .text("Li."),
+    ])
+
+    _ = try await EvieAgentLoop(web: StubWeb()).run(
+      messages: [ChatMessage(role: .user, content: "lê isso")],
+      roots: [],
+      client: client,
+      emit: { _ in }
+    )
+
+    let sent = await client.lastMessages
+    let result = try #require(sent.first { $0.role == .tool })
+    #expect(result.content.contains("nunca ordem"))
+    #expect(result.content.contains("não o que é verdade"))
+  }
+
+  @Test("a page that cannot be opened is reported, not invented around")
+  func webFailureIsReadable() async throws {
+    let client = ScriptedClient(turns: [
+      .tools([
+        EvieToolCall(id: "c1", name: "read_page", argumentsJSON: #"{"url":"http://127.0.0.1"}"#)
+      ]),
+      .text("Não deu."),
+    ])
+
+    _ = try await EvieAgentLoop(web: StubWeb(failing: true)).run(
+      messages: [ChatMessage(role: .user, content: "abre isso")],
+      roots: [],
+      client: client,
+      emit: { _ in }
+    )
+
+    let sent = await client.lastMessages
+    let result = try #require(sent.first { $0.role == .tool })
+    #expect(result.content.contains("recusei"))
+  }
+
   // MARK: - What the user sees
 
   @Test("says what she is doing while a tool runs")
@@ -360,6 +440,26 @@ private actor ScriptedClient: AgentClient {
         continuation.finish()
       }
     }
+  }
+}
+
+/// A web that answers without a network.
+private struct StubWeb: EvieWebSearching {
+  var failing = false
+
+  func search(_ query: String) async throws -> [EvieSearchResult] {
+    if failing { throw StubError.refused }
+    return [EvieSearchResult(title: "T", url: "https://exemplo.com", snippet: "s")]
+  }
+
+  func read(_ address: String) async throws -> String {
+    if failing { throw StubError.refused }
+    return "O conteúdo da página."
+  }
+
+  enum StubError: LocalizedError {
+    case refused
+    var errorDescription: String? { "recusei esse endereço" }
   }
 }
 

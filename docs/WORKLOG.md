@@ -817,3 +817,35 @@ previous day of building. Everything here came from that.
   with it, deleted it, and the user's five existing profiles were untouched.
 - Speaking is part of the check on purpose. A profile that is created and listed
   but cannot synthesise is the failure that would only show up mid-conversation.
+
+## 2026-08-05 — WEB-001: she can look things up, if you let her
+
+- First item of the user's next goal. Chosen first because it changes the most
+  days and needs no account, no key, and nobody's OAuth.
+- It is also the only thing in this project that breaks "nothing leaves the Mac",
+  so it is opt-in, off by default, and the setting says plainly what turning it
+  on means rather than burying it in a footnote.
+- DuckDuckGo's HTML endpoint: no key, no quota, no signup. The cost is markup
+  instead of an API, so parsing is lenient, lives in `EvieCore` away from the
+  network, and is tested against a fixture — a change in their markup fails in
+  the suite rather than in front of the user.
+- `EvieWebClient.validate` refuses anything that is not the public web before a
+  request is made: loopback, `10.`/`192.168.`/`172.16–31.`, `169.254.`, `.local`,
+  and the cloud metadata address. This is the security point of the whole slice.
+  A page can contain a link and a model asked to follow one will; without it,
+  "read this page" becomes a way to make Evie fetch her own model server, from
+  inside the machine, on the user's behalf. Verified: all six refused.
+- Two bugs found by running it rather than reasoning about it:
+  - Titles came back with the raw `href` attached, because the class appears
+    before the address inside the same tag and the text was read from the class
+    rather than from the end of the tag.
+  - A real page came back as **fifteen characters**. Removing the `head` element
+    matched `<header>` too, and with no `</head>` after it the removal ran to the
+    end of the document. Tag names are now matched with their delimiter.
+- Verified end to end against the running model: "qual a versão mais recente do
+  Swift" → `search_web` → an answer naming its sources, 59 s.
+- Honest limitation observed in that run: she answered from the snippets without
+  opening a page, which is exactly the hallucination risk the tool description
+  tells her to avoid. Worth watching, and the reason results are labelled as
+  claims rather than facts.
+- Validation: `Scripts/test` 260/260 in 25 suites.

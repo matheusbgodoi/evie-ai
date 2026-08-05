@@ -84,6 +84,38 @@ struct AppearanceSettingsView: View {
       } header: {
         Text("A marca")
       }
+
+      Section {
+        Toggle(
+          "Deixar a Evie pesquisar na web",
+          isOn: Binding(
+            get: { viewModel.preferences.webSearchEnabled },
+            set: viewModel.setWebSearchEnabled
+          )
+        )
+      } header: {
+        Text("Internet")
+      } footer: {
+        Text(
+          viewModel.preferences.webSearchEnabled
+            ? """
+              Ligado. Quando ela precisar, o que você perguntar é enviado a um \
+              buscador e ela abre as páginas que encontrar. É a única coisa nesta \
+              Evie que sai do seu Mac.
+              """
+            : """
+              Desligado. Nada sai do seu Mac. Ela responde só do que sabe e das \
+              suas pastas, e diz quando não sabe em vez de inventar.
+
+              Ligando: o que você perguntar vai para um buscador (sem conta, sem \
+              cadastro) e ela lê as páginas. É a única coisa aqui que sai da \
+              máquina, por isso vem desligado.
+              """
+        )
+        .font(.footnote)
+        .foregroundStyle(.secondary)
+      }
+
     }
     .formStyle(.grouped)
   }

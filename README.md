@@ -102,11 +102,11 @@ twenty-three seconds the first time she uses it.
 - Reading images and PDFs, including scanned ones
 - Reading, searching, and searching inside folders you authorise
 - Memory of what you told her, when you confirm it
+- Web search, if you switch it on — off by default
 - A movable, resizable overlay, and configurable everything
 
 ## What does not, yet
 
-- Web search
 - Anything that writes, moves, or deletes a file
 - Email, calendar, Drive, WhatsApp
 - Automations and scheduled work
@@ -130,6 +130,8 @@ evie-shell --read <file>                   # what Evie would read from an image 
 evie-shell --tools-check                   # a real agentic turn over a throwaway folder
 evie-shell --ask-folder <folder> "<question>"   # ask a real question of a real folder
 evie-shell --voices-check <audio.wav>      # train a throwaway voice, speak with it, delete it
+evie-shell --web-check "<query>"           # search, read a page, and show what is refused
+evie-shell --ask-web "<question>"          # a real turn with the web switched on
 ```
 
 Server lifecycle:

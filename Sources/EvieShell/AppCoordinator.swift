@@ -124,6 +124,7 @@ final class AppCoordinator: NSObject {
 
     viewModel.grantedRoots = { [rootsViewModel] in rootsViewModel.roots }
     viewModel.memories = { [memoryViewModel] in memoryViewModel.entries }
+    viewModel.isWebSearchEnabled = { [weak self] in self?.preferences.webSearchEnabled ?? false }
     viewModel.onMemoryDecided = { [weak self] fact, keep in
       guard let self, keep else { return }
       memoryViewModel.remember(fact)
@@ -155,6 +156,7 @@ final class AppCoordinator: NSObject {
     // offer to look, and the moment a folder is authorised she must know she
     // can. Claiming either wrongly is the fastest way to make her useless.
     capabilities.readsLocalFiles = hasGrantedFolders
+    capabilities.searchesTheWeb = preferences.webSearchEnabled
     capabilities.speaksAnswers =
       preferences.voice.speechOutputEnabled && !EvieSpeechOutput.availableVoices().isEmpty
     if EvieAudioCapture.isBundled, preferences.voice.pushToTalkEnabled {

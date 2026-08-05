@@ -180,6 +180,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
       return
     }
 
+    // A real agentic turn with the web switched on, so the whole path — decide to
+    // search, search, open a page, answer — is demonstrated rather than assumed.
+    if let index = CommandLine.arguments.firstIndex(of: "--ask-web"),
+      index + 1 < CommandLine.arguments.count
+    {
+      let question = CommandLine.arguments[index + 1]
+      Task { @MainActor in
+        await Self.runWebQuestion(question)
+        NSApp.terminate(nil)
+      }
+      return
+    }
+
     // Exercises the voice library through the same client the settings window
     // uses. The engine's protocol was proved with a throwaway script; this is
     // what proves *this* code speaks it, which is otherwise discovered by a
@@ -195,9 +208,102 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
       return
     }
 
+    // Proves the one part of Evie that leaves this Mac actually works, and
+    // shows exactly what it sends and receives.
+    if let index = CommandLine.arguments.firstIndex(of: "--web-check"),
+      index + 1 < CommandLine.arguments.count
+    {
+      let query = CommandLine.arguments[index + 1]
+      Task { @MainActor in
+        await Self.runWebCheck(query: query)
+        NSApp.terminate(nil)
+      }
+      return
+    }
+
     let coordinator = AppCoordinator()
     self.coordinator = coordinator
     coordinator.start()
+  }
+
+  static func runWebQuestion(_ question: String) async {
+    var capabilities = EvieCapabilitySnapshot.textOnly
+    capabilities.searchesTheWeb = true
+    let configuration = (try? EvieConfigurationLoader().load()) ?? EvieConfiguration()
+    let started = Date()
+
+    do {
+      let outcome = try await EvieAgentLoop(web: EvieWebClient()).run(
+        messages: [
+          ChatMessage(
+            role: .system,
+            content: EviePersona.evie.systemPrompt(capabilities: capabilities)
+          ),
+          ChatMessage(role: .user, content: question),
+        ],
+        roots: [],
+        client: TurboFieldfareClient(configuration: configuration),
+        emit: { event in
+          if case .status(let message) = event {
+            print("   · \(message)")
+          }
+        }
+      )
+      let used: [String] =
+        outcome.appended.compactMap { $0.toolCalls }.flatMap { $0 }.map { $0.name }
+      print("")
+      print("pergunta: \(question)")
+      print("tools: \(used.isEmpty ? "(nenhuma)" : used.joined(separator: " → "))")
+      print("tempo: \(String(format: "%.0f", Date().timeIntervalSince(started))) s")
+      print("")
+      print(outcome.answer.isEmpty ? "(sem resposta — laço esgotado)" : outcome.answer)
+    } catch {
+      print("FALHOU: \((error as? LocalizedError)?.errorDescription ?? "\(error)")")
+    }
+  }
+
+  static func runWebCheck(query: String) async {
+    let client = EvieWebClient()
+    print("buscando: \(query)")
+    let started = Date()
+
+    let results: [EvieSearchResult]
+    do {
+      results = try await client.search(query)
+    } catch {
+      print("BUSCA falhou: \((error as? LocalizedError)?.errorDescription ?? "\(error)")")
+      return
+    }
+    print(String(format: "BUSCA: %d resultados em %.1f s", results.count, Date().timeIntervalSince(started)))
+    for result in results.prefix(3) {
+      print("  · \(result.title)")
+      print("    \(result.url)")
+    }
+
+    guard let first = results.first else {
+      return
+    }
+    do {
+      let text = try await client.read(first.url)
+      print("LER PÁGINA: \(text.count) caracteres de \(first.url)")
+      print("  início: \(text.prefix(160).replacingOccurrences(of: "\n", with: " "))…")
+    } catch {
+      print("LER falhou: \((error as? LocalizedError)?.errorDescription ?? "\(error)")")
+    }
+
+    // The guard that matters more than the feature.
+    print("")
+    print("endereços recusados:")
+    for address in [
+      "http://127.0.0.1:38433/v1/models",
+      "http://localhost/admin",
+      "http://192.168.1.1",
+      "http://169.254.169.254/latest/meta-data/",
+      "file:///etc/passwd",
+      "http://10.0.0.5",
+    ] {
+      print("  \(EvieWebClient.validate(address) == nil ? "recusado" : "ACEITOU — BUG") \(address)")
+    }
   }
 
   static func runVoicesCheck(audioURL: URL) async {

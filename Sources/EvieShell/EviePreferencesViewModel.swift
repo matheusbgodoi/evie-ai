@@ -173,6 +173,18 @@ final class EviePreferencesViewModel: ObservableObject {
     return true
   }
 
+  // MARK: - Internet
+
+  func setWebSearchEnabled(_ enabled: Bool) {
+    apply(
+      successMessage: enabled
+        ? "Busca ligada. A partir de agora suas perguntas podem sair do Mac."
+        : "Busca desligada. Nada mais sai do Mac."
+    ) {
+      $0.webSearchEnabled = enabled
+    }
+  }
+
   // MARK: - Voice
 
   func setSpeechOutputEnabled(_ enabled: Bool) {
