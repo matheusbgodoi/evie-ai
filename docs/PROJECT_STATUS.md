@@ -1,11 +1,23 @@
 # Project status
 
-Last updated: 2026-08-04
+Last updated: 2026-08-05
 
 ## Current phase
 
 **Phase 1 inference validation and Phase 2 native-shell prototyping are in
 progress.**
+
+VS-003 is implemented at source level. Evie now has her own identity rather than
+presenting as a front end for a local server: the hidden persona names her creator
+and how he is addressed, no surface mentions the model or the inference server,
+and the loopback port moved to 38433 so it cannot collide with another project.
+The overlay can be moved, resized, and reset; its height follows what SwiftUI
+actually measured, which is what fixes the clipped background fade. The
+placeholder glyph became an ASCII key that tilts in three dimensions and lights up
+only while something real is happening — idle CPU with the overlay visible
+measured 0.0%, down from 8.1% in the first attempt. Preferences for appearance,
+eight configurable shortcuts, and the voice switches exist and are validated, but
+they have no settings UI yet, and voice itself is still unwired.
 
 The Phase 0 planning foundation is complete enough to support bounded code work.
 VS-001 and VS-002 are implemented at source level: the native shell now supports
@@ -62,9 +74,19 @@ state, configuration, PID state, and logs also remain under `~/Library`.
   individual file, retains readable sessions, and shows only an opaque
   unavailable-record count. There is still no semantic memory, prompt/result
   diagnostic logging, or RAG.
-- The reusable waveform is present but receives no audio data; microphone capture,
-  STT, TTS invocation/playback, and a configured personal voice are not active,
-  and the UI says so.
+- The reusable waveform and the new reactive ring are present but receive no audio
+  data; microphone capture, STT, TTS invocation/playback, and a configured personal
+  voice are not active, and the UI says so. Clicking the mark asks for voice and is
+  told plainly that voice is not wired yet.
+- `EviePersona` generates the hidden system message from an explicit capability
+  snapshot, so a capability cannot be described in prose without being built. Every
+  flag is currently false except plain text.
+- `EviePreferences` stores appearance, eight configurable shortcut actions, and the
+  voice switches in a `preferences.json` separate from the model configuration. The
+  call-mode/speech dependency is enforced in the type. No settings UI reaches it yet.
+- `EvieOverlayGeometry` resolves the panel rectangle from preferences and connected
+  displays; the overlay can be dragged, resized, and reset, and recovers to the
+  anchored default when the saved display is disconnected.
 - Current research pins a deny-by-default Hermes candidate, QMD/DDGS directions,
   and a native “E aí, ívi” wake-word path. None is installed or enabled by Evie.
 - A backend-neutral TTS protocol and defensive source-only OmniVoice batch adapter are
@@ -170,7 +192,11 @@ readiness only; they are not the Phase 1 performance suite.
   accepted for shortcuts, focus, Spaces, displays, accessibility, cancellation,
   or rendered response behavior.
 - The current shell is not a signed/notarized `.app`, login item, or packaged
-  utility.
+  utility. This is now the critical-path blocker: without a bundle identity macOS
+  will not grant microphone access, so no part of the voice loop can be validated.
+- Nothing in VS-003 has been accepted by eye on the target display. Dragging,
+  resizing, the reset control, the corrected fade, the legibility of the ASCII key
+  at 30 points, and the light/dark palette are all `QA-006`.
 - The development controller can explicitly health-check/start/stop the pinned
   TurboFieldfare server at `--max-context 65536`, but Evie's application does not
   own lifecycle, idle unload, crash recovery, power policy, or automatic startup.
@@ -191,9 +217,21 @@ readiness only; they are not the Phase 1 performance suite.
 
 ## Next recommended action
 
-Run the already rebuilt/relaunched VS-002 manual repeated-follow-up/history/settings/
-focus checklist. In code, finish the backend-neutral event and supervisor boundary
-before installing Hermes or exposing any real tool. Package a stable `.app` identity
-before requesting microphone permission, then implement push-to-talk before wake word.
+Build the tabbed settings window (`UI-017`/`UI-018`), because the preference model
+from VS-003 is complete but unreachable: shortcuts, the voice switches, and the
+appearance controls all exist and validate, and none of them can be changed from
+the interface.
+
+Then package `Evie.app` (`PKG-001`). It is the hard blocker for everything to do
+with voice — a bare SwiftPM binary has no bundle identity, so macOS will not grant
+it the microphone, and an ad-hoc signature makes the system re-ask on every
+rebuild. Push-to-talk comes before wake word.
+
+Sight is cheaper than it looked. Native text recognition needs no model download,
+handles Brazilian Portuguese correctly, and costs about 90 ms and 75 MB per page,
+so `VIS-007` can land well before any local vision model is pinned. Note the
+measured trap: `minimumTextHeightFraction` defaults to 1/32 of the image height
+and silently returns nothing for ordinary screenshot-sized text.
+
 Do not configure email, WhatsApp, Drive, file mutation, automatic microphone, or
 workflow activation before their permission and validation gates pass.

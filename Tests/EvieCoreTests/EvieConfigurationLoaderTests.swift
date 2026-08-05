@@ -10,8 +10,8 @@ struct EvieConfigurationLoaderTests {
     let loader = EvieConfigurationLoader(fileURL: missingFileURL())
     let configuration = try loader.load(environment: [:])
 
-    #expect(configuration.endpoint == EvieConfiguration.turboFieldfareEndpoint)
-    #expect(configuration.model == EvieConfiguration.turboFieldfareModel)
+    #expect(configuration.endpoint == EvieConfiguration.defaultEndpoint)
+    #expect(configuration.model == EvieConfiguration.defaultModel)
     #expect(configuration.contextWindowTokens == 65_536)
   }
 

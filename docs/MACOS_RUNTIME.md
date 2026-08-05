@@ -21,6 +21,45 @@ overlay. The core building blocks are:
 The overlay is removed with `orderOut` when hidden; a transparent window must not
 redraw continuously.
 
+### Hiding a window does not stop SwiftUI animation — measured 2026-08-05
+
+`orderOut` is a presentation change, not a signal to the SwiftUI render loop. On
+this Mac, an overlay hidden with `orderOut(nil)` kept its `TimelineView` running
+at 55 frames per second and burned about 2.5% of one core with nothing on screen.
+`.opacity(0)`, `NSHostingView.isHidden`, `alphaValue = 0`, and
+`setIsVisible(false)` are all equally ineffective; `.hidden()` stops the drawing
+but leaves the tick running at roughly 1.4%.
+
+Only two things actually stop it: `TimelineView(paused: true)`, or removing the
+timeline from the view tree. Evie does the latter, and lowers the flag that
+controls it *before* calling `orderOut`. Window occlusion is observed as well, so
+another window dropped on top of the overlay stops the animation too. Note that
+`canJoinAllSpaces` means switching Spaces produces no occlusion change, so an
+explicit hide remains the primary signal.
+
+### Animation cost, measured on this Mac
+
+Release build, overlay visible, percentages are of one core.
+
+| Technique | Cost |
+|---|---|
+| Idle with no timeline in the tree | ~0.1% |
+| `rotation3DEffect` animated implicitly by Core Animation | ~0.65% |
+| `Canvas` redraw with cached symbols, 12 fps | ~3.5% |
+| `Canvas` redraw with cached symbols, 60 fps | ~5.9% |
+| `Canvas` calling `context.resolve(Text:)` per glyph per frame | ~23% |
+
+Two rules follow. Reduce the frame rate rather than the artwork: grid size barely
+moved the number, because the cost is the canvas frame setup rather than the
+glyphs. And never resolve `Text` inside a per-frame loop — declare the glyphs
+through `Canvas(symbols:)`, which is worth roughly 6× on its own.
+
+### SwiftUI macros are unavailable without Xcode
+
+`@State` is a macro in the macOS 26+ SDK and its plugin ships only with Xcode, so
+it cannot be used here; see `AGENTS.md`. There is also no Metal toolchain, which
+rules out custom shader effects.
+
 ## Current development runtime
 
 The first-test implementation deliberately stops short of the recommended service

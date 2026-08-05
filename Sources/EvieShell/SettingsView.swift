@@ -5,11 +5,10 @@ struct SettingsView: View {
 
   var body: some View {
     Form {
-      Section("Gemma local") {
-        LabeledContent("Modelo", value: viewModel.model)
-        LabeledContent("Endpoint", value: viewModel.endpoint)
+      Section("Modelo local") {
+        LabeledContent("Onde roda", value: "Somente neste Mac")
         LabeledContent(
-          "Janela do servidor",
+          "Memória de contexto",
           value: "\(viewModel.contextWindowTokens.formatted()) tokens"
         )
       }

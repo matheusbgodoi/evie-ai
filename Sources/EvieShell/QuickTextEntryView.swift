@@ -2,9 +2,12 @@ import SwiftUI
 
 struct QuickTextEntryView: View {
   @Binding var text: String
-  var endpointDescription: String
+  var state: EvieVisualState = .ready
+  var waveformSamples: [CGFloat] = []
+  var isAnimating = true
   var onSubmit: () -> Void
   var onCancel: () -> Void
+  var onActivateVoice: (() -> Void)? = nil
 
   @FocusState private var isFocused: Bool
 
@@ -12,16 +15,17 @@ struct QuickTextEntryView: View {
     GlassSurface(
       cornerRadius: 24,
       material: .hudWindow,
-      contentPadding: EdgeInsets(top: 10, leading: 13, bottom: 10, trailing: 10),
-      tint: .indigo
+      contentPadding: EdgeInsets(top: 10, leading: 11, bottom: 10, trailing: 10),
+      tint: state.tint
     ) {
       HStack(spacing: 11) {
-        Image(systemName: "sparkles")
-          .font(.system(size: 11, weight: .bold))
-          .foregroundStyle(.white)
-          .frame(width: 27, height: 27)
-          .background(.indigo, in: Circle())
-          .accessibilityHidden(true)
+        EvieMarkView(
+          state: state,
+          waveformSamples: waveformSamples,
+          diameter: 30,
+          isAnimating: isAnimating,
+          onActivate: onActivateVoice
+        )
 
         TextField("Pergunte à Evie…", text: $text, axis: .vertical)
           .textFieldStyle(.plain)
@@ -31,12 +35,6 @@ struct QuickTextEntryView: View {
           .onSubmit(onSubmit)
           .accessibilityLabel("Comando para Evie")
 
-        Text(endpointDescription)
-          .font(.system(size: 9, weight: .medium, design: .monospaced))
-          .foregroundStyle(.secondary)
-          .lineLimit(1)
-          .accessibilityLabel("Servidor local \(endpointDescription)")
-
         Button(action: onSubmit) {
           Image(systemName: "arrow.up")
             .font(.system(size: 10, weight: .bold))
@@ -44,7 +42,7 @@ struct QuickTextEntryView: View {
         }
         .buttonStyle(.plain)
         .foregroundStyle(.white)
-        .background(.indigo, in: Circle())
+        .background(EvieVoiceTint.idle, in: Circle())
         .disabled(text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
         .opacity(text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? 0.42 : 1)
         .help("Enviar")

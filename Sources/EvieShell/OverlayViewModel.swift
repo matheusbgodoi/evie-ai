@@ -16,8 +16,12 @@ final class OverlayViewModel: ObservableObject {
 
   var onLayoutInvalidated: (@MainActor () -> Void)?
   var onDismissRequested: (@MainActor () -> Void)?
+  /// Set once a real capture path exists. While it is `nil` the mark says so
+  /// instead of pretending the microphone opened.
+  var onVoiceActivationRequested: (@MainActor () -> Void)?
 
   private var agentClient: any AgentClient
+  private var capabilities: EvieCapabilitySnapshot
   private let conversationStore: EvieConversationStore
   private var conversation: [ChatMessage]
   private var conversationCreatedAt = Date()
@@ -32,20 +36,48 @@ final class OverlayViewModel: ObservableObject {
 
   init(
     agentClient: any AgentClient,
-    conversationStore: EvieConversationStore = EvieConversationStore()
+    conversationStore: EvieConversationStore = EvieConversationStore(),
+    capabilities: EvieCapabilitySnapshot = .textOnly
   ) {
     self.agentClient = agentClient
     self.conversationStore = conversationStore
+    self.capabilities = capabilities
     conversation = [
-      ChatMessage(role: .system, content: Self.systemPrompt)
+      ChatMessage(role: .system, content: Self.systemPrompt(for: capabilities))
     ]
+  }
+
+  /// Rebuilds the hidden persona message when a capability is switched on or
+  /// off, so Evie never keeps claiming — or denying — something that changed
+  /// mid-session. Only the system message is replaced; the visible turns stay.
+  func applyCapabilities(_ capabilities: EvieCapabilitySnapshot) {
+    guard capabilities != self.capabilities else {
+      return
+    }
+    self.capabilities = capabilities
+    let message = ChatMessage(role: .system, content: systemPrompt)
+    if conversation.first?.role == .system {
+      conversation[0] = message
+    } else {
+      conversation.insert(message, at: 0)
+    }
   }
 
   var hasActiveRequest: Bool {
     activeRequestID != nil
   }
 
-  var endpointDescription: String {
+  /// What the interface calls the thing that answers.
+  ///
+  /// Evie never shows the model name, the server product, or a host and port:
+  /// they are implementation detail, and a loopback address on screen only
+  /// invites confusion. The raw endpoint stays available for the diagnostics
+  /// section of Settings.
+  var engineDescription: String {
+    "Modelo local"
+  }
+
+  var diagnosticEndpointDescription: String {
     let configuration = agentClient.configuration
     let defaultPort = configuration.endpoint.scheme?.lowercased() == "https" ? 443 : 80
     return
@@ -71,7 +103,7 @@ final class OverlayViewModel: ObservableObject {
     activeConversationID = UUID()
     activeConversationTitle = "Nova conversa"
     conversationCreatedAt = Date()
-    conversation = [ChatMessage(role: .system, content: Self.systemPrompt)]
+    conversation = [ChatMessage(role: .system, content: systemPrompt)]
     artifacts = []
     visualState = .ready
     primaryText = "Nova conversa"
@@ -99,7 +131,7 @@ final class OverlayViewModel: ObservableObject {
       activeConversationTitle = stored.title
       conversationCreatedAt = stored.createdAt
       conversation =
-        [ChatMessage(role: .system, content: Self.systemPrompt)]
+        [ChatMessage(role: .system, content: systemPrompt)]
         + stored.messages
       artifacts = stored.messages
         .filter { $0.role == .assistant }
@@ -183,9 +215,20 @@ final class OverlayViewModel: ObservableObject {
     isQuickTextEntryPresented = true
     visualState = .ready
     primaryText = "Digite um comando"
-    secondaryText = "Resposta local via Gemma"
+    secondaryText = "Tudo acontece neste Mac"
     onLayoutInvalidated?()
     return true
+  }
+
+  /// Tapping the mark, pressing push-to-talk, or saying the wake phrase all end
+  /// up here so the three routes cannot drift apart.
+  func requestVoiceActivation() {
+    guard let onVoiceActivationRequested else {
+      secondaryText = "A voz ainda não está ligada neste build."
+      onLayoutInvalidated?()
+      return
+    }
+    onVoiceActivationRequested()
   }
 
   func dismissQuickText() {
@@ -219,8 +262,8 @@ final class OverlayViewModel: ObservableObject {
     quickText = ""
     isQuickTextEntryPresented = false
     visualState = .thinking
-    primaryText = "Consultando o Gemma local…"
-    secondaryText = endpointDescription
+    primaryText = "Pensando…"
+    secondaryText = nil
     waveformSamples = []
     artifacts.append(
       ArtifactCardModel(
@@ -228,7 +271,7 @@ final class OverlayViewModel: ObservableObject {
         kind: .answer,
         title: "Resposta da Evie",
         summary: "Aguardando o primeiro trecho…",
-        source: "Gemma local · TurboFieldfare",
+        source: engineDescription,
         isExpanded: true,
         actions: [
           ArtifactActionModel(
@@ -359,15 +402,16 @@ final class OverlayViewModel: ObservableObject {
 }
 
 extension OverlayViewModel {
-  fileprivate static let systemPrompt = """
-    Você é Evie (pronúncia “ívi”), uma assistente pessoal local no macOS.
-    Responda no idioma do usuário, com clareza e concisão. Neste estágio você não
-    possui ferramentas, acesso à web, arquivos, e-mail, calendário ou WhatsApp.
-    O histórico visível das conversas pode ser salvo localmente, mas você ainda
-    não possui memória pessoal semântica nem RAG. Nunca alegue ter realizado uma
-    ação externa. Quando uma solicitação depender dessas capacidades, explique a
-    limitação brevemente e ajude com o que puder apenas pelo texto.
-    """
+  /// The hidden persona message for the capabilities that are switched on right
+  /// now. It is regenerated rather than stored so a capability change can never
+  /// leave a stale claim in the conversation.
+  fileprivate var systemPrompt: String {
+    Self.systemPrompt(for: capabilities)
+  }
+
+  fileprivate static func systemPrompt(for capabilities: EvieCapabilitySnapshot) -> String {
+    EviePersona.evie.systemPrompt(capabilities: capabilities)
+  }
 
   fileprivate static func title(for prompt: String) -> String {
     let firstLine =
@@ -426,7 +470,7 @@ extension OverlayViewModel {
     case .phaseChanged(let phase):
       visualState = visualState(for: phase)
       if phase == .thinking {
-        primaryText = "Gemma está pensando…"
+        primaryText = "Evie está pensando…"
       }
 
     case .transcriptUpdated(let text, _):
@@ -446,7 +490,7 @@ extension OverlayViewModel {
       onLayoutInvalidated?()
 
     case .usage(let usage):
-      secondaryText = "\(usage.totalTokens) tokens · Gemma local"
+      secondaryText = "\(usage.totalTokens) tokens · somente local"
 
     case .completed(let message, _):
       let content = message.content.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -506,7 +550,8 @@ extension OverlayViewModel {
     let failure = EvieFailure(
       kind: .backend,
       message: error.localizedDescription,
-      recoverySuggestion: "Confirme se o TurboFieldfare está rodando em \(endpointDescription)."
+      recoverySuggestion:
+        "O modelo local não respondeu. Abra Configurações › Diagnóstico para conferir o motor."
     )
     finishFailure(failure, requestID: requestID)
   }
@@ -518,7 +563,7 @@ extension OverlayViewModel {
 
     interactionState.apply(.failed(failure))
     visualState = failure.kind == .cancelled ? .ready : .error
-    primaryText = failure.kind == .cancelled ? "Consulta cancelada" : "Gemma indisponível"
+    primaryText = failure.kind == .cancelled ? "Consulta cancelada" : "Evie indisponível"
     secondaryText = failure.recoverySuggestion
 
     if let artifactID = activeArtifactID,
@@ -527,20 +572,20 @@ extension OverlayViewModel {
       artifacts[index] = ArtifactCardModel(
         id: artifactID,
         kind: .error,
-        title: "Não foi possível consultar o Gemma",
+        title: "Não consegui responder agora",
         summary: failure.message,
         detail: failure.recoverySuggestion,
-        source: endpointDescription,
+        source: engineDescription,
         isExpanded: true
       )
     } else {
       artifacts.append(
         ArtifactCardModel(
           kind: .error,
-          title: "Não foi possível consultar o Gemma",
+          title: "Não consegui responder agora",
           summary: failure.message,
           detail: failure.recoverySuggestion,
-          source: endpointDescription,
+          source: engineDescription,
           isExpanded: true
         )
       )

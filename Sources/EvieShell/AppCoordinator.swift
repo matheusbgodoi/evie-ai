@@ -6,8 +6,12 @@ final class AppCoordinator: NSObject {
   private let conversationStore: EvieConversationStore
   private let configurationLoader: EvieConfigurationLoader
   private let configurationStore: EvieConfigurationStore
+  private let preferencesStore: EviePreferencesStore
+  private var preferences: EviePreferences
+  private let preferencesLoadFailure: EviePreferencesStore.LoadFailure?
   private let configurationEnvironment: [String: String]
   private let viewModel: OverlayViewModel
+  private let chrome: OverlayChromeModel
   private let panelController: OverlayPanelController
   private let startupConfigurationError: (any Error)?
   private var hotKeyController: GlobalHotKeyController?
@@ -62,18 +66,45 @@ final class AppCoordinator: NSObject {
     }
 
     let conversationStore = EvieConversationStore()
+    let preferencesStore = EviePreferencesStore(
+      fileURL: loadResult.fileURL
+        .deletingLastPathComponent()
+        .appendingPathComponent("preferences.json", isDirectory: false)
+    )
+    let preferencesResult = preferencesStore.loadWithDiagnostics()
     let viewModel = OverlayViewModel(
       agentClient: TurboFieldfareClient(configuration: loadResult.configuration),
-      conversationStore: conversationStore
+      conversationStore: conversationStore,
+      capabilities: Self.capabilities(for: preferencesResult.preferences)
     )
+    let chrome = OverlayChromeModel(appearance: preferencesResult.preferences.appearance)
+
     self.conversationStore = conversationStore
     self.configurationLoader = configurationLoader
     configurationStore = EvieConfigurationStore(fileURL: loadResult.fileURL)
+    self.preferencesStore = preferencesStore
+    preferences = preferencesResult.preferences
+    preferencesLoadFailure = preferencesResult.failure
     self.configurationEnvironment = configurationEnvironment
     self.viewModel = viewModel
+    self.chrome = chrome
     startupConfigurationError = loadResult.error
-    panelController = OverlayPanelController(viewModel: viewModel)
+    panelController = OverlayPanelController(
+      viewModel: viewModel,
+      chrome: chrome,
+      appearance: preferencesResult.preferences.appearance,
+      preferencesStore: preferencesStore
+    )
     super.init()
+  }
+
+  /// Evie only claims a capability whose code path is actually wired up. Voice
+  /// preferences describe intent; they do not by themselves enable anything.
+  fileprivate static func capabilities(
+    for preferences: EviePreferences
+  ) -> EvieCapabilitySnapshot {
+    _ = preferences
+    return .textOnly
   }
 
   func start() {
@@ -173,13 +204,13 @@ extension AppCoordinator {
 
     menu.addItem(.separator())
 
-    let endpointItem = NSMenuItem(
-      title: "Gemma local · \(viewModel.endpointDescription)",
+    let identityItem = NSMenuItem(
+      title: "Evie · assistente pessoal",
       action: nil,
       keyEquivalent: ""
     )
-    endpointItem.isEnabled = false
-    menu.addItem(endpointItem)
+    identityItem.isEnabled = false
+    menu.addItem(identityItem)
 
     let settingsItem = NSMenuItem(
       title: "Configurações…",

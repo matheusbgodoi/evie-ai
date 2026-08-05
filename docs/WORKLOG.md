@@ -221,3 +221,56 @@
   - run `QA-005`, establish a stable packaged `.app` identity/TCC path, and complete
     `CORE-002`/`SUP-001` before enabling push-to-talk, wake word, Hermes, or any real
     side-effecting integration.
+
+## 2026-08-05 — VS-003 identity, window control, and the animated mark
+
+- Scope: `Sources/EvieCore/{EviePersona,EviePreferences,EviePreferencesStore,EvieShortcut,EvieOverlayGeometry,EvieConfiguration}.swift`,
+  `Sources/EvieShell/{AppCoordinator,EvieOverlayView,EvieShellApp,OverlayChromeModel,OverlayPanelController,OverlayViewModel,QuickTextEntryView,SettingsView}.swift`,
+  `Sources/EvieShell/Views/{EvieMarkView,OverlayChrome,OverlayRootView,StatusPill}.swift`,
+  `Tests/EvieCoreTests/{EviePersonaTests,EviePreferencesTests,EvieOverlayGeometryTests,EvieConfigurationLoaderTests}.swift`,
+  `Scripts/evie-runtime`, `.env.example`, `config/examples/*`, `AGENTS.md`,
+  `docs/{MACOS_RUNTIME,UI_UX,PROJECT_STATUS,ROADMAP}.md`,
+  `docs/implementation/{VS_003,TASKS}.md`, `CHANGELOG.md`.
+- Completed:
+  - generated the hidden persona from a capability snapshot so Evie knows who
+    created her, addresses him correctly, and cannot claim an unbuilt capability;
+  - removed every model and server name, and the loopback host and port, from the
+    interface, and moved the default port to 38433;
+  - added a preferences file with appearance, eight configurable shortcut actions,
+    and voice switches, with the call-mode/speech dependency enforced in the type;
+  - made the overlay draggable, resizable, resettable, and persistent, with pure
+    geometry resolution covered by tests including display disconnection;
+  - replaced the estimated panel height with a measured one and rebuilt the scroll
+    mask, fixing the clipped fade;
+  - replaced the inert circle with the ASCII key mark, its 3D tilt, the reactive
+    ring, and a voice-activation request that is honest about not being wired;
+  - corrected the voice palette against measured WCAG contrast.
+- Validation:
+  - `Scripts/test` — 85/85 passed across ten suites, up from 46/46;
+  - `swift format lint --strict --recursive Sources Tests` — clean;
+  - `swift build -c release --product evie-shell -Xswiftc -warnings-as-errors` — passed;
+  - `Scripts/evie-runtime smoke` on 38433 — model discovery, `PRONTA`, SSE `[DONE]`;
+  - persona checked against the live model: correct name, form of address, and an
+    honest refusal for filesystem access;
+  - idle CPU of the release shell with the overlay visible: 0.0% over five samples,
+    down from 8.1% in the first implementation of the mark.
+- Measured findings recorded in `docs/MACOS_RUNTIME.md`:
+  - `orderOut` does not stop a SwiftUI `TimelineView`; only removing it from the
+    tree or pausing it does;
+  - `context.resolve(Text:)` per glyph per frame costs roughly six times cached
+    canvas symbols;
+  - `@State` does not compile with Command Line Tools because it is a macro in the
+    macOS 26+ SDK, and there is no Metal toolchain for custom shaders.
+- Security/privacy: no credential, conversation, model asset, or personal path
+  entered Git; preferences and placement live beside the existing local config
+  with `0700`/`0600` permissions.
+- Risks/blockers:
+  - nothing in this slice has been accepted by eye on the target display; dragging,
+    resizing, reset, the fade, mark legibility at 30 points, and the light/dark
+    palette need `QA-006`;
+  - voice remains unwired, so the ring has no real levels and clicking the mark
+    only says so;
+  - the settings window still shows the VS-002 model form; the new preferences have
+    no UI yet.
+- Next action: `UI-014` — the tabbed settings window, starting with the shortcut
+  recorder, so the preferences that already exist become reachable.

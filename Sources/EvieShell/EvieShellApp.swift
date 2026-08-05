@@ -1,3 +1,4 @@
+import EvieCore
 import SwiftUI
 
 @main
@@ -18,6 +19,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
   private var terminationPrepared = false
 
   func applicationDidFinishLaunching(_ notification: Notification) {
+    // Diagnostics that must not require launching a window. `--print-persona`
+    // exists so the exact hidden instructions Evie receives can be reviewed
+    // without reading them out of a running conversation.
+    if CommandLine.arguments.contains("--print-persona") {
+      print(EviePersona.evie.systemPrompt(capabilities: .textOnly))
+      NSApp.terminate(nil)
+      return
+    }
+
     let coordinator = AppCoordinator()
     self.coordinator = coordinator
     coordinator.start()

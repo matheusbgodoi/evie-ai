@@ -1,6 +1,6 @@
 # Evie implementation task ledger
 
-Last updated: 2026-08-04
+Last updated: 2026-08-05
 
 This is the execution backlog for Evie. It complements `docs/ROADMAP.md`: the
 roadmap defines product gates, while this ledger defines bounded implementation
@@ -125,6 +125,56 @@ documents Xcode 26. The bounded first-test result measured a 3,215 MB warm serve
 and 18 MB shell footprint with 53% system-wide memory free and 0.0% sampled idle
 CPU. It does not establish throughput, energy, quality, or long-context behavior.
 
+### VS-003 — Identity, window control, and the animated mark — `DONE` (source); `QA-006` deferred
+
+This slice answers the user's first full review of the running application. The
+complete request set, what shipped, and the measurements are in
+[`VS_003.md`](VS_003.md).
+
+| ID | Status | Current owner/scope | Depends on | Done when |
+|---|---|---|---|---|
+| `CORE-006` | `DONE` | `EviePersona`, `EvieCapabilitySnapshot` | `CORE-001` | The hidden system message is generated from an explicit capability snapshot, names the creator and his form of address, never mentions the model or server, and cannot announce a capability whose flag is false. |
+| `CFG-001` | `DONE` | `EvieConfiguration`, `Scripts/evie-runtime`, examples | `FND-003` | The default loopback port is outside the IANA registry and below the ephemeral range, and every tracked example moved with it. |
+| `CFG-002` | `DONE` | `EviePreferences`, `EviePreferencesStore` | `FND-003` | Appearance, shortcut, and voice preferences round-trip through a versioned `preferences.json` separate from the model configuration, repair a damaged file, fall back to defaults on an unknown schema, and reject an invalid document before writing. |
+| `CFG-003` | `DONE` | `EvieVoicePreferences` | `CFG-002` | Call mode implies speech output in the type itself: the setters keep the pair consistent and `validate()` rejects the inconsistent combination. |
+| `UI-013` | `DONE` | `EvieMarkView`, `EvieKeyArt`, `EvieVoiceTint` | `UI-004` | The ASCII key replaces the placeholder glyph in three grid densities chosen by rendered size, tilts in 3D through Core Animation, sweeps its shading ramp only during real activity, respects Reduce Motion, and requests voice activation when clicked. |
+| `UI-014` | `DONE` | `EvieOverlayGeometry`, `OverlayPanelController`, `OverlayChrome` | `UI-002` | The overlay can be dragged, resized from either edge, and reset to the anchored default; placement persists outside Git and recovers when the saved display is gone. |
+| `UI-015` | `DONE` | `OverlayRootView`, `OverlayPanelController` | `UI-006` | The panel height follows the height SwiftUI measured, and the scroll mask fades over a real distance at both edges and only while the list overflows. |
+| `UI-016` | `DONE` | shell copy, menu bar, settings | `CORE-006` | No user-visible surface names the model, the inference server, or the loopback host and port. |
+| `PERF-001` | `DONE` | `OverlayPanelController`, `EvieMarkView` | `UI-013` | Hiding or occluding the overlay removes the animation timeline from the view tree; idle CPU of the release shell with the overlay visible measured 0.0%. |
+| `QA-006` | `DEFERRED` | user target-hardware acceptance | `UI-013`–`UI-016` | On the target display the user accepts dragging, resizing, reset, the fade, mark legibility at 30 points, and the palette in light and dark. |
+
+### VS-004 — Everything configurable — `PLANNED`
+
+| ID | Status | Depends on | Deliverable and definition of done |
+|---|---|---|---|
+| `UI-017` | `PLANNED` | `CFG-002` | A tabbed settings window replaces the single model form: Atalhos, Voz, Aparência, Modelo, Diagnóstico. Every tab writes through the existing atomic stores and reports validation failures in place. |
+| `UI-018` | `PLANNED` | `UI-017` | A shortcut recorder captures a real key combination, shows the conflict set by name when two actions collide, offers per-action disable, and offers reset for one action or for all. |
+| `UI-019` | `PLANNED` | `UI-017`, `CFG-003` | The voice tab presents wake word, push-to-talk, call mode, and speech output, and explains the dependency in place rather than silently reverting a switch. |
+| `UI-020` | `PLANNED` | `UI-017` | The appearance tab exposes overlay width, placement reset, and the logo animation switch, and the diagnostics tab is the only place the endpoint appears. |
+| `UI-021` | `PLANNED` | `UI-018`, `UI-009` | Registered global shortcuts follow the preferences at runtime: re-registration on change, a visible failure when the system refuses a combination, and push-to-talk registered for key release as well. |
+
+### VS-005 — The voice loop — `PLANNED`
+
+| ID | Status | Depends on | Deliverable and definition of done |
+|---|---|---|---|
+| `PKG-001` | `PLANNED` | `APP-002` | A reproducible script builds `Evie.app` from the SwiftPM product with a stable bundle identifier, `Info.plist` usage descriptions, and a signature. Without a bundle identity macOS will not grant the microphone, and an ad-hoc signature re-prompts on every rebuild. |
+| `VOI-015` | `PLANNED` | `PKG-001`, `VOI-001` | Real input levels from `AVAudioEngine` drive the ring and the waveform; stopping capture stops both immediately. |
+| `VOI-016` | `PLANNED` | `VOI-015`, `UI-021` | Push-to-talk, the mark, and the wake phrase all enter through one activation path so the three routes cannot drift apart. |
+| `VOI-017` | `PLANNED` | `VOI-016` | Local speech recognition produces a transcript that is submitted through the same interaction path as typed text, with partial text marked provisional. |
+| `VOI-018` | `PLANNED` | `VOI-007`, `VOI-015` | The existing OmniVoice adapter is connected to native playback with sentence chunking, output metering, cancellation, and barge-in. |
+| `VOI-019` | `PLANNED` | `VOI-018`, `CFG-003` | Call mode renders only the mark and its ring, with no transcript on screen, and leaving it restores the written conversation. |
+
+### VS-006 — Sight — `PLANNED`
+
+| ID | Status | Depends on | Deliverable and definition of done |
+|---|---|---|---|
+| `VIS-007` | `PLANNED` | `CORE-003` | Native text recognition through Vision, with `RecognizeDocumentsRequest` structure where available, feeding a structured observation. `minimumTextHeightFraction` is set explicitly, because the default silently returns nothing for ordinary screenshot-sized text. |
+| `VIS-008` | `PLANNED` | `VIS-007` | PDFs resolve per page: the embedded text layer when it is trustworthy, rendered pages through recognition when it is not, with the provenance of each page recorded. |
+| `VIS-009` | `PLANNED` | `VIS-007` | Images arrive by drag, paste, or explicit screen capture, with type and size limits, and Retina resolution preserved because downscaling loses diacritics. |
+| `VIS-010` | `PLANNED` | `VIS-009`, `AGT-003` | The observation reaches the model as untrusted evidence that cannot grant authority, and the card separates observed text from interpretation. |
+
+
 ## Dependency map
 
 The critical path is intentionally sequential at capability boundaries:
@@ -167,12 +217,12 @@ turns it into a robust long-lived macOS surface.
 |---|---|---|---|
 | `UI-007` | `PLANNED` | `APP-001`, `CORE-003` | General artifact stack supports pin/expand/copy/open/dismiss and compact task tabs without exposing private preview content by default. |
 | `UI-008` | `PLANNED` | `UI-002`–`UI-007` | Keyboard navigation, VoiceOver labels/order, Dynamic Type strategy, Reduce Motion, Reduce Transparency, high contrast, and light/dark behavior are verified. |
-| `UI-009` | `PLANNED` | `UI-003` | Shortcut preferences detect common conflicts, persist outside Git, and expose a reliable reset path. |
+| `UI-009` | `IN_PROGRESS` | `UI-003` | The preference model, conflict detection, per-action disable, and reset exist (`CFG-002`); the recorder UI and runtime re-registration are `UI-018`/`UI-021`. |
 | `UI-010` | `PLANNED` | `CORE-002`, `UI-007` | Visible worker-loading, offline, permission, cancellation, retry, sleeping, and memory-pressure states never overstate what the system is doing. |
 | `UI-011` | `PLANNED` | `UI-007`, `POL-002` | Approval card shows exact action, target, material arguments, revision, expiration, approve/deny controls, and post-action result. |
 | `UI-012` | `IN_PROGRESS` | `UI-007`, `AGT-006`, `AUT-009` | VS-002 deliberately opens native History and model Settings windows without changing the default overlay; pinned artifacts, workflows, permissions, semantic-memory/resource controls, and health remain deferred. |
 | `APP-002` | `DONE` | `APP-001`, `FND-003` | Continuous completed turns persist as user-only, schema-versioned visible-history records; full history is independent of bounded prompt context, hidden prompts never persist, sessions resume through the native history window, and deletion is explicitly confirmed. |
-| `UI-013` | `PLANNED` | `UI-004`, user logo asset | Replace the temporary sparkle glyph with the user-supplied Evie mark and a state-driven animation that respects Reduce Motion, keeps microphone/action indicators unambiguous, and has a static fallback. |
+| `UI-013` | `DONE` | `UI-004` | Delivered in VS-003 as an ASCII key rather than a supplied asset; see the VS-003 registry above. |
 | `QA-005` | `DEFERRED` | `APP-002`, `UI-012` | Target-Mac checks cover launch focus, repeated follow-ups, response-completion focus restoration, history resume/relaunch/delete, and live settings behavior. |
 | `QA-003` | `DEFERRED` | `UI-008`, `UI-010` | UI/state tests cover focus restoration, Spaces/full-screen, multiple displays, keyboard-only use, accessibility settings, hide/show, and stale asynchronous events. |
 

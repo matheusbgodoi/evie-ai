@@ -2,9 +2,11 @@ import SwiftUI
 
 struct EvieOverlayView: View {
   @ObservedObject var viewModel: OverlayViewModel
+  @ObservedObject var chrome: OverlayChromeModel
 
   var body: some View {
     OverlayRootView(
+      chrome: chrome,
       state: viewModel.visualState,
       primaryText: viewModel.primaryText,
       secondaryText: viewModel.secondaryText,
@@ -22,15 +24,13 @@ struct EvieOverlayView: View {
         viewModel.performArtifactAction(id, action: action)
       },
       quickText: viewModel.isQuickTextEntryPresented ? $viewModel.quickText : nil,
-      quickTextEndpointDescription: viewModel.isQuickTextEntryPresented
-        ? viewModel.endpointDescription
-        : nil,
       onSubmitQuickText: viewModel.isQuickTextEntryPresented
         ? { viewModel.submitQuickText() }
         : nil,
       onCancelQuickText: viewModel.isQuickTextEntryPresented
         ? { viewModel.dismissQuickText() }
-        : nil
+        : nil,
+      onActivateVoice: { viewModel.requestVoiceActivation() }
     )
   }
 }

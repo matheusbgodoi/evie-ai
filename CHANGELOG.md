@@ -6,6 +6,55 @@ All notable changes to Evie are documented here. Dates use `YYYY-MM-DD`.
 
 ### Added
 
+- Evie's own identity: `EviePersona` generates the hidden system message from an
+  explicit capability snapshot, names Matheus Barboza de Godoi as her creator,
+  addresses him as `você`/`seu` with masculine agreement, and can only claim a
+  capability whose flag is switched on. `evie-shell --print-persona` prints it.
+- `EviePreferences` and `EviePreferencesStore`: appearance, eight configurable
+  shortcut actions with conflict detection and per-action disable, and voice
+  switches, in a `preferences.json` kept separate from the model configuration.
+- The call-mode dependency is enforced in the type: turning speech off leaves call
+  mode, turning call mode on turns speech on, and the inconsistent pair fails
+  validation before it can be written.
+- `EvieOverlayGeometry`: overlay placement resolved from preferences and connected
+  displays, with clamping, resize around the window centre, and recovery to the
+  anchored default when the saved display is gone.
+- The overlay can be dragged anywhere, resized from either edge, and restored to
+  bottom-centre at its original width by a button that appears only once the
+  placement differs from the default. Placement persists outside Git.
+- Evie's mark: a key drawn as ASCII on a square-celled `Canvas`, in three grid
+  densities chosen by rendered size, tilted in 3D by Core Animation and lit by a
+  travelling shading ramp while she is listening, speaking, or thinking. Clicking
+  it requests voice activation; the request is honest that voice is not yet wired.
+- A reactive ring around the mark that encodes direction twice: incoming audio
+  grows inward with thin bars, outgoing audio grows outward with thick ones.
+
+### Changed
+
+- The default local endpoint moved from port `8080` to `38433`, chosen outside the
+  IANA registry and below the ephemeral range so it cannot collide with another
+  project or be taken by an outgoing connection.
+- No interface surface names the model or the inference server any more. "Gemma
+  local", "TurboFieldfare", and the loopback host and port are replaced by "Evie ·
+  assistente pessoal" and "Modelo local"; the raw endpoint remains available for
+  diagnostics only.
+- The overlay panel now follows the height SwiftUI actually measured instead of
+  estimating it, and the scroll mask fades over a real distance at both edges and
+  only when the list overflows. Together these fix the clipped background fade.
+- The voice palette was replaced with values measured for contrast. The previous
+  listening tint resolved to 1.82:1 against the HUD in light mode, below the 3:1
+  WCAG requires for a graphical object; the new pair clears 4.5:1 in both
+  appearances and resolves per appearance through `NSColor`.
+
+### Fixed
+
+- Hiding the overlay now stops its animation. `orderOut` does not stop a SwiftUI
+  timeline: a hidden overlay was measured redrawing at 55 fps and burning 2.5% of
+  a core. The motion gate is lowered before the window is ordered out, and window
+  occlusion is observed as well. Idle CPU with the mark animated measured 0.0%.
+
+### Added
+
 - Initial feasibility, architecture, security, UI, voice, RAG, automation, model,
   resource, roadmap, handoff, and evaluation documentation.
 - Repository-wide agent continuity and documentation contract.

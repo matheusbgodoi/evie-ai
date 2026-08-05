@@ -5,7 +5,7 @@ set -euo pipefail
 readonly EVIE_TURBO_REVISION="7a99f2a635e3adf7ed0720b882d2edb600f2f0da"
 readonly EVIE_MODEL_ID="gemma-4-26b-a4b-it"
 readonly EVIE_CONTEXT_TOKENS="65536"
-readonly EVIE_PORT="8080"
+readonly EVIE_PORT="38433"
 
 readonly EVIE_SCRIPT_DIR="${0:A:h}"
 readonly EVIE_REPOSITORY_DIR="${EVIE_SCRIPT_DIR:h}"
@@ -155,7 +155,7 @@ function configure() {
   print -r -- '{
   "schema_version": 1,
   "model": {
-    "endpoint": "http://127.0.0.1:8080/v1",
+    "endpoint": "http://127.0.0.1:38433/v1",
     "name": "gemma-4-26b-a4b-it",
     "context_tokens": 65536,
     "max_completion_tokens": 4096,

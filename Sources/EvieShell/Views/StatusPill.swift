@@ -27,7 +27,7 @@ enum EvieVisualState: String, CaseIterable, Hashable {
 
   var symbolName: String {
     switch self {
-    case .ready: "sparkles"
+    case .ready: "key.fill"
     case .listening: "mic.fill"
     case .transcribing: "text.bubble.fill"
     case .thinking: "ellipsis"
@@ -39,14 +39,16 @@ enum EvieVisualState: String, CaseIterable, Hashable {
     }
   }
 
+  /// Listening and speaking deliberately reuse the two voice hues so the same
+  /// colour always means the same direction of audio, wherever it appears.
   var tint: Color {
     switch self {
-    case .ready: .indigo
-    case .listening: .mint
+    case .ready: EvieVoiceTint.idle
+    case .listening: EvieVoiceTint.input
     case .transcribing: .cyan
-    case .thinking: .purple
+    case .thinking: EvieVoiceTint.idle
     case .usingTool: .blue
-    case .speaking: .pink
+    case .speaking: EvieVoiceTint.output
     case .awaitingApproval: .orange
     case .completed: .green
     case .error: .red
@@ -62,55 +64,6 @@ enum EvieVisualState: String, CaseIterable, Hashable {
   }
 }
 
-struct StatusPill: View {
-  var state: EvieVisualState
-  var detail: String? = nil
-  var compact = false
-
-  var body: some View {
-    HStack(spacing: compact ? 7 : 9) {
-      statusGlyph
-
-      VStack(alignment: .leading, spacing: 1) {
-        Text(state.title)
-          .font(compact ? .caption.weight(.semibold) : .subheadline.weight(.semibold))
-          .lineLimit(1)
-
-        if let detail, !detail.isEmpty, !compact {
-          Text(detail)
-            .font(.caption)
-            .foregroundStyle(.secondary)
-            .lineLimit(1)
-        }
-      }
-    }
-    .accessibilityElement(children: .combine)
-    .accessibilityLabel(state.title)
-    .accessibilityValue(detail ?? "")
-  }
-
-  private var statusGlyph: some View {
-    Image(systemName: state.symbolName)
-      .font(.system(size: compact ? 9 : 11, weight: .bold))
-      .foregroundStyle(.white)
-      .frame(width: compact ? 20 : 25, height: compact ? 20 : 25)
-      .background {
-        Circle()
-          .fill(
-            LinearGradient(
-              colors: [state.tint.opacity(0.82), state.tint],
-              startPoint: .topLeading,
-              endPoint: .bottomTrailing
-            )
-          )
-      }
-      .overlay {
-        Circle().strokeBorder(.white.opacity(0.22), lineWidth: 0.6)
-      }
-      .shadow(color: state.tint.opacity(0.32), radius: 6)
-  }
-}
-
 /// The compact, bottom-anchored interaction surface. Voice activity can update
 /// the samples while text/status changes remain concise and transient.
 struct CommandCapsule: View {
@@ -119,9 +72,11 @@ struct CommandCapsule: View {
   var secondaryText: String? = nil
   var waveformSamples: [CGFloat] = []
   var isMuted = false
+  var isAnimating = true
   var onToggleMute: (() -> Void)? = nil
   var onCancel: (() -> Void)? = nil
   var onOpenDetails: (() -> Void)? = nil
+  var onActivateVoice: (() -> Void)? = nil
 
   @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
@@ -133,7 +88,13 @@ struct CommandCapsule: View {
       tint: state.tint
     ) {
       HStack(spacing: 11) {
-        StatusPill(state: state, compact: true)
+        EvieMarkView(
+          state: state,
+          waveformSamples: waveformSamples,
+          diameter: 30,
+          isAnimating: isAnimating,
+          onActivate: onActivateVoice
+        )
 
         capsuleContent
           .frame(maxWidth: .infinity, alignment: .leading)

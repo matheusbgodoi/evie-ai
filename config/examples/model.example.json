@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "model": {
-    "endpoint": "http://127.0.0.1:8080/v1",
+    "endpoint": "http://127.0.0.1:38433/v1",
     "name": "gemma-4-26b-a4b-it",
     "context_tokens": 65536,
     "max_completion_tokens": 4096,

@@ -5,11 +5,11 @@ import Foundation
 /// It intentionally contains no API key or credential field. Secrets for future
 /// integrations belong in Keychain-backed adapters, not this Codable value.
 public struct EvieConfiguration: Codable, Hashable, Sendable {
-  public static let turboFieldfareEndpoint = URL(
-    string: "http://127.0.0.1:8080/v1"
+  public static let defaultEndpoint = URL(
+    string: "http://127.0.0.1:38433/v1"
   )!
-  public static let turboFieldfareModel = "gemma-4-26b-a4b-it"
-  public static let turboFieldfareContextWindow = 65_536
+  public static let defaultModel = "gemma-4-26b-a4b-it"
+  public static let defaultContextWindow = 65_536
 
   public var endpoint: URL
   public var model: String
@@ -23,9 +23,9 @@ public struct EvieConfiguration: Codable, Hashable, Sendable {
   public var requestTimeout: TimeInterval
 
   public init(
-    endpoint: URL = EvieConfiguration.turboFieldfareEndpoint,
-    model: String = EvieConfiguration.turboFieldfareModel,
-    contextWindowTokens: Int = EvieConfiguration.turboFieldfareContextWindow,
+    endpoint: URL = EvieConfiguration.defaultEndpoint,
+    model: String = EvieConfiguration.defaultModel,
+    contextWindowTokens: Int = EvieConfiguration.defaultContextWindow,
     maxCompletionTokens: Int = 4_096,
     temperature: Double? = nil,
     topP: Double? = nil,

@@ -1,8 +1,8 @@
 # Native interface and interaction model
 
-Status: VS-002 continuous text/history/settings source implemented; target
-interaction acceptance pending. CLUI CC is a UX reference, not a runtime
-dependency.
+Status: VS-003 identity, window control, and the animated mark are source
+implemented; target interaction acceptance is `QA-006`. CLUI CC is a UX reference,
+not a runtime dependency.
 
 ## Product stance
 
@@ -180,6 +180,62 @@ Additional states include awaiting permission, cancelled, worker loading, offlin
 integration, and system memory-pressure fallback. The UI must never display
 "listening" after microphone capture stops or "done" before a commit action is
 confirmed by its target.
+
+## Evie's mark
+
+The logo is a key drawn in ASCII. It is rendered into a `Canvas` with explicitly
+square cells rather than stacked `Text` rows, because a monospaced glyph cell is
+about 1.9 times taller than it is wide and would stretch the drawing. Three grid
+densities exist and are chosen by rendered size: 5×5 below 44 points, 7×7 below
+56, 9×9 above. A 9×9 grid inside a 28-point badge resolves to a 3.4-point font and
+is illegible, so density follows size rather than preference.
+
+The mark is also the voice button. Clicking it, holding push-to-talk, and saying
+the wake phrase all enter through one activation path, so the three routes cannot
+drift apart.
+
+Motion is deliberately two layers:
+
+- a `rotation3DEffect` tilt animated by Core Animation, running whenever the
+  overlay is on screen, at effectively no cost because the render server
+  interpolates the transform without re-running the view body;
+- a shading sweep that re-chooses each cell's character from the ramp
+  `" .:-=+*#%@"` every frame, which only runs while Evie is listening, speaking,
+  transcribing, thinking, or using a tool.
+
+An overlay that is hidden or occluded has no timeline in its view tree at all.
+Ordering the window out is not sufficient — see `docs/MACOS_RUNTIME.md` for the
+measurement.
+
+### Voice colours
+
+| Role | Light | Dark |
+|---|---|---|
+| Your voice going in | `#0D7770` | `#17CFC2` |
+| Evie's voice coming out | `#7149E9` | `#9577EE` |
+
+These replaced `.mint` and `.pink`, which were chosen by eye and failed in light
+mode: `.mint` resolves to 1.82:1 against the HUD surface, below the 3:1 that WCAG
+requires for a graphical object. The replacements clear 4.5:1 in both appearances
+and resolve per appearance through `NSColor(name:dynamicProvider:)`.
+
+Colour is not the only channel, because teal and violet both drift towards blue
+under common colour-vision differences. Direction is encoded geometrically as
+well: incoming audio grows **inward** with 44 thin bars, outgoing audio grows
+**outward** with 22 thick ones.
+
+## Window control
+
+The overlay is dragged by a grip at its top edge, which hands the mouse to
+AppKit's own `performDrag(with:)` so multi-display travel behaves like a normal
+titlebar without making the panel key. Thin handles on both edges change the width
+around the window's own centre. A reset control appears beside the grip only once
+the placement differs from the default.
+
+Placement is saved to `preferences.json` and re-validated at launch: a saved
+position is reused only when at least 160×48 points of it land on a connected
+display, so unplugging a monitor returns Evie to the anchored default rather than
+opening her off screen.
 
 ## Visual language
 
