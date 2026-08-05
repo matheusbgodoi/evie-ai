@@ -63,6 +63,12 @@ function build() {
 
   rm -rf "${EVIE_APP_DIR}"
   mkdir -p "${EVIE_APP_DIR}/Contents/MacOS" "${EVIE_APP_DIR}/Contents/Resources"
+
+  if [[ ! -f "${EVIE_REPOSITORY_DIR}/Resources/Evie.icns" ]]; then
+    print "Desenhando o ícone…"
+    "${EVIE_SCRIPT_DIR}/evie-icon" >/dev/null
+  fi
+  cp "${EVIE_REPOSITORY_DIR}/Resources/Evie.icns" "${EVIE_APP_DIR}/Contents/Resources/Evie.icns"
   cp "${executable}" "${EVIE_APP_DIR}/Contents/MacOS/${EVIE_EXECUTABLE}"
 
   # SwiftPM emits resource bundles beside the executable. Missing them breaks
@@ -107,6 +113,8 @@ function write_info_plist() {
   <string>${EVIE_BUNDLE_ID}</string>
   <key>CFBundleName</key>
   <string>${EVIE_APP_NAME}</string>
+  <key>CFBundleIconFile</key>
+  <string>Evie</string>
   <key>CFBundleDisplayName</key>
   <string>${EVIE_APP_NAME}</string>
   <key>CFBundlePackageType</key>

@@ -109,10 +109,6 @@ final class OverlayViewModel: ObservableObject {
   /// they are implementation detail, and a loopback address on screen only
   /// invites confusion. The raw endpoint stays available for the diagnostics
   /// section of Settings.
-  var engineDescription: String {
-    "Modelo local"
-  }
-
   var diagnosticEndpointDescription: String {
     let configuration = agentClient.configuration
     let defaultPort = configuration.endpoint.scheme?.lowercased() == "https" ? 443 : 80
@@ -542,7 +538,6 @@ final class OverlayViewModel: ObservableObject {
         kind: .answer,
         title: "Resposta da Evie",
         summary: "Aguardando o primeiro trecho…",
-        source: engineDescription,
         isExpanded: true,
         actions: [
           ArtifactActionModel(
@@ -1028,7 +1023,6 @@ extension OverlayViewModel {
         title: "Não consegui responder agora",
         summary: failure.message,
         detail: failure.recoverySuggestion,
-        source: engineDescription,
         isExpanded: true
       )
     } else {
@@ -1038,8 +1032,7 @@ extension OverlayViewModel {
           title: "Não consegui responder agora",
           summary: failure.message,
           detail: failure.recoverySuggestion,
-          source: engineDescription,
-          isExpanded: true
+            isExpanded: true
         )
       )
     }

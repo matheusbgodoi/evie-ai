@@ -1,0 +1,233 @@
+#!/bin/zsh
+
+# Draws Evie's application icon and packs it into an .icns.
+#
+# The icon is drawn rather than exported from a design tool so it lives in the
+# repository as source: the shape is a few numbers here instead of a binary
+# nobody can change. It is also drawn rather than rendered from the SF Symbol the
+# interface uses, because a symbol is designed to read at sixteen points and
+# looks thin and mechanical at a thousand.
+#
+# Run after changing the drawing; `Scripts/evie-app build` copies the result in.
+
+set -euo pipefail
+
+readonly root="${0:A:h:h}"
+readonly work="$(mktemp -d)"
+readonly iconset="${work}/Evie.iconset"
+readonly output="${root}/Resources/Evie.icns"
+
+trap 'rm -rf "${work}"' EXIT
+mkdir -p "${iconset}" "${root}/Resources"
+
+cat > "${work}/draw.swift" <<'SWIFT'
+import AppKit
+import CoreGraphics
+
+/// Evie's mark, drawn at any size.
+///
+/// A four-pointed sparkle on a dark squircle. The restraint is the point: one
+/// luminous shape on near-black reads as considered, where a busy icon reads as
+/// a placeholder somebody forgot to replace.
+enum EvieIcon {
+  /// Apple's grid for a macOS application icon. The rounded square occupies
+  /// 824 of 1024 points, leaving the margin the system expects for shadow and
+  /// for the icon to sit correctly beside every other one in the Dock.
+  static let canvasRatio: CGFloat = 1024
+  static let squircleRatio: CGFloat = 824
+  static let cornerRatio: CGFloat = 185
+
+  static func draw(size: CGFloat, into context: CGContext) {
+    let scale = size / canvasRatio
+    let squircle = squircleRatio * scale
+    let corner = cornerRatio * scale
+    let origin = (size - squircle) / 2
+    let box = CGRect(x: origin, y: origin, width: squircle, height: squircle)
+
+    context.saveGState()
+    let shape = CGPath(
+      roundedRect: box,
+      cornerWidth: corner,
+      cornerHeight: corner,
+      transform: nil
+    )
+    context.addPath(shape)
+    context.clip()
+
+    // A near-black field with the faintest lift towards the top, so the surface
+    // has depth without announcing a gradient.
+    let background = CGGradient(
+      colorsSpace: CGColorSpaceCreateDeviceRGB(),
+      colors: [
+        CGColor(red: 0.13, green: 0.14, blue: 0.20, alpha: 1),
+        CGColor(red: 0.05, green: 0.05, blue: 0.08, alpha: 1),
+      ] as CFArray,
+      locations: [0, 1]
+    )!
+    context.drawLinearGradient(
+      background,
+      start: CGPoint(x: box.minX, y: box.maxY),
+      end: CGPoint(x: box.maxX, y: box.minY),
+      options: []
+    )
+
+    // A wash of colour behind the mark, which is what stops the dark field
+    // reading as flat grey at small sizes.
+    let halo = CGGradient(
+      colorsSpace: CGColorSpaceCreateDeviceRGB(),
+      colors: [
+        CGColor(red: 0.42, green: 0.46, blue: 0.95, alpha: 0.40),
+        CGColor(red: 0.42, green: 0.46, blue: 0.95, alpha: 0),
+      ] as CFArray,
+      locations: [0, 1]
+    )!
+    context.drawRadialGradient(
+      halo,
+      startCenter: CGPoint(x: box.midX, y: box.midY),
+      startRadius: 0,
+      endCenter: CGPoint(x: box.midX, y: box.midY),
+      endRadius: squircle * 0.58,
+      options: []
+    )
+
+    drawSparkle(
+      centre: CGPoint(x: box.midX, y: box.midY - squircle * 0.015),
+      radius: squircle * 0.34,
+      context: context
+    )
+    // One small companion, off the main axis. Two shapes read as a mark; one
+    // reads as a logo mark, and three starts to look like decoration.
+    drawSparkle(
+      centre: CGPoint(x: box.midX + squircle * 0.245, y: box.midY + squircle * 0.245),
+      radius: squircle * 0.105,
+      context: context
+    )
+
+    context.restoreGState()
+
+    // A hairline of light along the top edge, the way physical objects catch a
+    // room's light. It is what makes the squircle look like a surface.
+    context.saveGState()
+    context.addPath(shape)
+    context.setLineWidth(max(1, scale * 2.5))
+    context.setStrokeColor(CGColor(red: 1, green: 1, blue: 1, alpha: 0.10))
+    context.strokePath()
+    context.restoreGState()
+  }
+
+  /// A four-pointed sparkle: four points joined by curves that pull in towards
+  /// the centre, which is what gives the shape its taper.
+  static func sparklePath(centre: CGPoint, radius: CGFloat) -> CGPath {
+    // How far the curve's control point sits from the centre. Smaller is
+    // sharper; this is the value where the points stay elegant without becoming
+    // needles that disappear at sixteen pixels.
+    let waist = radius * 0.20
+    let path = CGMutablePath()
+    let points = [
+      CGPoint(x: centre.x, y: centre.y + radius),
+      CGPoint(x: centre.x + radius, y: centre.y),
+      CGPoint(x: centre.x, y: centre.y - radius),
+      CGPoint(x: centre.x - radius, y: centre.y),
+    ]
+    let controls = [
+      CGPoint(x: centre.x + waist, y: centre.y + waist),
+      CGPoint(x: centre.x + waist, y: centre.y - waist),
+      CGPoint(x: centre.x - waist, y: centre.y - waist),
+      CGPoint(x: centre.x - waist, y: centre.y + waist),
+    ]
+
+    path.move(to: points[0])
+    for index in 0..<4 {
+      path.addQuadCurve(to: points[(index + 1) % 4], control: controls[index])
+    }
+    path.closeSubpath()
+    return path
+  }
+
+  static func drawSparkle(centre: CGPoint, radius: CGFloat, context: CGContext) {
+    // The glow first, so the shape sits in light rather than on top of it.
+    context.saveGState()
+    context.setShadow(
+      offset: .zero,
+      blur: radius * 0.55,
+      color: CGColor(red: 0.62, green: 0.70, blue: 1, alpha: 0.75)
+    )
+    context.addPath(sparklePath(centre: centre, radius: radius))
+    context.setFillColor(CGColor(red: 1, green: 1, blue: 1, alpha: 1))
+    context.fillPath()
+    context.restoreGState()
+
+    // Then the shape itself, in a gradient from white to a cool periwinkle, so
+    // it has a direction of light instead of being a flat white cutout.
+    context.saveGState()
+    context.addPath(sparklePath(centre: centre, radius: radius))
+    context.clip()
+    let fill = CGGradient(
+      colorsSpace: CGColorSpaceCreateDeviceRGB(),
+      colors: [
+        CGColor(red: 1, green: 1, blue: 1, alpha: 1),
+        CGColor(red: 0.78, green: 0.84, blue: 1, alpha: 1),
+      ] as CFArray,
+      locations: [0, 1]
+    )!
+    context.drawLinearGradient(
+      fill,
+      start: CGPoint(x: centre.x - radius, y: centre.y + radius),
+      end: CGPoint(x: centre.x + radius, y: centre.y - radius),
+      options: []
+    )
+    context.restoreGState()
+  }
+}
+
+let arguments = CommandLine.arguments
+guard arguments.count == 3, let pixels = Int(arguments[1]) else {
+  FileHandle.standardError.write(Data("usage: draw <pixels> <output.png>\n".utf8))
+  exit(1)
+}
+
+guard
+  let context = CGContext(
+    data: nil,
+    width: pixels,
+    height: pixels,
+    bitsPerComponent: 8,
+    bytesPerRow: 0,
+    space: CGColorSpaceCreateDeviceRGB(),
+    bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
+  )
+else {
+  exit(1)
+}
+
+EvieIcon.draw(size: CGFloat(pixels), into: context)
+
+guard
+  let image = context.makeImage(),
+  let destination = CGImageDestinationCreateWithURL(
+    URL(fileURLWithPath: arguments[2]) as CFURL,
+    "public.png" as CFString,
+    1,
+    nil
+  )
+else {
+  exit(1)
+}
+CGImageDestinationAddImage(destination, image, nil)
+CGImageDestinationFinalize(destination)
+SWIFT
+
+print "Compilando o desenho…"
+swiftc -O -framework AppKit -framework ImageIO -o "${work}/draw" "${work}/draw.swift" 2>/dev/null
+
+# The sizes macOS asks for, each at both scales.
+for spec in "16 16x16" "32 16x16@2x" "32 32x32" "64 32x32@2x" \
+            "128 128x128" "256 128x128@2x" "256 256x256" "512 256x256@2x" \
+            "512 512x512" "1024 512x512@2x"; do
+  pixels="${spec%% *}"
+  name="${spec##* }"
+  "${work}/draw" "${pixels}" "${iconset}/icon_${name}.png"
+done
+
+iconutil --convert icns --output "${output}" "${iconset}"
+print "Ícone em ${output} ($(du -h "${output}" | cut -f1))"
