@@ -6,6 +6,19 @@ All notable changes to Evie are documented here. Dates use `YYYY-MM-DD`.
 
 ### Added
 
+- Speech recognition through the system's own recogniser. It supports Brazilian
+  Portuguese, streams a partial transcript while you are still speaking, and runs
+  in a system daemon rather than inside Evie — so it does not compete with the
+  26B model for the 24 GB of unified memory that is the real constraint here.
+- A closed microphone that produced words submits them as an ordinary question,
+  through the same path typed text uses. A leftover partial guess is discarded
+  rather than submitted.
+- `evie-shell --speech-check` reports whether this Mac can transcribe Portuguese
+  and whether the language pack still has to be downloaded, without opening the
+  microphone.
+- The persona now derives from what is actually built: with a bundle identity and
+  system recognition present, Evie says she can hear and can read documents, and
+  still says plainly that she cannot speak, reach folders, or search the web.
 - Evie can read images and PDFs. `EvieDocumentReader` uses the system's own text
   recognition — no model downloaded, nothing leaving the Mac — and chooses per
   page between a PDF's embedded text layer and recognising the pixels, because a

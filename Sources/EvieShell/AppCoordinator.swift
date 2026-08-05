@@ -1,3 +1,4 @@
+import AVFoundation
 import AppKit
 import EvieCore
 
@@ -22,6 +23,9 @@ final class AppCoordinator: NSObject {
   /// True while push-to-talk is holding the microphone open, so releasing the key
   /// stops it but a click on the mark toggles instead.
   private var isHoldingToTalk = false
+  /// Held as `AnyObject` because speech recognition needs macOS 26 and the
+  /// coordinator does not. Every use is inside an availability check.
+  private var transcription: AnyObject?
   private var historyWindowController: ConversationHistoryWindowController?
   private weak var visibilityMenuItem: NSMenuItem?
 
@@ -103,13 +107,22 @@ final class AppCoordinator: NSObject {
     super.init()
   }
 
-  /// Evie only claims a capability whose code path is actually wired up. Voice
-  /// preferences describe intent; they do not by themselves enable anything.
+  /// Evie only claims a capability whose code path is actually wired up.
+  ///
+  /// A preference is an intention, not a capability: wanting her to speak does
+  /// not make her able to. Listening additionally requires a bundle identity,
+  /// because without one macOS will never hand over the microphone.
   fileprivate static func capabilities(
     for preferences: EviePreferences
   ) -> EvieCapabilitySnapshot {
-    _ = preferences
-    return .textOnly
+    var capabilities = EvieCapabilitySnapshot.textOnly
+    capabilities.readsImagesAndDocuments = true
+    if EvieAudioCapture.isBundled, preferences.voice.pushToTalkEnabled {
+      if #available(macOS 26, *) {
+        capabilities.listensToSpeech = EvieSpeechTranscription.isSupported
+      }
+    }
+    return capabilities
   }
 
   func start() {
@@ -402,13 +415,45 @@ extension AppCoordinator {
     Task { @MainActor [weak self] in
       guard let self else { return }
       do {
-        try await audioCapture.start()
+        let format = try await audioCapture.prepareInputFormat()
+        let sink = try await startTranscription(inputFormat: format)
+        try await audioCapture.start(bufferSink: sink)
         viewModel.beginListening()
       } catch {
         isHoldingToTalk = false
+        await cancelTranscription()
         viewModel.presentVoiceUnavailable(error)
       }
     }
+  }
+
+  /// Starts the recogniser when this Mac has one, and returns the sink the audio
+  /// tap should feed. Without recognition the microphone still opens; the level
+  /// ring works and the transcript simply does not exist.
+  fileprivate func startTranscription(
+    inputFormat: AVAudioFormat
+  ) async throws -> (@Sendable (AVAudioPCMBuffer) -> Void)? {
+    guard #available(macOS 26, *), EvieSpeechTranscription.isSupported else {
+      return nil
+    }
+    let recogniser = EvieSpeechTranscription()
+    recogniser.onTranscriptChanged = { [weak self] settled, volatile in
+      self?.viewModel.updateTranscript(settled: settled, volatile: volatile)
+    }
+    let pump = try await recogniser.start(inputFormat: inputFormat)
+    transcription = recogniser
+    return { buffer in pump.push(buffer) }
+  }
+
+  fileprivate func cancelTranscription() async {
+    guard #available(macOS 26, *),
+      let recogniser = transcription as? EvieSpeechTranscription
+    else {
+      transcription = nil
+      return
+    }
+    transcription = nil
+    await recogniser.cancel()
   }
 
   fileprivate func stopListening() {
@@ -416,9 +461,20 @@ extension AppCoordinator {
       return
     }
     audioCapture.stop()
-    // Speech recognition is not wired yet, so there is no transcript to hand
-    // back. The view model says exactly that rather than inventing one.
-    viewModel.endListening(transcript: nil)
+
+    guard #available(macOS 26, *),
+      let recogniser = transcription as? EvieSpeechTranscription
+    else {
+      transcription = nil
+      viewModel.endListening(transcript: nil)
+      return
+    }
+    transcription = nil
+    viewModel.presentTranscribing()
+    Task { @MainActor [weak self] in
+      let transcript = await recogniser.finish()
+      self?.viewModel.endListening(transcript: transcript)
+    }
   }
 
   /// Cancels the running answer and puts the overlay away.
@@ -428,6 +484,9 @@ extension AppCoordinator {
   fileprivate func stopEverything() {
     isHoldingToTalk = false
     audioCapture.stop()
+    Task { @MainActor [weak self] in
+      await self?.cancelTranscription()
+    }
     viewModel.cancelCurrentInteraction()
     panelController.hide()
     updateToggleMenuTitle()

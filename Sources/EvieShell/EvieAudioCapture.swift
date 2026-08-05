@@ -101,30 +101,49 @@ final class EvieAudioCapture: ObservableObject {
     return permission
   }
 
-  func start() async throws {
-    guard !isCapturing else {
-      return
-    }
+  /// Obtains consent and reports the format the microphone will produce, without
+  /// opening it yet.
+  ///
+  /// Split from `start` because the transcriber has to be configured for this
+  /// exact format before the first buffer arrives, and the format is only knowable
+  /// once permission exists.
+  func prepareInputFormat() async throws -> AVAudioFormat {
     guard Self.isBundled else {
       throw CaptureError.notBundled
     }
-
     let resolved = await requestPermission()
     guard resolved.allowsCapture else {
       throw CaptureError.permissionDenied
     }
 
-    let engine = AVAudioEngine()
-    let input = engine.inputNode
-    let format = input.outputFormat(forBus: 0)
+    let engine = self.engine ?? AVAudioEngine()
+    self.engine = engine
+    let format = engine.inputNode.outputFormat(forBus: 0)
     guard format.sampleRate > 0, format.channelCount > 0 else {
+      self.engine = nil
       throw CaptureError.engineFailed("nenhum dispositivo de entrada disponível")
     }
+    return format
+  }
+
+  /// Opens the microphone. `bufferSink` receives every buffer as it arrives, on
+  /// the audio thread, and must not block.
+  func start(bufferSink: (@Sendable (AVAudioPCMBuffer) -> Void)? = nil) async throws {
+    guard !isCapturing else {
+      return
+    }
+
+    let format = try await prepareInputFormat()
+    guard let engine else {
+      throw CaptureError.engineFailed("motor de áudio indisponível")
+    }
+    let input = engine.inputNode
 
     let meter = meter
     let floor = Self.noiseFloorDecibels
     input.installTap(onBus: 0, bufferSize: 1_024, format: format) { buffer, _ in
       meter.absorb(buffer, noiseFloorDecibels: floor)
+      bufferSink?(buffer)
     }
 
     do {
@@ -132,10 +151,10 @@ final class EvieAudioCapture: ObservableObject {
       try engine.start()
     } catch {
       input.removeTap(onBus: 0)
+      self.engine = nil
       throw CaptureError.engineFailed(error.localizedDescription)
     }
 
-    self.engine = engine
     isCapturing = true
     levels = Array(repeating: 0, count: Self.historyLength)
     startPublishing()

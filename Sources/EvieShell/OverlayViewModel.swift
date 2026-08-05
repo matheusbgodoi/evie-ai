@@ -348,6 +348,32 @@ final class OverlayViewModel: ObservableObject {
     onLayoutInvalidated?()
   }
 
+  /// The microphone closed and the recogniser is settling the last words.
+  func presentTranscribing() {
+    guard visualState == .listening else {
+      return
+    }
+    visualState = .transcribing
+    secondaryText = nil
+    waveformSamples = []
+    onLayoutInvalidated?()
+  }
+
+  /// Shows what is being heard while it is still being heard.
+  ///
+  /// The volatile part is the recogniser's current guess and is marked as such;
+  /// it is never treated as a question, and it is discarded if capture ends on it.
+  func updateTranscript(settled: String, volatile: String) {
+    guard visualState == .listening else {
+      return
+    }
+    let combined = [settled, volatile]
+      .filter { !$0.isEmpty }
+      .joined(separator: " ")
+    primaryText = combined.isEmpty ? "Ouvindo…" : combined
+    secondaryText = volatile.isEmpty ? nil : "ainda ouvindo…"
+  }
+
   func updateInputLevels(_ levels: [CGFloat]) {
     guard visualState == .listening else {
       return

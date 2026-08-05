@@ -23,7 +23,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     // exists so the exact hidden instructions Evie receives can be reviewed
     // without reading them out of a running conversation.
     if CommandLine.arguments.contains("--print-persona") {
-      print(EviePersona.evie.systemPrompt(capabilities: .textOnly))
+      var capabilities = EvieCapabilitySnapshot.textOnly
+      capabilities.readsImagesAndDocuments = true
+      if EvieAudioCapture.isBundled, #available(macOS 26, *) {
+        capabilities.listensToSpeech = EvieSpeechTranscription.isSupported
+      }
+      print(EviePersona.evie.systemPrompt(capabilities: capabilities))
       NSApp.terminate(nil)
       return
     }
@@ -41,6 +46,23 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
       print("permissão do microfone: \(EvieAudioCapture.currentPermission())")
       print("pode capturar: \(EvieAudioCapture.isBundled ? "identidade OK" : "sem identidade")")
       NSApp.terminate(nil)
+      return
+    }
+
+    // Reports whether this Mac can transcribe Portuguese, and whether doing so
+    // would first need a download. Opens no microphone.
+    if CommandLine.arguments.contains("--speech-check") {
+      Task {
+        if #available(macOS 26, *) {
+          let locale = Locale(identifier: "pt-BR")
+          let availability = await EvieSpeechTranscription.availability(for: locale)
+          print("reconhecimento disponível: \(EvieSpeechTranscription.isSupported)")
+          print("pt-BR: \(availability) — \(availability.message)")
+        } else {
+          print("Este macOS não tem o reconhecimento de fala do sistema.")
+        }
+        NSApp.terminate(nil)
+      }
       return
     }
 

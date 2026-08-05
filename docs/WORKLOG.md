@@ -387,3 +387,38 @@
   - drag-and-drop and the picker have not been exercised by hand.
 - Next action: `VOI-017`, connecting Apple's `SpeechTranscriber` so a spoken
   question becomes a typed one.
+
+## 2026-08-05 — VOI-017: a spoken question becomes a typed one
+
+- Scope: `Sources/EvieShell/{EvieSpeechTranscription,EvieAudioCapture,AppCoordinator,OverlayViewModel,EvieShellApp}.swift`,
+  `CHANGELOG.md`, `docs/implementation/TASKS.md`.
+- Completed:
+  - `SpeechAnalyzer` plus `SpeechTranscriber` at `pt-BR` with volatile and fast
+    results and per-result confidence, gated on macOS 26 so the package keeps its
+    macOS 15 floor;
+  - the language pack is installed up front rather than lazily, so the first
+    spoken sentence does not vanish into a silent download;
+  - an input pump that converts microphone buffers to the recogniser's format on
+    the audio thread behind a lock, yielding `AnalyzerInput` into the analyzer;
+  - `SpeechModels.endRetention()` on both finish and cancel, which is the idle
+    unload the engineering contract requires of every heavy worker;
+  - split `prepareInputFormat` from `start` in the capture, because the recogniser
+    must be configured for the exact input format before the first buffer;
+  - a live transcript in the capsule with the volatile part marked as still being
+    heard, and discarded if capture ends on it;
+  - capabilities now derived from what exists: hearing requires a bundle identity
+    and system recognition, reading documents is on, speaking is still off.
+- Validation:
+  - `Scripts/test` — 99/99 passed;
+  - strict format lint clean; release build with warnings-as-errors;
+  - `--speech-check` from the bundle: recognition available, `pt-BR` resolves to
+    `needsDownload`, meaning supported with a one-time language pack;
+  - `--print-persona` from the bundle now lists hearing and document reading as
+    available and continues to deny speaking, folders, and the web.
+- Not validated, and not claimed: no audio has been transcribed. That needs the
+  microphone grant, which is deliberately left for the user to give. Until then
+  the recogniser's accuracy on Brazilian Portuguese, its cold-start latency after
+  the language download, and barge-in behaviour are all unmeasured.
+- Next action: `VOI-018` — connect the existing OmniVoice adapter to playback so
+  she can answer out loud, which is the last switch in the settings that still
+  describes something unbuilt.
