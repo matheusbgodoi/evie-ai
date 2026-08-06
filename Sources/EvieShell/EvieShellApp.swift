@@ -634,6 +634,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
   @MainActor
   static func runPlanCheck(_ question: String) async {
+    // Line-buffered, or nothing at all is visible until the process exits.
+    // Swift's `print` block-buffers when standard output is a pipe, and a check
+    // whose whole value is watching a slow thing happen in stages is useless if
+    // the stages all arrive at the end — measured by staring at an empty file
+    // for seven minutes while the model worked.
+    setvbuf(stdout, nil, _IOLBF, 0)
+
     let client = TurboFieldfareClient(
       configuration: (try? EvieConfigurationLoader().load()) ?? EvieConfiguration()
     )
