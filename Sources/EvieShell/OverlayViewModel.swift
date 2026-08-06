@@ -128,6 +128,9 @@ final class OverlayViewModel: ObservableObject {
   }
 
   @Published private(set) var speechPhase: SpeechPhase = .idle
+  /// Which button on which card is currently saying it worked.
+  private var confirmedAction: (card: UUID, action: String)?
+  private var confirmationTask: Task<Void, Never>?
 
   var isSpeaking: Bool {
     speechPhase == .speaking
@@ -1027,6 +1030,7 @@ final class OverlayViewModel: ObservableObject {
         EvieRichText(artifact.detail ?? artifact.summary).plainText,
         forType: .string
       )
+      confirm("copy", on: id)
       primaryText = "Resposta copiada"
       secondaryText = "Sem marcações — pronta para colar"
 
@@ -1106,7 +1110,16 @@ extension OverlayViewModel {
   ///
   /// One place, because three call sites building the same pair by hand is how
   /// one of them ends up without the speaker.
-  static func answerActions(phase: SpeechPhase) -> [ArtifactActionModel] {
+  /// How long a button says it worked before going back to what it says.
+  ///
+  /// Long enough to be read without looking for it, short enough that the button
+  /// is ready again by the time anybody wants it.
+  static let confirmationSeconds: Double = 2
+
+  static func answerActions(
+    phase: SpeechPhase,
+    confirming: String? = nil
+  ) -> [ArtifactActionModel] {
     [
       ArtifactActionModel(
         id: "speak",
@@ -1117,18 +1130,41 @@ extension OverlayViewModel {
       ),
       ArtifactActionModel(
         id: "copy",
-        title: "Copiar",
+        title: confirming == "copy" ? "Copiado" : "Copiar",
         systemImage: "doc.on.doc",
-        role: .secondary
+        role: .secondary,
+        isConfirmed: confirming == "copy"
       ),
     ]
+  }
+
+  /// Marks one button on one card as having just worked, and undoes it.
+  private func confirm(_ actionID: String, on card: UUID) {
+    confirmationTask?.cancel()
+    confirmedAction = (card, actionID)
+    refreshSpeakActions()
+    onLayoutInvalidated?()
+
+    confirmationTask = Task { @MainActor [weak self] in
+      try? await Task.sleep(for: .seconds(Self.confirmationSeconds))
+      guard !Task.isCancelled, let self else {
+        return
+      }
+      confirmedAction = nil
+      refreshSpeakActions()
+      onLayoutInvalidated?()
+    }
   }
 
   /// Keeps the button on every card in step with whether she is actually
   /// talking, so it never offers to start something already running.
   fileprivate func refreshSpeakActions() {
     for index in artifacts.indices where artifacts[index].kind == .answer {
-      artifacts[index].actions = Self.answerActions(phase: speechPhase)
+      artifacts[index].actions = Self.answerActions(
+        phase: speechPhase,
+        confirming: confirmedAction?.card == artifacts[index].id
+          ? confirmedAction?.action : nil
+      )
     }
   }
 

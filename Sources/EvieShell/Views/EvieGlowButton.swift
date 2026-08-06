@@ -47,6 +47,7 @@ struct EvieGlowButton: NSViewRepresentable {
     private var action: (() -> Void)?
     private var isEnabledForClicks = true
     private var isHovering = false
+    private var isPressed = false
     private var trackingArea: NSTrackingArea?
     private var identity: Identity?
 
@@ -63,8 +64,12 @@ struct EvieGlowButton: NSViewRepresentable {
       super.init(frame: frame)
       wantsLayer = true
       layer = CALayer()
+      // Siblings, not parent and child. The glyph used to live inside the
+      // background, which meant the hover transform applied to one of them
+      // reached the other through the hierarchy instead of by intent. Both hang
+      // off the root now and the root is what moves, so they cannot drift apart.
       layer?.addSublayer(background)
-      background.addSublayer(glyph)
+      layer?.addSublayer(glyph)
     }
 
     @available(*, unavailable)
@@ -175,33 +180,47 @@ struct EvieGlowButton: NSViewRepresentable {
         background.backgroundColor = identity.tint.cgColor
       }
       background.opacity = identity.isEnabled ? 1 : 0.42
-      background.transform = CATransform3DMakeScale(
-        isHovering && identity.isEnabled ? 1.09 : 1,
-        isHovering && identity.isEnabled ? 1.09 : 1,
-        1
-      )
 
-      // The glyph is laid out at the symbol's own proportions. It used to be
-      // forced into a square of `glyphSize * 1.9`, which stretched every symbol
-      // that is not square — a chevron is about twice as wide as it is tall, so
-      // it came out fat and visibly crooked, and an `xmark` came out nearly
-      // filling the circle.
+      // One transform, on the root, so the circle and the mark inside it are
+      // always the same size and always concentric.
+      let emphasis: CGFloat
+      if !identity.isEnabled {
+        emphasis = 1
+      } else if isPressed {
+        // Pressing pushes in. Without it a click has no acknowledgement at all
+        // until whatever it triggered finishes, which for anything slow reads
+        // as a button that did not take the press.
+        emphasis = 0.92
+      } else if isHovering {
+        emphasis = 1.09
+      } else {
+        emphasis = 1
+      }
+      layer?.anchorPoint = CGPoint(x: 0.5, y: 0.5)
+      layer?.frame = bounds
+      layer?.transform = CATransform3DMakeScale(emphasis, emphasis, 1)
+
+      // The glyph is centred on its *ink*, not on its image.
+      //
+      // An SF Symbol's image is a canvas with the mark somewhere inside it, and
+      // where inside is not the middle: `chevron.up` sits high in its box and
+      // `chevron.down` sits low. Centring the box therefore puts the visible
+      // mark off-centre, in opposite directions for the two halves of the same
+      // toggle — which is why the arrow looked crooked, and why it looked more
+      // crooked the moment the circle grew under it on hover.
+      //
+      // The opaque bounds are measured once per appearance and cached, so this
+      // costs nothing on the hover redraws that call this method.
       let drawn = Self.image(
         named: identity.systemImage,
         size: identity.glyphSize,
         colour: identity.style == .filled ? .white : .secondaryLabelColor
       )
       let glyphSize = drawn?.size ?? CGSize(width: identity.glyphSize, height: identity.glyphSize)
-      // Snapped to the device pixel grid, not to whole points.
-      //
-      // A chevron is two strokes meeting at a corner. Rounding its origin to a
-      // point on a 2× display leaves the two arms on different half-pixel
-      // phases, so one is anti-aliased heavier than the other and the arrow
-      // reads as tilted — which is exactly how it was described. Snapping to
-      // the real pixel grid puts both arms in the same phase.
+      let offset = drawn?.inkOffset ?? .zero
       glyph.frame = CGRect(
-        x: Self.snap((identity.diameter - glyphSize.width) / 2, to: scale),
-        y: Self.snap((identity.diameter - glyphSize.height) / 2, to: scale),
+        x: Self.snap((identity.diameter - glyphSize.width) / 2 - offset.width, to: scale),
+        y: Self.snap((identity.diameter - glyphSize.height) / 2 - offset.height, to: scale),
         width: Self.snap(glyphSize.width, to: scale),
         height: Self.snap(glyphSize.height, to: scale)
       )
@@ -264,8 +283,28 @@ struct EvieGlowButton: NSViewRepresentable {
       CATransaction.commit()
     }
 
+    /// Pressed on the way down, fired on the way up inside the button.
+    ///
+    /// Firing on `mouseDown` gave the click no acknowledgement and no way out:
+    /// there was nothing to see and, once started, nothing to cancel by dragging
+    /// off — which is what every other button on this system does.
     override func mouseDown(with event: NSEvent) {
       guard isEnabledForClicks else {
+        return
+      }
+      isPressed = true
+      animateHover()
+    }
+
+    override func mouseUp(with event: NSEvent) {
+      guard isPressed else {
+        return
+      }
+      isPressed = false
+      animateHover()
+      guard isEnabledForClicks,
+        bounds.contains(convert(event.locationInWindow, from: nil))
+      else {
         return
       }
       action?()
@@ -287,13 +326,24 @@ struct EvieGlowButton: NSViewRepresentable {
     private struct DrawnGlyph {
       let image: CGImage
       let size: CGSize
+      /// How far the visible mark sits from the middle of its own image, in
+      /// points. Subtracting it centres the mark rather than the canvas.
+      let inkOffset: CGSize
     }
+
+    /// Drawn symbols, kept because `layOut` runs on every hover and measuring
+    /// the ink means reading the pixels.
+    private static var glyphCache: [String: DrawnGlyph] = [:]
 
     private static func image(
       named name: String,
       size: CGFloat,
       colour: NSColor
     ) -> DrawnGlyph? {
+      let key = "\(name)|\(size)|\(colour.description)"
+      if let cached = glyphCache[key] {
+        return cached
+      }
       let configuration = NSImage.SymbolConfiguration(pointSize: size, weight: .semibold)
         .applying(.init(hierarchicalColor: colour))
       guard
@@ -306,7 +356,63 @@ struct EvieGlowButton: NSViewRepresentable {
       guard let cgImage = image.cgImage(forProposedRect: &rect, context: nil, hints: nil) else {
         return nil
       }
-      return DrawnGlyph(image: cgImage, size: image.size)
+      let drawn = DrawnGlyph(
+        image: cgImage,
+        size: image.size,
+        inkOffset: inkOffset(of: cgImage, drawnAt: image.size)
+      )
+      glyphCache[key] = drawn
+      return drawn
+    }
+
+    /// Where the opaque pixels sit relative to the middle of the image.
+    ///
+    /// Read from the alpha channel, because a symbol's canvas is not its mark:
+    /// `chevron.up` occupies the upper part of its box and `chevron.down` the
+    /// lower, so centring the box tilts the two halves of one toggle in
+    /// opposite directions.
+    private static func inkOffset(of image: CGImage, drawnAt size: CGSize) -> CGSize {
+      let width = image.width
+      let height = image.height
+      guard width > 0, height > 0 else {
+        return .zero
+      }
+      var alpha = [UInt8](repeating: 0, count: width * height)
+      guard
+        let context = CGContext(
+          data: &alpha,
+          width: width,
+          height: height,
+          bitsPerComponent: 8,
+          bytesPerRow: width,
+          space: CGColorSpaceCreateDeviceGray(),
+          bitmapInfo: CGImageAlphaInfo.alphaOnly.rawValue
+        )
+      else {
+        return .zero
+      }
+      context.draw(image, in: CGRect(x: 0, y: 0, width: width, height: height))
+
+      var minX = width, maxX = -1, minY = height, maxY = -1
+      for y in 0..<height {
+        for x in 0..<width where alpha[y * width + x] > 8 {
+          minX = min(minX, x)
+          maxX = max(maxX, x)
+          minY = min(minY, y)
+          maxY = max(maxY, y)
+        }
+      }
+      guard maxX >= minX, maxY >= minY else {
+        return .zero
+      }
+      // In pixels, then converted to the points the layer is laid out in.
+      let inkCentreX = (CGFloat(minX) + CGFloat(maxX) + 1) / 2
+      let inkCentreY = (CGFloat(minY) + CGFloat(maxY) + 1) / 2
+      let offsetX = (inkCentreX - CGFloat(width) / 2) * (size.width / CGFloat(width))
+      // Core Graphics draws top-down here while the layer is laid out
+      // bottom-up, so the vertical offset changes sign.
+      let offsetY = -(inkCentreY - CGFloat(height) / 2) * (size.height / CGFloat(height))
+      return CGSize(width: offsetX, height: offsetY)
     }
   }
 }

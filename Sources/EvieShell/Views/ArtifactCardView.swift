@@ -76,6 +76,12 @@ struct ArtifactActionModel: Identifiable, Hashable {
   /// sound there are a couple of seconds of synthesis, and with the button
   /// unchanged the press looked like it had missed.
   var isBusy = false
+  /// It worked, and the button says so for a moment before going back.
+  ///
+  /// Copying is instant and invisible, which is the worst combination: nothing
+  /// happens on screen and there is no way to tell a press that worked from one
+  /// that missed.
+  var isConfirmed = false
 }
 
 struct ArtifactCardModel: Identifiable, Hashable {
@@ -173,9 +179,15 @@ struct ArtifactCardView: View {
       } action: { height in
         onReadingHeightChanged?(height)
       }
-      // Room for the bar, so it never sits on top of a word — and only when
-      // there is a bar.
-      .padding(.trailing, overflows ? 6 : 0)
+      // Room for the bar so it never sits on top of a word.
+      //
+      // macOS draws an overlay scroller *over* the content, and it is not one
+      // width: it is thin at rest and thickens while it is being dragged, and
+      // thicker again for anybody who has set scroll bars to always show. Six
+      // points cleared the thin one and nothing else. Fifteen clears the widest
+      // of them, which is the only number that is right on every Mac rather than
+      // on this one today.
+      .padding(.trailing, overflows ? 15 : 0)
     }
     // Shown only when it scrolls. A bar beside text that fits is an invitation
     // to look for something that is not there.
@@ -326,6 +338,10 @@ struct ArtifactCardView: View {
           } icon: {
             if action.isBusy {
               EvieThinkingIndicator(tint: artifact.kind.tint)
+            } else if action.isConfirmed {
+              Image(systemName: "checkmark.circle.fill")
+                .foregroundStyle(.green)
+                .transition(.scale.combined(with: .opacity))
             } else if let systemImage = action.systemImage {
               Image(systemName: systemImage)
             }
@@ -336,6 +352,7 @@ struct ArtifactCardView: View {
         }
         .buttonStyle(.plain)
         .foregroundStyle(actionForeground(action.role))
+        .animation(reduceMotion ? nil : .snappy(duration: 0.2), value: action.isConfirmed)
         .background(actionBackground(action.role), in: Capsule())
         .overlay {
           Capsule()
