@@ -24,8 +24,24 @@ final class OverlayChromeModel: ObservableObject {
   @Published private(set) var isCallMode = false
   /// True while the pointer is over the overlay, which reveals the handles.
   @Published private(set) var isShowingHandles = false
-  /// Height of the artifact list as SwiftUI actually laid it out.
-  @Published private(set) var artifactContentHeight: CGFloat = 0
+  /// How tall each open answer's text is, as SwiftUI actually laid it out.
+  ///
+  /// Kept here because a card has to be framed to `min(this, a ceiling)` and a
+  /// `ScrollView` has no height of its own — offered space is all it wants. Left
+  /// unmeasured, a two-line answer sits in a box the size of a twenty-line one.
+  /// Keyed by card, so two open answers cannot overwrite each other's height.
+  @Published private(set) var readingHeights: [UUID: CGFloat] = [:]
+
+  func setReadingHeight(_ height: CGFloat, for card: UUID) {
+    guard height.isFinite, abs(height - (readingHeights[card] ?? -1)) > 0.5 else {
+      return
+    }
+    readingHeights[card] = height
+  }
+
+  func forgetReadingHeights(keeping cards: Set<UUID>) {
+    readingHeights = readingHeights.filter { cards.contains($0.key) }
+  }
 
   /// Called while a width handle is dragged, with the total travel since the
   /// gesture began. Sending the total rather than a delta keeps the handle
@@ -71,10 +87,4 @@ final class OverlayChromeModel: ObservableObject {
     isShowingHandles = showing
   }
 
-  func setArtifactContentHeight(_ height: CGFloat) {
-    guard height.isFinite, abs(height - artifactContentHeight) > 0.5 else {
-      return
-    }
-    artifactContentHeight = height
-  }
 }

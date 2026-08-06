@@ -117,22 +117,36 @@ struct ArtifactCardView: View {
   var onToggleExpanded: (() -> Void)? = nil
   var onDismiss: (() -> Void)? = nil
   var onAction: ((ArtifactActionModel) -> Void)? = nil
+  /// How tall this card's text is, measured by SwiftUI on the last pass.
+  var readingHeight: CGFloat?
+  var onReadingHeightChanged: ((CGFloat) -> Void)?
 
   @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
-  /// How tall a single answer may get before it scrolls inside its own card.
+  /// How tall an answer may get before it stops growing and scrolls instead.
   ///
-  /// This is the whole shape of the fix. The answer used to be laid out at its
-  /// full height and the *list* of cards did the scrolling, which meant a long
-  /// answer scrolled its own header, its question and its Copiar button off the
-  /// screen: to reach the button you scrolled past everything, and while reading
-  /// the middle there was no title, no close, no way out. Worse, the card was
-  /// taller than the window and the overlay was drawing beyond its own bounds.
+  /// The bubble grows with the answer, which is what makes a short reply look
+  /// like a short reply. Past this it stays put and the text moves inside it —
+  /// so the header, the question and the buttons never scroll away, and the card
+  /// never grows past the window it lives in.
+  static let maximumReadingHeight: CGFloat = 460
+
+  /// Whether the text is taller than the box, and therefore actually scrolls.
+  private var overflows: Bool {
+    (readingHeight ?? 0) > Self.maximumReadingHeight
+  }
+
+  /// The height the box should be: the text's own, until the ceiling.
   ///
-  /// Now the card is the fixed thing and the text moves inside it. The header
-  /// and the buttons stay where they are, and the scroll bar sits where the
-  /// content it scrolls is.
-  private static let readingHeight: CGFloat = 360
+  /// Measured rather than left to the scroll view, because a `ScrollView` has no
+  /// height of its own and takes whatever it is offered. Framed at the ceiling
+  /// alone, a two-line answer would sit in a box the size of a twenty-line one.
+  private var readingBoxHeight: CGFloat? {
+    guard let readingHeight, readingHeight > 0 else {
+      return nil
+    }
+    return min(readingHeight, Self.maximumReadingHeight)
+  }
 
   /// The part that scrolls: the question and the answer, and nothing else.
   private var readingArea: some View {
@@ -148,16 +162,20 @@ struct ArtifactCardView: View {
         }
       }
       .frame(maxWidth: .infinity, alignment: .leading)
-      // Room for the indicator, so it never sits on top of a word.
-      .padding(.trailing, 4)
+      .onGeometryChange(for: CGFloat.self) { proxy in
+        proxy.size.height
+      } action: { height in
+        onReadingHeightChanged?(height)
+      }
+      // Room for the bar, so it never sits on top of a word — and only when
+      // there is a bar.
+      .padding(.trailing, overflows ? 6 : 0)
     }
-    // Shown rather than hidden. A bounded box with no visible bar looks like
-    // text that was cut off, which is the complaint this exists to answer.
-    .scrollIndicators(.visible)
+    // Shown only when it scrolls. A bar beside text that fits is an invitation
+    // to look for something that is not there.
+    .scrollIndicators(overflows ? .visible : .never)
     .scrollBounceBehavior(.basedOnSize)
-    // Only as tall as it needs to be. A short answer must not sit in a
-    // half-empty box waiting for text that is not coming.
-    .frame(maxHeight: Self.readingHeight)
+    .frame(height: readingBoxHeight)
   }
 
 

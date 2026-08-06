@@ -8,34 +8,12 @@ import SwiftUI
 /// glass edges and the scroll fade from being sliced by a window that guessed
 /// its own height.
 struct OverlayRootView: View {
-  /// Above this the artifact list scrolls instead of the window growing.
-  ///
-  /// Sized so that one open card never makes this scroll too. A card is its
-  /// header, up to `ArtifactCardView.readingHeight` of text, its buttons and its
-  /// padding — about 470 — and a viewport of exactly that would leave the outer
-  /// scroller engaging on a stray point or two, putting a scroll bar inside a
-  /// scroll bar for no reason. This one only comes into play once earlier turns
-  /// have been brought back, which is the only time there is a list to scroll.
-  private static let artifactViewportLimit: CGFloat = 540
   /// Transparent room kept around the content so the rounded corners, the
   /// hairline border, and the drop shadow of the glass all have somewhere to go.
   ///
   /// It has to exceed the shadow's reach — radius plus vertical offset — or the
   /// shadow ends on a hard line at the window edge instead of fading out.
   private static let outerPadding: CGFloat = 30
-  /// Room kept *inside* the scrolling area so a card's shadow has somewhere to
-  /// fall.
-  ///
-  /// A `ScrollView` clips its content, and a clipped shadow ends on a straight
-  /// line — which is why the cards had a hard dark edge while the text field,
-  /// which is not inside a scroller, faded out properly. The content is inset by
-  /// this much and the scroller is pulled back out by the same amount, so the
-  /// cards sit exactly where they did and the shadow is no longer sliced.
-  ///
-  /// Sized from what the shadow actually reaches: radius 16 plus a 7pt vertical
-  /// offset is 23 downwards. It has to stay under `outerPadding`, or the problem
-  /// simply moves to the window edge.
-  private static let artifactShadowMargin: CGFloat = 24
 
   @ObservedObject var chrome: OverlayChromeModel
 
@@ -245,71 +223,11 @@ struct OverlayRootView: View {
   /// The card list. Its viewport is exactly the content height until the content
   /// exceeds the limit; only then does it scroll, and only then is the softening
   /// mask applied — a permanent mask would fade the top card for no reason.
-  @ViewBuilder
-  private var artifactStack: some View {
-    if !artifacts.isEmpty {
-      VStack(spacing: 7) {
-        earlierTurnsControl
-        artifactScroller
-      }
-    }
-  }
-
-  @ViewBuilder
-  private var artifactScroller: some View {
-    Group {
-      ScrollView(.vertical) {
-        LazyVStack(spacing: 9) {
-          ForEach(artifacts) { artifact in
-            ArtifactCardView(
-              artifact: artifact,
-              onToggleExpanded: onToggleArtifact.map { handler in
-                { handler(artifact.id) }
-              },
-              onDismiss: onDismissArtifact.map { handler in
-                { handler(artifact.id) }
-              },
-              onAction: onArtifactAction.map { handler in
-                { action in handler(artifact.id, action) }
-              }
-            )
-            .transition(
-              reduceMotion
-                ? .opacity
-                : .move(edge: .bottom).combined(with: .opacity)
-            )
-          }
-        }
-        // Measured before the padding is applied, so the viewport height stays
-        // the height of the cards rather than the cards plus their breathing
-        // room.
-        .onGeometryChange(for: CGFloat.self) { proxy in
-          proxy.size.height
-        } action: { height in
-          chrome.setArtifactContentHeight(height)
-        }
-        .padding(Self.artifactShadowMargin)
-      }
-      .scrollIndicators(.hidden)
-      .scrollBounceBehavior(.basedOnSize)
-      .defaultScrollAnchor(.bottom)
-      .frame(height: artifactViewportHeight + Self.artifactShadowMargin * 2)
-      .padding(-Self.artifactShadowMargin)
-    }
-  }
-
   /// The way back to what was said before.
   ///
   /// Hidden until the pointer is over Evie at all, because asking something new
   /// is meant to leave that one answer on screen and nothing else. The history is
   /// not gone; it has stopped being furniture.
-  ///
-  /// Above the cards rather than over them. Floating it was an attempt to avoid
-  /// a flicker loop — appearing in the flow pushed the card down, out from under
-  /// the pointer that summoned it, which hid it again — but it solved that by
-  /// covering the first two lines of the answer, which is worse than the problem.
-  /// Keying it on the pointer being anywhere over the overlay fixes both: the
-  /// overlay does not move out from under a pointer that is inside it.
   @ViewBuilder
   private var earlierTurnsControl: some View {
     if earlierTurnCount > 0, let onLoadEarlierTurns, chrome.isShowingHandles {
@@ -329,14 +247,52 @@ struct OverlayRootView: View {
       .background(.ultraThinMaterial, in: Capsule())
       .overlay(Capsule().strokeBorder(.white.opacity(0.10), lineWidth: 0.75))
       .transition(.opacity)
-      .padding(.top, 2)
     }
   }
 
-  private var artifactViewportHeight: CGFloat {
-    guard chrome.artifactContentHeight > 0 else {
-      return Self.artifactViewportLimit
+  /// The answers on screen.
+  ///
+  /// A plain stack, and that is the whole design. It used to be a scroll view
+  /// with a measured viewport, a margin so the card shadows had somewhere to
+  /// fall, and a matching negative padding to put the edges back — three patches
+  /// that disagreed. The negative padding made the stack draw beyond its own
+  /// layout box, so the window was sized shorter than what it drew: the card
+  /// overlapped the field below it and its own header was clipped off the top.
+  ///
+  /// Nothing here scrolls now. Each card caps its own text and scrolls inside
+  /// itself, so the stack has an honest height and the window can be exactly
+  /// that tall.
+  @ViewBuilder
+  private var artifactStack: some View {
+    if !artifacts.isEmpty {
+      VStack(spacing: 9) {
+        earlierTurnsControl
+
+        ForEach(artifacts) { artifact in
+          ArtifactCardView(
+            artifact: artifact,
+            onToggleExpanded: onToggleArtifact.map { handler in
+              { handler(artifact.id) }
+            },
+            onDismiss: onDismissArtifact.map { handler in
+              { handler(artifact.id) }
+            },
+            onAction: onArtifactAction.map { handler in
+              { action in handler(artifact.id, action) }
+            },
+            readingHeight: chrome.readingHeights[artifact.id],
+            onReadingHeightChanged: { chrome.setReadingHeight($0, for: artifact.id) }
+          )
+          .transition(
+            reduceMotion
+              ? .opacity
+              : .move(edge: .bottom).combined(with: .opacity)
+          )
+        }
+      }
+      .onChange(of: artifacts.map(\.id)) { _, ids in
+        chrome.forgetReadingHeights(keeping: Set(ids))
+      }
     }
-    return min(chrome.artifactContentHeight, Self.artifactViewportLimit)
   }
 }
