@@ -391,6 +391,13 @@ final class OverlayViewModel: ObservableObject {
   private func prepare(_ slot: EvieAttachmentSlot) {
     preparationTasks[slot.id] = Task { @MainActor [weak self] in
       guard let self else { return }
+      // Drawn first, so the chip stops being a grey pill the moment it appears
+      // rather than when the reading finishes.
+      if let picture = Self.thumbnail(for: slot.url),
+        let index = attachmentSlots.firstIndex(where: { $0.id == slot.id })
+      {
+        attachmentSlots[index].thumbnail = picture
+      }
       do {
         let pages = try await documentReader.read(fileAt: slot.url)
         try Task.checkCancellation()
@@ -421,6 +428,31 @@ final class OverlayViewModel: ObservableObject {
         )
       }
     }
+  }
+
+  /// A small picture of a file, for the chip.
+  ///
+  /// One path for images and PDFs alike: `NSImage` renders the first page of a
+  /// PDF, which is exactly the preview worth showing.
+  private static func thumbnail(for url: URL, side: CGFloat = 52) -> NSImage? {
+    guard let original = NSImage(contentsOf: url), original.size.width > 0 else {
+      return nil
+    }
+    let scale = side / max(original.size.width, original.size.height)
+    let size = NSSize(
+      width: max(1, original.size.width * scale),
+      height: max(1, original.size.height * scale)
+    )
+    let scaled = NSImage(size: size)
+    scaled.lockFocus()
+    original.draw(
+      in: NSRect(origin: .zero, size: size),
+      from: NSRect(origin: .zero, size: original.size),
+      operation: .copy,
+      fraction: 1
+    )
+    scaled.unlockFocus()
+    return scaled
   }
 
   private func settle(_ id: UUID, _ state: EvieAttachmentSlot.State) {

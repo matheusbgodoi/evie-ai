@@ -1,3 +1,4 @@
+import AppKit
 import EvieCore
 import Foundation
 
@@ -83,6 +84,13 @@ struct EvieAttachmentSlot: Identifiable {
   let id = UUID()
   let url: URL
   var state: State
+  /// A picture of what was attached, for the chip beside the field.
+  ///
+  /// `NSImage(contentsOf:)` reads both an image and the first page of a PDF, so
+  /// one path covers everything Evie accepts. Downscaled on the way in: the chip
+  /// is 26 points tall and holding a 12-megapixel photograph to draw it would be
+  /// paying for the original a second time.
+  var thumbnail: NSImage?
 
   var name: String {
     url.lastPathComponent

@@ -61,13 +61,27 @@ struct QuickTextEntryView: View {
         .padding(.horizontal, 2)
       }
       .scrollIndicators(.never)
-      .frame(maxHeight: 34)
+      .frame(maxHeight: 42)
     }
   }
 
   private func attachmentChip(_ slot: EvieAttachmentSlot) -> some View {
     HStack(spacing: 6) {
-      if slot.isPreparing {
+      if let picture = slot.thumbnail {
+        Image(nsImage: picture)
+          .resizable()
+          .aspectRatio(contentMode: .fill)
+          .frame(width: 26, height: 26)
+          .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
+          // Dimmed while it is still being read, so the chip shows both what was
+          // attached and that it is not finished.
+          .opacity(slot.isPreparing ? 0.45 : 1)
+          .overlay {
+            if slot.isPreparing {
+              EvieThinkingIndicator(tint: .white)
+            }
+          }
+      } else if slot.isPreparing {
         EvieThinkingIndicator(tint: .secondary)
       } else if slot.failure != nil {
         Image(systemName: "exclamationmark.triangle.fill")
@@ -97,7 +111,7 @@ struct QuickTextEntryView: View {
       .foregroundStyle(.secondary)
       .accessibilityLabel("Tirar \(slot.name)")
     }
-    .padding(.leading, 9)
+    .padding(.leading, slot.thumbnail == nil ? 9 : 5)
     .padding(.trailing, 6)
     .padding(.vertical, 5)
     .background(.ultraThinMaterial, in: Capsule())
