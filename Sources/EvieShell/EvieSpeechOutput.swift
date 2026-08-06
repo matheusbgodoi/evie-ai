@@ -59,6 +59,7 @@ final class EvieSpeechOutput: ObservableObject {
   private var player: AVAudioPlayerNode?
   private var publishTask: Task<Void, Never>?
   private var speechTask: Task<Void, Never>?
+  private var prefetchTask: Task<SynthesisedAudio, Never>?
   private var levels: [CGFloat] = []
   private var engineFormat: AVAudioFormat?
   /// Rebuilt when the quality preference changes, since the step count is what
@@ -202,21 +203,34 @@ final class EvieSpeechOutput: ObservableObject {
     }
 
     speechTask = Task { @MainActor [weak self] in
-      for block in blocks {
-        guard let self, !Task.isCancelled else {
+      guard let self else {
+        return
+      }
+      // The next block is synthesised while this one is playing.
+      //
+      // Waiting for playback and only then starting the next synthesis makes
+      // every gap between blocks the whole cost of the next one — measured at
+      // about 1.5 s fixed plus 0.16x the audio, so a block came four seconds
+      // after the one before it, in silence. It was reported from the outside as
+      // "pausas longas de 5 ou 6 segundos do nada", which is exactly what a
+      // serial loop sounds like.
+      //
+      // Synthesis of a block takes roughly a quarter of the time the previous
+      // block takes to play, so overlapping them removes the gap entirely rather
+      // than shortening it.
+      var pending = prefetch(blocks.first, voice: voice, rate: rate)
+
+      for index in blocks.indices {
+        guard !Task.isCancelled else {
           return
         }
-        let produced: [AVAudioPCMBuffer]?
-        switch voice {
-        case .system:
-          if let systemVoice {
-            produced = await synthesise(block, voice: systemVoice, rate: rate)
-          } else {
-            produced = nil
-          }
-        case .cloned(let profileID):
-          produced = await synthesiseCloned(block, profileID: profileID)
-        }
+        let produced = await pending?.value.buffers
+        // Started before this block plays, not after.
+        pending = prefetch(
+          index + 1 < blocks.count ? blocks[index + 1] : nil,
+          voice: voice,
+          rate: rate
+        )
         guard
           let buffers = produced,
           let format = buffers.first(where: { $0.frameLength > 0 })?.format
@@ -245,13 +259,65 @@ final class EvieSpeechOutput: ObservableObject {
         }
         await play(buffers)
       }
-      self?.finish()
+      finish()
     }
+  }
+
+  /// Begins synthesising one block, or nothing when there is no next block.
+  ///
+  /// Unstructured on purpose so it can outlive the iteration that started it —
+  /// which is the point — and therefore held on the object so `stop()` can reach
+  /// it. A prefetch left running after a stop would finish a synthesis nobody is
+  /// waiting for and hold the engine busy for the next thing that is.
+  /// Buffers on their way from one main-actor step to the next.
+  ///
+  /// `AVAudioPCMBuffer` is not `Sendable`, and a `Task`'s result type must be.
+  /// Unchecked is honest here rather than a shrug: the buffers are made inside
+  /// the synthesis, handed over once, and only ever touched on the main actor —
+  /// the box crosses a task boundary, never two threads at the same time.
+  private struct SynthesisedAudio: @unchecked Sendable {
+    let buffers: [AVAudioPCMBuffer]?
+  }
+
+  private func prefetch(
+    _ block: String?,
+    voice: Voice,
+    rate: Double
+  ) -> Task<SynthesisedAudio, Never>? {
+    guard let block else {
+      return nil
+    }
+    let task = Task { @MainActor [weak self] in
+      guard let self, !Task.isCancelled else {
+        return SynthesisedAudio(buffers: nil)
+      }
+      switch voice {
+      case .system(let identifier):
+        let systemVoice =
+          identifier.flatMap(AVSpeechSynthesisVoice.init(identifier:))
+          ?? Self.preferredVoiceIdentifier.flatMap(AVSpeechSynthesisVoice.init(identifier:))
+        guard let systemVoice else {
+          return SynthesisedAudio(buffers: nil)
+        }
+        return SynthesisedAudio(
+          buffers: await synthesise(block, voice: systemVoice, rate: rate)
+        )
+      case .cloned(let profileID):
+        return SynthesisedAudio(buffers: await synthesiseCloned(block, profileID: profileID))
+      }
+    }
+    prefetchTask = task
+    return task
   }
 
   func stop() {
     speechTask?.cancel()
     speechTask = nil
+    // The prefetch is unstructured, so cancelling its parent does not reach it.
+    // Left alone it would finish a synthesis nobody is waiting for and keep the
+    // engine busy for whatever is asked next.
+    prefetchTask?.cancel()
+    prefetchTask = nil
     publishTask?.cancel()
     publishTask = nil
 

@@ -243,13 +243,22 @@ final class AppCoordinator: NSObject {
       self?.viewModel.beginSpeaking()
     }
     speechOutput.onSpeakingChanged = { [weak self] speaking in
-      self?.viewModel.setSpeaking(speaking)
+      guard let self else { return }
+      viewModel.setSpeaking(speaking)
+      // One place decides that speaking has ended, whether it ran out or was
+      // stopped. Resetting the visuals only on `onFinished` meant pressing stop
+      // silenced her and left the mark pulsing red — the audio was gone and the
+      // interface still said she was talking.
+      if !speaking {
+        viewModel.endSpeaking()
+      }
     }
     speechOutput.onFinished = { [weak self] in
       guard let self else { return }
-      viewModel.endSpeaking()
       // A call keeps going. When she stops talking the microphone opens again,
       // which is the difference between a call and a sequence of questions.
+      // Resetting the visuals is not done here: `onSpeakingChanged` covers both
+      // ways speaking can end, and this one only covers running out.
       if isInCall {
         startListening()
       }
