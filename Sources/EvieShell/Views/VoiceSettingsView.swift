@@ -28,6 +28,7 @@ struct VoiceSettingsView: View {
         systemImage: "waveform.circle.fill"
       )
       .font(.caption)
+      .symbolRenderingMode(.hierarchical)
       .foregroundStyle(.secondary)
     } else {
       Label(
@@ -56,6 +57,7 @@ struct VoiceSettingsView: View {
           "Segurar o atalho para falar",
           isOn: Binding(get: { voice.pushToTalkEnabled }, set: viewModel.setPushToTalkEnabled)
         )
+        .help("O microfone abre só enquanto você segura a tecla")
         captionRow(
           "Enquanto a tecla estiver pressionada o microfone fica aberto. "
             + "A combinação está em Atalhos, hoje "
@@ -67,6 +69,7 @@ struct VoiceSettingsView: View {
           "Atender quando eu chamar pelo nome",
           isOn: Binding(get: { voice.wakeWordEnabled }, set: viewModel.setWakeWordEnabled)
         )
+        .help("Mantém o microfone aberto esperando a frase de ativação")
         captionRow(
           "Ela não aparece, não desenha ondas e não guarda nada — tudo o que ouve "
             + "é descartado até você chamar. Mas o microfone precisa ficar aberto, "
@@ -81,6 +84,11 @@ struct VoiceSettingsView: View {
           text: Binding(get: { voice.wakePhrase }, set: viewModel.setWakePhrase)
         )
         .disabled(!voice.wakeWordEnabled)
+        .help(
+          voice.wakeWordEnabled
+            ? "O que você diz para chamar a Evie; separe variantes com ponto e vírgula"
+            : "Disponível quando “Atender quando eu chamar pelo nome” estiver ligado"
+        )
         captionRow(
           "Separe variantes com ponto e vírgula — a vírgula faz parte da frase. "
             + "Mínimo de \(EvieWakePhrase.minimumPhraseCharacters) letras."
@@ -97,14 +105,16 @@ struct VoiceSettingsView: View {
               .foregroundStyle(.secondary)
               .textSelection(.enabled)
           }
+          .help("O que o reconhecedor acabou de transcrever do microfone")
           captionRow(
             "Diga a frase e veja o que ela entendeu. Se vier diferente, "
               + "acrescente o que apareceu aqui como variante."
           )
         }
         if let failure = wakeListener.failure, voice.wakeWordEnabled {
-          Text(failure)
+          Label(failure, systemImage: "exclamationmark.triangle.fill")
             .font(.footnote)
+            .symbolRenderingMode(.hierarchical)
             .foregroundStyle(.orange)
         }
       }
@@ -114,6 +124,7 @@ struct VoiceSettingsView: View {
           "A Evie responde falando",
           isOn: Binding(get: { voice.speechOutputEnabled }, set: viewModel.setSpeechOutputEnabled)
         )
+        .help("Lê as respostas em voz alta; falar por cima interrompe")
         captionRow(
           voice.speechOutputEnabled
             ? "Ela responde falando quando você fala com ela. Falar por cima interrompe."
@@ -128,6 +139,11 @@ struct VoiceSettingsView: View {
           )
         )
         .disabled(!voice.speechOutputEnabled)
+        .help(
+          voice.speechOutputEnabled
+            ? "Fala também as respostas de perguntas que você escreveu"
+            : "Disponível quando “A Evie responde falando” estiver ligado"
+        )
         captionRow(
           voice.speaksTypedAnswers
             ? "Ela lê toda resposta em voz alta, inclusive as que você pediu escrevendo."
@@ -146,6 +162,7 @@ struct VoiceSettingsView: View {
           Text("Caprichada").tag(32)
         }
         .pickerStyle(.segmented)
+        .help("Quantas passadas o motor dá em cada frase: mais fiel à referência, mais lento")
         captionRow(
           "Quantas passadas o motor dá em cada frase. Mais passadas soam mais "
             + "perto da gravação de referência e demoram mais. Só vale para vozes "
@@ -156,6 +173,7 @@ struct VoiceSettingsView: View {
           "Modo ligação",
           isOn: Binding(get: { voice.callModeEnabled }, set: viewModel.setCallModeEnabled)
         )
+        .help("Clicar na marca troca a tela inteira por voz, sem nada escrito")
         captionRow(
           "Com isto ligado, clicar na marca troca a tela inteira por voz — só a "
             + "Evie e as ondas em volta, nada escrito. Clicar de novo volta para o "
@@ -177,10 +195,11 @@ struct VoiceSettingsView: View {
           Label(
             "Este Mac não tem nenhuma voz em português instalada. Ajustes do Sistema › "
               + "Acessibilidade › Conteúdo Falado › Vozes do sistema.",
-            systemImage: "exclamationmark.triangle"
+            systemImage: "exclamationmark.triangle.fill"
           )
           .font(.caption)
-          .foregroundStyle(.secondary)
+          .symbolRenderingMode(.hierarchical)
+          .foregroundStyle(.orange)
         } else {
           Picker(
             "Voz",
@@ -203,13 +222,16 @@ struct VoiceSettingsView: View {
             }
           }
           .disabled(!voice.speechOutputEnabled)
+          .help(
+            voice.speechOutputEnabled
+              ? "Qual voz a Evie usa para falar"
+              : "Disponível quando “A Evie responde falando” estiver ligado"
+          )
 
           engineStatus
 
           VStack(alignment: .leading, spacing: 7) {
-            HStack {
-              Text("Velocidade")
-              Spacer()
+            LabeledContent("Velocidade") {
               Text(rateDescription)
                 .foregroundStyle(.secondary)
             }
@@ -220,14 +242,20 @@ struct VoiceSettingsView: View {
               ),
               in: 0.3...0.75
             )
+            .accessibilityLabel("Velocidade da fala")
+            .accessibilityValue(rateDescription)
           }
           .disabled(!voice.speechOutputEnabled)
+          .help("Quão rápido a Evie fala")
 
           HStack {
-            Button("Ouvir uma frase") {
+            Button {
               viewModel.testVoice()
+            } label: {
+              Label("Ouvir uma frase", systemImage: "play.circle")
             }
             .disabled(!voice.speechOutputEnabled)
+            .help("Fala uma frase de exemplo com a voz e a velocidade escolhidas")
             Spacer()
           }
         }
@@ -250,6 +278,7 @@ struct VoiceSettingsView: View {
           "Guardar o áudio bruto neste Mac",
           isOn: Binding(get: { voice.retainsRawAudio }, set: viewModel.setRetainsRawAudio)
         )
+        .help("Mantém as gravações em disco depois de virarem texto; só para diagnóstico")
         captionRow(
           voice.retainsRawAudio
             ? "As gravações ficam salvas até você apagar. Use só para diagnóstico."

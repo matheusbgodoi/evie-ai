@@ -63,17 +63,21 @@ struct DiagnosticsSettingsView: View {
     .formStyle(.grouped)
   }
 
+  /// LabeledContent, not a hand-built HStack: this is exactly the read-only
+  /// value it is for, and it lines these rows up with the "Janela do servidor"
+  /// row above that already used it.
   private func copyableRow(_ title: String, value: String) -> some View {
-    HStack {
-      Text(title)
-      Spacer()
-      Text(value)
-        .font(.system(size: 11, design: .monospaced))
-        .foregroundStyle(.secondary)
-        .textSelection(.enabled)
-        .lineLimit(1)
-        .truncationMode(.middle)
-      copyButton(value)
+    LabeledContent(title) {
+      HStack(spacing: 6) {
+        Text(value)
+          .font(.system(size: 11, design: .monospaced))
+          .foregroundStyle(.secondary)
+          .textSelection(.enabled)
+          .lineLimit(1)
+          .truncationMode(.middle)
+          .help(value)
+        copyButton(value)
+      }
     }
   }
 
@@ -98,9 +102,10 @@ struct DiagnosticsSettingsView: View {
     } label: {
       Image(systemName: "doc.on.doc")
         .font(.system(size: 10))
+        .symbolRenderingMode(.hierarchical)
     }
     .buttonStyle(.borderless)
-    .help("Copiar")
+    .help("Copiar para a Área de Transferência")
     .accessibilityLabel("Copiar \(value)")
   }
 }

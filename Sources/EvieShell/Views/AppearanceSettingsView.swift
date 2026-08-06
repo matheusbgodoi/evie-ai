@@ -13,9 +13,9 @@ struct AppearanceSettingsView: View {
     Form {
       Section {
         VStack(alignment: .leading, spacing: 7) {
-          HStack {
-            Text("Largura da janela")
-            Spacer()
+          // LabeledContent rather than a hand-built HStack: inside a grouped
+          // Form it lines the readout up with every other value in the window.
+          LabeledContent("Largura da janela") {
             Text("\(Int(appearance.resolvedOverlayWidth)) pt")
               .monospacedDigit()
               .foregroundStyle(.secondary)
@@ -29,6 +29,9 @@ struct AppearanceSettingsView: View {
               .minimumOverlayWidth...EvieAppearancePreferences.maximumOverlayWidth,
             step: 4
           )
+          .accessibilityLabel("Largura da janela")
+          .accessibilityValue("\(Int(appearance.resolvedOverlayWidth)) pontos")
+          .help("Quão larga a Evie aparece na tela, em pontos")
           Text(
             "Você também pode arrastar as bordas da própria janela; as duas coisas "
               + "mexem no mesmo valor."
@@ -53,6 +56,13 @@ struct AppearanceSettingsView: View {
             viewModel.resetPlacement()
           }
           .disabled(appearance.isUsingDefaultPlacement)
+          // A help tag still shows on a disabled control, so this is where the
+          // reason it is greyed out gets said.
+          .help(
+            appearance.isUsingDefaultPlacement
+              ? "A janela já está na posição e no tamanho padrão"
+              : "Devolve a Evie ao rodapé da tela principal, centralizada"
+          )
         }
       } header: {
         Text("Janela")
@@ -73,6 +83,7 @@ struct AppearanceSettingsView: View {
             set: viewModel.setAnimatesLogo
           )
         )
+        .help("Gira a chave devagar e a acende quando a Evie está ouvindo, pensando ou falando")
         Text(
           "A chave gira devagar em três dimensões enquanto a Evie está na tela, e "
             + "acende de verdade quando ela está ouvindo, pensando ou falando. "
@@ -93,6 +104,7 @@ struct AppearanceSettingsView: View {
             set: viewModel.setWebSearchEnabled
           )
         )
+        .help("A única coisa nesta Evie que envia algo para fora do seu Mac")
       } header: {
         Text("Internet")
       } footer: {

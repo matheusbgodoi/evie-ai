@@ -60,6 +60,7 @@ struct SettingsView: View {
             : "checkmark.circle.fill"
         )
         .font(.callout)
+        .symbolRenderingMode(.hierarchical)
         .foregroundStyle(feedback.isError ? .red : .secondary)
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(.horizontal, 16)
@@ -77,13 +78,17 @@ private struct PaneSelector: View {
   @Binding var selection: Int
 
   var body: some View {
-    Picker("", selection: $selection) {
+    // The label is empty on screen because the tab above already names the
+    // subject, but a picker with no label at all is an unnamed control to
+    // VoiceOver, so the name is given and then hidden rather than omitted.
+    Picker("Seção", selection: $selection) {
       ForEach(Array(titles.enumerated()), id: \.offset) { index, title in
         Text(title).tag(index)
       }
     }
     .pickerStyle(.segmented)
     .labelsHidden()
+    .accessibilityLabel("Seção")
     .padding(.horizontal, 20)
     .padding(.top, 12)
   }

@@ -50,14 +50,17 @@ struct UpdateSettingsView: View {
         Button("Procurar atualização") {
           Task { await updater.check(force: true) }
         }
+        .help("Pergunta ao GitHub se existe uma versão mais nova; nada é baixado ainda")
         if case .upToDate = updater.state {
-          Text("Você está na versão mais recente.")
+          Label("Você está na versão mais recente.", systemImage: "checkmark.circle.fill")
             .font(.footnote)
+            .symbolRenderingMode(.hierarchical)
             .foregroundStyle(.secondary)
         }
         if case .failed(let reason) = updater.state {
-          Text(reason)
+          Label(reason, systemImage: "exclamationmark.triangle.fill")
             .font(.footnote)
+            .symbolRenderingMode(.hierarchical)
             .foregroundStyle(.orange)
         }
       }
@@ -67,6 +70,7 @@ struct UpdateSettingsView: View {
         ProgressView().controlSize(.small)
         Text("Perguntando ao GitHub…").foregroundStyle(.secondary)
       }
+      .accessibilityElement(children: .combine)
 
     case .available(let release):
       VStack(alignment: .leading, spacing: 8) {
@@ -83,27 +87,37 @@ struct UpdateSettingsView: View {
         Button("Baixar e conferir a assinatura") {
           Task { await updater.download(release) }
         }
+        .help("Baixa a nova versão e confere quem a assinou; nada é instalado ainda")
       }
 
     case .downloading(let fraction):
       ProgressView(value: fraction) {
         Text("Baixando…")
       }
+      .accessibilityLabel("Baixando a atualização")
+      .accessibilityValue("\(Int(fraction * 100)) por cento")
 
     case .readyToInstall(let release):
       VStack(alignment: .leading, spacing: 8) {
         Label(
           "Versão \(release.version.description) conferida — assinada por quem assinou esta cópia.",
-          systemImage: "checkmark.seal"
+          systemImage: "checkmark.seal.fill"
         )
+        .symbolRenderingMode(.hierarchical)
         .foregroundStyle(.green)
         HStack {
           Button("Instalar e reabrir") { updater.install() }
             .buttonStyle(.borderedProminent)
-          Button("Descartar") {
+            .keyboardShortcut(.defaultAction)
+            .help("Substitui esta cópia da Evie pela nova versão e reabre o aplicativo")
+          // Destructive by role because it throws away a verified download the
+          // user waited for; no confirmation, because pressing it costs only
+          // another download.
+          Button("Descartar", role: .destructive) {
             updater.discardStaged()
             Task { await updater.check(force: true) }
           }
+          .help("Joga fora o download conferido e procura de novo")
         }
       }
     }

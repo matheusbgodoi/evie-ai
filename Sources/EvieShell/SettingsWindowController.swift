@@ -17,14 +17,17 @@ final class SettingsWindowController: NSWindowController, NSWindowDelegate {
     preferencesPath: String,
     configurationPath: String
   ) {
+    // No minimise button: a settings window is a modeless companion to the app,
+    // not a document, and macOS draws its minimise button greyed out for exactly
+    // that reason. Resizable stays, because the folder, memory and voice lists
+    // are genuinely long and a fixed height would clip them.
     let window = NSWindow(
       contentRect: NSRect(x: 0, y: 0, width: 660, height: 580),
-      styleMask: [.titled, .closable, .miniaturizable, .resizable],
+      styleMask: [.titled, .closable, .resizable],
       backing: .buffered,
       defer: false
     )
     window.title = "Configurações da Evie"
-    window.center()
     window.isReleasedWhenClosed = false
     self.preferencesViewModel = preferencesViewModel
     window.contentViewController = NSHostingController(
@@ -43,6 +46,15 @@ final class SettingsWindowController: NSWindowController, NSWindowDelegate {
     )
     super.init(window: window)
     window.delegate = self
+    // Where the user last dragged this window is where they expect to find it
+    // next time. Without an autosave name it re-centres on every open, which is
+    // the one thing a settings window should never do to someone who moved it.
+    // Set after `super.init` so AppKit restores the saved frame rather than
+    // having it overwritten by the contentRect above.
+    window.setFrameAutosaveName("EvieSettingsWindow")
+    if window.frame.origin == .zero {
+      window.center()
+    }
   }
 
   @available(*, unavailable)

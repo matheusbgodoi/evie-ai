@@ -6,6 +6,7 @@ import SwiftUI
 struct VoiceLibraryView: View {
   @ObservedObject var viewModel: EvieVoiceLibraryViewModel
   var onPreview: (() -> Void)?
+  @StateObject private var deletion = VoiceDeletionPrompt()
 
   var body: some View {
     Form {
@@ -20,9 +21,12 @@ struct VoiceLibraryView: View {
         // Offered here because this is where somebody looking at a list with no
         // trained voices in it will be standing.
         if viewModel.canStartEngine {
-          Button("Ligar o motor de voz") {
+          Button {
             Task { await viewModel.startEngine() }
+          } label: {
+            Label("Ligar o motor de voz", systemImage: "power")
           }
+          .help("Sobe o motor local de voz clonada, que segura cerca de 2,4 GB enquanto roda")
         }
       } header: {
         Text("Vozes")
@@ -49,6 +53,7 @@ struct VoiceLibraryView: View {
               Spacer()
               Button("Trazer de volta") { viewModel.restore(entry) }
                 .buttonStyle(.borderless)
+                .help("Devolve esta voz à lista")
             }
           }
         }
@@ -61,6 +66,7 @@ struct VoiceLibraryView: View {
           } label: {
             Label("Escolher áudio…", systemImage: "waveform.badge.plus")
           }
+          .help("Uma gravação limpa de dez a trinta segundos da voz a ser copiada")
           if let name = viewModel.pendingAudioName {
             Text(name)
               .font(.caption)
@@ -71,23 +77,35 @@ struct VoiceLibraryView: View {
         }
 
         TextField("Nome da voz", text: $viewModel.newVoiceName)
+          .help("Como esta voz vai aparecer na lista acima")
         TextField(
           "O que é falado na gravação (opcional, mas acelera muito)",
           text: $viewModel.newVoiceReferenceText,
           axis: .vertical
         )
         .lineLimit(2...4)
+        .help("Sem isto, a primeira fala com esta voz gasta uns vinte e três segundos transcrevendo")
 
         Button {
           viewModel.trainPendingVoice()
         } label: {
           if viewModel.isBusy {
-            Label("Treinando…", systemImage: "hourglass")
+            // A spinner, not an hourglass symbol: an indeterminate wait is what
+            // ProgressView is for, and the hourglass sat perfectly still.
+            HStack(spacing: 6) {
+              ProgressView().controlSize(.small)
+              Text("Treinando…")
+            }
           } else {
             Label("Treinar esta voz", systemImage: "sparkles")
           }
         }
         .disabled(!viewModel.canTrain)
+        .help(
+          viewModel.canTrain
+            ? "Cria a voz a partir da gravação escolhida"
+            : "Escolha um áudio e dê um nome à voz primeiro"
+        )
       } header: {
         Text("Adicionar uma voz")
       } footer: {
@@ -110,6 +128,24 @@ struct VoiceLibraryView: View {
     }
     .formStyle(.grouped)
     .task { await viewModel.refresh() }
+    // Deleting a trained voice destroys a file that took minutes to make and
+    // cannot be undone, so it asks. Hiding a system voice is reversible one
+    // section below and deliberately does not.
+    .confirmationDialog(
+      deletion.pending.map { "Apagar a voz “\($0.name)”?" } ?? "Apagar a voz?",
+      isPresented: deletion.isPresented,
+      titleVisibility: .visible
+    ) {
+      Button("Apagar", role: .destructive) {
+        if let entry = deletion.pending {
+          viewModel.remove(entry)
+        }
+        deletion.pending = nil
+      }
+      Button("Cancelar", role: .cancel) { deletion.pending = nil }
+    } message: {
+      Text("O arquivo treinado sai deste Mac e não tem como ser recuperado.")
+    }
     .safeAreaInset(edge: .bottom) {
       if let feedback = viewModel.feedback {
         Label(
@@ -130,9 +166,24 @@ struct VoiceLibraryView: View {
 
   private func row(for entry: EvieVoiceLibraryViewModel.Entry) -> some View {
     HStack(spacing: 10) {
-      Image(systemName: entry.isSelected ? "checkmark.circle.fill" : "circle")
-        .foregroundStyle(entry.isSelected ? Color.accentColor : Color.secondary.opacity(0.5))
-        .onTapGesture { viewModel.select(entry) }
+      // A real Button, not an Image with a tap gesture. A tap gesture is
+      // invisible to the keyboard and to VoiceOver: with Full Keyboard Access
+      // on there was no way to reach this at all, and VoiceOver read it as a
+      // decorative image rather than as the thing that picks the voice.
+      Button {
+        viewModel.select(entry)
+      } label: {
+        Image(systemName: entry.isSelected ? "checkmark.circle.fill" : "circle")
+          .symbolRenderingMode(.hierarchical)
+          .foregroundStyle(entry.isSelected ? Color.accentColor : Color.secondary.opacity(0.5))
+          // Apple's own swap for a symbol that changes meaning in place. It
+          // reads as a no-op under Reduce Motion, so no guard is needed.
+          .contentTransition(.symbolEffect(.replace))
+      }
+      .buttonStyle(.plain)
+      .accessibilityLabel("Usar a voz \(entry.name)")
+      .accessibilityAddTraits(entry.isSelected ? [.isSelected] : [])
+      .help(entry.isSelected ? "Esta é a voz em uso" : "Passar a usar esta voz")
 
       VStack(alignment: .leading, spacing: 1) {
         Text(entry.name)
@@ -146,16 +197,51 @@ struct VoiceLibraryView: View {
       if entry.isSelected, let onPreview {
         Button("Ouvir", action: onPreview)
           .buttonStyle(.borderless)
+          .help("Falar uma frase de exemplo com esta voz")
       }
 
-      Button(entry.origin == .cloned ? "Apagar" : "Remover") {
-        viewModel.remove(entry)
+      // Only a trained voice is actually destroyed. "Remover" on a system voice
+      // hides a row the user can bring back below, so it gets neither the
+      // destructive role nor the red that promises something irreversible.
+      if entry.origin == .cloned {
+        Button("Apagar", role: .destructive) {
+          deletion.pending = entry
+        }
+        .buttonStyle(.borderless)
+        .foregroundStyle(.red)
+        .disabled(viewModel.isBusy)
+        .help("Apaga o arquivo desta voz treinada deste Mac")
+      } else {
+        Button("Remover") {
+          viewModel.remove(entry)
+        }
+        .buttonStyle(.borderless)
+        .disabled(viewModel.isBusy)
+        .help("Tira esta voz do sistema da lista; ela continua instalada no macOS")
       }
-      .buttonStyle(.borderless)
-      .foregroundStyle(.red)
-      .disabled(viewModel.isBusy)
     }
     .contentShape(Rectangle())
     .onTapGesture { viewModel.select(entry) }
+  }
+}
+
+/// Which trained voice is waiting on a confirmation.
+///
+/// This toolchain has no `@State`, and the library view model is shared with the
+/// voice preferences pane, which has no business knowing that a sheet is open.
+/// So the one piece of throwaway state this pane needs lives here.
+@MainActor
+private final class VoiceDeletionPrompt: ObservableObject {
+  @Published var pending: EvieVoiceLibraryViewModel.Entry?
+
+  var isPresented: Binding<Bool> {
+    Binding(
+      get: { self.pending != nil },
+      set: { presented in
+        if !presented {
+          self.pending = nil
+        }
+      }
+    )
   }
 }

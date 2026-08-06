@@ -19,6 +19,7 @@ struct RootsSettingsView: View {
             set: { viewModel.setHomeGranted($0) }
           )
         )
+        .help("Autoriza tudo dentro da sua pasta pessoal de uma vez, no lugar das pastas avulsas")
       } header: {
         Text("Sem escolher pasta por pasta")
       } footer: {
@@ -71,6 +72,7 @@ struct RootsSettingsView: View {
                 systemImage: "book.closed"
               )
             }
+            .help("Autoriza a Evie a ler as notas deste cofre; ela nunca escreve nem apaga")
           }
         } footer: {
           Text(
@@ -93,6 +95,7 @@ struct RootsSettingsView: View {
             set: { viewModel.setCanChangeFiles($0) }
           )
         )
+        .help("Permite que ela sugira mandar para o Lixo, renomear e mover, sempre com um clique seu")
         Text(
           viewModel.canChangeFiles
             ? """
@@ -118,6 +121,11 @@ struct RootsSettingsView: View {
           )
         )
         .disabled(!viewModel.canChangeFiles)
+        .help(
+          viewModel.canChangeFiles
+            ? "Dispensa o clique só quando a sua própria mensagem pediu a mudança"
+            : "Disponível quando “Deixar a Evie mexer nos arquivos” estiver ligado"
+        )
         Text(
           viewModel.autoApprovesChanges
             ? """
@@ -140,6 +148,7 @@ struct RootsSettingsView: View {
         } label: {
           Label("Autorizar uma pasta…", systemImage: "folder.badge.plus")
         }
+        .help("Abre o painel do sistema para escolher mais uma pasta que a Evie pode ler")
       }
     }
     .formStyle(.grouped)
@@ -180,7 +189,11 @@ struct RootsSettingsView: View {
   private func row(for root: EvieFileRoot) -> some View {
     HStack(spacing: 12) {
       Image(systemName: "folder")
+        .symbolRenderingMode(.hierarchical)
         .foregroundStyle(.secondary)
+        // Decoration next to a name that already says what this is; announcing
+        // "pasta" before every row would only slow VoiceOver down.
+        .accessibilityHidden(true)
 
       VStack(alignment: .leading, spacing: 2) {
         Text(root.displayName)
@@ -193,19 +206,25 @@ struct RootsSettingsView: View {
         // A grant that has stopped working should say so here rather than turn
         // into a puzzling failure in the middle of an answer.
         if !viewModel.isReachable(root) {
-          Label("não está acessível agora", systemImage: "exclamationmark.triangle")
+          Label("não está acessível agora", systemImage: "exclamationmark.triangle.fill")
             .font(.caption)
+            .symbolRenderingMode(.hierarchical)
             .foregroundStyle(.orange)
         }
       }
 
       Spacer()
 
-      Button("Remover") {
+      // Destructive by role because it takes access away, but with no
+      // confirmation: nothing is deleted and the folder can be authorised again
+      // from the button below.
+      Button("Remover", role: .destructive) {
         viewModel.revoke(root)
       }
       .buttonStyle(.borderless)
       .foregroundStyle(.red)
+      .help("Tira a autorização desta pasta; nada é apagado")
+      .accessibilityLabel("Remover a autorização de \(root.displayName)")
     }
     .padding(.vertical, 2)
   }
