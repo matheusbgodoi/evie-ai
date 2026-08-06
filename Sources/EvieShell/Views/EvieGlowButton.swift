@@ -192,17 +192,32 @@ struct EvieGlowButton: NSViewRepresentable {
         colour: identity.style == .filled ? .white : .secondaryLabelColor
       )
       let glyphSize = drawn?.size ?? CGSize(width: identity.glyphSize, height: identity.glyphSize)
+      // Snapped to the device pixel grid, not to whole points.
+      //
+      // A chevron is two strokes meeting at a corner. Rounding its origin to a
+      // point on a 2× display leaves the two arms on different half-pixel
+      // phases, so one is anti-aliased heavier than the other and the arrow
+      // reads as tilted — which is exactly how it was described. Snapping to
+      // the real pixel grid puts both arms in the same phase.
       glyph.frame = CGRect(
-        x: ((identity.diameter - glyphSize.width) / 2).rounded(),
-        y: ((identity.diameter - glyphSize.height) / 2).rounded(),
-        width: glyphSize.width,
-        height: glyphSize.height
+        x: Self.snap((identity.diameter - glyphSize.width) / 2, to: scale),
+        y: Self.snap((identity.diameter - glyphSize.height) / 2, to: scale),
+        width: Self.snap(glyphSize.width, to: scale),
+        height: Self.snap(glyphSize.height, to: scale)
       )
       glyph.contentsScale = scale
       glyph.contentsGravity = .resizeAspect
       glyph.contents = drawn?.image
 
       CATransaction.commit()
+    }
+
+    /// The nearest position that lands on a whole device pixel.
+    static func snap(_ value: CGFloat, to scale: CGFloat) -> CGFloat {
+      guard scale > 0 else {
+        return value.rounded()
+      }
+      return (value * scale).rounded() / scale
     }
 
     override func mouseEntered(with event: NSEvent) {

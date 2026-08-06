@@ -69,6 +69,7 @@ struct OverlayRootView: View {
   var onDismissCommands: (() -> Void)? = nil
   var attachments: [EvieAttachmentSlot] = []
   var onRemoveAttachment: ((UUID) -> Void)? = nil
+  var onPasteAttachment: (() -> Bool)? = nil
 
   @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
@@ -219,7 +220,8 @@ struct OverlayRootView: View {
         onCompleteCommand: onCompleteCommand,
         onDismissCommands: onDismissCommands,
         attachments: attachments,
-        onRemoveAttachment: onRemoveAttachment
+        onRemoveAttachment: onRemoveAttachment,
+        onPasteAttachment: onPasteAttachment
       )
       .transition(.move(edge: .bottom).combined(with: .opacity))
     } else {

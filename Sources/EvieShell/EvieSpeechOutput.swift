@@ -231,6 +231,11 @@ final class EvieSpeechOutput: ObservableObject {
       isSpeaking = false
       levels = []
       onLevels?([])
+      // Reported, or the button that was just pressed keeps offering to stop
+      // something that already stopped. Deliberately not `onFinished`: that one
+      // means the speech ran out, and in a call it reopens the microphone —
+      // which is the opposite of what someone pressing stop asked for.
+      onSpeakingChanged?(false)
     }
   }
 }
@@ -295,7 +300,53 @@ extension EvieSpeechOutput {
     guard let buffer = try? await clonedEngine.synthesise(text, profileID: profileID) else {
       return nil
     }
-    return [buffer]
+    return Self.trimmed(buffer).map { [$0] }
+  }
+
+  /// The same buffer with the padding at each end removed.
+  ///
+  /// A model gives every phrase room to breathe at both ends — sensible for one
+  /// phrase, and the reason two played back to back have a gap neither sentence
+  /// asked for. Silence *inside* the phrase is left alone: that is punctuation
+  /// being spoken, and cutting it would be editing the delivery.
+  ///
+  /// Returns nil for a phrase that is silence all through, which is a synthesis
+  /// that produced nothing and should not be queued at all.
+  fileprivate nonisolated static func trimmed(
+    _ buffer: AVAudioPCMBuffer
+  ) -> AVAudioPCMBuffer? {
+    guard let channels = buffer.floatChannelData, buffer.frameLength > 0 else {
+      return buffer
+    }
+    let count = Int(buffer.frameLength)
+    let samples = Array(UnsafeBufferPointer(start: channels[0], count: count))
+    guard
+      let range = EvieSilenceTrim.speechRange(
+        in: samples,
+        sampleRate: buffer.format.sampleRate
+      )
+    else {
+      return nil
+    }
+    guard range.lowerBound > 0 || range.upperBound < count else {
+      return buffer
+    }
+    guard
+      let cut = AVAudioPCMBuffer(
+        pcmFormat: buffer.format,
+        frameCapacity: AVAudioFrameCount(range.count)
+      ), let target = cut.floatChannelData
+    else {
+      return buffer
+    }
+    for channel in 0..<Int(buffer.format.channelCount) {
+      target[channel].update(
+        from: channels[channel] + range.lowerBound,
+        count: range.count
+      )
+    }
+    cut.frameLength = AVAudioFrameCount(range.count)
+    return cut
   }
 
   /// Renders one sentence to buffers.

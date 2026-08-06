@@ -24,6 +24,9 @@ struct QuickTextEntryView: View {
 
   var attachments: [EvieAttachmentSlot] = []
   var onRemoveAttachment: ((UUID) -> Void)? = nil
+  /// Returns true when the clipboard held something worth attaching, so an
+  /// ordinary text paste still happens when it did not.
+  var onPasteAttachment: (() -> Bool)? = nil
 
   private var isShowingCommands: Bool {
     !commandSuggestions.isEmpty
@@ -219,6 +222,16 @@ struct QuickTextEntryView: View {
             guard isShowingCommands else { return .ignored }
             onMoveCommandHighlight?(1)
             return .handled
+          }
+          // ⌘V is intercepted only when the clipboard holds a file or a
+          // picture. Reporting `.ignored` otherwise lets the field paste text
+          // the way it always has — refusing a normal paste because something
+          // unreadable was copied would be worse than having no paste at all.
+          .onKeyPress(keys: ["v"]) { press in
+            guard press.modifiers.contains(.command), let onPasteAttachment else {
+              return .ignored
+            }
+            return onPasteAttachment() ? .handled : .ignored
           }
           .onKeyPress(.tab) {
             guard isShowingCommands else { return .ignored }

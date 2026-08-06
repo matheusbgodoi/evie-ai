@@ -503,6 +503,54 @@ final class OverlayViewModel: ObservableObject {
     }
   }
 
+  /// Attaches whatever is on the clipboard, if it is something she can read.
+  ///
+  /// A screenshot goes to the clipboard as image data with no file behind it, so
+  /// it is written to a temporary file first — everything downstream reads from
+  /// a URL, and inventing a second path for pasted bytes would be two code paths
+  /// for one idea.
+  ///
+  /// Returns whether anything was taken, so the field can fall back to pasting
+  /// text when the clipboard holds text. Refusing a normal paste because
+  /// something unreadable was on the clipboard would be worse than not
+  /// supporting paste at all.
+  @discardableResult
+  func pasteAttachment() -> Bool {
+    let pasteboard = NSPasteboard.general
+
+    // Real files first: dragging a PDF out of Finder and copying it puts a URL
+    // on the clipboard, and the file on disk is better than a re-encoding of it.
+    if let urls = pasteboard.readObjects(forClasses: [NSURL.self]) as? [URL],
+      !urls.isEmpty
+    {
+      let readable = urls.filter(EvieDocumentReader.canRead)
+      if !readable.isEmpty {
+        attachFiles(at: readable)
+        return true
+      }
+    }
+
+    guard let image = NSImage(pasteboard: pasteboard),
+      let data = Self.pngData(from: image)
+    else {
+      return false
+    }
+    let url = FileManager.default.temporaryDirectory
+      .appendingPathComponent("evie-colado-\(UUID().uuidString).png")
+    guard (try? data.write(to: url)) != nil else {
+      return false
+    }
+    attachFiles(at: [url])
+    return true
+  }
+
+  private static func pngData(from image: NSImage) -> Data? {
+    guard let cgImage = image.cgImage(forProposedRect: nil, context: nil, hints: nil) else {
+      return nil
+    }
+    return NSBitmapImageRep(cgImage: cgImage).representation(using: .png, properties: [:])
+  }
+
   func removeAttachment(id: UUID) {
     preparationTasks[id]?.cancel()
     preparationTasks[id] = nil

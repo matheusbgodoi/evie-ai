@@ -43,7 +43,8 @@ struct EvieOverlayView: View {
       onCompleteCommand: { viewModel.completeCommand() },
       onDismissCommands: { viewModel.dismissCommandMenu() },
       attachments: viewModel.attachmentSlots,
-      onRemoveAttachment: { viewModel.removeAttachment(id: $0) }
+      onRemoveAttachment: { viewModel.removeAttachment(id: $0) },
+      onPasteAttachment: { viewModel.pasteAttachment() }
     )
   }
 }
