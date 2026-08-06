@@ -33,6 +33,11 @@ struct ShortcutSettingsView: View {
           viewModel.resetAllShortcuts()
         }
         .disabled(viewModel.preferences.shortcuts.isUsingDefaults)
+        .help(
+          viewModel.preferences.shortcuts.isUsingDefaults
+            ? "Todos os atalhos já estão como vieram"
+            : "Devolve todos os atalhos às combinações originais"
+        )
         Spacer()
       }
       .padding(14)
@@ -75,6 +80,8 @@ private struct ShortcutRow: View {
         .buttonStyle(.bordered)
         .tint(isRecording ? .accentColor : nil)
         .help(isRecording ? "Pressione a combinação, ou Esc para desistir" : "Alterar o atalho")
+        .accessibilityLabel("Atalho de \(action.title)")
+        .accessibilityValue(label)
 
         Menu {
           Button("Restaurar padrão") {
@@ -88,9 +95,11 @@ private struct ShortcutRow: View {
           .disabled(viewModel.isDisabled(action))
         } label: {
           Image(systemName: "ellipsis.circle")
+            .symbolRenderingMode(.hierarchical)
         }
         .menuStyle(.borderlessButton)
         .fixedSize()
+        .help("Restaurar o padrão ou desativar este atalho")
         .accessibilityLabel("Mais opções para \(action.title)")
       }
 
@@ -135,6 +144,9 @@ private struct ShortcutRow: View {
   private func rowNote(_ text: String, symbol: String, tint: Color) -> some View {
     Label(text, systemImage: symbol)
       .font(.caption)
+      // Hierarchical keeps the filled warning symbols reading as one tinted
+      // shape instead of a flat silhouette at caption size.
+      .symbolRenderingMode(.hierarchical)
       .foregroundStyle(tint)
   }
 }

@@ -47,11 +47,13 @@ struct SkillsSettingsView: View {
         } label: {
           Label("Abrir a pasta das habilidades", systemImage: "folder")
         }
+        .help("Mostra no Finder onde os arquivos .md das habilidades ficam")
         Button {
           viewModel.reload()
         } label: {
           Label("Reler a pasta", systemImage: "arrow.clockwise")
         }
+        .help("Procura habilidades novas ou alteradas sem reabrir a Evie")
       } footer: {
         Text(
           "Escreva um arquivo .md nessa pasta e ele vira uma habilidade. "
@@ -82,14 +84,19 @@ struct SkillsSettingsView: View {
 
   private func row(for skill: EvieSkill) -> some View {
     HStack(alignment: .top, spacing: 10) {
+      // The name goes in the label and is then hidden, rather than the label
+      // being an empty string. `labelsHidden` only stops it being drawn — it
+      // stays as the accessibility name, so VoiceOver stops reading every one
+      // of these as an anonymous switch.
       Toggle(
-        "",
+        skill.name,
         isOn: Binding(
           get: { skill.isEnabled },
           set: { viewModel.setEnabled($0, for: skill) }
         )
       )
       .labelsHidden()
+      .help(skill.isEnabled ? "Desligar sem apagar o arquivo" : "Voltar a usar esta habilidade")
 
       VStack(alignment: .leading, spacing: 2) {
         Text(skill.name)
@@ -101,9 +108,13 @@ struct SkillsSettingsView: View {
 
       Spacer()
 
-      Button("Remover") { viewModel.remove(skill) }
+      // No confirmation: this goes to the Trash, so the Finder already holds
+      // the undo.
+      Button("Remover", role: .destructive) { viewModel.remove(skill) }
         .buttonStyle(.borderless)
         .foregroundStyle(.red)
+        .help("Manda o arquivo desta habilidade para o Lixo")
+        .accessibilityLabel("Remover a habilidade \(skill.name)")
     }
     .padding(.vertical, 2)
   }
