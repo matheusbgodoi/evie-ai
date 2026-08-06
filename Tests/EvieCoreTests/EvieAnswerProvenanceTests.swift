@@ -103,3 +103,35 @@ struct EvieAnswerProvenanceTests {
     #expect(provenance.usedOnlyItsOwnKnowledge)
   }
 }
+
+@Suite("Evie provenance for attachments")
+struct EvieAttachmentProvenanceTests {
+  /// An answer drawn from a picture in front of her is not an answer with
+  /// nothing behind it, and must not carry the warning meant for one.
+  @Test("looking at an attached file is not answering from memory")
+  func attachmentIsNotMemory() {
+    let provenance = EvieAnswerProvenance.from(toolCalls: [], readAttachment: true)
+
+    #expect(!provenance.usedOnlyItsOwnKnowledge)
+    #expect(provenance.note.contains("anexou"))
+    #expect(!provenance.note.contains("pode conter erro"))
+  }
+
+  /// The attachment leads, because it is what the question was about.
+  @Test("the attachment is named first when something else was used too")
+  func attachmentLeads() {
+    let provenance = EvieAnswerProvenance(
+      usedLocalKnowledge: true,
+      usedWeb: false,
+      usedAttachment: true
+    )
+
+    #expect(provenance.note.hasPrefix("Li o que você anexou"))
+    #expect(provenance.note.contains("anotações"))
+  }
+
+  @Test("nothing consulted still warns")
+  func stillWarnsWhenUngrounded() {
+    #expect(EvieAnswerProvenance().note.contains("pode conter erro"))
+  }
+}

@@ -701,6 +701,9 @@ final class OverlayViewModel: ObservableObject {
     // and pressing it added a second copy of the turn just given.
     let artifactID = userMessage.id
     let evidence = takeAttachmentEvidence()
+    // What the person attached is the subject of the question. Looking anything
+    // up is slower and answers a different question.
+    let carriesAttachment = evidence != nil
     let requestMessages = conversationPrefix(
       adding: userMessage,
       evidence: evidence
@@ -799,7 +802,8 @@ final class OverlayViewModel: ObservableObject {
         ).run(
           messages: requestMessages,
           roots: roots,
-          client: client
+          client: client,
+          carriesAttachment: carriesAttachment
         ) { [weak self] event in
           await self?.receiveDuringLoop(event, requestID: requestID)
         }

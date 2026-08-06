@@ -78,10 +78,19 @@ public struct EvieAgentLoop: Sendable {
   /// she is looking something up. It is `async` so the interface can be updated
   /// on the main actor while the loop itself — including the blocking file reads
   /// a tool performs — stays off it.
+  /// - Parameter carriesAttachment: whether the conversation already contains a
+  ///   file the person attached. When it does, nothing is looked up: the subject
+  ///   of the question is on the screen, and searching for it is both slow and
+  ///   wrong. Measured on a real turn — a painting attached with "sobre o que é
+  ///   esta imagem?" — the search returned Google's own help pages about
+  ///   identifying images, contributed nothing to an answer that came entirely
+  ///   from having looked at the picture, and still made the card claim "Usei a
+  ///   web". Seconds spent to end up citing a source that was not used.
   public func run(
     messages: [ChatMessage],
     roots: [EvieFileRoot],
     client: any AgentClient,
+    carriesAttachment: Bool = false,
     emit: @Sendable (EvieInteractionEvent) async -> Void
   ) async throws -> Outcome {
     var conversation = messages
@@ -106,7 +115,8 @@ public struct EvieAgentLoop: Sendable {
     // Looked up before the model is asked anything, so the order the user asked
     // for is a property of this code rather than a request the model can decline
     // — which, measured twice, it does.
-    if let question = messages.last(where: { $0.role == .user })?.content,
+    if !carriesAttachment,
+      let question = messages.last(where: { $0.role == .user })?.content,
       EvieGrounding.needsLookup(question)
     {
       let grounding = await ground(
@@ -148,7 +158,11 @@ public struct EvieAgentLoop: Sendable {
           toolCallCount: toolCallCount,
           exhausted: false,
           memoryProposals: memoryProposals,
-          provenance: .from(toolCalls: toolNames, readAddresses: readAddresses),
+          provenance: .from(
+            toolCalls: toolNames,
+            readAddresses: readAddresses,
+            readAttachment: carriesAttachment
+          ),
           changeProposals: changeProposals,
           skillProposals: skillProposals
         )
@@ -227,7 +241,11 @@ public struct EvieAgentLoop: Sendable {
       toolCallCount: toolCallCount,
       exhausted: true,
       memoryProposals: memoryProposals,
-      provenance: .from(toolCalls: toolNames, readAddresses: readAddresses),
+      provenance: .from(
+            toolCalls: toolNames,
+            readAddresses: readAddresses,
+            readAttachment: carriesAttachment
+          ),
       changeProposals: changeProposals,
       skillProposals: skillProposals
     )

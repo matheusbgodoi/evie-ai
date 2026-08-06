@@ -17,28 +17,40 @@ public struct EvieAnswerProvenance: Hashable, Sendable {
   public var usedLocalKnowledge: Bool
   /// She searched or opened pages on the web.
   public var usedWeb: Bool
+  /// She read or looked at a file the person attached.
+  ///
+  /// A separate fact from the other two, and one that has to be recorded, or an
+  /// answer that came entirely from looking at an attached picture reports "usei
+  /// só o que eu já sabia — pode conter erro". That warning exists for answers
+  /// with nothing behind them; putting it under one drawn from the thing in
+  /// front of her would teach you to ignore it.
+  public var usedAttachment: Bool
   /// Addresses she actually opened, so they can be shown rather than promised.
   public var citedPages: [String]
 
   public init(
     usedLocalKnowledge: Bool = false,
     usedWeb: Bool = false,
+    usedAttachment: Bool = false,
     citedPages: [String] = []
   ) {
     self.usedLocalKnowledge = usedLocalKnowledge
     self.usedWeb = usedWeb
+    self.usedAttachment = usedAttachment
     self.citedPages = citedPages
   }
 
   /// True when nothing was consulted, which is the case worth warning about.
   public var usedOnlyItsOwnKnowledge: Bool {
-    !usedLocalKnowledge && !usedWeb
+    !usedLocalKnowledge && !usedWeb && !usedAttachment
   }
 
   /// Reads the record of a turn.
-  public static func from(toolCalls names: [String], readAddresses: [String] = [])
-    -> EvieAnswerProvenance
-  {
+  public static func from(
+    toolCalls names: [String],
+    readAddresses: [String] = [],
+    readAttachment: Bool = false
+  ) -> EvieAnswerProvenance {
     let local = Set(EvieFileToolbox.ToolName.allCases.map(\.rawValue))
     // `list_roots` alone is her finding out what she may look at, not looking.
     let looked = names.filter { local.contains($0) && $0 != EvieFileToolbox.ToolName.listRoots.rawValue }
@@ -47,6 +59,7 @@ public struct EvieAnswerProvenance: Hashable, Sendable {
     return EvieAnswerProvenance(
       usedLocalKnowledge: !looked.isEmpty,
       usedWeb: !web.isEmpty,
+      usedAttachment: readAttachment,
       citedPages: readAddresses
     )
   }
@@ -57,6 +70,17 @@ public struct EvieAnswerProvenance: Hashable, Sendable {
   /// answer rather than part of it, and having Evie read "usei meu próprio
   /// conhecimento" out loud after every sentence would be unbearable.
   public var note: String {
+    // First, because when a file is attached it is what the question was about
+    // and everything else is background.
+    if usedAttachment {
+      var note = "Li o que você anexou"
+      if usedWeb {
+        note += " e a web" + citation
+      } else if usedLocalKnowledge {
+        note += " e suas anotações"
+      }
+      return note
+    }
     if usedLocalKnowledge, usedWeb {
       return "Usei suas anotações e a web" + citation
     }
