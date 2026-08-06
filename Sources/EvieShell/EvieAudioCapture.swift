@@ -57,13 +57,20 @@ final class EvieAudioCapture: ObservableObject {
 
   /// How many level samples the ring and the waveform draw.
   private static let historyLength = 44
+  /// How many frames the audio tap hands over at a time. Named because the wake
+  /// gate has to know how long one buffer lasts to convert its durations into
+  /// buffer counts, and a second copy of the number would be a second copy to get
+  /// wrong.
+  nonisolated static let tapBufferFrames: AVAudioFrameCount = 1_024
   /// Levels are published at a bounded rate rather than per audio buffer.
   /// Roughly thirty frames a second. Forty milliseconds was visibly steppy on
   /// the trace, and going below thirty buys smoothness the eye cannot see at the
   /// cost of waking the main actor more often while the microphone is open.
   static let publishInterval = Duration.milliseconds(30)
-  /// Below this the microphone is treated as silent.
-  private static let noiseFloorDecibels: Float = -55
+  /// Below this the microphone is treated as silent. Not private because the wake
+  /// gate normalises its levels the same way, and two different floors would mean
+  /// two different meanings for the same number.
+  static let noiseFloorDecibels: Float = -55
 
   private let meter = EvieLevelMeter()
   private var engine: AVAudioEngine?
@@ -214,7 +221,7 @@ final class EvieAudioCapture: ObservableObject {
     floor: Float,
     sink: (any EvieAudioBufferSink)?
   ) {
-    input.installTap(onBus: 0, bufferSize: 1_024, format: format) { buffer, _ in
+    input.installTap(onBus: 0, bufferSize: tapBufferFrames, format: format) { buffer, _ in
       meter.absorb(buffer, noiseFloorDecibels: floor)
       sink?.receive(buffer)
     }

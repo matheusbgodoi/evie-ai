@@ -203,6 +203,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
       return
     }
 
+    // Arms the wake listener for a fixed period and reports what it cost.
+    //
+    // The promise this project makes is "only spends processing when the tool is
+    // used", and arming is the one state where that could quietly be false. It
+    // was never measured before this flag existed.
+    if CommandLine.arguments.contains("--wake-cost-check") {
+      let seconds = Self.numericArgument(after: "--wake-cost-check") ?? 30
+      Task { @MainActor in
+        await Self.runWakeCostCheck(seconds: seconds)
+        NSApp.terminate(nil)
+      }
+      return
+    }
+
     // Reads a file and prints exactly what Evie would receive. Useful on its own,
     // and the only way to check the reader without dragging something onto a
     // window.
@@ -1201,6 +1215,198 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         atomically: true,
         encoding: .utf8
       )
+  }
+
+  /// A number written after a flag, when there is one.
+  static func numericArgument(after flag: String) -> Double? {
+    guard let index = CommandLine.arguments.firstIndex(of: flag),
+      index + 1 < CommandLine.arguments.count
+    else {
+      return nil
+    }
+    return Double(CommandLine.arguments[index + 1])
+  }
+
+  /// What this process has consumed so far, as the kernel accounts it.
+  ///
+  /// `powermetrics` reports energy in watts but needs sudo, and a diagnostic that
+  /// needs a password is a diagnostic nobody runs. `proc_pid_rusage` needs
+  /// nothing. Energy is deliberately not reported here: `ri_billed_energy` was
+  /// read on this Mac and comes back exactly 0 for an unentitled process, and
+  /// printing a zero as if it were a measurement is worse than printing nothing.
+  /// Cycles are what the kernel really counts, and between two versions of the
+  /// same code they are the closest honest stand-in for energy.
+  struct ProcessCost {
+    var cpuSeconds: Double
+    var cycles: Double
+    var instructions: Double
+    var footprintBytes: Double
+
+    /// `ri_user_time` is in mach ticks, not nanoseconds, and the difference is
+    /// not cosmetic: on this Mac the timebase is 125/3, so reading the raw value
+    /// as nanoseconds reports 2.4% of the CPU that was actually spent. Verified
+    /// against a busy loop of a known second — raw 23_968_445 ticks, 0.999 s
+    /// after conversion.
+    static let ticksToSeconds: Double = {
+      var timebase = mach_timebase_info_data_t()
+      mach_timebase_info(&timebase)
+      guard timebase.denom > 0 else {
+        return 1e-9
+      }
+      return Double(timebase.numer) / Double(timebase.denom) / 1e9
+    }()
+
+    static func current() -> ProcessCost {
+      var info = rusage_info_v4()
+      let read = withUnsafeMutablePointer(to: &info) { pointer in
+        pointer.withMemoryRebound(to: rusage_info_t?.self, capacity: 1) { rebound in
+          proc_pid_rusage(getpid(), RUSAGE_INFO_V4, rebound)
+        }
+      }
+      guard read == 0 else {
+        return ProcessCost(cpuSeconds: 0, cycles: 0, instructions: 0, footprintBytes: 0)
+      }
+      return ProcessCost(
+        cpuSeconds: Double(info.ri_user_time + info.ri_system_time) * ticksToSeconds,
+        cycles: Double(info.ri_cycles),
+        instructions: Double(info.ri_instructions),
+        footprintBytes: Double(info.ri_phys_footprint)
+      )
+    }
+  }
+
+  /// Runs `body` for `seconds` and reports what the process spent doing it.
+  ///
+  /// Wall time is measured rather than assumed: `Task.sleep` is a floor, not a
+  /// promise, and dividing by the requested duration would inflate every figure
+  /// by however much it overslept.
+  static func measureCost(
+    label: String,
+    seconds: Double,
+    body: () async -> Void = {}
+  ) async -> [String] {
+    let before = ProcessCost.current()
+    let started = Date()
+    await body()
+    try? await Task.sleep(for: .seconds(seconds))
+    let elapsed = Date().timeIntervalSince(started)
+    let after = ProcessCost.current()
+
+    let cpu = after.cpuSeconds - before.cpuSeconds
+    let cycles = after.cycles - before.cycles
+    let instructions = after.instructions - before.instructions
+    return [
+      String(
+        format: "%@: %.2f%% de CPU (%.3f s de CPU em %.1f s), %.2f G ciclos, %.2f G instruções",
+        label, cpu / elapsed * 100, cpu, elapsed, cycles / 1e9, instructions / 1e9
+      ),
+      String(format: "  memória do processo ao fim: %.0f MB", after.footprintBytes / 1_048_576),
+    ]
+  }
+
+  /// Measures what arming the wake listener costs, against doing nothing at all.
+  ///
+  /// The idle phase is not padding. Every process pays something merely for being
+  /// alive, and without that baseline the armed figure includes the cost of the
+  /// runloop and reads higher than the feature really is.
+  static func runWakeCostCheck(seconds: Double) async {
+    setvbuf(stdout, nil, _IOLBF, 0)
+    var report: [String] = []
+    func say(_ lines: [String]) {
+      for line in lines {
+        print(line)
+        report.append(line)
+      }
+    }
+
+    say(["janela de medição: \(Int(seconds)) s por fase"])
+    say(["permissão do microfone: \(EvieAudioCapture.currentPermission())"])
+    if let format = try? await EvieAudioCapture().prepareInputFormat() {
+      say([
+        "formato de entrada: \(Int(format.sampleRate)) Hz, \(format.channelCount) canal(is)"
+      ])
+    }
+    say(await measureCost(label: "parada (nada armado)", seconds: seconds))
+
+    guard EvieWakeListener().isSupported, #available(macOS 26, *) else {
+      say(["FALHA: este Mac não faz reconhecimento de fala, não há o que medir."])
+      writeWakeCostReport(report)
+      return
+    }
+
+    // Both arrangements, back to back, in the same room. Measuring the gated
+    // version against a number taken yesterday would compare rooms, not code.
+    // The order is a knob because the second phase runs against warm daemons and
+    // that alone could look like a saving. Run it both ways and the bias shows.
+    let order = CommandLine.arguments.contains("--gated-first") ? [true, false] : [false, true]
+    for gated in order {
+      let listener = EvieWakeListener()
+      listener.gatesRecogniser = gated
+      let label = gated ? "armada com portão" : "armada sem portão (como era)"
+      say(
+        await measureCost(label: label, seconds: seconds) {
+          await listener.arm(phrases: EvieVoicePreferences.defaultWakePhrase)
+        }
+      )
+      say(["  armada de fato: \(listener.isArmed)"])
+      if let failure = listener.failure {
+        say(["  falha ao armar: \(failure)"])
+      }
+      if let stats = listener.gateStatistics, stats.buffers > 0 {
+        say([
+          String(
+            format:
+              "  portão aberto em %d de %d buffers (%.1f%%), %d aberturas, "
+              + "piso %.3f, limiar %.3f, pico %.3f",
+            stats.fed, stats.buffers, Double(stats.fed) / Double(stats.buffers) * 100,
+            stats.openings, Double(stats.floor), Double(stats.openThreshold),
+            Double(stats.peakLevel)
+          ),
+          String(format: "  cada buffer dura %.0f ms", stats.bufferSeconds * 1_000),
+        ])
+        // The distribution of the levels, because the thresholds are supposed to
+        // come from what this microphone reports and not from a guess about it.
+        let sorted = stats.levels.sorted()
+        if !sorted.isEmpty {
+          let at = { (fraction: Double) -> Double in
+            Double(sorted[min(sorted.count - 1, Int(Double(sorted.count - 1) * fraction))])
+          }
+          say([
+            String(
+              format: "  níveis: p10 %.3f  p50 %.3f  p90 %.3f  p99 %.3f  máx %.3f",
+              at(0.1), at(0.5), at(0.9), at(0.99), at(1)
+            )
+          ])
+          // The whole trace goes to the file, and only to the file. Tuning a
+          // threshold against a summary is how the first version ended up with a
+          // gate that never closed; replaying the levels the microphone really
+          // produced is how it was fixed.
+          report.append(
+            "  trace: " + stats.levels.map { String(format: "%.3f", Double($0)) }
+              .joined(separator: " ")
+          )
+        }
+      }
+      say(["  último trecho reconhecido: \"\(listener.lastHeard)\""])
+      listener.disarm()
+      // The microphone and the recogniser both take a moment to actually go
+      // away; measuring the next phase over that tail would charge it to the
+      // wrong arrangement.
+      try? await Task.sleep(for: .seconds(3))
+    }
+
+    writeWakeCostReport(report)
+  }
+
+  private static func writeWakeCostReport(_ report: [String]) {
+    let directory = FileManager.default.homeDirectoryForCurrentUser
+      .appendingPathComponent("Library/Logs/Evie", isDirectory: true)
+    try? FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+    try? report.joined(separator: "\n").appending("\n").write(
+      to: directory.appendingPathComponent("wake-cost-check.txt"),
+      atomically: true,
+      encoding: .utf8
+    )
   }
 
   func applicationWillTerminate(_ notification: Notification) {
