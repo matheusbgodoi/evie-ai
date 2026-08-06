@@ -67,12 +67,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
       return
     }
 
-    // Speaks one sentence out loud through the whole path — synthesis, playback,
-    // and metering — and reports what happened. You hear it; the file says
-    // whether the level was real.
-    // Brings the voice engine up the way asking her to speak does, and reports
-    // how long it took. The point is to prove the app can start it without the
-    // shell script, which is the failure this exists for.
+    // Runs a real plan against the running model and prints each stage, because
+    // the only thing worth knowing about a planner is whether the model actually
+    // produces a list this parser can read.
+    if let index = CommandLine.arguments.firstIndex(of: "--plan-check"),
+      index + 1 < CommandLine.arguments.count
+    {
+      let question = CommandLine.arguments[index + 1]
+      Task { @MainActor in
+        await Self.runPlanCheck(question)
+        NSApp.terminate(nil)
+      }
+      return
+    }
+
     // Runs the update check against the real feed, and runs the signature
     // verification against real tampered copies of this very bundle. The second
     // half is the one that matters: it is the only thing standing between a
@@ -85,6 +93,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
       return
     }
 
+    // Brings the voice engine up the way asking her to speak does, and reports
+    // how long it took. The point is to prove the app can start it without the
+    // shell script, which is the failure this exists for.
     if CommandLine.arguments.contains("--voice-engine-check") {
       Task { @MainActor in
         await Self.runVoiceEngineCheck()
@@ -93,6 +104,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
       return
     }
 
+    // Speaks one sentence out loud through the whole path — synthesis, playback,
+    // and metering — and reports what happened. You hear it; the file says
+    // whether the level was real.
     if CommandLine.arguments.contains("--speak-check") {
       Task { @MainActor in
         await Self.runSpeakCheck()
@@ -615,6 +629,56 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
       "http://10.0.0.5",
     ] {
       print("  \(EvieWebClient.validate(address) == nil ? "recusado" : "ACEITOU — BUG") \(address)")
+    }
+  }
+
+  @MainActor
+  static func runPlanCheck(_ question: String) async {
+    let client = TurboFieldfareClient(
+      configuration: (try? EvieConfigurationLoader().load()) ?? EvieConfiguration()
+    )
+    let loop = EvieAgentLoop(web: nil, vault: nil, offersChanges: false)
+
+    func ask(_ prompt: String) async -> String {
+      (try? await loop.run(
+        messages: [ChatMessage(role: .user, content: prompt)],
+        roots: [],
+        client: client
+      ) { _ in })?.answer.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+    }
+
+    print("pergunta: \(question)")
+    let start = Date()
+    let written = await ask(EviePlanPrompts.planning(for: question))
+    print(String(format: "planejou em %.1f s:", Date().timeIntervalSince(start)))
+    print(written)
+    print("")
+
+    do {
+      var plan = EviePlan(question: question, steps: try EviePlanParser.steps(in: written))
+      print("LEU \(plan.steps.count) etapas:")
+      print(plan.progressReport)
+      print("")
+      for index in plan.steps.indices {
+        let stepStart = Date()
+        let result = await ask(EviePlanPrompts.step(index, of: plan))
+        plan.steps[index].state =
+          result.isEmpty ? .failed("resposta vazia") : .done(result)
+        print(
+          String(
+            format: "etapa %d em %.1f s: %@",
+            index + 1,
+            Date().timeIntervalSince(stepStart),
+            String(result.prefix(90))
+          )
+        )
+      }
+      print("")
+      let answer = await ask(EviePlanPrompts.synthesis(for: plan))
+      print("RESPOSTA: \(answer.prefix(400))")
+      print(String(format: "TOTAL: %.1f s", Date().timeIntervalSince(start)))
+    } catch {
+      print("NÃO LEU O PLANO: \((error as? LocalizedError)?.errorDescription ?? "\(error)")")
     }
   }
 

@@ -76,6 +76,43 @@ unreachable.
 nothing to press to say you have finished. She answers out loud, because you asked
 out loud.
 
+**Calling her by name.** Turn on Settings › Voz › "Atender quando eu chamar pelo
+nome". She shows nothing while waiting — no waveform, no listening state — and
+keeps nothing beyond an 80-character tail that is thrown away every minute.
+
+The microphone does have to stay open, and macOS shows its orange indicator
+whenever any app holds it. Siri avoids that only because "Hey Siri" runs on
+dedicated silicon no third-party app can reach. There is no way around it, so
+Evie says so instead of implying otherwise.
+
+The same pane shows what the recogniser actually heard, which is the point:
+"Evie" is not a Portuguese word, so pt-BR recognition builds it from real ones.
+Say the phrase, read what came back, and add it as a variant — separated by
+semicolons, since a comma is part of "Ei, Evie":
+
+```
+Ei, Evie; ei ivi; ei ive
+```
+
+**`/plano`.** Ask for something that takes several moves and she breaks it into
+steps, runs them one after another, and then writes one answer from what they
+found.
+
+```
+/plano compare o HTTP/2 com o HTTP/3 e diga qual eu deveria usar
+```
+
+It is a typed command and never a guess, because it costs one model call to plan,
+one per step, and one to answer — minutes rather than seconds on this hardware.
+The steps run strictly one at a time: this Mac serves one model, and three
+concurrent requests were measured at 23.3 s against 8.1 s for a single one, so
+fanning out costs 2.9× and buys nothing.
+
+The plan stays on screen while it runs. Stop is live at every step, a step that
+fails does not end the run, and whatever the finished steps found still becomes
+an answer — one that says which steps were missing rather than quietly leaving
+them out.
+
 **Call mode.** `⌥⇧C`, then click the mark: the window becomes voice only. She
 speaks, the microphone reopens by itself, and it keeps going until you click again.
 
