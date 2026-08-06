@@ -13,6 +13,7 @@ final class SettingsWindowController: NSWindowController, NSWindowDelegate {
     memoryViewModel: EvieMemoryViewModel,
     skillsViewModel: EvieSkillsViewModel,
     updater: EvieUpdater,
+    wakeListener: EvieWakeListener,
     preferencesPath: String,
     configurationPath: String
   ) {
@@ -35,6 +36,7 @@ final class SettingsWindowController: NSWindowController, NSWindowDelegate {
         memoryViewModel: memoryViewModel,
         skillsViewModel: skillsViewModel,
         updater: updater,
+        wakeListener: wakeListener,
         preferencesPath: preferencesPath,
         configurationPath: configurationPath
       )

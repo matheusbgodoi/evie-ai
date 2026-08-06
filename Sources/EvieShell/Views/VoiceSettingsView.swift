@@ -8,6 +8,7 @@ import SwiftUI
 /// explanation.
 struct VoiceSettingsView: View {
   @ObservedObject var viewModel: EviePreferencesViewModel
+  @ObservedObject var wakeListener: EvieWakeListener
 
   private var voice: EvieVoicePreferences {
     viewModel.preferences.voice
@@ -67,9 +68,12 @@ struct VoiceSettingsView: View {
           isOn: Binding(get: { voice.wakeWordEnabled }, set: viewModel.setWakeWordEnabled)
         )
         captionRow(
-          "Exige o microfone permanentemente aberto para um detector minúsculo. "
-            + "O indicador do microfone fica visível o tempo todo, e o custo de bateria "
-            + "precisa ser medido antes de virar padrão."
+          "Ela não aparece, não desenha ondas e não guarda nada — tudo o que ouve "
+            + "é descartado até você chamar. Mas o microfone precisa ficar aberto, "
+            + "e o macOS mostra o ponto laranja na barra sempre que qualquer app o "
+            + "abre. A Siri escapa disso porque roda no processador dedicado da "
+            + "Apple, que nenhum outro app alcança. Não dá para esconder, então "
+            + "está dito."
         )
 
         TextField(
@@ -77,6 +81,32 @@ struct VoiceSettingsView: View {
           text: Binding(get: { voice.wakePhrase }, set: viewModel.setWakePhrase)
         )
         .disabled(!voice.wakeWordEnabled)
+        captionRow(
+          "Separe variantes com ponto e vírgula — a vírgula faz parte da frase. "
+            + "Mínimo de \(EvieWakePhrase.minimumPhraseCharacters) letras."
+        )
+
+        // The only honest way to tune this. "Evie" is not a Portuguese word, so
+        // the recogniser builds it out of real ones — "ivi", "e vi", "eve" — and
+        // which ones it picks is not guessable from the outside. Showing what it
+        // actually heard turns "ela não vem" from a mystery into a reading.
+        if voice.wakeWordEnabled, wakeListener.isArmed {
+          LabeledContent("Ouvindo agora") {
+            Text(wakeListener.lastHeard.isEmpty ? "— silêncio —" : wakeListener.lastHeard)
+              .font(.system(.footnote, design: .monospaced))
+              .foregroundStyle(.secondary)
+              .textSelection(.enabled)
+          }
+          captionRow(
+            "Diga a frase e veja o que ela entendeu. Se vier diferente, "
+              + "acrescente o que apareceu aqui como variante."
+          )
+        }
+        if let failure = wakeListener.failure, voice.wakeWordEnabled {
+          Text(failure)
+            .font(.footnote)
+            .foregroundStyle(.orange)
+        }
       }
 
       Section {

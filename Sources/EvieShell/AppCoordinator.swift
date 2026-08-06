@@ -31,6 +31,7 @@ final class AppCoordinator: NSObject {
   private let speechOutput = EvieSpeechOutput()
   private let voiceEngineLauncher = EvieVoiceEngineLauncher()
   private let updater = EvieUpdater()
+  private let wakeListener = EvieWakeListener()
   /// True while push-to-talk is holding the microphone open, so releasing the key
   /// stops it but a click on the mark toggles instead.
   private var isHoldingToTalk = false
@@ -252,6 +253,13 @@ final class AppCoordinator: NSObject {
     viewModel.onAnswerReady = { [weak self] answer in
       self?.speak(answer)
     }
+    wakeListener.onWake = { [weak self] in
+      guard let self else { return }
+      // Called by name, so the answer follows the way the question was asked:
+      // she comes, she opens the microphone, and she speaks the reply.
+      panelController.showQuickText()
+      startListening()
+    }
 
     do {
       let controller = try GlobalHotKeyController()
@@ -264,6 +272,10 @@ final class AppCoordinator: NSObject {
       viewModel.presentRuntimeError(title: "Atalhos globais indisponíveis", error: error)
       panelController.showPassive()
     }
+
+    // Armed at launch if that is what the preference says, so being able to call
+    // her by name does not depend on having opened settings this session.
+    updateWakeListening()
 
     // Evie has no Dock icon, so there is no ordinary way to reach Settings when a
     // shortcut is unavailable. This flag is that way out, and it is what makes the
@@ -557,6 +569,7 @@ extension AppCoordinator {
         memoryViewModel: memoryViewModel,
         skillsViewModel: skillsViewModel,
         updater: updater,
+        wakeListener: wakeListener,
         preferencesPath: preferencesStore.fileURL.path,
         configurationPath: configurationStore.fileURL.path
       )
@@ -733,6 +746,10 @@ extension AppCoordinator {
     guard !audioCapture.isCapturing else {
       return
     }
+    // Only one thing may hold the microphone. Arming and a real turn are the
+    // same device, and two owners is a hang inside coreaudiod rather than an
+    // error anybody could act on.
+    wakeListener.disarm()
     // Barge-in: opening the microphone always cuts whatever she is saying. Being
     // talked over is the whole point of being able to interrupt.
     speechOutput.stop()
@@ -791,6 +808,8 @@ extension AppCoordinator {
       return
     }
     audioCapture.stop()
+    // Handed back, so saying the phrase works again without reopening settings.
+    updateWakeListening()
 
     guard #available(macOS 26, *),
       let recogniser = transcription as? EvieSpeechTranscription
@@ -848,6 +867,23 @@ extension AppCoordinator {
     activateVoice()
   }
 
+  /// Arms or disarms the wake phrase to match the preference.
+  ///
+  /// Called from everywhere the answer could have changed rather than only where
+  /// the switch is flipped, because the microphone is also taken and given back
+  /// by ordinary turns. A single place that recomputes the truth beats several
+  /// that each remember one case of it.
+  fileprivate func updateWakeListening() {
+    guard preferences.voice.wakeWordEnabled, !audioCapture.isCapturing, !isInCall else {
+      wakeListener.disarm()
+      return
+    }
+    Task { @MainActor [weak self] in
+      guard let self else { return }
+      await wakeListener.arm(phrases: preferences.voice.wakePhrase)
+    }
+  }
+
   fileprivate func preferencesDidChange(_ updated: EviePreferences) {
     let appearanceChanged = updated.appearance != preferences.appearance
     let shortcutsChanged = updated.shortcuts != preferences.shortcuts
@@ -865,6 +901,7 @@ extension AppCoordinator {
     if shortcutsChanged {
       applyShortcuts()
     }
+    updateWakeListening()
     refreshMenuShortcuts()
     preferencesViewModel?.adopt(updated)
     viewModel.applyCapabilities(

@@ -16,6 +16,7 @@ struct SettingsView: View {
   @ObservedObject var memoryViewModel: EvieMemoryViewModel
   @ObservedObject var skillsViewModel: EvieSkillsViewModel
   @ObservedObject var updater: EvieUpdater
+  @ObservedObject var wakeListener: EvieWakeListener
   var preferencesPath: String = EviePreferencesStore.defaultFileURL.path
   var configurationPath: String = EvieConfigurationLoader.defaultFileURL.path
 
@@ -25,6 +26,7 @@ struct SettingsView: View {
         .tabItem { Label("Atalhos", systemImage: "keyboard") }
 
       VoiceTabView(
+        wakeListener: wakeListener,
         preferencesViewModel: preferencesViewModel,
         libraryViewModel: voiceLibraryViewModel
       )
@@ -89,6 +91,7 @@ private struct PaneSelector: View {
 
 /// How she speaks, and which voices she has. One question, so one tab.
 private struct VoiceTabView: View {
+  @ObservedObject var wakeListener: EvieWakeListener
   @ObservedObject var preferencesViewModel: EviePreferencesViewModel
   @ObservedObject var libraryViewModel: EvieVoiceLibraryViewModel
 
@@ -99,7 +102,7 @@ private struct VoiceTabView: View {
         selection: $preferencesViewModel.voicePane
       )
       if preferencesViewModel.voicePane == 0 {
-        VoiceSettingsView(viewModel: preferencesViewModel)
+        VoiceSettingsView(viewModel: preferencesViewModel, wakeListener: wakeListener)
       } else {
         VoiceLibraryView(
           viewModel: libraryViewModel,
