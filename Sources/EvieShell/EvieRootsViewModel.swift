@@ -67,6 +67,18 @@ final class EvieRootsViewModel: ObservableObject {
   }
 
   /// Asks for a folder, through the system panel.
+  ///
+  /// Attached to the window that asked, as a sheet, rather than run
+  /// application-modal. Evie has no Dock icon — `NSApp.setActivationPolicy`
+  /// is `.accessory` — and an app in that mode has no reliable way back to a
+  /// window it lost: no Dock tile, no entry in the app switcher, nothing but the
+  /// menu-bar item. `runModal()` takes over activation for the whole application
+  /// and hands it back to whatever the system thinks is frontmost, which for an
+  /// accessory app is regularly not the settings window. It looks exactly like
+  /// the window closed.
+  ///
+  /// As a sheet the panel belongs to the window, cannot outlive it, and gives
+  /// focus back to it — which is what should have happened in the first place.
   func grant() {
     let panel = NSOpenPanel()
     panel.canChooseFiles = false
@@ -79,10 +91,23 @@ final class EvieRootsViewModel: ObservableObject {
       das pastas autorizadas, e nunca escreve nem apaga nada.
       """
 
-    guard panel.runModal() == .OK, let url = panel.url else {
+    // The window the person is looking at. Falls back to running modally only
+    // when there is genuinely no window to attach to, which is the diagnostics
+    // path rather than anything a person does.
+    guard let host = NSApp.keyWindow ?? NSApp.mainWindow else {
+      if panel.runModal() == .OK, let url = panel.url {
+        add(url)
+      }
       return
     }
-    add(url)
+    panel.beginSheetModal(for: host) { [weak self] response in
+      guard response == .OK, let url = panel.url else {
+        return
+      }
+      MainActor.assumeIsolated {
+        self?.add(url)
+      }
+    }
   }
 
   /// Records a folder the user chose.

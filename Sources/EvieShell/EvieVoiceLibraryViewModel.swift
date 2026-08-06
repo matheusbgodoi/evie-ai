@@ -230,17 +230,26 @@ final class EvieVoiceLibraryViewModel: ObservableObject {
   }
 
   func chooseAudio() {
-    guard let url = pickAudio() else {
-      return
-    }
-    pendingAudioURL = url
-    if newVoiceName.isEmpty {
-      newVoiceName = url.deletingPathExtension().lastPathComponent
+    pickAudio { [weak self] url in
+      guard let self, let url else {
+        return
+      }
+      pendingAudioURL = url
+      if newVoiceName.isEmpty {
+        newVoiceName = url.deletingPathExtension().lastPathComponent
+      }
     }
   }
 
   /// Asks for a recording, through the system panel.
-  func pickAudio() -> URL? {
+  ///
+  /// A sheet on the window that asked, for the same reason the folder picker is
+  /// one: Evie is an accessory app with no Dock icon, and `runModal()` takes
+  /// activation for the whole application and returns it to whatever the system
+  /// considers frontmost — which is regularly not the settings window. Losing it
+  /// that way is indistinguishable from it closing, and there is no Dock tile to
+  /// click to get it back.
+  func pickAudio(_ completion: @escaping @MainActor (URL?) -> Void) {
     let panel = NSOpenPanel()
     panel.canChooseFiles = true
     panel.canChooseDirectories = false
@@ -251,9 +260,15 @@ final class EvieVoiceLibraryViewModel: ObservableObject {
       Escolha uma gravação limpa da voz, de uns dez a trinta segundos, sem música \
       nem outra pessoa falando por cima.
       """
-    guard panel.runModal() == .OK else {
-      return nil
+
+    guard let host = NSApp.keyWindow ?? NSApp.mainWindow else {
+      completion(panel.runModal() == .OK ? panel.url : nil)
+      return
     }
-    return panel.url
+    panel.beginSheetModal(for: host) { response in
+      MainActor.assumeIsolated {
+        completion(response == .OK ? panel.url : nil)
+      }
+    }
   }
 }
