@@ -78,9 +78,6 @@ final class OverlayPanelController: NSObject {
     chrome.onWidthCommit = { [weak self] in
       self?.finishWidthDrag()
     }
-    chrome.onResetPlacement = { [weak self] in
-      self?.resetPlacement()
-    }
 
     updateGeometry()
   }

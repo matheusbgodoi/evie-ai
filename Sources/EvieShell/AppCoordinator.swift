@@ -657,7 +657,7 @@ extension AppCoordinator {
     // which is why the switch that forces it is off by default.
     guard
       preferences.voice.speaksAnswer(
-        toSpokenPrompt: viewModel.lastPromptWasSpoken,
+        toSpokenPrompt: viewModel.answeringSpokenPrompt,
         inCall: isInCall
       )
     else {

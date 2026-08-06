@@ -30,6 +30,17 @@ final class OverlayViewModel: ObservableObject {
   /// Whether the question being answered was spoken rather than typed. Read by
   /// the coordinator to decide whether the answer is read out loud.
   private(set) var lastPromptWasSpoken = false
+  /// Whether the question *this answer belongs to* was spoken.
+  ///
+  /// Captured when the question is sent, not read when the answer arrives, and
+  /// that difference is the whole point. `lastPromptWasSpoken` is ambient: it
+  /// describes the most recent thing that happened, which by the time an answer
+  /// comes back — tens of seconds later — may be a completely different turn.
+  /// Open the microphone while a typed question is still in flight and the flag
+  /// flips to true underneath it, so the typed answer is read out loud against
+  /// an explicit preference not to. Measured from the report; the fix is to stop
+  /// asking a question about the present that was only ever about the past.
+  private(set) var answeringSpokenPrompt = false
   /// Whether web search is switched on, asked for at the start of every turn so
   /// turning it off takes effect on the next question.
   var isWebSearchEnabled: @MainActor () -> Bool = { false }
@@ -552,6 +563,8 @@ final class OverlayViewModel: ObservableObject {
 
     activeRequestID = requestID
     activeArtifactID = artifactID
+    // Pinned to this turn now, while it is still true of this turn.
+    answeringSpokenPrompt = lastPromptWasSpoken
     streamedResponse = ""
     interactionState = EvieInteractionState(phase: .thinking)
     pendingPrompt = prompt

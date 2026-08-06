@@ -97,22 +97,3 @@ struct OverlayWidthHandle: View {
   }
 }
 
-/// Restores the anchored bottom-centre position and the original width. It only
-/// appears once the window has actually been moved or resized.
-struct OverlayResetPlacementButton: View {
-  var action: () -> Void
-
-  var body: some View {
-    Button(action: action) {
-      Image(systemName: "arrow.counterclockwise")
-        .font(.system(size: 9, weight: .bold))
-        .frame(width: 20, height: 20)
-        .contentShape(Circle())
-    }
-    .buttonStyle(.plain)
-    .foregroundStyle(.secondary)
-    .background(.white.opacity(0.07), in: Circle())
-    .help("Voltar para a posição e a largura padrão")
-    .accessibilityLabel("Voltar ao tamanho e posição padrão")
-  }
-}

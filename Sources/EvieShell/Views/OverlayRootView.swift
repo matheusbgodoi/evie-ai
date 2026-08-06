@@ -15,6 +15,19 @@ struct OverlayRootView: View {
   /// It has to exceed the shadow's reach — radius plus vertical offset — or the
   /// shadow ends on a hard line at the window edge instead of fading out.
   private static let outerPadding: CGFloat = 30
+  /// Room kept *inside* the scrolling area so a card's shadow has somewhere to
+  /// fall.
+  ///
+  /// A `ScrollView` clips its content, and a clipped shadow ends on a straight
+  /// line — which is why the cards had a hard dark edge while the text field,
+  /// which is not inside a scroller, faded out properly. The content is inset by
+  /// this much and the scroller is pulled back out by the same amount, so the
+  /// cards sit exactly where they did and the shadow is no longer sliced.
+  ///
+  /// Sized from what the shadow actually reaches: radius 16 plus a 7pt vertical
+  /// offset is 23 downwards. It has to stay under `outerPadding`, or the problem
+  /// simply moves to the window edge.
+  private static let artifactShadowMargin: CGFloat = 24
 
   @ObservedObject var chrome: OverlayChromeModel
 
@@ -144,22 +157,19 @@ struct OverlayRootView: View {
     .animation(reduceMotion ? nil : .easeOut(duration: 0.16), value: chrome.isShowingHandles)
   }
 
-  /// Drag grip and the reset control, invisible until the pointer is over the
-  /// overlay. They still respond to the mouse while invisible, which is what
-  /// makes the whole top margin a drag area.
+  /// The drag grip, invisible until the pointer is over the overlay. It still
+  /// responds to the mouse while invisible, which is what makes the whole top
+  /// margin a drag area.
+  ///
+  /// It used to sit next to a button that restored the default size and
+  /// position, which appeared the moment the overlay was resized — so making the
+  /// window the shape you wanted was rewarded with a permanent control offering
+  /// to undo it. The same thing lives in Settings › Aparência, where undoing a
+  /// deliberate change belongs.
   private var gripControls: some View {
-    HStack(spacing: 8) {
-      OverlayGripHandle(isHighlighted: chrome.isShowingHandles)
-
-      if !chrome.isUsingDefaultPlacement {
-        OverlayResetPlacementButton {
-          chrome.onResetPlacement?()
-        }
-        .transition(.opacity.combined(with: .scale(scale: 0.8)))
-      }
-    }
-    .padding(.top, 5)
-    .opacity(chrome.isShowingHandles ? 1 : 0)
+    OverlayGripHandle(isHighlighted: chrome.isShowingHandles)
+      .padding(.top, 5)
+      .opacity(chrome.isShowingHandles ? 1 : 0)
   }
 
   private func widthHandle(_ side: OverlayWidthHandle.Side) -> some View {
@@ -216,26 +226,6 @@ struct OverlayRootView: View {
     if !artifacts.isEmpty {
       ScrollView(.vertical) {
         LazyVStack(spacing: 9) {
-          // At the top of the list rather than in a menu: scrolling up to look
-          // for what was said earlier is the gesture that means "show me more",
-          // and this is where that gesture ends.
-          if earlierTurnCount > 0, let onLoadEarlierTurns {
-            Button(action: onLoadEarlierTurns) {
-              Label(
-                earlierTurnCount == 1
-                  ? "Ver 1 mensagem anterior"
-                  : "Ver \(min(earlierTurnCount, OverlayViewModel.artifactPageSize)) mensagens anteriores",
-                systemImage: "arrow.up"
-              )
-              .font(.system(size: 11, weight: .medium))
-              .foregroundStyle(.secondary)
-              .frame(maxWidth: .infinity)
-              .padding(.vertical, 7)
-            }
-            .buttonStyle(.plain)
-            .background(.quaternary.opacity(0.28), in: Capsule())
-          }
-
           ForEach(artifacts) { artifact in
             ArtifactCardView(
               artifact: artifact,
@@ -256,16 +246,55 @@ struct OverlayRootView: View {
             )
           }
         }
+        // Measured before the padding is applied, so the viewport height stays
+        // the height of the cards rather than the cards plus their breathing
+        // room.
         .onGeometryChange(for: CGFloat.self) { proxy in
           proxy.size.height
         } action: { height in
           chrome.setArtifactContentHeight(height)
         }
+        .padding(Self.artifactShadowMargin)
       }
       .scrollIndicators(.hidden)
       .scrollBounceBehavior(.basedOnSize)
       .defaultScrollAnchor(.bottom)
-      .frame(height: artifactViewportHeight)
+      .frame(height: artifactViewportHeight + Self.artifactShadowMargin * 2)
+      .padding(-Self.artifactShadowMargin)
+      // Laid over the cards rather than stacked above them. In the flow it would
+      // push every card down the instant the pointer arrived, which moves the
+      // card out from under the pointer, which ends the hover, which puts it
+      // back — a flicker loop. Floating it costs nothing and cannot do that.
+      .overlay(alignment: .top) { earlierTurnsControl }
+      .onHover { chrome.isPointerOverArtifacts = $0 }
+    }
+  }
+
+  /// The way back to what was said before.
+  ///
+  /// Hidden until the pointer is over the answer, because asking something new
+  /// is meant to leave that one answer on screen and nothing else. The history is
+  /// not gone; it has stopped being furniture.
+  @ViewBuilder
+  private var earlierTurnsControl: some View {
+    if earlierTurnCount > 0, let onLoadEarlierTurns, chrome.isPointerOverArtifacts {
+      Button(action: onLoadEarlierTurns) {
+        Label(
+          earlierTurnCount == 1
+            ? "Ver 1 mensagem anterior"
+            : "Ver \(min(earlierTurnCount, OverlayViewModel.artifactPageSize)) mensagens anteriores",
+          systemImage: "arrow.up"
+        )
+        .font(.system(size: 11, weight: .medium))
+        .foregroundStyle(.secondary)
+        .padding(.horizontal, 12)
+        .padding(.vertical, 6)
+      }
+      .buttonStyle(.plain)
+      .background(.ultraThinMaterial, in: Capsule())
+      .overlay(Capsule().strokeBorder(.white.opacity(0.10), lineWidth: 0.75))
+      .transition(.opacity)
+      .padding(.top, 2)
     }
   }
 
