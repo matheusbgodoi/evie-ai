@@ -73,3 +73,6 @@ yarn-error.log*
 artifacts/
 benchmarks/results/
 tmp/
+
+# Agent worktrees and local agent config — never part of the project.
+.claude/
