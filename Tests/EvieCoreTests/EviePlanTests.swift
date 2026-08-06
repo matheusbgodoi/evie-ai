@@ -227,3 +227,71 @@ struct EviePlanProgressTests {
     #expect(lines[4].contains("5."))
   }
 }
+
+@Suite("Evie plan cost")
+struct EviePlanCostTests {
+  /// The shape that made this necessary: across one five-step run the steps took
+  /// 42.5, 49.6, 65.0, 72.7 and 75.4 seconds, because each carried every earlier
+  /// finding whole.
+  @Test("a later step gets the opening of an earlier finding, not all of it")
+  func condensesCarriedFindings() {
+    let long = String(repeating: "Uma frase razoavelmente longa sobre o assunto. ", count: 40)
+    let plan = EviePlan(
+      question: "q",
+      steps: [
+        EviePlanStep(instruction: "primeira", state: .done(long)),
+        EviePlanStep(instruction: "segunda"),
+      ]
+    )
+
+    let stepPrompt = EviePlanPrompts.step(1, of: plan)
+    #expect(stepPrompt.count < long.count)
+    #expect(stepPrompt.contains("Uma frase razoavelmente longa"))
+  }
+
+  /// The pass that actually writes from the findings still gets them whole.
+  @Test("the answer is written from the findings in full")
+  func synthesisKeepsEverything() {
+    let long = String(repeating: "Detalhe importante que não pode sumir. ", count: 40)
+    let plan = EviePlan(
+      question: "q",
+      steps: [EviePlanStep(instruction: "primeira", state: .done(long))]
+    )
+
+    #expect(EviePlanPrompts.synthesis(for: plan).contains(long))
+  }
+
+  @Test("a finding is cut at a sentence, not mid-word")
+  func cutsAtASentence() {
+    let text = "Primeira frase completa. " + String(repeating: "palavra ", count: 200)
+    let cut = EviePlanPrompts.condensed(text, to: 100)
+
+    #expect(cut.count <= 110)
+    #expect(cut.contains("Primeira frase completa."))
+  }
+
+  /// An early full stop must not cut a finding down to nothing.
+  @Test("a finding that opens with a short sentence is not cut to it")
+  func doesNotCutToAlmostNothing() {
+    let text = "Sim. " + String(repeating: "conteúdo que importa de verdade ", count: 50)
+    let cut = EviePlanPrompts.condensed(text, to: 200)
+
+    #expect(cut.count > 100)
+    #expect(cut.contains("conteúdo que importa"))
+  }
+
+  @Test("something already short is left alone")
+  func leavesShortFindingsWhole() {
+    #expect(EviePlanPrompts.condensed("Curto.") == "Curto.")
+  }
+
+  /// The step that only concludes spent a minute redoing what the synthesis pass
+  /// does next.
+  @Test("the planner is told not to end with a concluding step")
+  func forbidsAConcludingStep() {
+    let prompt = EviePlanPrompts.planning(for: "qualquer coisa")
+
+    #expect(prompt.contains("NÃO pode ser"))
+    #expect(prompt.contains("concluir"))
+  }
+}

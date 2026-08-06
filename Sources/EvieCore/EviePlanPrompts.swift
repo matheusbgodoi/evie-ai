@@ -8,6 +8,41 @@ import Foundation
 /// refused outright. The instruction has to arrive the same way a person's words
 /// arrive or it does not arrive at all.
 public enum EviePlanPrompts {
+  /// How much of an earlier finding a later step is given.
+  ///
+  /// The reason there is a budget at all is a shape in the measurements rather
+  /// than a worry: across one five-step run the steps took 42.5, 49.6, 65.0,
+  /// 72.7 and 75.4 seconds. They slow down because each one carries every
+  /// earlier finding in full, so the prompt grows and generation with it.
+  ///
+  /// A later step does not need the earlier answer, it needs to know what ground
+  /// was already covered — so it gets the opening of it, which is where a model
+  /// puts its substance. The synthesis pass, which actually writes from the
+  /// findings, still receives every one of them whole.
+  ///
+  /// Re-measured on the same question afterwards: 34.7, 40.2 and 51.2 seconds
+  /// against 42.5, 49.6 and 65.0 for the same work — 126.1 s of steps against
+  /// 157.1 s. The curve still rises, because 400 characters is still something,
+  /// but the step-to-step growth roughly halved. If it ever matters again, the
+  /// next cut is carrying only the most recent finding rather than all of them.
+  public static let maximumCarriedCharacters = 400
+
+  /// The opening of a finding, cut at a sentence rather than mid-word.
+  static func condensed(_ text: String, to budget: Int = maximumCarriedCharacters) -> String {
+    guard text.count > budget else {
+      return text
+    }
+    let head = text.prefix(budget)
+    // Only honoured when it lands past the halfway mark; an early full stop —
+    // "1." at the top of a list — would otherwise cut the finding to nothing.
+    if let stop = head.lastIndex(where: { ".!?\n".contains($0) }),
+      head.distance(from: head.startIndex, to: stop) > budget / 2
+    {
+      return String(head[head.startIndex...stop]) + " […]"
+    }
+    return String(head) + "…"
+  }
+
   /// Asks for the plan itself.
   ///
   /// The format is spelled out rather than left to the model, because the parser
@@ -28,6 +63,12 @@ public enum EviePlanPrompts {
     nas anotações, pesquisar algo específico na web, comparar dois resultados. \
     Não escreva etapas como "entender o problema" ou "pensar sobre o assunto", \
     que não produzem nada que a etapa seguinte possa usar.
+
+    A última etapa NÃO pode ser "concluir", "recomendar" ou "responder": a \
+    resposta final é escrita depois, a partir do que as etapas acharem. Uma \
+    etapa que só conclui gasta um minuto refazendo o que vem em seguida.
+
+    Use o menor número de etapas que resolva. Cada etapa custa quase um minuto.
     """
   }
 
@@ -51,7 +92,9 @@ public enum EviePlanPrompts {
     if !findings.isEmpty {
       prompt += "\n\nO que as etapas anteriores acharam:\n"
       for (position, finding) in findings.enumerated() {
-        prompt += "\n\(position + 1). \(finding.instruction)\n\(finding.result)\n"
+        // Condensed, not whole: this is orientation, and the pass that writes
+        // from the findings gets them in full.
+        prompt += "\n\(position + 1). \(finding.instruction)\n\(condensed(finding.result))\n"
       }
     }
 

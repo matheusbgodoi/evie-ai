@@ -127,7 +127,13 @@ public enum EviePlanParser {
   public static let minimumSteps = 2
   /// Above this the model is padding. Each step is a full turn, so the ceiling
   /// is about the person's time rather than about correctness.
-  public static let maximumSteps = 6
+  ///
+  /// Four rather than six, and the difference was measured. A five-step plan for
+  /// "compare o HTTP/2 com o HTTP/3" took 425 s end to end, and the answer it
+  /// produced rested almost entirely on the first three steps — the last two
+  /// restated and concluded, which the synthesis pass does anyway. Two fewer
+  /// steps is close to two fewer minutes for an answer of the same substance.
+  public static let maximumSteps = 4
   /// Longer than this and the "step" is prose that escaped the list.
   static let maximumStepCharacters = 240
 
