@@ -10,7 +10,52 @@ final class OverlayViewModel: ObservableObject {
   @Published var waveformSamples: [CGFloat] = []
   @Published var artifacts: [ArtifactCardModel] = []
   @Published var isQuickTextEntryPresented = false
-  @Published var quickText = ""
+  @Published var quickText = "" {
+    didSet {
+      guard quickText != oldValue else {
+        return
+      }
+      // Typing brings the menu back after Escape closed it, and puts the
+      // highlight on the first match. Keeping a highlight across a change of
+      // text means Return runs whatever happened to be selected before, which
+      // is the one thing a completion menu must never do.
+      isCommandMenuDismissed = false
+      commandHighlight = 0
+    }
+  }
+  /// Which suggestion Return and Tab would take.
+  @Published private(set) var commandHighlight = 0
+  /// Escape closes the menu without closing Evie, and it stays closed until the
+  /// text changes.
+  @Published private(set) var isCommandMenuDismissed = false
+
+  /// The commands worth offering for what is in the field.
+  var commandSuggestions: [EvieCommand] {
+    isCommandMenuDismissed ? [] : EvieCommandCatalogue.suggestions(for: quickText)
+  }
+
+  func moveCommandHighlight(by offset: Int) {
+    let count = commandSuggestions.count
+    guard count > 0 else {
+      return
+    }
+    // Wraps, because a list this short is faster to cycle than to reverse.
+    commandHighlight = ((commandHighlight + offset) % count + count) % count
+  }
+
+  /// Puts the highlighted command in the field, ready for its question.
+  func completeCommand() {
+    guard commandHighlight < commandSuggestions.count else {
+      return
+    }
+    let chosen = commandSuggestions[commandHighlight]
+    quickText = chosen.completion
+    isCommandMenuDismissed = true
+  }
+
+  func dismissCommandMenu() {
+    isCommandMenuDismissed = true
+  }
   @Published private(set) var activeConversationID = UUID()
   @Published private(set) var activeConversationTitle = "Nova conversa"
   /// Documents read but not yet asked about. They travel with the next message.

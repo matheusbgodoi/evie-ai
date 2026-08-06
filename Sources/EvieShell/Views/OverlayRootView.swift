@@ -1,3 +1,4 @@
+import EvieCore
 import SwiftUI
 
 /// The visual root for the transient overlay.
@@ -54,6 +55,11 @@ struct OverlayRootView: View {
   var onActivateVoice: (() -> Void)? = nil
   var onAttachFiles: (([URL]) -> Void)? = nil
   var onBrowseForFiles: (() -> Void)? = nil
+  var commandSuggestions: [EvieCommand] = []
+  var highlightedCommand = 0
+  var onMoveCommandHighlight: ((Int) -> Void)? = nil
+  var onCompleteCommand: (() -> Void)? = nil
+  var onDismissCommands: (() -> Void)? = nil
 
   @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
@@ -197,7 +203,12 @@ struct OverlayRootView: View {
         onCancel: onCancelQuickText,
         onStop: onCancel,
         onActivateVoice: onActivateVoice,
-        onBrowseForFiles: onBrowseForFiles
+        onBrowseForFiles: onBrowseForFiles,
+        commandSuggestions: commandSuggestions,
+        highlightedCommand: highlightedCommand,
+        onMoveCommandHighlight: onMoveCommandHighlight,
+        onCompleteCommand: onCompleteCommand,
+        onDismissCommands: onDismissCommands
       )
       .transition(.move(edge: .bottom).combined(with: .opacity))
     } else {

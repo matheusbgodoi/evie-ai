@@ -36,7 +36,12 @@ struct EvieOverlayView: View {
       isProcessing: viewModel.hasActiveRequest,
       onActivateVoice: { viewModel.requestVoiceActivation() },
       onAttachFiles: { urls in viewModel.attachFiles(at: urls) },
-      onBrowseForFiles: { viewModel.browseForFiles() }
+      onBrowseForFiles: { viewModel.browseForFiles() },
+      commandSuggestions: viewModel.commandSuggestions,
+      highlightedCommand: viewModel.commandHighlight,
+      onMoveCommandHighlight: { viewModel.moveCommandHighlight(by: $0) },
+      onCompleteCommand: { viewModel.completeCommand() },
+      onDismissCommands: { viewModel.dismissCommandMenu() }
     )
   }
 }

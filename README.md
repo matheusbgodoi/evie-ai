@@ -94,6 +94,11 @@ semicolons, since a comma is part of "Ei, Evie":
 Ei, Evie; ei ivi; ei ive
 ```
 
+**Commands.** Type `/` and the commands appear above the field, with what each
+one costs. `↑` `↓` to choose, `Tab` or `Return` to take one, `Esc` to close the
+list without closing Evie. Anything that is not the start of a command — a
+question, a date, `2/3` — leaves the menu shut.
+
 **`/plano`.** Ask for something that takes several moves and she breaks it into
 steps, runs them one after another, and then writes one answer from what they
 found.
