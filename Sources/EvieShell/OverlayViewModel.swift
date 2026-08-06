@@ -100,6 +100,25 @@ final class OverlayViewModel: ObservableObject {
   /// The skills installed right now, asked for per turn so a skill dropped into
   /// the folder works on the next question rather than the next launch.
   var installedSkills: @MainActor () -> [EvieSkill] = { [] }
+  /// Reads an answer out loud because the button was pressed, whatever the
+  /// preferences say about answering out loud on its own.
+  ///
+  /// Separate from `onAnswerReady` on purpose. That one is automatic and must
+  /// obey the switches; this one is a person pointing at a thing and asking to
+  /// hear it, which is not a preference to be overridden by a preference.
+  var onSpeakRequested: (@MainActor (EvieRichText) -> Void)?
+  var onSpeakStopRequested: (@MainActor () -> Void)?
+  /// True while she is reading something out, so the button can offer to stop.
+  @Published private(set) var isSpeaking = false
+
+  func setSpeaking(_ speaking: Bool) {
+    guard speaking != isSpeaking else {
+      return
+    }
+    isSpeaking = speaking
+    refreshSpeakActions()
+    onLayoutInvalidated?()
+  }
   /// Raised when she suggests a new one. Nothing is installed by this.
   var onSkillProposed: (@MainActor (EvieSkill) -> Void)?
   /// Hybrid retrieval over the indexed vault, when there is an index. Absent
@@ -413,14 +432,7 @@ final class OverlayViewModel: ObservableObject {
         detail: attachment.preview,
         source: attachment.provenanceDescription,
         isExpanded: false,
-        actions: [
-          ArtifactActionModel(
-            id: "copy",
-            title: "Copiar texto",
-            systemImage: "doc.on.doc",
-            role: .secondary
-          )
-        ]
+        actions: Self.answerActions(isSpeaking: false)
       )
     )
     secondaryText = "Agora me pergunte o que você quer saber sobre isso."
@@ -645,14 +657,7 @@ final class OverlayViewModel: ObservableObject {
         summary: "",
         isExpanded: true,
         isLoading: true,
-        actions: [
-          ArtifactActionModel(
-            id: "copy",
-            title: "Copiar",
-            systemImage: "doc.on.doc",
-            role: .secondary
-          )
-        ]
+        actions: Self.answerActions(isSpeaking: isSpeaking)
       )
     )
     onLayoutInvalidated?()
@@ -830,6 +835,17 @@ final class OverlayViewModel: ObservableObject {
       secondaryText = "Ela não guardou nada"
       onLayoutInvalidated?()
 
+    case "speak":
+      // Toggles, because the thing you most want to do to a voice reading four
+      // paragraphs at you is stop it.
+      if isSpeaking {
+        onSpeakStopRequested?()
+        return
+      }
+      // Spoken from the resolved text, so no asterisk or hash is ever
+      // pronounced, and never from the provenance note attached beside it.
+      onSpeakRequested?(EvieRichText(artifact.detail ?? artifact.summary))
+
     case "copy":
       // What lands on the clipboard is the answer without its syntax: no hashes,
       // no asterisks, no LaTeX. Pasting it anywhere should need no cleanup.
@@ -913,6 +929,35 @@ extension OverlayViewModel {
   /// question is still on the card — it is shown when the card is open, right
   /// above the answer — so nothing is lost by titling the card with the thing
   /// that actually distinguishes it.
+  /// The buttons every answer carries.
+  ///
+  /// One place, because three call sites building the same pair by hand is how
+  /// one of them ends up without the speaker.
+  static func answerActions(isSpeaking: Bool) -> [ArtifactActionModel] {
+    [
+      ArtifactActionModel(
+        id: "speak",
+        title: isSpeaking ? "Parar" : "Ouvir",
+        systemImage: isSpeaking ? "stop.fill" : "speaker.wave.2.fill",
+        role: .secondary
+      ),
+      ArtifactActionModel(
+        id: "copy",
+        title: "Copiar",
+        systemImage: "doc.on.doc",
+        role: .secondary
+      ),
+    ]
+  }
+
+  /// Keeps the button on every card in step with whether she is actually
+  /// talking, so it never offers to start something already running.
+  fileprivate func refreshSpeakActions() {
+    for index in artifacts.indices where artifacts[index].kind == .answer {
+      artifacts[index].actions = Self.answerActions(isSpeaking: isSpeaking)
+    }
+  }
+
   fileprivate static func title(fromAnswer answer: String) -> String {
     // Markers stripped rather than rendered: a heading that opens an answer
     // would otherwise put "## " at the front of the title.
@@ -1584,14 +1629,7 @@ extension OverlayViewModel {
         question: turn.question.content,
         summary: turn.answer.content,
         isExpanded: false,
-        actions: [
-          ArtifactActionModel(
-            id: "copy",
-            title: "Copiar",
-            systemImage: "doc.on.doc",
-            role: .secondary
-          )
-        ]
+        actions: Self.answerActions(isSpeaking: false)
       )
     }
   }
@@ -1617,6 +1655,7 @@ extension OverlayViewModel {
 
   /// Brings back the previous page of turns, oldest-last, all closed.
   func loadEarlierTurns() {
+    defer { refreshSpeakActions() }
     let hidden = Self.turns(in: conversation).filter { !isShown($0) }
     guard !hidden.isEmpty else {
       return

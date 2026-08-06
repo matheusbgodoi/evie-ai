@@ -241,6 +241,9 @@ final class AppCoordinator: NSObject {
     speechOutput.onStarted = { [weak self] in
       self?.viewModel.beginSpeaking()
     }
+    speechOutput.onSpeakingChanged = { [weak self] speaking in
+      self?.viewModel.setSpeaking(speaking)
+    }
     speechOutput.onFinished = { [weak self] in
       guard let self else { return }
       viewModel.endSpeaking()
@@ -253,6 +256,34 @@ final class AppCoordinator: NSObject {
     viewModel.onAnswerReady = { [weak self] answer in
       self?.speak(answer)
     }
+    // Pressing the speaker is a person asking to hear this, which is not the
+    // same question as whether she answers out loud on her own — so it does not
+    // consult `speaksAnswer` at all. It does bring the voice engine up, the same
+    // as any other request to speak.
+    viewModel.onSpeakRequested = { [weak self] text in
+      guard let self else { return }
+      let voice = Self.voice(for: preferences.voice)
+      let rate = preferences.voice.resolvedSpeechRate
+      guard case .cloned = voice else {
+        speechOutput.speak(text, using: voice, rate: rate)
+        return
+      }
+      Task { @MainActor [weak self] in
+        guard let self else { return }
+        do {
+          try await voiceEngineLauncher.ensureRunning()
+        } catch {
+          viewModel.reportVoiceEngineFailure(error)
+          speechOutput.speak(text, using: Self.fallbackVoice(for: preferences.voice), rate: rate)
+          return
+        }
+        speechOutput.speak(text, using: voice, rate: rate)
+      }
+    }
+    viewModel.onSpeakStopRequested = { [weak self] in
+      self?.speechOutput.stop()
+    }
+
     wakeListener.onWake = { [weak self] in
       guard let self else { return }
       // Called by name, so the answer follows the way the question was asked:

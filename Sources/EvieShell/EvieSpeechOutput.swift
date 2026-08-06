@@ -34,6 +34,13 @@ final class EvieSpeechOutput: ObservableObject {
   /// been synthesised — not when `speak` returns.
   var onStarted: (@MainActor () -> Void)?
   var onFinished: (@MainActor () -> Void)?
+  /// Reports both edges of speaking as one signal.
+  ///
+  /// `onStarted` and `onFinished` already exist, and a button that has to track
+  /// its own state from two callbacks gets it wrong the first time either fires
+  /// out of order — after a barge-in, say, where stopping and starting happen in
+  /// the same breath.
+  var onSpeakingChanged: (@MainActor (Bool) -> Void)?
 
   private static let historyLength = 44
   private static let publishInterval = Duration.milliseconds(40)
@@ -200,6 +207,7 @@ final class EvieSpeechOutput: ObservableObject {
           levels = Array(repeating: 0, count: Self.historyLength)
           startPublishing()
           onStarted?()
+          onSpeakingChanged?(true)
         }
         await play(buffers)
       }
@@ -354,6 +362,7 @@ extension EvieSpeechOutput {
     }
     stop()
     onFinished?()
+    onSpeakingChanged?(false)
   }
 
   fileprivate func startPublishing() {
