@@ -6,6 +6,11 @@ struct EvieClonedVoice: Identifiable, Hashable, Sendable {
   var id: String
   var name: String
   var language: String
+  /// A cloned voice whose reference recording has never been transcribed.
+  ///
+  /// Costs about eighteen seconds on every phrase until it is, so it is worth
+  /// knowing about rather than living with.
+  var needsReferenceText = false
 }
 
 /// Talks to the local OmniVoice backend.
@@ -108,12 +113,119 @@ struct EvieOmniVoiceClient: Sendable {
       guard let id = object["id"] as? String else {
         return nil
       }
+      let referenceText = (object["ref_text"] as? String) ?? ""
+      let isClone = (object["kind"] as? String) != "design"
       return EvieClonedVoice(
         id: id,
         name: object["name"] as? String ?? id,
-        language: object["language"] as? String ?? ""
+        language: object["language"] as? String ?? "",
+        needsReferenceText: isClone && referenceText.isEmpty
+          && (object["ref_audio_path"] as? String)?.isEmpty == false
       )
     }
+  }
+
+  /// Fills in the reference transcript of any cloned voice that is missing one.
+  ///
+  /// This is the difference between a voice engine that is unusable and one that
+  /// is faster than real time, and it was measured on this Mac rather than
+  /// guessed. A cloned profile whose `ref_text` is empty makes the backend
+  /// transcribe its reference recording with Whisper **on every phrase** — not
+  /// once, every time:
+  ///
+  /// | profile                              | one short phrase |
+  /// | ------------------------------------ | ---------------- |
+  /// | designed voice, no reference audio   | 1.5 s            |
+  /// | cloned voice, `ref_text` empty       | 19.1 s           |
+  /// | the same cloned voice, `ref_text` set| 1.7 s            |
+  ///
+  /// Twelve seconds of speech went from 20.4 s to 3.4 s — from four times slower
+  /// than real time to three times faster. A voice trained through Evie carries
+  /// its transcript already; one made in the engine's own application, which is
+  /// where this profile came from, does not. Repairing it costs one transcription
+  /// of a ten-second clip, measured at 7 s, once ever.
+  ///
+  /// Returns the names of the voices it repaired, so the interface can say what
+  /// happened instead of a voice silently becoming quick.
+  func repairMissingReferenceText() async -> [String] {
+    var repaired: [String] = []
+    for profile in await voices() where profile.needsReferenceText {
+      guard let audio = await referenceAudio(for: profile.id),
+        let text = await transcribe(audio),
+        !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+        await setReferenceText(text, name: profile.name, for: profile.id)
+      else {
+        continue
+      }
+      repaired.append(profile.name)
+    }
+    return repaired
+  }
+
+  private func referenceAudio(for profileID: String) async -> Data? {
+    let url =
+      endpoint
+      .appendingPathComponent("profiles")
+      .appendingPathComponent(profileID)
+      .appendingPathComponent("audio")
+    var request = URLRequest(url: url)
+    request.timeoutInterval = 60
+    guard let (data, response) = try? await URLSession.shared.data(for: request),
+      (response as? HTTPURLResponse)?.statusCode == 200, !data.isEmpty
+    else {
+      return nil
+    }
+    return data
+  }
+
+  private func transcribe(_ audio: Data) async -> String? {
+    var request = URLRequest(url: endpoint.appendingPathComponent("transcribe"))
+    request.httpMethod = "POST"
+    // Generous: this is a Whisper pass, and it happens once per voice ever.
+    request.timeoutInterval = 300
+    let boundary = "evie-\(UUID().uuidString)"
+    request.setValue(
+      "multipart/form-data; boundary=\(boundary)",
+      forHTTPHeaderField: "Content-Type"
+    )
+    var body = Data()
+    body.append(Data("--\(boundary)\r\n".utf8))
+    body.append(
+      Data(
+        "Content-Disposition: form-data; name=\"audio\"; filename=\"reference.mp3\"\r\n".utf8
+      )
+    )
+    body.append(Data("Content-Type: audio/mpeg\r\n\r\n".utf8))
+    body.append(audio)
+    body.append(Data("\r\n--\(boundary)--\r\n".utf8))
+    request.httpBody = body
+
+    guard let (data, response) = try? await URLSession.shared.data(for: request),
+      (response as? HTTPURLResponse)?.statusCode == 200,
+      let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any]
+    else {
+      return nil
+    }
+    return (object["text"] ?? object["transcript"]) as? String
+  }
+
+  private func setReferenceText(_ text: String, name: String, for profileID: String) async -> Bool {
+    let url =
+      endpoint.appendingPathComponent("profiles").appendingPathComponent(profileID)
+    var request = URLRequest(url: url)
+    request.httpMethod = "PUT"
+    request.timeoutInterval = 30
+    // JSON, not the multipart the other endpoints take. The backend rejects a
+    // multipart body here with 422; measured rather than assumed from the shape
+    // of its neighbours.
+    request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+    request.httpBody = try? JSONSerialization.data(
+      withJSONObject: ["name": name, "ref_text": text]
+    )
+    guard let (_, response) = try? await URLSession.shared.data(for: request) else {
+      return false
+    }
+    return (response as? HTTPURLResponse)?.statusCode == 200
   }
 
   /// Synthesises one block of text and returns it ready to play.

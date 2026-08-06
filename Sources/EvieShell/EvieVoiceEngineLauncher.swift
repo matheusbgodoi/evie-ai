@@ -81,6 +81,9 @@ final class EvieVoiceEngineLauncher {
   }
 
   private var launch: Task<Void, any Error>?
+  /// Repaired once per session. The check itself is a list call, but the repair
+  /// behind it is a Whisper pass, and neither belongs on every phrase.
+  private var hasRepairedReferences = false
 
   /// Brings the engine up and returns once it answers.
   ///
@@ -89,6 +92,7 @@ final class EvieVoiceEngineLauncher {
   /// starting two models.
   func ensureRunning(client: EvieOmniVoiceClient = EvieOmniVoiceClient()) async throws {
     if await client.isHealthy() {
+      await repairReferences(using: client)
       return
     }
     if let launch {
@@ -100,8 +104,31 @@ final class EvieVoiceEngineLauncher {
     }
     launch = task
     defer { launch = nil }
-    return try await task.value
+    try await task.value
+    await repairReferences(using: client)
   }
+
+  /// Gives any cloned voice missing its transcript one, once.
+  ///
+  /// A voice trained through Evie carries it already. One made in the engine's
+  /// own application does not, and without it the backend re-transcribes the
+  /// reference recording on every phrase — measured at 19.1 s for a phrase that
+  /// takes 1.7 s once the transcript is stored.
+  private func repairReferences(using client: EvieOmniVoiceClient) async {
+    guard !hasRepairedReferences else {
+      return
+    }
+    hasRepairedReferences = true
+    let repaired = await client.repairMissingReferenceText()
+    guard !repaired.isEmpty else {
+      return
+    }
+    onRepaired?(repaired)
+  }
+
+  /// Reports voices that were made quick, because a voice silently becoming ten
+  /// times faster is worth a sentence.
+  var onRepaired: (@MainActor ([String]) -> Void)?
 
   /// Starts the process, or reports precisely why it could not.
   private static func spawn() throws {

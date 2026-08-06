@@ -284,6 +284,13 @@ final class AppCoordinator: NSObject {
       self?.speechOutput.stop()
     }
 
+    voiceEngineLauncher.onRepaired = { [weak self] names in
+      self?.viewModel.reportVoiceEngineFailure(
+        VoiceRepairNotice(
+          names: names)
+      )
+    }
+
     wakeListener.onWake = { [weak self] in
       guard let self else { return }
       // Called by name, so the answer follows the way the question was asked:
@@ -912,6 +919,18 @@ extension AppCoordinator {
     Task { @MainActor [weak self] in
       guard let self else { return }
       await wakeListener.arm(phrases: preferences.voice.wakePhrase)
+    }
+  }
+
+  /// Said in the same place a voice failure is said, because it is the same kind
+  /// of fact: something about how she speaks changed without you asking.
+  struct VoiceRepairNotice: LocalizedError {
+    let names: [String]
+
+    var errorDescription: String? {
+      names.count == 1
+        ? "Preparei a voz \(names[0]) — agora ela fala na hora."
+        : "Preparei \(names.count) vozes — agora elas falam na hora."
     }
   }
 
