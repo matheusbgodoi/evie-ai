@@ -9,7 +9,14 @@ import SwiftUI
 /// its own height.
 struct OverlayRootView: View {
   /// Above this the artifact list scrolls instead of the window growing.
-  private static let artifactViewportLimit: CGFloat = 470
+  ///
+  /// Sized so that one open card never makes this scroll too. A card is its
+  /// header, up to `ArtifactCardView.readingHeight` of text, its buttons and its
+  /// padding — about 470 — and a viewport of exactly that would leave the outer
+  /// scroller engaging on a stray point or two, putting a scroll bar inside a
+  /// scroll bar for no reason. This one only comes into play once earlier turns
+  /// have been brought back, which is the only time there is a list to scroll.
+  private static let artifactViewportLimit: CGFloat = 540
   /// Transparent room kept around the content so the rounded corners, the
   /// hairline border, and the drop shadow of the glass all have somewhere to go.
   ///
@@ -235,6 +242,16 @@ struct OverlayRootView: View {
   @ViewBuilder
   private var artifactStack: some View {
     if !artifacts.isEmpty {
+      VStack(spacing: 7) {
+        earlierTurnsControl
+        artifactScroller
+      }
+    }
+  }
+
+  @ViewBuilder
+  private var artifactScroller: some View {
+    Group {
       ScrollView(.vertical) {
         LazyVStack(spacing: 9) {
           ForEach(artifacts) { artifact in
@@ -272,23 +289,24 @@ struct OverlayRootView: View {
       .defaultScrollAnchor(.bottom)
       .frame(height: artifactViewportHeight + Self.artifactShadowMargin * 2)
       .padding(-Self.artifactShadowMargin)
-      // Laid over the cards rather than stacked above them. In the flow it would
-      // push every card down the instant the pointer arrived, which moves the
-      // card out from under the pointer, which ends the hover, which puts it
-      // back — a flicker loop. Floating it costs nothing and cannot do that.
-      .overlay(alignment: .top) { earlierTurnsControl }
-      .onHover { chrome.isPointerOverArtifacts = $0 }
     }
   }
 
   /// The way back to what was said before.
   ///
-  /// Hidden until the pointer is over the answer, because asking something new
+  /// Hidden until the pointer is over Evie at all, because asking something new
   /// is meant to leave that one answer on screen and nothing else. The history is
   /// not gone; it has stopped being furniture.
+  ///
+  /// Above the cards rather than over them. Floating it was an attempt to avoid
+  /// a flicker loop — appearing in the flow pushed the card down, out from under
+  /// the pointer that summoned it, which hid it again — but it solved that by
+  /// covering the first two lines of the answer, which is worse than the problem.
+  /// Keying it on the pointer being anywhere over the overlay fixes both: the
+  /// overlay does not move out from under a pointer that is inside it.
   @ViewBuilder
   private var earlierTurnsControl: some View {
-    if earlierTurnCount > 0, let onLoadEarlierTurns, chrome.isPointerOverArtifacts {
+    if earlierTurnCount > 0, let onLoadEarlierTurns, chrome.isShowingHandles {
       Button(action: onLoadEarlierTurns) {
         Label(
           earlierTurnCount == 1

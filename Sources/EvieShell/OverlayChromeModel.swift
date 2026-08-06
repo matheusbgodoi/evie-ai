@@ -24,11 +24,6 @@ final class OverlayChromeModel: ObservableObject {
   @Published private(set) var isCallMode = false
   /// True while the pointer is over the overlay, which reveals the handles.
   @Published private(set) var isShowingHandles = false
-  /// True while the pointer is over the answer cards, which is the only thing
-  /// that reveals the way back to earlier turns. Asking a new question is meant
-  /// to leave one answer on screen and nothing else; the history is still there,
-  /// it just stops being furniture.
-  @Published var isPointerOverArtifacts = false
   /// Height of the artifact list as SwiftUI actually laid it out.
   @Published private(set) var artifactContentHeight: CGFloat = 0
 

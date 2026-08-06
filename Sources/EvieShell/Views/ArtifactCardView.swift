@@ -120,6 +120,46 @@ struct ArtifactCardView: View {
 
   @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
+  /// How tall a single answer may get before it scrolls inside its own card.
+  ///
+  /// This is the whole shape of the fix. The answer used to be laid out at its
+  /// full height and the *list* of cards did the scrolling, which meant a long
+  /// answer scrolled its own header, its question and its Copiar button off the
+  /// screen: to reach the button you scrolled past everything, and while reading
+  /// the middle there was no title, no close, no way out. Worse, the card was
+  /// taller than the window and the overlay was drawing beyond its own bounds.
+  ///
+  /// Now the card is the fixed thing and the text moves inside it. The header
+  /// and the buttons stay where they are, and the scroll bar sits where the
+  /// content it scrolls is.
+  private static let readingHeight: CGFloat = 360
+
+  /// The part that scrolls: the question and the answer, and nothing else.
+  private var readingArea: some View {
+    ScrollView(.vertical) {
+      VStack(alignment: .leading, spacing: 11) {
+        if let question = artifact.question, !question.isEmpty {
+          askedRow(question)
+        }
+        if artifact.isSensitive {
+          sensitivePreview
+        } else {
+          content
+        }
+      }
+      .frame(maxWidth: .infinity, alignment: .leading)
+      // Room for the indicator, so it never sits on top of a word.
+      .padding(.trailing, 4)
+    }
+    // Shown rather than hidden. A bounded box with no visible bar looks like
+    // text that was cut off, which is the complaint this exists to answer.
+    .scrollIndicators(.visible)
+    .scrollBounceBehavior(.basedOnSize)
+    // Only as tall as it needs to be. A short answer must not sit in a
+    // half-empty box waiting for text that is not coming.
+    .frame(maxHeight: Self.readingHeight)
+  }
+
 
   var body: some View {
     GlassSurface(
@@ -134,14 +174,7 @@ struct ArtifactCardView: View {
         // Closed, a card is its title and nothing else — a line you can scan
         // down to find the answer you are after. Everything else waits.
         if artifact.isExpanded {
-          if let question = artifact.question, !question.isEmpty {
-            askedRow(question)
-          }
-          if artifact.isSensitive {
-            sensitivePreview
-          } else {
-            content
-          }
+          readingArea
         }
 
         // Where the answer came from. Derived from the tools that actually ran,
