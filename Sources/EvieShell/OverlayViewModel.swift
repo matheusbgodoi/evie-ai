@@ -625,15 +625,14 @@ final class OverlayViewModel: ObservableObject {
     // Your own question, kept on screen. Without it the overlay is a column of
     // answers to questions that disappeared, and there is no way to find your
     // place in a long conversation.
-    // A new question closes everything before it. Reading is the point of the
-    // window, and reading is easier when exactly one thing is open — the rest
-    // stays a column of titles to scan and reopen deliberately.
+    // A new question clears the screen. Closing the earlier cards was not
+    // enough — a closed card is still a card, so the window kept growing a row
+    // of titles nobody asked to see. They are not lost: every turn is in the
+    // conversation, and "Ver mensagens anteriores" brings them back.
     //
     // Except a card that is waiting on an answer. Its buttons only exist while
-    // it is open, so closing it would leave a question nobody can reply to.
-    for index in artifacts.indices where !artifacts[index].isAwaitingDecision {
-      artifacts[index].isExpanded = false
-    }
+    // it is open, so removing it would strand a question nobody can reply to.
+    artifacts.removeAll { !$0.isAwaitingDecision }
     artifacts.append(
       ArtifactCardModel(
         id: artifactID,
@@ -641,10 +640,11 @@ final class OverlayViewModel: ObservableObject {
         // The question is the title, because it is what you will be looking for
         // when you scroll back — not "Resposta da Evie", of which there are
         // twenty.
-        title: Self.title(for: prompt),
+        title: "",
         question: prompt,
-        summary: "Aguardando o primeiro trecho…",
+        summary: "",
         isExpanded: true,
+        isLoading: true,
         actions: [
           ArtifactActionModel(
             id: "copy",
@@ -744,9 +744,13 @@ final class OverlayViewModel: ObservableObject {
     primaryText = "Consulta cancelada"
     secondaryText = "Nenhuma ação foi executada"
 
+    // A card cancelled before anything arrived has nothing to keep. Recognised
+    // by the loading flag rather than by comparing against a placeholder
+    // sentence, which is a string two places had to agree on and one of them
+    // would eventually be reworded.
     if let artifactID = activeArtifactID,
       let index = artifacts.firstIndex(where: { $0.id == artifactID }),
-      artifacts[index].summary == "Aguardando o primeiro trecho…"
+      artifacts[index].isLoading
     {
       artifacts.remove(at: index)
       onLayoutInvalidated?()
@@ -899,6 +903,38 @@ extension OverlayViewModel {
       return persona
     }
     return persona + "\n\n" + recall
+  }
+
+  /// The opening of the answer, for the line you scan when the card is closed.
+  ///
+  /// The title used to be the question, which reads well while you are still
+  /// looking at what you typed and badly a minute later: a column headed "oi",
+  /// "e aí" and "e isso?" tells you nothing about which answer is which. The
+  /// question is still on the card — it is shown when the card is open, right
+  /// above the answer — so nothing is lost by titling the card with the thing
+  /// that actually distinguishes it.
+  fileprivate static func title(fromAnswer answer: String) -> String {
+    // Markers stripped rather than rendered: a heading that opens an answer
+    // would otherwise put "## " at the front of the title.
+    let cleaned =
+      answer
+      .split(whereSeparator: \.isNewline)
+      .first { !$0.trimmingCharacters(in: .whitespaces).isEmpty }
+      .map(String.init)?
+      .trimmingCharacters(in: CharacterSet(charactersIn: "#*_>-• \t"))
+      .replacingOccurrences(of: "**", with: "")
+      ?? ""
+    guard !cleaned.isEmpty else {
+      return "Resposta"
+    }
+    // Cut at the first sentence when there is one, so the title settles early
+    // and stops changing while the rest of the answer streams in.
+    if let stop = cleaned.firstIndex(where: { ".!?".contains($0) }),
+      cleaned.distance(from: cleaned.startIndex, to: stop) >= 12
+    {
+      return String(cleaned[cleaned.startIndex...stop])
+    }
+    return title(for: cleaned)
   }
 
   fileprivate static func title(for prompt: String) -> String {
@@ -1332,6 +1368,13 @@ extension OverlayViewModel {
       return
     }
     artifacts[index].summary = content
+    let written = content.trimmingCharacters(in: .whitespacesAndNewlines)
+    guard !written.isEmpty else {
+      return
+    }
+    // The dots stop the moment there is something to read.
+    artifacts[index].isLoading = false
+    artifacts[index].title = Self.title(fromAnswer: written)
   }
 
   fileprivate func artifactCard(from artifact: EvieArtifact) -> ArtifactCardModel {
@@ -1534,7 +1577,10 @@ extension OverlayViewModel {
         // Keyed on the question, which is what `submitQuickText` keys on too.
         id: turn.question.id,
         kind: .answer,
-        title: Self.title(for: turn.question.content),
+        // From the answer, the same as a live card, or scrolling back would
+        // show one column headed by questions and another by answers depending
+        // on which side of a restart you were looking at.
+        title: Self.title(fromAnswer: turn.answer.content),
         question: turn.question.content,
         summary: turn.answer.content,
         isExpanded: false,

@@ -93,6 +93,13 @@ struct ArtifactCardModel: Identifiable, Hashable {
   var detail: String? = nil
   var source: String? = nil
   var isExpanded = false
+  /// True between asking and the first words of the answer.
+  ///
+  /// The card used to fill that gap with the sentence "Aguardando o primeiro
+  /// trecho…", which is a status report pretending to be content: it sits in the
+  /// place the answer will occupy and has to be read to discover it says nothing.
+  /// A moving indicator says the same thing without asking to be read.
+  var isLoading = false
   var isSensitive = false
   var actions: [ArtifactActionModel] = []
 
@@ -175,11 +182,15 @@ struct ArtifactCardView: View {
             .tracking(0.75)
         }
 
-        Text(artifact.title)
-          .font(.subheadline.weight(artifact.isExpanded ? .semibold : .regular))
-          .foregroundStyle(Color.primary.opacity(artifact.isExpanded ? 1 : 0.72))
-          .lineLimit(artifact.isExpanded ? 3 : 1)
-          .truncationMode(.tail)
+        if artifact.isLoading {
+          EvieThinkingIndicator(tint: artifact.kind.tint)
+        } else {
+          Text(artifact.title)
+            .font(.subheadline.weight(artifact.isExpanded ? .semibold : .regular))
+            .foregroundStyle(Color.primary.opacity(artifact.isExpanded ? 1 : 0.72))
+            .lineLimit(artifact.isExpanded ? 3 : 1)
+            .truncationMode(.tail)
+        }
       }
 
       Spacer(minLength: 8)
@@ -326,5 +337,32 @@ struct ArtifactCardView: View {
     case .secondary: .white.opacity(0.10)
     case .destructive: .red.opacity(0.24)
     }
+  }
+}
+
+
+/// Three dots that travel while she is thinking.
+///
+/// The shape of the wave lives in `EvieThinkingWave`, where it can be tested;
+/// this only draws it.
+struct EvieThinkingIndicator: View {
+  var tint: Color
+
+  var body: some View {
+    TimelineView(.animation(minimumInterval: 1 / 20)) { timeline in
+      let phase =
+        timeline.date.timeIntervalSinceReferenceDate
+        .truncatingRemainder(dividingBy: EvieThinkingWave.period) / EvieThinkingWave.period
+      HStack(spacing: 4) {
+        ForEach(0..<3, id: \.self) { index in
+          Circle()
+            .fill(tint)
+            .frame(width: 5, height: 5)
+            .opacity(EvieThinkingWave.opacity(forDot: index, at: phase))
+        }
+      }
+      .frame(height: 17, alignment: .leading)
+    }
+    .accessibilityLabel("Pensando")
   }
 }
