@@ -40,6 +40,16 @@ public enum EvieCommandCatalogue {
       argumentHint: "pergunta",
       summary: "Divide em etapas, faz uma de cada vez e responde no fim",
       cost: "minutos"
+    ),
+    EvieCommand(
+      name: EvieVaultSearchCommand.name,
+      argumentHint: "termo",
+      summary: "Mostra os trechos das suas anotações, sem passar pelo modelo"
+    ),
+    EvieCommand(
+      name: EvieWebCommand.name,
+      argumentHint: "pergunta",
+      summary: "Pula as anotações e responde a partir da web"
     )
   ]
 
