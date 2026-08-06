@@ -532,6 +532,10 @@ extension AppCoordinator {
     if historyWindowController == nil {
       let historyViewModel = ConversationHistoryViewModel(
         store: conversationStore,
+        // The coordinator's own store, not a second one pointed at the same
+        // folder. Two objects owning one directory is how a change made through
+        // one becomes invisible to the other.
+        mediaStore: mediaStore,
         onContinue: { [weak self] id in
           guard let self else { return }
           Task { @MainActor in
