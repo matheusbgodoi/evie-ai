@@ -161,6 +161,21 @@ public actor EvieConversationStore {
     return try persist(conversation, updatingTimestamp: true)
   }
 
+  /// Called with the files a deleted conversation was holding, so whoever owns
+  /// them can remove them too.
+  ///
+  /// A closure rather than a dependency, because the store is in the core and
+  /// knows nothing about ImageIO, and because deleting a conversation must not
+  /// fail on account of a file that was already gone.
+  private var onMediaOrphaned: (@Sendable ([EvieStoredMedia]) -> Void)?
+
+  /// Registers the handler from outside the actor.
+  public func observeOrphanedMedia(
+    _ handler: @escaping @Sendable ([EvieStoredMedia]) -> Void
+  ) {
+    onMediaOrphaned = handler
+  }
+
   public func delete(id: UUID) throws {
     try prepareDirectory()
     let fileURL = recordURL(for: id)
@@ -169,10 +184,17 @@ public actor EvieConversationStore {
     }
     try ensureRegularRecord(at: fileURL)
 
+    // Read before the record goes, since afterwards there is nothing left to
+    // say which files belonged to it.
+    let orphaned = (try? load(id: id))?.media ?? []
+
     do {
       try fileManager.removeItem(at: fileURL)
     } catch {
       throw StoreError.deleteFailed
+    }
+    if !orphaned.isEmpty {
+      onMediaOrphaned?(orphaned)
     }
   }
 }

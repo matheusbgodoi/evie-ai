@@ -31,6 +31,7 @@ final class AppCoordinator: NSObject {
   private let speechOutput = EvieSpeechOutput()
   private let voiceEngineLauncher = EvieVoiceEngineLauncher()
   private let updater = EvieUpdater()
+  private let mediaStore = EvieMediaStore()
   private let wakeListener = EvieWakeListener()
   /// True while push-to-talk is holding the microphone open, so releasing the key
   /// stops it but a click on the mark toggles instead.
@@ -321,6 +322,7 @@ final class AppCoordinator: NSObject {
     // Armed at launch if that is what the preference says, so being able to call
     // her by name does not depend on having opened settings this session.
     updateWakeListening()
+    attachMediaLifecycle()
 
     // Evie has no Dock icon, so there is no ordinary way to reach Settings when a
     // shortcut is unavailable. This flag is that way out, and it is what makes the
@@ -918,6 +920,34 @@ extension AppCoordinator {
   /// the switch is flipped, because the microphone is also taken and given back
   /// by ordinary turns. A single place that recomputes the truth beats several
   /// that each remember one case of it.
+  /// Ties the media folder to the conversations that name it.
+  ///
+  /// Deleting a conversation deletes what was attached to it, and anything left
+  /// behind by a crash is swept at launch — a folder of pictures nobody can
+  /// reach is exactly the kind of thing that quietly fills a disk.
+  fileprivate func attachMediaLifecycle() {
+    let store = mediaStore
+    Task { @MainActor [weak self] in
+      guard let self else { return }
+      await conversationStore.observeOrphanedMedia { orphaned in
+        Task { @MainActor in
+          store.delete(orphaned)
+        }
+      }
+    }
+    Task { @MainActor [weak self] in
+      guard let self else { return }
+      let summaries = (try? await conversationStore.list()) ?? []
+      var kept: [EvieStoredMedia] = []
+      for summary in summaries {
+        if let conversation = try? await conversationStore.load(id: summary.id) {
+          kept.append(contentsOf: conversation.media)
+        }
+      }
+      mediaStore.collectGarbage(keeping: kept)
+    }
+  }
+
   fileprivate func updateWakeListening() {
     guard preferences.voice.wakeWordEnabled, !audioCapture.isCapturing, !isInCall else {
       wakeListener.disarm()

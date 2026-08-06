@@ -65,6 +65,9 @@ final class OverlayViewModel: ObservableObject {
   /// with it, which is the whole difference between attaching and sending.
   @Published private(set) var attachmentSlots: [EvieAttachmentSlot] = []
   private var preparationTasks: [UUID: Task<Void, Never>] = [:]
+  private let mediaStore = EvieMediaStore()
+  /// Files kept for the conversation being had, so it can be read back whole.
+  private var conversationMedia: [EvieStoredMedia] = []
 
   var onLayoutInvalidated: (@MainActor () -> Void)?
   var onDismissRequested: (@MainActor () -> Void)?
@@ -263,6 +266,8 @@ final class OverlayViewModel: ObservableObject {
     }
     preparationTasks = [:]
     attachmentSlots = []
+    // Belongs to the conversation being left, which already holds it on disk.
+    conversationMedia = []
     visualState = .ready
     primaryText = "Nova conversa"
     secondaryText = "O histórico anterior continua salvo somente neste Mac"
@@ -288,6 +293,9 @@ final class OverlayViewModel: ObservableObject {
       activeConversationID = stored.id
       activeConversationTitle = stored.title
       conversationCreatedAt = stored.createdAt
+      // Carried forward, or saving the reopened conversation would drop every
+      // file it had — the record is rewritten whole on each save.
+      conversationMedia = stored.media
       conversation =
         [ChatMessage(role: .system, content: systemPrompt)]
         + stored.messages
@@ -769,7 +777,7 @@ final class OverlayViewModel: ObservableObject {
     // finished. That put "Ver 1 mensagem anterior" on screen after every answer,
     // and pressing it added a second copy of the turn just given.
     let artifactID = userMessage.id
-    let evidence = takeAttachmentEvidence()
+    let evidence = takeAttachmentEvidence(for: userMessage.id)
     // What the person attached is the subject of the question. Looking anything
     // up is slower and answers a different question.
     let carriesAttachment = evidence != nil
@@ -1173,7 +1181,8 @@ extension OverlayViewModel {
       title: activeConversationTitle,
       createdAt: conversationCreatedAt,
       updatedAt: Date(),
-      messages: visibleMessages
+      messages: visibleMessages,
+      media: conversationMedia
     )
     let precedingTask = persistenceTask
     let store = conversationStore
@@ -1686,7 +1695,7 @@ extension OverlayViewModel {
       .contains(url.pathExtension.lowercased())
   }
 
-  fileprivate func takeAttachmentEvidence() -> ChatMessage? {
+  fileprivate func takeAttachmentEvidence(for messageID: UUID? = nil) -> ChatMessage? {
     // Only what finished preparing. A slot still being read, or one that failed,
     // is not evidence — and the send path waits for the first kind before
     // getting here, so arriving with one is a genuine failure rather than a race.
@@ -1694,6 +1703,19 @@ extension OverlayViewModel {
     guard !attachments.isEmpty else {
       attachmentSlots = []
       return nil
+    }
+    // Kept before the file is forgotten. What reaches the model is the text
+    // pulled out of a picture; a conversation that says "a imagem mostra uma
+    // cordilheira" with no way to see the picture is an answer with its question
+    // missing.
+    for slot in attachmentSlots where slot.prepared != nil {
+      if let stored = mediaStore.store(
+        slot.url,
+        originalName: slot.name,
+        messageID: messageID
+      ) {
+        conversationMedia.append(stored)
+      }
     }
     let pages = attachments.flatMap(\.pages)
     // What was seen goes first, because it says what kind of thing this is

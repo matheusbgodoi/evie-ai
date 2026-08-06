@@ -67,6 +67,41 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
       return
     }
 
+    // Stores real files and reports what they cost, because "compressed" is a
+    // claim and a ratio is a measurement.
+    if let index = CommandLine.arguments.firstIndex(of: "--media-check"),
+      index + 1 < CommandLine.arguments.count
+    {
+      let paths = Array(CommandLine.arguments[(index + 1)...])
+      Task { @MainActor in
+        setvbuf(stdout, nil, _IOLBF, 0)
+        let folder = URL(fileURLWithPath: NSTemporaryDirectory())
+          .appendingPathComponent("evie-media-check-\(ProcessInfo.processInfo.processIdentifier)")
+        defer { try? FileManager.default.removeItem(at: folder) }
+        let store = EvieMediaStore(directoryURL: folder)
+        for path in paths where !path.hasPrefix("--") {
+          let url = URL(fileURLWithPath: path)
+          let before =
+            ((try? FileManager.default.attributesOfItem(atPath: url.path))?[.size] as? Int) ?? 0
+          guard let stored = store.store(url, originalName: url.lastPathComponent, messageID: nil)
+          else {
+            print("\(url.lastPathComponent): não consegui guardar")
+            continue
+          }
+          let ratio = before > 0 ? Double(stored.byteCount) / Double(before) : 1
+          print(
+            String(
+              format: "%@: %d KB → %d KB (%.0f%% do original)",
+              url.lastPathComponent, before / 1024, stored.byteCount / 1024, ratio * 100
+            )
+          )
+        }
+        print(String(format: "pasta inteira: %d KB", store.totalBytes() / 1024))
+        NSApp.terminate(nil)
+      }
+      return
+    }
+
     // Runs a real plan against the running model and prints each stage, because
     // the only thing worth knowing about a planner is whether the model actually
     // produces a list this parser can read.
