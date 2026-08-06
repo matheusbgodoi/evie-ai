@@ -153,32 +153,53 @@ function identity() {
   local work_dir
   work_dir=$(mktemp -d)
   print "Creating a self-signed code-signing certificate…"
+
+  # Errors are not discarded here, and that is the point. This step used to send
+  # both openssl invocations to /dev/null, so when `-legacy` turned out not to
+  # exist in the LibreSSL that macOS ships, the p12 was simply never written and
+  # the import failed against a missing file — silently. Evie stayed ad-hoc
+  # signed for weeks, which meant no stable identity, permissions re-granted on
+  # every rebuild, and nothing for an update to be checked against.
   openssl req -x509 -newkey rsa:2048 -days 3650 -nodes \
     -keyout "${work_dir}/dev.key" -out "${work_dir}/dev.crt" \
     -subj "/CN=${EVIE_SIGNING_IDENTITY_NAME}" \
     -addext "keyUsage=critical,digitalSignature" \
-    -addext "extendedKeyUsage=codeSigning" 2>/dev/null
-  openssl pkcs12 -export -legacy \
+    -addext "extendedKeyUsage=codeSigning"
+  openssl pkcs12 -export \
     -in "${work_dir}/dev.crt" -inkey "${work_dir}/dev.key" \
-    -out "${work_dir}/dev.p12" -password pass:evie 2>/dev/null
+    -out "${work_dir}/dev.p12" -password pass:evie
 
   security import "${work_dir}/dev.p12" \
     -k "${HOME}/Library/Keychains/login.keychain-db" \
     -P evie -T /usr/bin/codesign
 
+  # An imported certificate is not yet a usable signing identity: codesign wants
+  # it trusted for that purpose. This was documented as a manual trip through
+  # Keychain Access, which it does not have to be — the trust setting can be
+  # written to the user's own domain. macOS asks for authorisation once.
+  print ""
+  print "macOS will ask permission to trust the certificate for code signing."
+  security add-trusted-cert -r trustRoot -p codeSign \
+    -k "${HOME}/Library/Keychains/login.keychain-db" "${work_dir}/dev.crt"
+
   rm -rf "${work_dir}"
 
+  # Asserted rather than assumed. Every failure above was a silent one.
+  if [[ "$(signing_identity)" == "-" ]]; then
+    print -u2 ""
+    print -u2 "The certificate was created but is still not a valid signing identity."
+    print -u2 "Open Keychain Access, find '${EVIE_SIGNING_IDENTITY_NAME}' under login,"
+    print -u2 "and set Get Info -> Trust -> Code Signing to Always Trust."
+    return 1
+  fi
+
   print ""
-  print "One manual step remains, and it cannot be scripted:"
-  print ""
-  print "  1. Open Keychain Access (Acesso às Chaves)"
-  print "  2. Find the '${EVIE_SIGNING_IDENTITY_NAME}' certificate under login"
-  print "  3. Get Info -> Trust -> Code Signing: Always Trust"
-  print ""
-  print "Then run 'Scripts/evie-app build' again."
+  print "Ready. Run 'Scripts/evie-app build' to sign with it."
   print ""
   print "This is not a Developer ID. It keeps permissions across rebuilds on this"
   print "Mac and nowhere else; it does not pass Gatekeeper on another machine."
+  print "It is also what an update is checked against: Evie only installs a"
+  print "download signed by this same certificate."
 }
 
 function install_app() {

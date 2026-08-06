@@ -12,6 +12,7 @@ final class SettingsWindowController: NSWindowController, NSWindowDelegate {
     voiceLibraryViewModel: EvieVoiceLibraryViewModel,
     memoryViewModel: EvieMemoryViewModel,
     skillsViewModel: EvieSkillsViewModel,
+    updater: EvieUpdater,
     preferencesPath: String,
     configurationPath: String
   ) {
@@ -33,6 +34,7 @@ final class SettingsWindowController: NSWindowController, NSWindowDelegate {
         voiceLibraryViewModel: voiceLibraryViewModel,
         memoryViewModel: memoryViewModel,
         skillsViewModel: skillsViewModel,
+        updater: updater,
         preferencesPath: preferencesPath,
         configurationPath: configurationPath
       )

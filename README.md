@@ -223,3 +223,42 @@ Nothing private belongs in Git — tokens, sessions, voice recordings, documents
 transcripts, indexes, and weights all live outside it. See
 [.gitignore](.gitignore) and [Security](docs/SECURITY.md) before adding an
 integration.
+
+---
+
+## Updating
+
+Evie checks GitHub for a newer release, at most once a day, and offers it in
+Settings › Avançado › Atualizar. Nothing installs itself: looking, downloading,
+and installing are three separate presses.
+
+A download is only installed when **its code signature matches the copy already
+running**. Measured against deliberately tampered bundles of this very app:
+
+| what was done to the download        | result   |
+| ------------------------------------ | -------- |
+| `Info.plist` edited                  | refused  |
+| a byte flipped in the binary          | refused  |
+| a file added to `Resources`           | refused  |
+| re-signed by somebody else            | refused  |
+| untouched                             | accepted |
+
+That means a compromised GitHub account is not enough to ship code to an
+installed Evie — the attacker would also need the signing key, which never
+leaves the machine that made it.
+
+Because the identity is self-signed, this only holds for builds made on the same
+Mac. Set one up once with `Scripts/evie-app identity`; without it Evie is signed
+ad-hoc, has no certificate, and **refuses every update rather than accepting
+any**.
+
+### Publishing one
+
+```bash
+Scripts/evie-release 0.2.0
+```
+
+It builds, refuses to publish an ad-hoc bundle, packs with `ditto` so the
+signature survives, verifies the packed copy still passes a signature check, then
+tags and uploads. For anyone other than you to download it, the repository has to
+be public.

@@ -1,0 +1,119 @@
+#!/bin/zsh
+
+# Publishes a release that Evie's updater will accept.
+#
+# The updater refuses anything not signed with this Mac's certificate, so the
+# only build worth publishing is one made here by `Scripts/evie-app build`.
+# This exists so that constraint is enforced rather than remembered: it refuses
+# to publish an unsigned bundle, refuses a version that is not newer than the
+# tag it is replacing, and verifies the zip it uploaded is the one it built.
+
+set -euo pipefail
+
+readonly EVIE_ROOT="${0:A:h:h}"
+readonly EVIE_APP="${EVIE_ROOT}/.build/release/Evie.app"
+readonly EVIE_SCRIPT="${EVIE_ROOT}/Scripts/evie-app"
+
+function usage() {
+  print "Usage: Scripts/evie-release <version>"
+  print ""
+  print "  version   e.g. 0.2.0 — the tag becomes v0.2.0"
+  print ""
+  print "Builds, signs, zips, tags, and publishes to GitHub Releases."
+  print "Release notes come from the commits since the previous tag."
+}
+
+if [[ $# -ne 1 ]]; then
+  usage
+  exit 1
+fi
+
+readonly VERSION="${1#v}"
+readonly TAG="v${VERSION}"
+
+if [[ ! "${VERSION}" =~ '^[0-9]+(\.[0-9]+)*(-[0-9A-Za-z.]+)?$' ]]; then
+  print -u2 "\"${VERSION}\" is not a version number."
+  print -u2 "Evie refuses a tag it cannot order, so this would never be offered."
+  exit 1
+fi
+
+if git rev-parse "${TAG}" >/dev/null 2>&1; then
+  print -u2 "${TAG} already exists. A published release is not rewritten."
+  exit 1
+fi
+
+if [[ -n "$(git status --porcelain)" ]]; then
+  print -u2 "The working tree is dirty. Commit first, so the tag means something."
+  exit 1
+fi
+
+# The version has to be in the bundle, not only in the tag: the updater compares
+# the tag against CFBundleShortVersionString, and a build that still says 0.1
+# would be offered its own release forever.
+print "Setting the bundle version to ${VERSION}…"
+/usr/bin/sed -i '' "s/^readonly EVIE_SHORT_VERSION=.*/readonly EVIE_SHORT_VERSION=\"${VERSION}\"/" \
+  "${EVIE_SCRIPT}"
+git add "${EVIE_SCRIPT}"
+git commit -q -m "Release ${TAG}"
+
+print "Building…"
+"${EVIE_SCRIPT}" build >/dev/null
+
+# Refused rather than published. An ad-hoc bundle carries no certificate, so
+# every installation of it would reject every future update.
+if ! codesign -dv --verbose=2 "${EVIE_APP}" 2>&1 | grep -q "^Authority="; then
+  print -u2 ""
+  print -u2 "The build is signed ad-hoc, with no certificate."
+  print -u2 "Nobody who installs it could ever verify an update from it."
+  print -u2 "Run 'Scripts/evie-app identity' first."
+  exit 1
+fi
+
+readonly BUILT_VERSION=$(/usr/libexec/PlistBuddy -c "Print CFBundleShortVersionString" \
+  "${EVIE_APP}/Contents/Info.plist")
+if [[ "${BUILT_VERSION}" != "${VERSION}" ]]; then
+  print -u2 "The bundle says ${BUILT_VERSION} but the tag says ${VERSION}."
+  exit 1
+fi
+
+readonly WORK=$(mktemp -d)
+readonly ZIP="${WORK}/Evie.app.zip"
+print "Packing…"
+# ditto, not zip: the signature is computed over extended attributes and symlink
+# structure that `zip` silently drops, which would make every download fail
+# verification for the wrong reason.
+ditto -c -k --sequesterRsrc --keepParent "${EVIE_APP}" "${ZIP}"
+
+print "Checking the packed copy still verifies…"
+readonly PROOF="${WORK}/proof"
+mkdir -p "${PROOF}"
+ditto -x -k "${ZIP}" "${PROOF}"
+if ! codesign --verify --strict "${PROOF}/Evie.app" 2>/dev/null; then
+  print -u2 "The zip does not survive a signature check. Not publishing it."
+  rm -rf "${WORK}"
+  exit 1
+fi
+
+readonly PREVIOUS=$(git describe --tags --abbrev=0 2>/dev/null || true)
+if [[ -n "${PREVIOUS}" ]]; then
+  readonly NOTES=$(git log --pretty='- %s' "${PREVIOUS}..HEAD")
+else
+  readonly NOTES=$(git log --pretty='- %s' -20)
+fi
+
+git tag -a "${TAG}" -m "Evie ${TAG}"
+git push -q origin HEAD
+git push -q origin "${TAG}"
+
+print "Publishing ${TAG}…"
+gh release create "${TAG}" "${ZIP}#Evie.app.zip" \
+  --title "Evie ${TAG}" \
+  --notes "${NOTES}"
+
+rm -rf "${WORK}"
+print ""
+print "Published. Evie will offer it to anyone whose copy was signed with the"
+print "same certificate — which, for a self-signed identity, means this Mac."
+print ""
+print "For anyone else to download it at all, the repository must be public:"
+print "  gh repo edit --visibility public"

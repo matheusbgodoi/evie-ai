@@ -15,6 +15,7 @@ struct SettingsView: View {
   @ObservedObject var voiceLibraryViewModel: EvieVoiceLibraryViewModel
   @ObservedObject var memoryViewModel: EvieMemoryViewModel
   @ObservedObject var skillsViewModel: EvieSkillsViewModel
+  @ObservedObject var updater: EvieUpdater
   var preferencesPath: String = EviePreferencesStore.defaultFileURL.path
   var configurationPath: String = EvieConfigurationLoader.defaultFileURL.path
 
@@ -40,6 +41,7 @@ struct SettingsView: View {
         .tabItem { Label("Aparência", systemImage: "macwindow") }
 
       AdvancedTabView(
+        updater: updater,
         modelViewModel: modelViewModel,
         preferencesPath: preferencesPath,
         configurationPath: configurationPath
@@ -134,6 +136,7 @@ private struct KnowledgeTabView: View {
 
 /// The two panes nobody opens until something is wrong.
 private struct AdvancedTabView: View {
+  @ObservedObject var updater: EvieUpdater
   @ObservedObject var modelViewModel: ModelSettingsViewModel
   var preferencesPath: String
   var configurationPath: String
@@ -141,11 +144,13 @@ private struct AdvancedTabView: View {
   var body: some View {
     VStack(spacing: 0) {
       PaneSelector(
-        titles: ["Modelo", "Diagnóstico"],
+        titles: ["Modelo", "Diagnóstico", "Atualizar"],
         selection: $modelViewModel.advancedPane
       )
       if modelViewModel.advancedPane == 0 {
         ModelSettingsView(viewModel: modelViewModel)
+      } else if modelViewModel.advancedPane == 2 {
+        UpdateSettingsView(updater: updater)
       } else {
         DiagnosticsSettingsView(
           modelName: modelViewModel.model,

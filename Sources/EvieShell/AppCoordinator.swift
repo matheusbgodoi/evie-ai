@@ -30,6 +30,7 @@ final class AppCoordinator: NSObject {
   private let audioCapture = EvieAudioCapture()
   private let speechOutput = EvieSpeechOutput()
   private let voiceEngineLauncher = EvieVoiceEngineLauncher()
+  private let updater = EvieUpdater()
   /// True while push-to-talk is holding the microphone open, so releasing the key
   /// stops it but a click on the mark toggles instead.
   private var isHoldingToTalk = false
@@ -555,6 +556,7 @@ extension AppCoordinator {
         voiceLibraryViewModel: voiceLibraryViewModel,
         memoryViewModel: memoryViewModel,
         skillsViewModel: skillsViewModel,
+        updater: updater,
         preferencesPath: preferencesStore.fileURL.path,
         configurationPath: configurationStore.fileURL.path
       )

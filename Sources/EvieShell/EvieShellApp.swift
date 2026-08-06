@@ -73,6 +73,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     // Brings the voice engine up the way asking her to speak does, and reports
     // how long it took. The point is to prove the app can start it without the
     // shell script, which is the failure this exists for.
+    // Runs the update check against the real feed, and runs the signature
+    // verification against real tampered copies of this very bundle. The second
+    // half is the one that matters: it is the only thing standing between a
+    // release feed and code executing here.
+    if CommandLine.arguments.contains("--update-check") {
+      Task { @MainActor in
+        await Self.runUpdateCheck()
+        NSApp.terminate(nil)
+      }
+      return
+    }
+
     if CommandLine.arguments.contains("--voice-engine-check") {
       Task { @MainActor in
         await Self.runVoiceEngineCheck()
@@ -604,6 +616,95 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     ] {
       print("  \(EvieWebClient.validate(address) == nil ? "recusado" : "ACEITOU — BUG") \(address)")
     }
+  }
+
+  @MainActor
+  static func runUpdateCheck() async {
+    let running = Bundle.main.bundleURL
+    print("rodando: \(running.path)")
+    print("versão instalada: \(EvieUpdater.installedVersion?.description ?? "nenhuma")")
+    print("é um bundle: \(EvieUpdater.isRunningFromBundle)")
+
+    switch (try? EvieBundleSignature.leafCertificateHash(ofBundleAt: running)) ?? nil {
+    case .some(let hash):
+      print("certificado desta cópia: \(hash.prefix(8).map { String(format: "%02x", $0) }.joined())…")
+    case .none:
+      print("certificado desta cópia: NENHUM (ad-hoc) — nenhuma atualização seria aceita")
+    }
+
+    // Against tampered copies of this exact bundle, so the table in
+    // EvieBundleSignature is a measurement rather than a claim.
+    print("")
+    print("verificação contra cópias adulteradas:")
+    let workspace = URL(fileURLWithPath: NSTemporaryDirectory())
+      .appendingPathComponent("evie-update-check-\(ProcessInfo.processInfo.processIdentifier)")
+    defer { try? FileManager.default.removeItem(at: workspace) }
+    try? FileManager.default.createDirectory(at: workspace, withIntermediateDirectories: true)
+
+    for (label, tamper) in Self.tamperings {
+      let copy = workspace.appendingPathComponent("\(label).app")
+      try? FileManager.default.removeItem(at: copy)
+      guard (try? FileManager.default.copyItem(at: running, to: copy)) != nil else {
+        print("  \(label): não consegui copiar")
+        continue
+      }
+      tamper(copy)
+      do {
+        try EvieBundleSignature.verify(candidateAt: copy, matchesSignerOf: running)
+        print("  \(label): ACEITOU — investigar")
+      } catch {
+        print("  \(label): recusado — \((error as? LocalizedError)?.errorDescription ?? "\(error)")")
+      }
+    }
+    // The control: an untouched copy must be accepted, or the check is only
+    // refusing everything and proving nothing.
+    let clean = workspace.appendingPathComponent("intacta.app")
+    try? FileManager.default.copyItem(at: running, to: clean)
+    do {
+      try EvieBundleSignature.verify(candidateAt: clean, matchesSignerOf: running)
+      print("  cópia intacta: aceita (controle)")
+    } catch {
+      print("  cópia intacta: RECUSADA — \(error)")
+    }
+
+    print("")
+    let updater = EvieUpdater()
+    await updater.check(force: true)
+    print("feed: \(updater.state)")
+  }
+
+  /// The ways a downloaded bundle could have been interfered with.
+  private static var tamperings: [(String, (URL) -> Void)] {
+    [
+      (
+        "info-plist-alterado",
+        { copy in
+          let plist = copy.appendingPathComponent("Contents/Info.plist")
+          guard var text = try? String(contentsOf: plist, encoding: .utf8) else { return }
+          text = text.replacingOccurrences(of: "<string>APPL</string>", with: "<string>APPX</string>")
+          try? text.write(to: plist, atomically: true, encoding: .utf8)
+        }
+      ),
+      (
+        "recurso-adicionado",
+        { copy in
+          let extra = copy.appendingPathComponent("Contents/Resources/injetado.sh")
+          try? "malicioso".write(to: extra, atomically: true, encoding: .utf8)
+        }
+      ),
+      (
+        "reassinado-adhoc",
+        { copy in
+          let sign = Process()
+          sign.executableURL = URL(fileURLWithPath: "/usr/bin/codesign")
+          sign.arguments = ["--force", "--deep", "-s", "-", copy.path]
+          sign.standardError = FileHandle.nullDevice
+          sign.standardOutput = FileHandle.nullDevice
+          try? sign.run()
+          sign.waitUntilExit()
+        }
+      ),
+    ]
   }
 
   @MainActor
