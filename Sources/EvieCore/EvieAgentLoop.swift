@@ -86,11 +86,18 @@ public struct EvieAgentLoop: Sendable {
   ///   identifying images, contributed nothing to an answer that came entirely
   ///   from having looked at the picture, and still made the card claim "Usei a
   ///   web". Seconds spent to end up citing a source that was not used.
+  /// - Parameter skipsNotes: whether the person asked for the web specifically,
+  ///   with `/web`. The notes-first order is enforced here rather than requested
+  ///   of the model, so the only honest way to skip that step is to say so here.
+  ///   It also forces the lookup: `/web` is an explicit instruction to go and
+  ///   look, so the judgement about whether a question is worth looking up does
+  ///   not get to overrule it.
   public func run(
     messages: [ChatMessage],
     roots: [EvieFileRoot],
     client: any AgentClient,
     carriesAttachment: Bool = false,
+    skipsNotes: Bool = false,
     emit: @Sendable (EvieInteractionEvent) async -> Void
   ) async throws -> Outcome {
     var conversation = messages
@@ -117,11 +124,12 @@ public struct EvieAgentLoop: Sendable {
     // — which, measured twice, it does.
     if !carriesAttachment,
       let question = messages.last(where: { $0.role == .user })?.content,
-      EvieGrounding.needsLookup(question)
+      skipsNotes || EvieGrounding.needsLookup(question)
     {
       let grounding = await ground(
         question: question,
         roots: roots,
+        skipsNotes: skipsNotes,
         emit: emit
       )
       if let message = grounding.message {
@@ -261,12 +269,17 @@ extension EvieAgentLoop {
   fileprivate func ground(
     question: String,
     roots: [EvieFileRoot],
+    skipsNotes: Bool = false,
     emit: @Sendable (EvieInteractionEvent) async -> Void
   ) async -> EvieGroundingResult {
     var result = EvieGroundingResult()
     let query = EvieGrounding.query(from: question)
 
-    if let vault {
+    if skipsNotes {
+      // `/web`: the notes step is skipped entirely rather than run and ignored,
+      // because running it is the expensive part and its only other effect would
+      // be to stop the web step below from happening at all.
+    } else if let vault {
       // Hybrid retrieval over the indexed vault: words and meaning, fused.
       await emit(.status(message: "Procurando nas suas anotações…"))
       let retrieved = await vault(query)
