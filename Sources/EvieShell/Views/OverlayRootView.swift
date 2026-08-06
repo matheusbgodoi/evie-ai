@@ -67,6 +67,8 @@ struct OverlayRootView: View {
   var onMoveCommandHighlight: ((Int) -> Void)? = nil
   var onCompleteCommand: (() -> Void)? = nil
   var onDismissCommands: (() -> Void)? = nil
+  var attachments: [EvieAttachmentSlot] = []
+  var onRemoveAttachment: ((UUID) -> Void)? = nil
 
   @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
@@ -215,7 +217,9 @@ struct OverlayRootView: View {
         highlightedCommand: highlightedCommand,
         onMoveCommandHighlight: onMoveCommandHighlight,
         onCompleteCommand: onCompleteCommand,
-        onDismissCommands: onDismissCommands
+        onDismissCommands: onDismissCommands,
+        attachments: attachments,
+        onRemoveAttachment: onRemoveAttachment
       )
       .transition(.move(edge: .bottom).combined(with: .opacity))
     } else {

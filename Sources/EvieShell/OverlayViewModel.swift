@@ -59,7 +59,12 @@ final class OverlayViewModel: ObservableObject {
   @Published private(set) var activeConversationID = UUID()
   @Published private(set) var activeConversationTitle = "Nova conversa"
   /// Documents read but not yet asked about. They travel with the next message.
-  @Published private(set) var attachments: [EvieDocumentAttachment] = []
+  /// Files picked but not yet sent, in the order they were picked.
+  ///
+  /// Nothing here has reached the model. They go with the next message and only
+  /// with it, which is the whole difference between attaching and sending.
+  @Published private(set) var attachmentSlots: [EvieAttachmentSlot] = []
+  private var preparationTasks: [UUID: Task<Void, Never>] = [:]
 
   var onLayoutInvalidated: (@MainActor () -> Void)?
   var onDismissRequested: (@MainActor () -> Void)?
@@ -233,6 +238,13 @@ final class OverlayViewModel: ObservableObject {
     conversationCreatedAt = Date()
     conversation = [ChatMessage(role: .system, content: systemPrompt)]
     artifacts = []
+    // A file picked for the last conversation must not ride along into the next
+    // one, and a read still running for it has nothing left to be read for.
+    for task in preparationTasks.values {
+      task.cancel()
+    }
+    preparationTasks = [:]
+    attachmentSlots = []
     visualState = .ready
     primaryText = "Nova conversa"
     secondaryText = "O histórico anterior continua salvo somente neste Mac"
@@ -359,42 +371,65 @@ final class OverlayViewModel: ObservableObject {
       return
     }
 
-    visualState = .usingTool
-    primaryText = readable.count == 1 ? "Lendo o arquivo…" : "Lendo os arquivos…"
+    // The field opens, because an attachment with nowhere to type beside it is
+    // the interface asking to be sent on its own.
+    isQuickTextEntryPresented = true
+    for url in readable {
+      let slot = EvieAttachmentSlot(url: url, state: .preparing)
+      attachmentSlots.append(slot)
+      prepare(slot)
+    }
     onLayoutInvalidated?()
+  }
 
-    Task { @MainActor [weak self] in
+  /// Reads and, for a picture, looks at one attached file.
+  ///
+  /// Started on attach rather than on send: it is local work that costs nothing
+  /// but time, and doing it while the question is still being typed is time the
+  /// send would otherwise have to spend. Deliberately silent — no visual state,
+  /// no card, nothing that could be mistaken for an answer.
+  private func prepare(_ slot: EvieAttachmentSlot) {
+    preparationTasks[slot.id] = Task { @MainActor [weak self] in
       guard let self else { return }
-      for url in readable {
-        do {
-          let pages = try await documentReader.read(fileAt: url)
-          // Sight is best-effort beside reading: a Mac without it still reads
-          // the text, and a failure to describe must not lose the document.
-          let seen = Self.isImage(url) ? try? await visionDescriber.describe(imageAt: url) : nil
-          appendAttachment(
+      do {
+        let pages = try await documentReader.read(fileAt: slot.url)
+        try Task.checkCancellation()
+        // Sight is best-effort beside reading: a Mac without it still reads the
+        // text, and a failure to describe must not lose the document.
+        let seen =
+          Self.isImage(slot.url)
+          ? try? await visionDescriber.describe(imageAt: slot.url) : nil
+        try Task.checkCancellation()
+        settle(
+          slot.id,
+          .ready(
             EvieDocumentAttachment(
-              name: url.lastPathComponent,
+              name: slot.url.lastPathComponent,
               pages: pages,
               visualDescription: seen
             )
           )
-        } catch {
-          artifacts.append(
-            ArtifactCardModel(
-              kind: .error,
-              title: "Não consegui ler \(url.lastPathComponent)",
-              summary: (error as? LocalizedError)?.errorDescription
-                ?? error.localizedDescription,
-              isExpanded: true
-            )
+        )
+      } catch is CancellationError {
+        // Removed while it was being read. Nothing to report and nothing to keep.
+      } catch {
+        settle(
+          slot.id,
+          .failed(
+            (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
           )
-        }
+        )
       }
-      visualState = .ready
-      primaryText = attachments.isEmpty ? "Evie está pronta" : "Li o que você mandou"
-      isQuickTextEntryPresented = true
-      onLayoutInvalidated?()
     }
+  }
+
+  private func settle(_ id: UUID, _ state: EvieAttachmentSlot.State) {
+    preparationTasks[id] = nil
+    guard let index = attachmentSlots.firstIndex(where: { $0.id == id }) else {
+      return
+    }
+    attachmentSlots[index].state = state
+    onLayoutInvalidated?()
   }
 
   /// Opens the system file picker.
@@ -416,27 +451,33 @@ final class OverlayViewModel: ObservableObject {
     attachFiles(at: panel.urls)
   }
 
+  /// Waits for every file still being read, then sends.
+  private func awaitAttachmentsThenSubmit() {
+    visualState = .usingTool
+    primaryText = "Terminando de ler o anexo…"
+    secondaryText = nil
+    onLayoutInvalidated?()
+
+    requestTask = Task { @MainActor [weak self] in
+      guard let self else { return }
+      for task in preparationTasks.values {
+        await task.value
+      }
+      guard !Task.isCancelled else {
+        return
+      }
+      requestTask = nil
+      submitQuickText()
+    }
+  }
+
   func removeAttachment(id: UUID) {
-    attachments.removeAll { $0.id == id }
+    preparationTasks[id]?.cancel()
+    preparationTasks[id] = nil
+    attachmentSlots.removeAll { $0.id == id }
     onLayoutInvalidated?()
   }
 
-  private func appendAttachment(_ attachment: EvieDocumentAttachment) {
-    attachments.append(attachment)
-    artifacts.append(
-      ArtifactCardModel(
-        id: attachment.id,
-        kind: .answer,
-        title: attachment.name,
-        summary: attachment.summary,
-        detail: attachment.preview,
-        source: attachment.provenanceDescription,
-        isExpanded: false,
-        actions: Self.answerActions(isSpeaking: false)
-      )
-    )
-    secondaryText = "Agora me pergunte o que você quer saber sobre isso."
-  }
 
   /// The microphone is open. This is only ever called after capture actually
   /// started, so the listening indicator can never be shown over a closed
@@ -596,9 +637,25 @@ final class OverlayViewModel: ObservableObject {
   }
 
   func submitQuickText() {
-    let prompt = quickText.trimmingCharacters(in: .whitespacesAndNewlines)
+    var prompt = quickText.trimmingCharacters(in: .whitespacesAndNewlines)
+    // An attachment on its own is a complete message. Refusing it because the
+    // field is empty would mean the only way to ask about a document is to type
+    // something first, and there is nothing to type.
+    if prompt.isEmpty, attachmentSlots.contains(where: { $0.prepared != nil || $0.isPreparing }) {
+      prompt = "Dá uma olhada nisso."
+    }
     guard !prompt.isEmpty, !hasActiveRequest else {
       NSSound.beep()
+      return
+    }
+
+    // Sending before a file finished being read would send the message without
+    // it — silently, since the evidence is built from what is prepared. Waiting
+    // is the only correct answer; it is usually already done, because reading
+    // started when the file was picked.
+    if attachmentSlots.contains(where: \.isPreparing) {
+      quickText = prompt
+      awaitAttachmentsThenSubmit()
       return
     }
 
@@ -1521,7 +1578,12 @@ extension OverlayViewModel {
   }
 
   fileprivate func takeAttachmentEvidence() -> ChatMessage? {
+    // Only what finished preparing. A slot still being read, or one that failed,
+    // is not evidence — and the send path waits for the first kind before
+    // getting here, so arriving with one is a genuine failure rather than a race.
+    let attachments = attachmentSlots.compactMap(\.prepared)
     guard !attachments.isEmpty else {
+      attachmentSlots = []
       return nil
     }
     let pages = attachments.flatMap(\.pages)
@@ -1534,7 +1596,7 @@ extension OverlayViewModel {
       }
       return "\(attachment.name): \(description)"
     }
-    attachments = []
+    attachmentSlots = []
 
     var evidence = ""
     if !seen.isEmpty {

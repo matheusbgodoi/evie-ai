@@ -22,6 +22,9 @@ struct QuickTextEntryView: View {
   var onCompleteCommand: (() -> Void)? = nil
   var onDismissCommands: (() -> Void)? = nil
 
+  var attachments: [EvieAttachmentSlot] = []
+  var onRemoveAttachment: ((UUID) -> Void)? = nil
+
   private var isShowingCommands: Bool {
     !commandSuggestions.isEmpty
   }
@@ -35,8 +38,76 @@ struct QuickTextEntryView: View {
   var body: some View {
     VStack(alignment: .leading, spacing: 7) {
       commandMenu
+      attachmentChips
       field
     }
+  }
+
+  /// The files waiting to go with the next message.
+  ///
+  /// Beside the field rather than in the answer list, which is where they used
+  /// to appear — as cards, indistinguishable from something already asked and
+  /// answered. A chip here says the opposite: this is attached, not sent, and
+  /// here is the cross that takes it back.
+  @ViewBuilder
+  private var attachmentChips: some View {
+    if !attachments.isEmpty {
+      ScrollView(.horizontal) {
+        HStack(spacing: 6) {
+          ForEach(attachments) { slot in
+            attachmentChip(slot)
+          }
+        }
+        .padding(.horizontal, 2)
+      }
+      .scrollIndicators(.never)
+      .frame(maxHeight: 34)
+    }
+  }
+
+  private func attachmentChip(_ slot: EvieAttachmentSlot) -> some View {
+    HStack(spacing: 6) {
+      if slot.isPreparing {
+        EvieThinkingIndicator(tint: .secondary)
+      } else if slot.failure != nil {
+        Image(systemName: "exclamationmark.triangle.fill")
+          .font(.system(size: 10))
+          .foregroundStyle(.orange)
+      } else {
+        Image(systemName: "paperclip")
+          .font(.system(size: 10))
+          .foregroundStyle(.secondary)
+      }
+
+      Text(slot.name)
+        .font(.system(size: 12, weight: .medium))
+        .lineLimit(1)
+        .truncationMode(.middle)
+        .frame(maxWidth: 180, alignment: .leading)
+
+      Button {
+        onRemoveAttachment?(slot.id)
+      } label: {
+        Image(systemName: "xmark")
+          .font(.system(size: 8, weight: .bold))
+          .frame(width: 14, height: 14)
+          .contentShape(Circle())
+      }
+      .buttonStyle(.plain)
+      .foregroundStyle(.secondary)
+      .accessibilityLabel("Tirar \(slot.name)")
+    }
+    .padding(.leading, 9)
+    .padding(.trailing, 6)
+    .padding(.vertical, 5)
+    .background(.ultraThinMaterial, in: Capsule())
+    .overlay(
+      Capsule().strokeBorder(
+        slot.failure == nil ? .white.opacity(0.10) : .orange.opacity(0.45),
+        lineWidth: 0.75
+      )
+    )
+    .help(slot.failure ?? slot.name)
   }
 
   /// The commands, above the field because the field is at the bottom of the

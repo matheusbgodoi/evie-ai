@@ -41,7 +41,9 @@ struct EvieOverlayView: View {
       highlightedCommand: viewModel.commandHighlight,
       onMoveCommandHighlight: { viewModel.moveCommandHighlight(by: $0) },
       onCompleteCommand: { viewModel.completeCommand() },
-      onDismissCommands: { viewModel.dismissCommandMenu() }
+      onDismissCommands: { viewModel.dismissCommandMenu() },
+      attachments: viewModel.attachmentSlots,
+      onRemoveAttachment: { viewModel.removeAttachment(id: $0) }
     )
   }
 }

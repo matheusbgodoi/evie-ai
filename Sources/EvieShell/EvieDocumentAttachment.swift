@@ -60,3 +60,52 @@ struct EvieDocumentAttachment: Identifiable, Hashable {
     return "Parte extraída do arquivo, parte reconhecida da imagem"
   }
 }
+
+
+/// A file waiting to be sent, and how far its preparation got.
+///
+/// Attaching used to read the file straight away, announce "Lendo o arquivo…"
+/// and put a card in the answer list — so a document that had only been picked
+/// looked exactly like one that had been sent and answered. Nothing had reached
+/// the model, but nothing on screen said so.
+///
+/// The work still happens on attach, because doing it while the question is
+/// being typed is free time that sending would otherwise have to pay for. What
+/// changed is that it happens quietly, in a chip beside the field, and the file
+/// reaches the model only when the message does.
+struct EvieAttachmentSlot: Identifiable {
+  enum State {
+    case preparing
+    case ready(EvieDocumentAttachment)
+    case failed(String)
+  }
+
+  let id = UUID()
+  let url: URL
+  var state: State
+
+  var name: String {
+    url.lastPathComponent
+  }
+
+  var prepared: EvieDocumentAttachment? {
+    if case .ready(let attachment) = state {
+      return attachment
+    }
+    return nil
+  }
+
+  var isPreparing: Bool {
+    if case .preparing = state {
+      return true
+    }
+    return false
+  }
+
+  var failure: String? {
+    if case .failed(let reason) = state {
+      return reason
+    }
+    return nil
+  }
+}
