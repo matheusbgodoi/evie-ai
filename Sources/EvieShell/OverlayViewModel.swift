@@ -113,14 +113,32 @@ final class OverlayViewModel: ObservableObject {
   /// hear it, which is not a preference to be overridden by a preference.
   var onSpeakRequested: (@MainActor (EvieRichText) -> Void)?
   var onSpeakStopRequested: (@MainActor () -> Void)?
-  /// True while she is reading something out, so the button can offer to stop.
-  @Published private(set) var isSpeaking = false
+  /// Where the speaking of an answer has got to.
+  ///
+  /// Three states rather than a flag, because the gap between pressing Ouvir and
+  /// the first sound is a couple of seconds of synthesis, and a button that does
+  /// not change during it looks like a button that missed the press.
+  enum SpeechPhase {
+    case idle
+    case preparing
+    case speaking
+  }
+
+  @Published private(set) var speechPhase: SpeechPhase = .idle
+
+  var isSpeaking: Bool {
+    speechPhase == .speaking
+  }
 
   func setSpeaking(_ speaking: Bool) {
-    guard speaking != isSpeaking else {
+    setSpeechPhase(speaking ? .speaking : .idle)
+  }
+
+  func setSpeechPhase(_ phase: SpeechPhase) {
+    guard phase != speechPhase else {
       return
     }
-    isSpeaking = speaking
+    speechPhase = phase
     refreshSpeakActions()
     onLayoutInvalidated?()
   }
@@ -626,6 +644,9 @@ final class OverlayViewModel: ObservableObject {
   /// no explanation anywhere, which cost an evening of looking for a crash that
   /// had not happened.
   func reportVoiceEngineFailure(_ error: any Error) {
+    // Whatever went wrong, nothing is being prepared any more — the button must
+    // not sit spinning over work that has stopped.
+    setSpeechPhase(isSpeaking ? .speaking : .idle)
     secondaryText =
       (error as? LocalizedError)?.errorDescription
       ?? "Não consegui iniciar o motor de voz treinada."
@@ -797,7 +818,7 @@ final class OverlayViewModel: ObservableObject {
         summary: "",
         isExpanded: true,
         isLoading: true,
-        actions: Self.answerActions(isSpeaking: isSpeaking)
+        actions: Self.answerActions(phase: speechPhase)
       )
     )
     onLayoutInvalidated?()
@@ -983,6 +1004,9 @@ final class OverlayViewModel: ObservableObject {
         onSpeakStopRequested?()
         return
       }
+      // Set before the request, because the couple of seconds of synthesis that
+      // follow are exactly the window this is for.
+      setSpeechPhase(.preparing)
       // Spoken from the resolved text, so no asterisk or hash is ever
       // pronounced, and never from the provenance note attached beside it.
       onSpeakRequested?(EvieRichText(artifact.detail ?? artifact.summary))
@@ -1074,13 +1098,14 @@ extension OverlayViewModel {
   ///
   /// One place, because three call sites building the same pair by hand is how
   /// one of them ends up without the speaker.
-  static func answerActions(isSpeaking: Bool) -> [ArtifactActionModel] {
+  static func answerActions(phase: SpeechPhase) -> [ArtifactActionModel] {
     [
       ArtifactActionModel(
         id: "speak",
-        title: isSpeaking ? "Parar" : "Ouvir",
-        systemImage: isSpeaking ? "stop.fill" : "speaker.wave.2.fill",
-        role: .secondary
+        title: phase == .speaking ? "Parar" : "Ouvir",
+        systemImage: phase == .speaking ? "stop.fill" : "speaker.wave.2.fill",
+        role: .secondary,
+        isBusy: phase == .preparing
       ),
       ArtifactActionModel(
         id: "copy",
@@ -1095,7 +1120,7 @@ extension OverlayViewModel {
   /// talking, so it never offers to start something already running.
   fileprivate func refreshSpeakActions() {
     for index in artifacts.indices where artifacts[index].kind == .answer {
-      artifacts[index].actions = Self.answerActions(isSpeaking: isSpeaking)
+      artifacts[index].actions = Self.answerActions(phase: speechPhase)
     }
   }
 
@@ -1775,7 +1800,7 @@ extension OverlayViewModel {
         question: turn.question.content,
         summary: turn.answer.content,
         isExpanded: false,
-        actions: Self.answerActions(isSpeaking: false)
+        actions: Self.answerActions(phase: .idle)
       )
     }
   }

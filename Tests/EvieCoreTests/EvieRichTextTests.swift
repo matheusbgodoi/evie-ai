@@ -225,3 +225,48 @@ struct EvieRichTextRegressionTests {
     #expect(blocks.contains { if case .bullet(1, _) = $0 { return true } else { return false } })
   }
 }
+
+@Suite("Evie speech and clipboard cleanliness")
+struct EvieSpokenTextTests {
+  private let markdown = """
+    ## O que é isso?
+
+    É um **diagrama** de um projeto que usa o `ESP32` para controlar \
+    *cinco* servomotores.
+
+    - O ponto mais **crítico** é a alimentação
+    - A ~~fonte~~ solução é uma externa
+
+    ```swift
+    let x = 1
+    ```
+
+    ---
+    """
+
+  /// Nothing anybody types to make text bold should ever be pronounced.
+  @Test("markdown is never spoken")
+  func speechCarriesNoMarkup() {
+    let spoken = EvieRichText(markdown).spokenSentences.joined(separator: " ")
+
+    for marker in ["##", "**", "`", "~~", "---", "- "] {
+      #expect(!spoken.contains(marker), "falou \"\(marker)\"")
+    }
+    #expect(spoken.contains("diagrama"))
+    #expect(spoken.contains("crítico"))
+    // Code is not prose and reading it out loud is unbearable.
+    #expect(!spoken.contains("let x"))
+  }
+
+  /// Pasting an answer anywhere should need no cleanup.
+  @Test("what is copied is text, not source")
+  func clipboardCarriesNoMarkup() {
+    let copied = EvieRichText(markdown).plainText
+
+    for marker in ["##", "**", "~~"] {
+      #expect(!copied.contains(marker), "copiou \"\(marker)\"")
+    }
+    #expect(copied.contains("O que é isso?"))
+    #expect(copied.contains("diagrama"))
+  }
+}

@@ -70,6 +70,12 @@ struct ArtifactActionModel: Identifiable, Hashable {
   var title: String
   var systemImage: String? = nil
   var role: ArtifactActionRole = .secondary
+  /// Work is happening that has not produced anything yet.
+  ///
+  /// Speech is the case this exists for: between pressing Ouvir and the first
+  /// sound there are a couple of seconds of synthesis, and with the button
+  /// unchanged the press looked like it had missed.
+  var isBusy = false
 }
 
 struct ArtifactCardModel: Identifiable, Hashable {
@@ -318,7 +324,9 @@ struct ArtifactCardView: View {
           Label {
             Text(action.title)
           } icon: {
-            if let systemImage = action.systemImage {
+            if action.isBusy {
+              EvieThinkingIndicator(tint: artifact.kind.tint)
+            } else if let systemImage = action.systemImage {
               Image(systemName: systemImage)
             }
           }

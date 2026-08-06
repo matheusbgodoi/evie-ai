@@ -280,6 +280,13 @@ final class AppCoordinator: NSObject {
         speechOutput.speak(text, using: voice, rate: rate)
       }
     }
+    // A block that could not be synthesised used to be skipped in silence, which
+    // is how an answer stops halfway with nothing to explain it.
+    speechOutput.onBlockFailed = { [weak self] in
+      self?.viewModel.reportVoiceEngineFailure(
+        SpeechGapNotice()
+      )
+    }
     viewModel.onSpeakStopRequested = { [weak self] in
       self?.speechOutput.stop()
     }
@@ -924,6 +931,13 @@ extension AppCoordinator {
 
   /// Said in the same place a voice failure is said, because it is the same kind
   /// of fact: something about how she speaks changed without you asking.
+  /// One block of an answer could not be spoken. The rest still plays.
+  struct SpeechGapNotice: LocalizedError {
+    var errorDescription: String? {
+      "Pulei um trecho que o motor de voz não conseguiu gerar."
+    }
+  }
+
   struct VoiceRepairNotice: LocalizedError {
     let names: [String]
 

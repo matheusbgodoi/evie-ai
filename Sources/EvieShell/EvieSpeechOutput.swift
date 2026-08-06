@@ -41,6 +41,8 @@ final class EvieSpeechOutput: ObservableObject {
   /// out of order — after a barge-in, say, where stopping and starting happen in
   /// the same breath.
   var onSpeakingChanged: (@MainActor (Bool) -> Void)?
+  /// One block of the answer could not be synthesised. The rest still plays.
+  var onBlockFailed: (@MainActor () -> Void)?
 
   private static let historyLength = 44
   private static let publishInterval = Duration.milliseconds(40)
@@ -83,10 +85,25 @@ final class EvieSpeechOutput: ObservableObject {
   /// How the text is divided before synthesis, which differs by engine.
   ///
   /// The system synthesiser is effectively instant, so one sentence at a time
-  /// keeps interruption responsive. The cloned engine pays a fixed cost per call
-  /// — measured at 1.9 times real time for a short sentence against 1.1 for a
-  /// long one — so everything after the opening sentence goes in one block. That
-  /// buys a fast first word without paying the overhead again on every clause.
+  /// keeps interruption responsive.
+  ///
+  /// The cloned engine used to put *everything* after the opening sentence into
+  /// a single block, to avoid paying a large fixed cost per call twice. That cost
+  /// turned out to be the backend re-transcribing its reference recording, which
+  /// is now stored — the fixed part is about 1.5 s and the marginal part about
+  /// 0.16x the audio produced, both measured. One block was also a real failure:
+  /// a two-thousand-character answer is one enormous synthesis, and when it did
+  /// not come back she read the first sentence and fell silent with nothing said
+  /// about why.
+  ///
+  /// Blocks are bounded now. At 280 characters a block yields roughly fifteen
+  /// seconds of speech for about 3.9 s of work, so playback stays comfortably
+  /// ahead of synthesis, and one failure costs one paragraph rather than the
+  /// whole answer.
+  /// The opening block is short so the first word arrives quickly; the rest are
+  /// filled to this before starting a new one.
+  static let clonedBlockCharacters = 280
+
   static func blocks(from sentences: [String], for voice: Voice) -> [String] {
     switch voice {
     case .system:
@@ -95,8 +112,22 @@ final class EvieSpeechOutput: ObservableObject {
       guard let first = sentences.first else {
         return []
       }
-      let rest = sentences.dropFirst().joined(separator: " ")
-      return rest.isEmpty ? [first] : [first, rest]
+      var blocks = [first]
+      var current = ""
+      for sentence in sentences.dropFirst() {
+        if current.isEmpty {
+          current = sentence
+        } else if current.count + sentence.count + 1 <= clonedBlockCharacters {
+          current += " " + sentence
+        } else {
+          blocks.append(current)
+          current = sentence
+        }
+      }
+      if !current.isEmpty {
+        blocks.append(current)
+      }
+      return blocks
     }
   }
 
@@ -190,6 +221,9 @@ final class EvieSpeechOutput: ObservableObject {
           let buffers = produced,
           let format = buffers.first(where: { $0.frameLength > 0 })?.format
         else {
+          // Said rather than skipped. Silently dropping a block is how an answer
+          // stops halfway with nothing to explain it.
+          onBlockFailed?()
           continue
         }
         guard !Task.isCancelled else {
