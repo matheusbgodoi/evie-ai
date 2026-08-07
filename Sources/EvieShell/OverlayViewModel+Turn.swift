@@ -404,6 +404,114 @@ extension OverlayViewModel {
     }
   }
 
+  /// Puts a written message on screen with everything that will leave visible.
+  ///
+  /// This card carries more weight than any other in the app, because it is the
+  /// only one whose button cannot be undone afterwards. So it is built for the
+  /// mistake that actually happens — the wrong recipient — rather than for a typo
+  /// in the text: every address in full, the account it leaves from, the subject,
+  /// and the whole body. Nothing is counted, shortened or summarised, and if it
+  /// does not fit the card grows.
+  ///
+  /// Three buttons rather than two, and the middle one is the argument. "Não"
+  /// used to be the only way out of a card, which for a message means throwing
+  /// away something he may have wanted with one word changed. "Salvar rascunho"
+  /// keeps it, in Mail, where editing and sending are what that app is for — and
+  /// it is also the safer half of this whole feature: a draft reaches nobody. It
+  /// is not the primary button because he asked to send, and a card whose main
+  /// action is "quase" would just move the decision somewhere with less context.
+  ///
+  /// No timeout, no "lembrar desta escolha", and no automatic path anywhere —
+  /// see `performMailProposal`.
+  func presentMailProposal(_ proposal: EvieMailProposal) {
+    artifacts.append(
+      ArtifactCardModel(
+        id: proposal.id,
+        kind: .email,
+        title: proposal.summary,
+        summary: proposal.detail,
+        isExpanded: true,
+        actions: [
+          ArtifactActionModel(
+            id: "mail-send:\(proposal.id.uuidString)",
+            // The verb, not "OK". What this button does is put the message on
+            // somebody else's screen, and it says so.
+            title: "Enviar",
+            systemImage: "paperplane.fill",
+            role: .primary
+          ),
+          ArtifactActionModel(
+            id: "mail-draft:\(proposal.id.uuidString)",
+            title: "Salvar rascunho",
+            systemImage: "tray.and.arrow.down",
+            role: .secondary
+          ),
+          ArtifactActionModel(
+            id: "mail-skip:\(proposal.id.uuidString)",
+            title: "Não",
+            systemImage: "xmark",
+            role: .secondary
+          ),
+        ]
+      )
+    )
+    pendingMail[proposal.id] = proposal
+    onLayoutInvalidated?()
+  }
+
+  /// Sends it, or files it, and says which one happened.
+  ///
+  /// Asynchronous because Mail answers in its own time. Nothing is claimed until
+  /// it has: "enviado" written before the app confirmed is how somebody spends a
+  /// week believing a message went out.
+  ///
+  /// There is no automatic path here, and there is no switch that could create
+  /// one. Auto-approval exists for undoing things on his own disk, where the
+  /// worst case is a file in the Trash; a sent message is on somebody else's
+  /// screen and no preference is allowed to skip the press.
+  func performMailProposal(_ proposal: EvieMailProposal, sending: Bool) {
+    pendingMail[proposal.id] = nil
+    guard let onMailApproved else {
+      return
+    }
+    primaryText = sending ? "Enviando…" : "Guardando o rascunho…"
+    onLayoutInvalidated?()
+
+    Task { @MainActor [weak self] in
+      let receipt = await onMailApproved(proposal, sending)
+      guard let self else {
+        return
+      }
+      artifacts.append(
+        ArtifactCardModel(
+          kind: receipt.outcome == .failed ? .error : .email,
+          title: Self.mailCardTitle(for: receipt.outcome),
+          summary: receipt.report,
+          isExpanded: true
+        )
+      )
+      switch receipt.outcome {
+      case .sent:
+        primaryText = "E-mail enviado"
+        secondaryText = "Não dá para voltar atrás"
+      case .draft:
+        primaryText = "Rascunho guardado"
+        secondaryText = "Nada foi enviado"
+      case .failed:
+        primaryText = "Nada foi enviado"
+      }
+      onLayoutInvalidated?()
+    }
+  }
+
+  static func mailCardTitle(for outcome: EvieMailReceipt.Outcome) -> String {
+    switch outcome {
+    case .sent: "Enviado"
+    case .draft: "Guardado em Rascunhos"
+    case .failed: "Não consegui enviar"
+    }
+  }
+
   /// Puts a suggested skill on screen with its instructions visible.
   ///
   /// The instructions are shown in full rather than summarised, because agreeing
@@ -517,6 +625,11 @@ extension OverlayViewModel {
     }
     for event in outcome.eventProposals {
       presentEventProposal(event)
+    }
+    // Never routed through the auto-approval branch below, and not by omission:
+    // there is no branch to route it through. `autoApproveChanges` is about files.
+    for mail in outcome.mailProposals {
+      presentMailProposal(mail)
     }
     for change in outcome.changeProposals {
       if autoApproveChanges {

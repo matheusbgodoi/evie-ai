@@ -78,6 +78,9 @@ public struct EvieAgentLoop: Sendable {
     /// Events she asked to create. Nothing is in the calendar: the loop cannot
     /// reach the app that writes, only the one that reads.
     public var eventProposals: [EvieCalendarEventProposal] = []
+    /// Messages she wrote. Nothing has been sent, and nothing can be: the loop
+    /// holds a reader, and sending lives behind a protocol it was never given.
+    public var mailProposals: [EvieMailProposal] = []
   }
 
   /// Runs the turn.
@@ -116,6 +119,7 @@ public struct EvieAgentLoop: Sendable {
     var changeProposals: [EvieFileChange] = []
     var skillProposals: [EvieSkill] = []
     var eventProposals: [EvieCalendarEventProposal] = []
+    var mailProposals: [EvieMailProposal] = []
     var toolNames: [String] = []
     var readAddresses: [String] = []
     // Memory is offered alongside the file tools, and is the only one of them
@@ -138,6 +142,12 @@ public struct EvieAgentLoop: Sendable {
       // Automation grant, the same "sim" in the same System Settings pane. A
       // second switch would be a second thing to explain for no extra decision.
       tools.append(EvieCalendarEventTool.definition)
+      // Writing a message rides on the same switch for the same reason: the same
+      // app, the same Automation grant, the same "sim" in the same pane. It does
+      // not ride on the same *card* — sending is its own confirmation, with the
+      // recipients written out, because the failure it has to catch is the wrong
+      // person rather than the wrong hour.
+      tools.append(EvieMailTool.definition)
     }
     if offersChanges, !roots.isEmpty {
       tools.append(EvieChangeTool.definition)
@@ -249,7 +259,8 @@ public struct EvieAgentLoop: Sendable {
           ),
           changeProposals: changeProposals,
           skillProposals: skillProposals,
-          eventProposals: eventProposals
+          eventProposals: eventProposals,
+          mailProposals: mailProposals
         )
       }
 
@@ -268,7 +279,8 @@ public struct EvieAgentLoop: Sendable {
           ),
           changeProposals: changeProposals,
           skillProposals: skillProposals,
-          eventProposals: eventProposals
+          eventProposals: eventProposals,
+          mailProposals: mailProposals
         )
       }
 
@@ -297,6 +309,19 @@ public struct EvieAgentLoop: Sendable {
           if let proposal {
             eventProposals.append(proposal)
           }
+        } else if let mailAndCalendar, call.name == EvieMailTool.name {
+          // The conversation as it stands right now is what the addresses are
+          // checked against, so an address that arrived in a message read three
+          // steps ago counts and one the model just produced does not.
+          let (outcome, proposal) = await Self.recordMail(
+            call,
+            known: Self.knownAddresses(in: conversation),
+            using: mailAndCalendar
+          )
+          result = outcome
+          if let proposal {
+            mailProposals.append(proposal)
+          }
         } else if EvieMailCalendarTool.refusedWritingNames.contains(call.name) {
           // Reached only when the model invents a name that was never declared.
           // Answered with a sentence rather than "essa ferramenta não existe",
@@ -304,7 +329,9 @@ public struct EvieAgentLoop: Sendable {
           result = EvieToolResult(
             callID: call.id,
             name: call.name,
-            content: EvieMailCalendarTool.writingRefusal(offersEvents: mailAndCalendar != nil),
+            content: EvieMailCalendarTool.writingRefusal(
+              offersProposals: mailAndCalendar != nil
+            ),
             isFailure: true
           )
         } else if offersChanges, call.name == EvieChangeTool.name {
@@ -374,7 +401,8 @@ public struct EvieAgentLoop: Sendable {
           ),
       changeProposals: changeProposals,
       skillProposals: skillProposals,
-      eventProposals: eventProposals
+      eventProposals: eventProposals,
+      mailProposals: mailProposals
     )
   }
 }
@@ -532,6 +560,12 @@ extension EvieAgentLoop {
       }
       if call.name == EvieCalendarEventTool.name {
         return "Montando o compromisso para você conferir…"
+      }
+      if call.name == EvieMailTool.name {
+        // "Escrevendo", never "enviando". The status line is read while it
+        // happens, and the one thing it must not do is suggest the message has
+        // already gone.
+        return "Escrevendo o e-mail para você conferir…"
       }
       switch EvieMailCalendarTool(rawValue: call.name) {
       case .readMail:
@@ -753,6 +787,76 @@ extension EvieAgentLoop {
             na agenda \(proposal.calendarName). NADA foi criado — só acontece se \
             ele confirmar na tela. Não diga que já marcou; diga que a sugestão \
             está aí esperando.
+            """
+        ),
+        proposal
+      )
+    }
+  }
+
+  /// Every address that exists as far as this turn is concerned.
+  ///
+  /// Three sources, and the omission is the point: what he said, what he let her
+  /// remember (the system message), and what the apps and the tools handed back.
+  /// Assistant turns are excluded, because an assistant turn is exactly where an
+  /// invented address would be — a model that wrote `pedro.silva@gmail.com` two
+  /// steps ago must not be able to cite itself as evidence that the address is
+  /// real.
+  static func knownAddresses(in conversation: [ChatMessage]) -> Set<String> {
+    var found: Set<String> = []
+    for message in conversation where message.role != .assistant {
+      found.formUnion(EvieMailProposal.addresses(in: message.content))
+    }
+    return found
+  }
+
+  /// Turns a mail request into a card, and sends nothing.
+  ///
+  /// The accounts are read here rather than at the button, for the reason the
+  /// calendars are: the card has to name the address the message leaves from, and
+  /// a `from` the model invented has to fail while it still has a turn left to
+  /// fix it. Reading them is the only thing this function does to Mail.
+  fileprivate static func recordMail(
+    _ call: EvieToolCall,
+    known: Set<String>,
+    using apps: any EvieMailCalendarReading
+  ) async -> (EvieToolResult, EvieMailProposal?) {
+    let accounts: [String]
+    do {
+      accounts = try await apps.listMailAccounts()
+    } catch {
+      return (
+        EvieToolResult(
+          callID: call.id,
+          name: call.name,
+          content: (error as? LocalizedError)?.errorDescription
+            ?? "Não consegui falar com o Mail.",
+          isFailure: true
+        ),
+        nil
+      )
+    }
+
+    switch EvieMailTool.proposal(from: call, accounts: accounts, known: known) {
+    case .failure(let reason):
+      return (
+        EvieToolResult(
+          callID: call.id, name: call.name, content: reason.message, isFailure: true
+        ),
+        nil
+      )
+
+    case .success(let proposal):
+      return (
+        EvieToolResult(
+          callID: call.id,
+          name: call.name,
+          content: """
+            E-mail escrito e mostrado ao Matheus: para \
+            \(proposal.recipients.joined(separator: ", ")), de \(proposal.sender), \
+            assunto "\(proposal.subject)". NADA foi enviado — só sai se ele \
+            apertar o botão. Não diga que já mandou; diga que o e-mail está aí \
+            esperando ele conferir.
             """
         ),
         proposal
