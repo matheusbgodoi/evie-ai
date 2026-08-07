@@ -222,6 +222,7 @@ final class AppCoordinator: NSObject {
     // Declared unconditionally: the tool is always offered, so the persona may
     // always tell her to use it.
     capabilities.calculates = true
+    capabilities.readsMailAndCalendar = preferences.mailAndCalendarEnabled
     capabilities.searchesTheWeb = preferences.webSearchEnabled
     capabilities.speaksAnswers =
       preferences.voice.speechOutputEnabled && !EvieSpeechOutput.availableVoices().isEmpty

@@ -21,6 +21,10 @@ public struct EvieCapabilitySnapshot: Hashable, Sendable {
   /// loop actually offers it: telling her to send every sum to a function that
   /// was never declared turns an easy question into a rejected request.
   public var calculates: Bool
+  /// She can read the Mail and Calendar apps. Off unless the person switched it
+  /// on, and the persona has to be told, or she holds three tools she has never
+  /// heard of — which is how a switch turns on a capability nobody uses.
+  public var readsMailAndCalendar: Bool
 
   public init(
     listensToSpeech: Bool = false,
@@ -30,7 +34,8 @@ public struct EvieCapabilitySnapshot: Hashable, Sendable {
     seesImages: Bool = false,
     searchesTheWeb: Bool = false,
     hasSemanticMemory: Bool = false,
-    calculates: Bool = false
+    calculates: Bool = false,
+    readsMailAndCalendar: Bool = false
   ) {
     self.listensToSpeech = listensToSpeech
     self.speaksAnswers = speaksAnswers
@@ -40,6 +45,7 @@ public struct EvieCapabilitySnapshot: Hashable, Sendable {
     self.searchesTheWeb = searchesTheWeb
     self.hasSemanticMemory = hasSemanticMemory
     self.calculates = calculates
+    self.readsMailAndCalendar = readsMailAndCalendar
   }
 
   public static let textOnly = EvieCapabilitySnapshot()
@@ -52,7 +58,8 @@ public struct EvieCapabilitySnapshot: Hashable, Sendable {
     seesImages: true,
     searchesTheWeb: true,
     hasSemanticMemory: true,
-    calculates: true
+    calculates: true,
+    readsMailAndCalendar: true
   )
 }
 
@@ -274,6 +281,21 @@ extension EviePersona {
       available.append("Você pode consultar a web e deve citar de onde veio cada informação.")
     } else {
       unavailable.append("consultar a web")
+    }
+
+    // Said in both directions, and the negative half is the important one: asked
+    // to schedule something without it, she searched the notes for a meeting
+    // that did not exist and reported not finding it — an answer to a question
+    // nobody asked. Knowing she cannot is what lets her say so.
+    if capabilities.readsMailAndCalendar {
+      available.append(
+        "Você pode ler o Mail e o Calendário deste Mac com read_mail, search_mail e "
+          + "read_calendar. Só ler: você não envia, não apaga, não marca como lida e "
+          + "não cria compromisso. Se ele pedir para marcar ou enviar algo, diga que "
+          + "você só consegue ler."
+      )
+    } else {
+      unavailable.append("ler o Mail ou a agenda")
     }
 
     // Only ever announced, never denied. "Você não consegue calcular" would be
