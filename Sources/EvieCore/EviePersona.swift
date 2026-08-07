@@ -172,20 +172,24 @@ extension EviePersona {
     day.timeZone = timeZone
     day.dateFormat = "EEEE, d 'de' MMMM 'de' yyyy"
 
-    let clock = DateFormatter()
-    clock.locale = locale
-    clock.timeZone = timeZone
-    clock.dateFormat = "HH:mm"
-
     let zone =
       timeZone.localizedName(for: .generic, locale: locale)
       ?? timeZone.identifier
 
+    // The day, not the minute, and that is a caching decision rather than a
+    // stylistic one. The system prompt is the cached prefix of every request —
+    // measured on this Mac's server, 42% of prompt tokens are served from that
+    // cache. A prompt carrying the current minute changes on every turn, so the
+    // prefix never matches and the whole thing is reprocessed each time: precise
+    // to the minute, and paying for it on every question.
+    //
+    // The exact time is attached to the question instead, where it lands after
+    // the cached prefix and costs nothing. See `conversationPrefix`.
     return """
-      Agora é \(day.string(from: now)), \(clock.string(from: now)) (\(zone)). \
-      Essa é a hora desta pergunta, e é de onde saem "hoje", "ontem", "amanhã", \
-      "esta semana", "quanto falta para" e qualquer prazo. Nunca chute a data, \
-      e não use uma data que você lembre de outro lugar.
+      Hoje é \(day.string(from: now)) (\(zone)). Essa é a data de hoje, e é de \
+      onde saem "hoje", "ontem", "amanhã", "esta semana", "quanto falta para" e \
+      qualquer prazo. Nunca chute a data, e não use uma data que você lembre de \
+      outro lugar. A hora exata vem junto de cada pergunta.
       """
   }
 

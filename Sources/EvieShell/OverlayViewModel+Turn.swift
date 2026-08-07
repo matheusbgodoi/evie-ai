@@ -617,10 +617,27 @@ extension OverlayViewModel {
     }
   }
 
+  /// The moment a question was asked, in words she can read.
+  ///
+  /// Attached to the question rather than kept in the system prompt. It is the
+  /// answer to "que horas são" without a tool call, and to "há quanto tempo"
+  /// across a long conversation, since each turn carries the time it was asked.
+  static func timestamp(_ now: Date = Date()) -> String {
+    let formatter = DateFormatter()
+    formatter.locale = Locale(identifier: "pt_BR")
+    formatter.dateFormat = "EEEE, d 'de' MMMM 'de' yyyy, HH:mm"
+    return formatter.string(from: now)
+  }
+
   func conversationPrefix(
     adding userMessage: ChatMessage,
     evidence: ChatMessage? = nil
   ) -> [ChatMessage] {
+    // The day may have turned over since this conversation started. Rebuilding
+    // costs a string comparison — `refreshSystemPrompt` returns early when the
+    // text is unchanged — and the prompt now carries only the date, so it is
+    // unchanged for a whole day and the cached prefix survives.
+    refreshSystemPrompt()
     var prefix = conversation
     let characterBudget = max(
       8_000,
@@ -645,9 +662,19 @@ extension OverlayViewModel {
       prefix.insert(ChatMessage(role: .system, content: guidance), at: position)
     }
 
+    // The exact time rides with the question rather than sitting in the system
+    // prompt. Up there it would change every minute and break the cached prefix
+    // on every turn; down here it lands after everything cached, where the tokens
+    // were going to be new anyway. Earlier turns keep the time they were asked
+    // at, which is both true and what keeps the prefix stable.
+    let asked = ChatMessage(
+      role: .user,
+      content: "[\(Self.timestamp())] \(userMessage.content)"
+    )
+
     // Evidence goes immediately before the question so the model reads the
     // document, then what is being asked about it.
-    return prefix + [evidence, userMessage].compactMap { $0 }
+    return prefix + [evidence, asked].compactMap { $0 }
   }
 
   /// Consumes the pending attachments into one message, bounded so a long

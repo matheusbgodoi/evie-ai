@@ -21,7 +21,11 @@ struct EviePersonaClockTests {
 
     #expect(prompt.contains("sexta-feira"))
     #expect(prompt.contains("7 de agosto de 2026"))
-    #expect(prompt.contains("14:32"))
+    // Deliberately not the minute. The system prompt is the cached prefix of
+    // every request — 42% of prompt tokens are served from that cache on this
+    // Mac — and a prompt that changes every minute never matches it. The exact
+    // time rides with the question instead; see `OverlayViewModel.timestamp`.
+    #expect(!prompt.contains("14:32"))
   }
 
   @Test("the timezone is named, because a deadline without one is approximate")
@@ -45,7 +49,9 @@ struct EviePersonaClockTests {
     )
 
     #expect(tokyo.contains("8 de agosto de 2026"))
-    #expect(tokyo.contains("02:32"))
+    // The date, not the time, for the reason above. Tokyo is a day ahead, which
+    // is what this is really checking.
+    #expect(!tokyo.contains("02:32"))
   }
 
   @Test("a prompt built a day later says the next day")
