@@ -210,9 +210,37 @@ final class EvieVaultIndex: ObservableObject {
     return false
   }
 
-  nonisolated static func collect(from roots: [EvieFileRoot]) -> [EvieVaultPassage] {
+  /// The folders worth reading as notes.
+  ///
+  /// "Which folders may she read files from" and "which folders are her notes"
+  /// are different questions, and conflating them is what broke this. Granting
+  /// the home folder is a reasonable answer to the first and a terrible answer
+  /// to the second: the first pruned build filled its entire 12,000-passage
+  /// budget on `Documents` and this project's own source tree, and stopped
+  /// before it ever reached the Obsidian vault — so the notes the whole feature
+  /// exists for were the one thing missing from it.
+  ///
+  /// When a vault is present, it *is* the notes and nothing else is. Only when
+  /// there is none does the granted folder stand in, pruned.
+  nonisolated static func noteRoots(from roots: [EvieFileRoot]) -> [EvieFileRoot] {
+    let vaults = roots.compactMap { root -> EvieFileRoot? in
+      for candidate in EvieRootsViewModel.obsidianVaultURLs
+      where candidate.path.hasPrefix(root.url.path) {
+        return EvieFileRoot(
+          displayName: candidate.lastPathComponent,
+          path: candidate.path,
+          bookmark: root.bookmark
+        )
+      }
+      return nil
+    }
+    return vaults.isEmpty ? roots : vaults
+  }
+
+  nonisolated static func collect(from granted: [EvieFileRoot]) -> [EvieVaultPassage] {
     var passages: [EvieVaultPassage] = []
     var visitedDirectories = 0
+    let roots = noteRoots(from: granted)
 
     for root in roots {
       guard

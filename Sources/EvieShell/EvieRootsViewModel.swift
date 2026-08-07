@@ -181,7 +181,10 @@ final class EvieRootsViewModel: ObservableObject {
   /// read and the hardest one to find in an open panel: it lives inside the
   /// iCloud container, several levels below a folder called
   /// `Mobile Documents` that Finder does not show under that name.
-  static var obsidianVaultURLs: [URL] {
+  // `nonisolated` so the note index can ask the same question off the main
+  // actor. It reads the file system and nothing else — there is no state here
+  // for the isolation to protect.
+  nonisolated static var obsidianVaultURLs: [URL] {
     let home = FileManager.default.homeDirectoryForCurrentUser
     let containers = [
       home.appendingPathComponent(
@@ -195,15 +198,26 @@ final class EvieRootsViewModel: ObservableObject {
     var found: [URL] = []
     for container in containers {
       guard
+        // No `.skipsHiddenFiles`, and this is the second time that option has
+        // hidden this exact vault. `~/Library` carries the hidden flag, and the
+        // option discards everything beneath a hidden ancestor — so listing
+        // `Library/Mobile Documents/iCloud~md~obsidian/Documents`, where the
+        // iCloud vault lives, returns nothing at all. Measured: 0 entries with
+        // the option, 2 without. `EvieVaultIndex.collect` carries the same
+        // comment for the same reason; the fix did not travel from one to the
+        // other because nobody looked here.
+        //
+        // The dotfiles the option was there to skip are skipped below instead,
+        // by name, which is what was actually wanted.
         let entries = try? FileManager.default.contentsOfDirectory(
           at: container,
           includingPropertiesForKeys: [.isDirectoryKey],
-          options: [.skipsHiddenFiles]
+          options: []
         )
       else {
         continue
       }
-      for entry in entries {
+      for entry in entries where !entry.lastPathComponent.hasPrefix(".") {
         // A vault is a folder with an `.obsidian` settings directory in it.
         // Checking for that rather than for a name means a vault called anything
         // is found and a folder merely called "Obsidian" is not.
