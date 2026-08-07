@@ -96,22 +96,12 @@ public enum EviePlanCommand {
 
   /// The question behind `/plano …`, or nil when this is not that command.
   ///
-  /// Anchored at the start and requiring a boundary after the word, so
-  /// "/planos de saúde" and "meu /plano é esse" are ordinary questions.
+  /// Read by the same parser as `/buscar` and `/web`, rather than by a second
+  /// copy of it. "Is this a command" had two implementations that agreed today,
+  /// which only means the next fix to one of them — a boundary rule, an accent,
+  /// a different kind of space — would have left the other one wrong.
   public static func question(in input: String) -> String? {
-    let trimmed = input.trimmingCharacters(in: .whitespacesAndNewlines)
-    guard trimmed.lowercased().hasPrefix(name) else {
-      return nil
-    }
-    let rest = String(trimmed.dropFirst(name.count))
-    guard let first = rest.first else {
-      // `/plano` alone is the command with nothing to plan.
-      return ""
-    }
-    guard first.isWhitespace else {
-      return nil
-    }
-    return rest.trimmingCharacters(in: .whitespacesAndNewlines)
+    EvieSlashCommand.argument(after: name, in: input)
   }
 }
 

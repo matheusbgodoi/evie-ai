@@ -51,23 +51,10 @@ struct SettingsView: View {
       .tabItem { Label("Avançado", systemImage: "gearshape.2") }
     }
     .frame(minWidth: 680, minHeight: 600)
-    .safeAreaInset(edge: .bottom) {
-      if let feedback = preferencesViewModel.feedback {
-        Label(
-          feedback.message,
-          systemImage: feedback.isError
-            ? "exclamationmark.triangle.fill"
-            : "checkmark.circle.fill"
-        )
-        .font(.callout)
-        .symbolRenderingMode(.hierarchical)
-        .foregroundStyle(feedback.isError ? .red : .secondary)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(.horizontal, 16)
-        .padding(.vertical, 9)
-        .background(.bar)
-      }
-    }
+    .settingsFeedback(
+      preferencesViewModel.feedback?.message,
+      isError: preferencesViewModel.feedback?.isError == true
+    )
   }
 }
 

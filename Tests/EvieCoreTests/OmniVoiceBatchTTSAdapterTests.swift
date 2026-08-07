@@ -89,6 +89,7 @@ struct OmniVoiceBatchTTSAdapterTests {
   func timeout() async throws {
     let fixture = try Fixture(script: Self.longRunningScript)
     defer { fixture.remove() }
+    try fixture.warmUpExecutable()
     let adapter = try OmniVoiceBatchTTSAdapter(
       configuration: fixture.configuration(timeout: 0.5, gracePeriod: 0.05)
     )
@@ -365,6 +366,56 @@ private final class Fixture: @unchecked Sendable {
       at: temporaryRootURL,
       includingPropertiesForKeys: [.isDirectoryKey]
     )
+  }
+
+  /// Launches the script once and stops it again, before anything is timed.
+  ///
+  /// macOS charges the first execution of a file it has never seen a provenance
+  /// check that the second execution of the same file does not pay. Measured on
+  /// this machine, 200 launches of freshly written copies of the long-running
+  /// script took 29 ms to reach the line that records the descendant's pid at
+  /// the median, 324 ms at the 99th percentile and 450 ms at the worst, while
+  /// 200 launches of one already-executed file never exceeded 41 ms. The timeout
+  /// test gives the child 500 ms before killing its process group, so that tail
+  /// fell on the wrong side of the deadline in about two runs per hundred: the
+  /// script died before writing the pid file and the test failed reading it,
+  /// which looked like a flaky adapter and was only a cold file. Paying the
+  /// check before the clock starts puts the deadline back on the timeout.
+  func warmUpExecutable() throws {
+    let directory = rootURL.appendingPathComponent("warmup", isDirectory: true)
+    try FileManager.default.createDirectory(
+      at: directory,
+      withIntermediateDirectories: false,
+      attributes: [.posixPermissions: NSNumber(value: 0o700)]
+    )
+    let process = Process()
+    process.executableURL = executableURL
+    process.arguments = [
+      "--model", directory.path,
+      "--test_list", "/dev/stdin",
+      "--res_dir", directory.path,
+      "--nj_per_gpu", "1",
+      "--batch_size", "1",
+      "--warmup", "0",
+      "--num_step", "32",
+    ]
+    process.standardInput = FileHandle.nullDevice
+    process.standardOutput = FileHandle.nullDevice
+    process.standardError = FileHandle.nullDevice
+    try process.run()
+
+    // Waiting for the pid file rather than for the launch, because the cost
+    // being paid here covers the whole path the timed run has to walk: the
+    // exec, the shell, and the fork of the descendant.
+    let pidFileURL = directory.appendingPathComponent("child.pid", isDirectory: false)
+    for _ in 0..<200 {
+      if FileManager.default.fileExists(atPath: pidFileURL.path) {
+        break
+      }
+      Thread.sleep(forTimeInterval: 0.005)
+    }
+    process.terminate()
+    process.waitUntilExit()
   }
 
   func recordedChildIdentifier() async throws -> Int32 {
