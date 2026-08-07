@@ -30,6 +30,14 @@ public struct EviePreferences: Codable, Hashable, Sendable {
   /// construction — the inference client refuses a non-loopback address — so
   /// this is stated plainly in the interface rather than made convenient.
   public var webSearchEnabled: Bool
+  /// Whether Evie may read the Mail and Calendar apps.
+  ///
+  /// Off by default, for the same reason web search is: reading someone's mail
+  /// is not a thing to switch on for them. Nothing leaves the machine here —
+  /// both apps are on this disk — but the inbox is the one local source a
+  /// stranger can write into, and it is the most personal thing Evie can be
+  /// pointed at. Turning it on is a decision, not a default.
+  public var mailAndCalendarEnabled: Bool
 
   public init(
     appearance: EvieAppearancePreferences = EvieAppearancePreferences(),
@@ -37,7 +45,8 @@ public struct EviePreferences: Codable, Hashable, Sendable {
     voice: EvieVoicePreferences = EvieVoicePreferences(),
     fileChangesEnabled: Bool = false,
     autoApproveChanges: Bool = false,
-    webSearchEnabled: Bool = false
+    webSearchEnabled: Bool = false,
+    mailAndCalendarEnabled: Bool = false
   ) {
     self.appearance = appearance
     self.shortcuts = shortcuts
@@ -45,8 +54,13 @@ public struct EviePreferences: Codable, Hashable, Sendable {
     self.fileChangesEnabled = fileChangesEnabled
     self.autoApproveChanges = autoApproveChanges
     self.webSearchEnabled = webSearchEnabled
+    self.mailAndCalendarEnabled = mailAndCalendarEnabled
   }
 
+  /// Written out by hand rather than left to `convertFromSnakeCase`, for the
+  /// reason spelled out at `EvieVoicePreferences.CodingKeys`: Foundation's two
+  /// conversions are not inverses around an acronym, and the failure is silent —
+  /// a setting that is simply forgotten on every launch.
   enum CodingKeys: String, CodingKey {
     case appearance
     case shortcuts
@@ -54,6 +68,7 @@ public struct EviePreferences: Codable, Hashable, Sendable {
     case fileChangesEnabled = "file_changes_enabled"
     case autoApproveChanges = "auto_approve_changes"
     case webSearchEnabled = "web_search_enabled"
+    case mailAndCalendarEnabled = "mail_and_calendar_enabled"
   }
 
   /// Every field optional, for the same reason as the sections below: a missing
@@ -75,6 +90,8 @@ public struct EviePreferences: Codable, Hashable, Sendable {
       try container.decodeIfPresent(Bool.self, forKey: .autoApproveChanges) ?? false
     webSearchEnabled =
       try container.decodeIfPresent(Bool.self, forKey: .webSearchEnabled) ?? false
+    mailAndCalendarEnabled =
+      try container.decodeIfPresent(Bool.self, forKey: .mailAndCalendarEnabled) ?? false
   }
 
   /// Turning changes off must also clear the bypass, or the file keeps a switch
