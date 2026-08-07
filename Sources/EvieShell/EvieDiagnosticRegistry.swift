@@ -1,4 +1,5 @@
 import AppKit
+import EvieCore
 import Foundation
 
 /// Every diagnostic flag the shell answers to.
@@ -271,6 +272,41 @@ enum EvieDiagnosticRegistry {
       requiredArguments: 1
     ) { arguments in
       await EvieDiagnostics.ragCheck(folder: arguments.url(), questions: arguments.values(from: 1))
+    },
+
+    // The flag every scheduled job passes back. `launchd` wakes this bundle,
+    // this runs the one prompt, the answer goes to the history and to a banner,
+    // and the process quits — nothing of Evie's is alive in between.
+    //
+    // Registered here rather than handled apart from the diagnostics because it
+    // is the same shape: one flag, one bounded thing, then exit. It also keeps
+    // the argument written into every generated plist documented in `--help`.
+    EvieDiagnostic.terminating(
+      flag: EvieScheduleAgent.flag,
+      usage: "\(EvieScheduleAgent.flag) <id>",
+      summary: "roda um agendamento agora — é isto que o launchd chama",
+      requiredArguments: 1
+    ) { arguments in
+      await EvieDiagnostics.runSchedule(arguments.value())
+    },
+
+    // Installs a real job for the next minute and waits for it. A scheduler that
+    // was never watched scheduling something is not a scheduler anybody has
+    // reason to believe.
+    EvieDiagnostic.terminating(
+      flag: "--schedule-check",
+      summary: "agenda algo para daqui a um minuto e espera o launchd disparar"
+    ) { _ in
+      await EvieDiagnostics.scheduleCheck()
+    },
+
+    // Says what is scheduled and whether launchd is actually holding it, which
+    // are two different questions that look the same from the settings window.
+    EvieDiagnostic.terminating(
+      flag: "--schedules-check",
+      summary: "lista os agendamentos e o que o launchd tem carregado"
+    ) { _ in
+      await EvieDiagnostics.schedulesCheck()
     },
 
     // Acted on by the coordinator once the application is up, not here — the
