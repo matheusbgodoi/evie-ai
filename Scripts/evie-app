@@ -140,7 +140,7 @@ function write_info_plist() {
   <key>NSDownloadsFolderUsageDescription</key>
   <string>A Evie lê a pasta Downloads apenas quando você autorizar.</string>
   <key>NSAppleEventsUsageDescription</key>
-  <string>A Evie lê o Mail e o Calendário deste Mac: remetente, assunto, data e o começo do texto das mensagens, e seus compromissos entre duas datas. Ela só lê — não envia, não apaga, não marca como lida e não cria compromisso.</string>
+  <string>A Evie lê o Mail e o Calendário deste Mac: remetente, assunto, data e o começo do texto das mensagens, e seus compromissos entre duas datas. Do Mail ela só lê — não envia, não apaga e não marca como lida. Na agenda ela pode criar um compromisso, e só depois de você confirmar num botão.</string>
 </dict>
 </plist>
 PLIST
