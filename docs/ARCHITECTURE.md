@@ -2,8 +2,9 @@
 
 Status: the target architecture below is still the target. What is built is the
 native shell with a direct loopback client, an agent loop with read-only tools and
-two proposing writers — one for files, one for calendar events, neither of which
-performs anything — retrieval, voice in both directions, vision through the
+three proposing writers — one for files, one for calendar events, one for
+outgoing mail, none of which performs anything — retrieval, voice in both
+directions, vision through the
 system daemon, typed commands, and a self-update path. The `evied` supervisor does
 not exist; the application composition root is doing its job for now.
 
@@ -87,16 +88,30 @@ than leaving as an out-of-date boundary:
 - the application now starts a process — the voice engine, and only when a trained
   voice is asked for;
 - it now executes tools, in `EvieAgentLoop`, outside the transport;
-- two of those tools propose — a filesystem change, and a calendar event — which
-  a person then approves.
+- three of those tools propose — a filesystem change, a calendar event, and an
+  outgoing message — which a person then approves.
 
 What has not changed is the invariant those abstinences were protecting: no tool
 the model can call changes anything. `propose_change` records a proposal and
 returns a result saying plainly that nothing happened. `propose_event`, added in
 `383a92c`, has the same shape and is enforced by a stronger structure: creating
 the event is `EvieCalendarWriting`, a protocol `EvieAgentLoop` does not hold, so
-there is no path from a tool call to the Calendar app at all. Prompt injection
-reaches a card, not a filesystem and not an agenda.
+there is no path from a tool call to the Calendar app at all.
+
+`propose_mail`, added in `6dade94`, is the third and the one that reaches
+somebody other than the owner. It has the same shape and a **third** protocol:
+`EvieMailSending`, carrying `sendMail` and `saveMailDraft`, which the loop does
+not hold and cannot be given — the stub its own tests run against has no sending
+function to offer. The tool validates recipients, refuses any address the
+conversation does not contain, resolves the account the message would leave from,
+and draws a card listing every recipient in full with the whole body; the two
+writing buttons are the only callers, they re-read the Mail and agenda switch at
+the press, and there is no auto-approve path for mail at all. See
+`docs/SECURITY.md`, [ADR 0010](adr/0010-refuse-unseen-mail-recipients.md) and
+[ADR 0011](adr/0011-draft-beside-send.md).
+
+Prompt injection reaches a card, not a filesystem, not an agenda, and not the
+wire.
 
 **The loop no longer withdraws its tools on the last pass.** It used to, so the
 model would have to produce words, and this server rejects a tool call naming a
@@ -160,7 +175,7 @@ system frameworks, and every process Evie starts.
 | Commands | `EvieCommand`, `EvieSearchCommands`, `EviePlan`, `EviePlanPrompts` |
 | Retrieval and grounding | `EvieVaultRetriever`, `EvieVaultPassage`, `EviePassageRanker`, `EvieQueryTerms`, `EvieGrounding`, `EvieAnswerProvenance`, `EvieWebSearch`, `EvieWebPassages` |
 | Files | `EvieRootRegistry`, `EvieFileToolbox`, `EvieScopedFileReader`, `EvieDocumentReader`, `EvieFileWriter`, `EvieFileChange`, `EvieChangeIntent` |
-| Mail and calendar | `EvieMailCalendar`, `EvieAppleScripts`, `EvieMailCalendarTool`, `EvieMailMessage`, `EvieCalendarEvent`, `EvieCalendarEventProposal`, `EvieCalendarEventTool` |
+| Mail and calendar | `EvieMailCalendar`, `EvieAppleScripts`, `EvieMailCalendarTool`, `EvieMailMessage`, `EvieCalendarEvent`, `EvieCalendarEventProposal`, `EvieCalendarEventTool`, `EvieMailProposal`, `EvieMailTool`, `EvieMailSending` |
 | Arithmetic | `EvieCalculator`, `EvieCalculatorTool` |
 | Schedules | `EvieSchedule`, `EvieScheduleTrigger`, `EvieScheduleAgent`, `EviePropertyList` |
 | Knowledge and identity | `EvieMemory`, `EvieSkill`, `EviePersona`, `EvieCapabilityContracts` |

@@ -2055,3 +2055,161 @@ one is a trap this repository had already documented and then walked into anyway
   created against his own Calendar proves the script, not the card that asks
   first. That belongs to `QA-006`, with the "Mail e agenda" and "Agendamentos"
   panes.
+
+## 2026-08-07 — `QA-006` passed, in his words
+
+- Commit: `66d52ad`. Closes the line immediately above: the confirmation card has
+  now been seen and used by the person it was built for.
+- He booked a real appointment through it — "ela cadastrou pra hoje call cluemed
+  meio dia perfeitamente" — and accepted the whole of what he had been using:
+  "pra mim está tudo aprovado". Recorded as his words rather than paraphrased,
+  because a pass is a person's judgement and not a measurement anybody else can
+  reproduce; writing it as though it were the second would be the false precision
+  this repository spends its comments avoiding.
+- The whole path was exercised rather than the script alone — proposal, card,
+  press, appointment where the card said it would be.
+- Deliberately not covered: the wake phrase, which is off and whose end-to-end
+  path through the energy gate was never run, and the Automation consent prompt,
+  which has still never been observed because every terminal used to test it
+  already held the grant.
+- `REL-001` becomes the only remaining blocker.
+
+## 2026-08-07 — what a question costs in heat, not only in memory
+
+- Commit: `553c0ca`. Touched `README.md`, `docs/RESOURCE_BUDGET.md`, and added
+  `--energy-check` to the diagnostics registry.
+- It started as a question about a fan. It was not her: three Adobe processes
+  were using more than two cores between them while her server sat at 0.0%. A
+  snapshot is not an answer, so the measurement was taken properly.
+- **The thing every earlier measurement missed is that a question is a GPU
+  cost.** The server holds about one core of ten while it answers, which is the
+  small half of the bill; the GPU goes from a fifth busy to three quarters busy,
+  and that is where the work is. Any account of what she costs that quotes only
+  %CPU understates it by a wide margin.
+- Ten questions back to back, which nobody had tried before — everything measured
+  until then was a single question, and a run of them is the case where a laptop
+  gets hot. It does not get hot: `pmset -g therm` reported no speed limit at any
+  point and the thermal state was nominal in every sample of every phase.
+  Throughput drifted down **7.3%** from the first five questions to the last
+  five, which is a drift and not a cliff.
+- What did change is memory. After one question the server settles back to
+  megabytes; after ten it was still holding **1.1 GB** a minute later, and the run
+  ended before it finished releasing. Written down as an open question rather
+  than rounded off.
+- **No watts anywhere, and said out loud rather than left as a silence.**
+  `powermetrics` needs sudo, and on mains power the battery reports zero current,
+  so there is no honest wattage for this machine while it is plugged in. The
+  adapter's 68 W is a rating, not a draw. Nothing was unplugged to find out,
+  because the machine was in use by its owner. GPU utilisation is the proxy, and
+  the four things this Mac will not report are listed instead of omitted.
+- `--energy-check` makes it repeatable instead of a one-off: it reads the GPU from
+  the IO registry, the thermal state from `ProcessInfo`, and the battery current,
+  and prints the absence of a draw figure as an absence rather than as "0 W" —
+  the same reason `ProcessCost` refuses to report `ri_billed_energy`. Run idle and
+  again while generating, it reproduced the sampler's finding independently:
+  **19.5% GPU to 79.0%**, nominal throughout.
+- Conditions are attached to every number, including the inconvenient one: Adobe,
+  Chrome and a Terminal were running the whole time. That is not a clean room and
+  deliberately not one — it is the machine as he uses it. For scale, over the same
+  95 seconds Adobe Creative Cloud spent two and a half times the CPU Evie did, and
+  it spent it in the idle windows too, at around 250% of a core, continuously, for
+  nothing anybody asked for.
+
+## 2026-08-07 — she can send an e-mail, once you have read who it goes to
+
+- Commits: `6dade94`, merged as `c470567`. Supersedes the mail half of "Read-only
+  by construction" in the 2026-08-06 entry, and the sentence in the entry above
+  saying mail was untouched. Both were true when they were written.
+- Sending had been refused until this point because it is irreversible and it
+  reaches other people, unlike an event that is deleted in two clicks. The owner
+  asked for it with the condition that made it buildable: the same confirmation
+  card the calendar already uses.
+- **`propose_mail` sends nothing.** It validates the addresses, resolves which
+  account the message would leave from, and records a proposal the shell draws as
+  a card. Sending lives on a **third** protocol, `EvieMailSending` — `sendMail`
+  and `saveMailDraft` — which `EvieAgentLoop` does not hold and cannot be given:
+  the stub the loop is tested against has no sending function to offer, so no
+  test can make the loop send even deliberately. There is no auto-approve path
+  for mail, ever, including when file auto-approval is on, and the buttons re-read
+  `mailAndCalendarEnabled` at the moment of the press.
+- **The card is written for the wrong recipient, not for a typo in the body.**
+  Every address in full, one per line, the account it leaves from, the subject,
+  and the whole text. Never a count, never a truncated list, never a summarised
+  body — approving a summary is approving something other than what leaves. No
+  timeout and no "remember this choice", which would be an auto-approve path
+  under another name. Ten recipients at most: past that it is a mailing list, and
+  a card with forty addresses is one nobody reads to the end.
+- **Three buttons rather than two.** "Salvar rascunho" files the same message in
+  Rascunhos, reaches nobody, and exists because "quase certo" is the common case
+  and Mail is where editing and sending belong — the safer half of the feature,
+  offered at no cost. "Não" writes nothing anywhere and leaves the composition on
+  screen as a collapsed card with a copy button, because discarding a card used to
+  take the text with it. Recorded as
+  [ADR 0011](adr/0011-draft-beside-send.md).
+- **An address that appears nowhere but in an assistant turn is refused rather
+  than flagged.** A model with no address for somebody produces one that looks
+  right, and a badge on the card would rely on him spotting which of three
+  plausible addresses is invented — which is precisely what people do not spot.
+  Recipients must appear whole in what he said, in what he let her remember, or in
+  something a tool returned; matching is exact-token, so `pedro@empresa.com.br`
+  does not vouch for `pedro@empresa.com`. Refusing costs one round trip, after
+  which the address is in the conversation and passes. Recorded as
+  [ADR 0010](adr/0010-refuse-unseen-mail-recipients.md).
+- **What that check does not catch, stated because it matters more than what it
+  does:** an address arriving inside a hostile message he was sent is in the
+  conversation and passes. It catches hallucination, not injection. The defence
+  against the second is the full recipient list on the card, which is the reason
+  nothing on that card is ever shortened.
+- Out of scope with reasons rather than as backlog. **Attachments**: a file
+  leaving this Mac is a different decision from a message he dictated, and there
+  is no parameter that could carry one. **Replies**: `read_mail` returns no
+  identifier that survives the turn, so a reply would mean guessing which message
+  was meant, and guessing wrong sends text to the wrong person — a new message to
+  the address she already showed does the same work.
+- **Inviting people to an event cannot be built here, and that is measured, not
+  policy.** On this Mac, 2026-08-07: `make new attendee` fails with error -1719
+  and leaves the attendee list empty, and passing attendees to `make new event`
+  fails with -1700; every attendee property is `access="r"` in Calendar's
+  `iCal.sdef`. So there is no invitation button, `add_attendee` and its
+  neighbours are on the refused list, and the refusal offers an e-mail with the
+  details of the event instead. Recorded in `docs/AUTOMATIONS.md` as well, because
+  a measured impossibility is worth more than a missing feature.
+- Two new scripts, held to the same rule as the rest: compiled-in constants, every
+  input travelling as `argv`. The suite asserts that the one that sends contains
+  `send msg` and the one that drafts does not, that neither mentions Calendar, and
+  runs the real `osascript` against both with three break-out payloads in the
+  subject, the body and the recipient — with a sending account that cannot exist,
+  so the script stops before composing anything.
+- Verified against the real Mail: one message, from `matheusgodoi.engbio@gmail.com`
+  to the same address, subject "Teste da Evie — envio de e-mail". It appears in
+  E-mails enviados and arrived in the inbox. A draft was saved and deleted the
+  same way. Nothing was sent to anybody else.
+- **`NSAppleEventsUsageDescription` said she never sends mail.** That is the string
+  macOS shows while asking for the Automation grant, so it is the worst place in
+  the project for a stale claim; it now says what the two buttons do.
+- Unproven: **the mail card has not been used by a person.** The message and the
+  draft prove the scripts, not the card that asks first — the same gap the event
+  card had until `QA-006`.
+
+## 2026-08-07 — the documents catch up with sending
+
+- Documentation only. Several documents still said she could not send, and
+  `docs/SECURITY.md` still said `createEvent` was the only writing path — the
+  worst kind of document to get wrong, because somebody reads it to decide what to
+  switch on.
+- Corrected: the "current boundary" list and the Apple Events section of
+  `docs/SECURITY.md`, which now records the third protocol, the recipient rule and
+  its limit, the three buttons, the absent auto-approve path, and the attendee
+  measurement; `docs/ARCHITECTURE.md`, which said two tools propose; `README.md`,
+  in the feature list, in "what she deliberately does not do", in "nothing leaves
+  the Mac", and in the limitation that still claimed the event card had never been
+  seen by a human — `QA-006` had already disproved that.
+- Three ADRs written: [0010](adr/0010-refuse-unseen-mail-recipients.md) for
+  refusing a recipient the conversation never contained rather than badging it,
+  [0011](adr/0011-draft-beside-send.md) for offering a draft beside send, and
+  [0012](adr/0012-fused-local-retrieval.md) for the retrieval decision `REL-001`
+  names — the last one recording a decision made in `a0e360f` that had lived only
+  in `docs/RAG.md`.
+- `CHANGELOG.md` gains a `1.0.0` section gathering what the first release
+  contains. It is not dated and `REL-001` is not marked done: cutting a release is
+  an action and it is the owner's.

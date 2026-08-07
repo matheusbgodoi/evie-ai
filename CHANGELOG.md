@@ -4,6 +4,50 @@ All notable changes to Evie are documented here. Dates use `YYYY-MM-DD`.
 
 ## [Unreleased]
 
+Nothing since the `1.0.0` section below was gathered.
+
+## [1.0.0] — not released yet
+
+This section gathers what the first release contains. It carries no date because
+no release has been cut: that is `REL-001`, it is an action rather than a
+document, and it is the owner's. What still has to be decided before it can
+happen is whether the release ships the application or the instructions to build
+it — the update mechanism argues for the application, since it installs only a
+bundle signed with the same key. Notarisation is not available for a self-signed
+identity, which constrains what that application can be
+(`docs/PROJECT_STATUS.md`).
+
+What it is, in one line each:
+
+- A local assistant in Brazilian Portuguese, one shortcut away, with nothing
+  leaving the Mac except web search, which is off by default, and an e-mail you
+  approved on a card.
+- She reads the folders you authorise — including your Obsidian vault — and finds
+  things by meaning as well as by the words you typed
+  ([ADR 0012](docs/adr/0012-fused-local-retrieval.md)).
+- She reads images and PDFs, and on macOS 27 describes what a picture shows.
+- She speaks and listens, with a macOS voice or one you trained.
+- She changes files only through a card you approve, and deleting always means the
+  Trash.
+- She reads your Mail and your agenda, off by default, through the Apple
+  applications that already hold your accounts — no OAuth application and no token
+  anywhere.
+- She books one calendar event and sends one e-mail, each behind a button, each
+  from a tool that performs nothing
+  ([ADR 0010](docs/adr/0010-refuse-unseen-mail-recipients.md),
+  [ADR 0011](docs/adr/0011-draft-beside-send.md)).
+- She calculates instead of guessing, and knows what day it is.
+- Typed commands — `/plano`, `/buscar`, `/web` — each saying what it costs.
+- Schedules held by `launchd`, with nothing of hers running between firings.
+- Memory only from cards you confirmed, and skills you write yourself.
+- An update path that installs a download only when its signature matches the
+  running copy.
+- Command-line diagnostics that declare themselves, including `--energy-check`.
+
+What it is not: notarized, a login item, or the owner of the model server's
+lifecycle. `docs/PROJECT_STATUS.md` is the list of everything this release does
+not do, and it is the document to trust over this one.
+
 ### Added
 
 - She reads your Mail and your agenda. Three reading tools against the Apple
@@ -47,6 +91,15 @@ All notable changes to Evie are documented here. Dates use `YYYY-MM-DD`.
   auto-approve on for file changes; the button re-checks the Mail and agenda
   switch at the moment you press it. Attachments were not built: a file leaving
   this Mac is a different decision from a message you dictated.
+- **What a question costs in heat is measured, and repeatable.** `--energy-check`
+  reads the GPU from the IO registry, the thermal state, and the battery current,
+  and prints the absence of a wattage as an absence rather than as "0 W" — there
+  is no honest wattage for this Mac on mains power. Idle to generating, it
+  reproduced the sampler's finding: 19.5% GPU to 79.0%, thermal state nominal
+  throughout. Ten questions back to back do not make the laptop hot: no speed
+  limit at any point, and throughput drifted 7.3% from the first five to the last
+  five. Memory is the open question — after ten questions the server was still
+  holding 1.1 GB a minute later (`docs/RESOURCE_BUDGET.md`).
 - **Inviting people to an event is not possible on this Mac, and she says so.**
   Measured on 2026-08-07: Calendar's `make new attendee` fails with error -1719
   and leaves the attendee list empty, and passing attendees to `make new event`

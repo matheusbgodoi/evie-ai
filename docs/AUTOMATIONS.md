@@ -995,6 +995,49 @@ than "clocks only".
 The Shortcuts adapter is still unwritten and the two open questions at the top of
 this document are still open.
 
+---
+
+## What was built — mail and calendar through AppleScript, 2026-08-07
+
+Option 4's AppleScript half, and the only part of the Apple integration that
+writes. Five tools behind one switch: `read_mail`, `search_mail` and
+`read_calendar` read; `propose_event` (`383a92c`) and `propose_mail` (`6dade94`)
+perform nothing and draw a card, and the event or the message happens when a
+person presses a button. The scripts are compiled-in constants and every input
+travels as `argv`; `docs/SECURITY.md` holds the boundary, the tests and what was
+verified against the real applications.
+
+Worth recording here because this is the document that says what the Apple apps
+can be driven to do: `send msg` works, and the message that left on 2026-08-07
+arrived. The mail side of AppleScript is not the weak part.
+
+### Calendar cannot send an invitation, and that is measured
+
+Anyone reading this document to plan an automation will eventually want "book it
+and invite them". It cannot be done from a script on this Mac, and the reason is
+in Calendar's own scripting dictionary rather than in anything Evie chose.
+
+Measured 2026-08-07:
+
+| Attempt | Result |
+|---|---|
+| `make new attendee … {email:…}` on an existing event | fails with **-1719**, and the attendee list stays empty |
+| `make new event … {attendees:{…}}` | fails with **-1700** |
+| Every property of the `attendee` class in `/System/Applications/Calendar.app/Contents/Resources/iCal.sdef` | `access="r"` — `display name`, `email`, `participation status` |
+
+An error is one thing and a read-only dictionary is another; together they are
+not a bug to work around but the interface saying no. So there is no invitation
+button anywhere in Evie, and `add_attendee`, `invite_attendee`, `send_invite` and
+`invite` sit on `EvieMailCalendarTool.refusedWritingNames` — refused with a
+sentence that names what does work, which is an e-mail carrying the details of
+the appointment through `propose_mail`.
+
+Written down because a measured impossibility is worth more than a missing
+feature: it stops the next person spending a day rediscovering it, and it stops
+anybody promising it in a roadmap. If it is ever wanted, what is established is
+only the negative: the route is not AppleScript. Whatever else might serve has
+not been tried and nothing here should be read as saying it would work.
+
 ## Appendix — what survives from the Node-RED design
 
 The engine changes; most of the thinking does not. Recorded here so it is not

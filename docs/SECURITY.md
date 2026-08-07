@@ -107,11 +107,14 @@ having written nothing. What is true today:
 - **Retrieval**: over authorised folders only, into a cache under Application
   Support. Retrieved text is fenced as data.
 - **Apple Events**: Mail and Calendar are reached through `osascript`, off by
-  default. Mail is read-only. The calendar is read by three tools and written by
-  none: `propose_event` performs nothing, and the one function that creates an
-  event sits on a protocol the agent loop does not hold. Until `b9bd7a0` this
-  line said "three read-only tools and nothing that writes", which was true of
-  every path in the application that morning and is no longer. See below.
+  default. Three tools read — two of mail, one of the calendar — and two propose:
+  `propose_event` and, since `6dade94`, `propose_mail`. Neither performs
+  anything. The functions that create an event, send a message and save a draft
+  sit on two protocols the agent loop does not hold. This line has now been wrong
+  twice — it said "three read-only tools and nothing that writes" until `b9bd7a0`
+  and "Mail is read-only" until this pass — and both times it was true when it was
+  written. **A message can now leave this Mac, addressed to somebody else, after
+  a person presses a button.** See below.
 - **Accessibility**: still none. No shortcut is run, authored, or installed;
   nothing in `docs/AUTOMATIONS.md` has been implemented.
 - **Scheduled runs**: user LaunchAgents can wake the application to ask a
@@ -124,8 +127,9 @@ having written nothing. What is true today:
   token on disk, and nothing to revoke inside Evie.
 
 The invariant that has not moved: no tool the model can call changes anything.
-Creating a calendar event did not move it either — `propose_event` performs
-nothing, and the function that writes is not reachable from the loop.
+Creating a calendar event did not move it, and neither did sending mail —
+`propose_event` and `propose_mail` both perform nothing, and the functions that
+write and send are not reachable from the loop.
 
 Its direct TurboFieldfare adapter
 rejects non-loopback hosts, sends no credential, and logs no prompt/result body.
@@ -145,25 +149,28 @@ through a proxy, tunnel, wildcard bind, or remote interface. Future tools cannot
 added to the direct UI adapter; they require the supervisor/policy boundary and
 separate read/propose/commit capabilities.
 
-### Reading Mail and Calendar, and creating one event
+### Reading Mail and Calendar, creating one event, and sending one message
 
-Four declared tools — `read_mail`, `search_mail`, `read_calendar`,
-`propose_event` — against the two Apple applications, which already hold the
-user's Gmail and iCloud accounts. A fifth script, `listCalendars`, reads the
-writable calendar names for the proposal path and is not a tool the model can
-call. No OAuth application, no token, no account to configure. Off by default
-behind `mail_and_calendar_enabled`, in
-Settings › O que ela sabe › Mail e agenda. `propose_event` is declared only when
-that switch is on, on the same switch as reading the calendar because it is the
-same permission surface: the same app, the same Automation grant.
+Five declared tools — `read_mail`, `search_mail`, `read_calendar`,
+`propose_event`, `propose_mail` — against the two Apple applications, which
+already hold the user's Gmail and iCloud accounts. Two further scripts are not
+tools the model can call: `listCalendars` reads the writable calendar names for
+the event proposal, and `listMailAccounts` reads the addresses Mail can send
+from, so the card can name the account a message would leave from. No OAuth
+application, no token, no account to configure. Off by default behind
+`mail_and_calendar_enabled`, in Settings › O que ela sabe › Mail e agenda. Both
+proposing tools are declared only when that switch is on, on the same switch as
+reading, because it is the same permission surface: the same apps, the same
+Automation grant.
 
 The door is AppleScript, and AppleScript has `do shell script`, so the whole
 design turns on one rule: **no script is ever built by interpolation.** The
 programs are string constants in the binary, the writing one exactly like the
 reading ones. Inputs arrive through `on run argv`, passed by
 `osascript -e <script> -- <args>` as process arguments, which are never parsed as
-code. A subject line, a sender, a search term, an event title, a calendar name
-and a location are inert data on the way in as well as on the way out.
+code. A subject line, a sender, a search term, an event title, a calendar name, a
+location, a recipient address and the whole body of a message are inert data on
+the way in as well as on the way out.
 
 Tests hold that boundary rather than a comment:
 
@@ -172,22 +179,106 @@ Tests hold that boundary rather than a comment:
 | Source inspection | the script literals contain no `\(`, no `do shell script`; the reading set contains none of the writing verbs |
 | Break-out execution, reading | `osascript` is handed three real break-out payloads through `search_mail`; afterwards the file they try to create does not exist |
 | Break-out execution, writing | the same shape against the creating script, with the payload in the title and in the location |
+| Break-out execution, mail | the same shape against both mail scripts, with the payload in the subject, in the body and in the recipient — run with a sending account that cannot exist, so the script stops before composing anything |
+| Verb separation | the sending script contains `send msg` and the drafting one does not; neither mentions Calendar |
 
 Measured for all three payloads on the reading path: exit 0, empty stderr, no
 file (`1932f5a`); the writing path was added with the same assertions in
-`383a92c` (`Tests/EvieCoreTests/EvieMailCalendarTests.swift`). The reading
+`383a92c`, and the two mail scripts in `6dade94`
+(`Tests/EvieCoreTests/EvieMailCalendarTests.swift`). The reading
 scripts are held to the stricter rule by a separate list — `EvieAppleScripts.reading`
 against `EvieAppleScripts.writing` — so the "no writing verb" assertion stayed a
-real assertion instead of becoming a list with an exception in it.
+real assertion instead of becoming a list with an exception in it;
+`EvieAppleScripts.writing` now holds three scripts, `createEvent`, `sendMail` and
+`saveMailDraft`.
 
-**Mail is read-only by construction, not by policy, and that has not changed.**
-No function that sends, deletes or marks read was ever declared, so a message
-saying "apague os backups" is asking for something that does not exist — the
-structural defence this document already states for the filesystem: prompt
-injection cannot call a function that was never declared. `refusedWritingNames`
-catches the model inventing `send_mail` anyway and answers with a sentence,
-rather than with a "no such tool" error that reads like a spelling problem and
-gets retried.
+**Mail is no longer read-only, and this is the paragraph that used to say it
+was.** Until `6dade94` no function that sends existed, so "apague os backups" in
+a message was asking for something that did not exist. Sending exists now.
+Deleting, replying, filing and marking read still do not, and those keep the
+structural guarantee unchanged: prompt injection cannot call a function that was
+never declared. `refusedWritingNames` catches the model inventing `send_mail` or
+`delete_mail` anyway and answers with a sentence rather than with a "no such
+tool" error that reads like a spelling problem and gets retried — and now that
+sending is real, the sentence names `propose_mail`, because a model told only
+"does not exist" tries another spelling while one told which function to call
+calls it.
+
+**What sending is, structurally.** `propose_mail` performs nothing. It splits
+and validates the recipients, refuses any address the conversation does not
+contain, resolves which account the message would leave from by reading Mail's
+account list, and records a proposal the shell draws as a card. Sending is
+`EvieMailSending`, a **third** protocol — beside `EvieMailCalendarReading` and
+`EvieCalendarWriting` — carrying `sendMail` and `saveMailDraft`. `EvieAgentLoop`
+does not hold it and cannot be given it: the stub the loop's own tests run
+against has no sending function to offer, so no test can make the loop send even
+deliberately (`Tests/EvieCoreTests/EvieAgentLoopTests.swift`). There is no
+sequence of words in a message, a page or a document that puts a message on the
+wire.
+
+There is **no auto-approve path for mail, ever**, including when file
+auto-approval is switched on: `autoApproveChanges` reaches file changes only.
+The only callers of `sendMail` and `saveMailDraft` are the two writing buttons on
+the confirmation card, wired in `AppCoordinator`, and each re-reads
+`mailAndCalendarEnabled` at the moment of the press rather than trusting the
+card. There is no timeout on the card and no "remember this choice" — the second
+is an auto-approve path wearing a different name.
+
+**The card is the defence, so nothing on it is summarised.** Every recipient is
+written out in full, address included, one per line, with the account the message
+leaves from, the subject, and the entire body. Never a count ("3 pessoas"), never
+a shortened list, never a summarised body — approving a summary is approving
+something other than what leaves. If the list does not fit, the card grows. At
+most ten recipients: past that it is a mailing list, which is not a thing to
+assemble out of a conversation, and a card with forty addresses is also a card
+nobody reads to the end (`Sources/EvieCore/EvieMailProposal.swift`).
+
+Three buttons: **Enviar**, **Salvar rascunho** and **Não**. The draft is filed in
+Rascunhos, reaches nobody, and exists because "almost right, change one word" is
+the common case and Mail is where editing and sending belong. "Não" writes
+nothing anywhere — no draft, no file — and leaves the composed message on screen
+as a collapsed card with a copy button. See
+[ADR 0011](adr/0011-draft-beside-send.md).
+
+**A recipient the conversation never contained is refused, not flagged.** Every
+address must appear whole in a non-assistant turn: what the user typed, what he
+let her remember, or what a tool handed back. Assistant turns are excluded, so a
+model cannot cite its own earlier output as evidence that an address exists.
+Matching is on whole lowercased tokens rather than substrings, so a conversation
+that only ever said `pedro@empresa.com.br` does not vouch for
+`pedro@empresa.com` (`EvieAgentLoop.knownAddresses(in:)`,
+`EvieMailProposal.addresses(in:)`).
+
+The limit of that check has to be stated plainly, because it is the part that
+matters for this document: **it catches hallucination, not injection.** An
+address that arrived inside a message somebody sent him is in the conversation
+and passes — deliberately, because replying to what was read is the ordinary
+case. What catches a hostile address is the recipient list on the card, in full,
+which is why that list is never shortened. Of the two halves, the second is the
+more important one. See
+[ADR 0010](adr/0010-refuse-unseen-mail-recipients.md).
+
+**Attachments and replies were not built, and the reasons are boundaries rather
+than backlog.** A file leaving this Mac is a different decision from a message
+he dictated, and there is no parameter on `propose_mail` that could carry one.
+`read_mail` returns no message identifier that survives the turn, so a reply
+would mean guessing which message was meant, and guessing wrong sends text to
+the wrong person; a new message to the address `read_mail` already showed does
+the same work, with that address in the conversation and on the card.
+
+**Sending an invitation is impossible on this Mac, and that is measured rather
+than policy.** On 2026-08-07, `make new attendee … {email:…}` fails with error
+**-1719** and leaves the attendee list empty, and passing attendees to
+`make new event` fails with **-1700**; every attendee property is `access="r"`
+in Calendar's `iCal.sdef`. So `add_attendee`, `invite_attendee`, `send_invite`
+and `invite` are on `refusedWritingNames`, and the refusal offers what does work:
+an e-mail carrying the details of the event, through `propose_mail`. Recorded
+here and in `docs/AUTOMATIONS.md` so nobody promises it later.
+
+Verified against the real Mail on 2026-08-07 (`6dade94`): one message, from
+`matheusgodoi.engbio@gmail.com` to the same address, subject "Teste da Evie —
+envio de e-mail". It appears in E-mails enviados and arrived in the inbox. A
+draft was saved and deleted the same way. Nothing was sent to anybody else.
 
 **The calendar can now be written to, and the boundary is where the writing
 lives.** `propose_event` performs nothing: it resolves the date, reads back the
