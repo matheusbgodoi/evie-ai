@@ -365,6 +365,62 @@ struct EvieAgentLoopTests {
     #expect(outcome.provenance.note.contains("erro"))
   }
 
+  /// The sum reaches her without her having asked for it. `EvieGrounding`
+  /// refuses to look arithmetic up — rightly — so this is the one kind of
+  /// evidence that has to arrive on a turn where nothing was searched.
+  @Test("a sum is calculated before the first completion, with nothing searched")
+  func groundsArithmeticWithoutSearching() async throws {
+    let client = ScriptedClient(turns: [.text("São 510.")])
+
+    _ = try await EvieAgentLoop().run(
+      messages: [ChatMessage(role: .user, content: "quanto é 15% de 3400?")],
+      roots: [],
+      client: client,
+      emit: { _ in }
+    )
+    let sent = await client.lastMessages
+
+    #expect(await client.callCount == 1)
+    #expect(sent.contains { $0.content.contains("15% * 3400 = 510") })
+    #expect(sent.allSatisfy { $0.role != .developer })
+  }
+
+  /// An attached file stops the search, because the subject is on the screen.
+  /// It does not stop a sum: he can ask what 15% of a number is while a picture
+  /// is open, and the calculation costs no I/O.
+  @Test("an attachment does not stop the arithmetic")
+  func groundsArithmeticEvenWithAnAttachment() async throws {
+    let client = ScriptedClient(turns: [.text("São 510.")])
+
+    _ = try await EvieAgentLoop().run(
+      messages: [ChatMessage(role: .user, content: "quanto é 15% de 3400?")],
+      roots: [],
+      client: client,
+      carriesAttachment: true,
+      emit: { _ in }
+    )
+    let sent = await client.lastMessages
+
+    #expect(sent.contains { $0.content.contains("15% * 3400 = 510") })
+  }
+
+  /// Nothing was consulted, so the label must not claim otherwise: a calculator
+  /// is not a source, and "usei suas anotações" under an answer she worked out
+  /// from the question would be false.
+  @Test("a calculated turn is still labelled as memory")
+  func arithmeticIsNotASource() async throws {
+    let client = ScriptedClient(turns: [.text("São 510.")])
+
+    let outcome = try await EvieAgentLoop().run(
+      messages: [ChatMessage(role: .user, content: "quanto é 15% de 3400?")],
+      roots: [],
+      client: client,
+      emit: { _ in }
+    )
+
+    #expect(outcome.provenance.usedOnlyItsOwnKnowledge)
+  }
+
   @Test("a turn that read the folders is labelled as such")
   func provenanceOfALocalAnswer() async throws {
     let client = ScriptedClient(turns: [

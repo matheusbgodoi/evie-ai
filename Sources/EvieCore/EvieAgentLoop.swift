@@ -137,16 +137,21 @@ public struct EvieAgentLoop: Sendable {
     // Looked up before the model is asked anything, so the order the user asked
     // for is a property of this code rather than a request the model can decline
     // — which, measured twice, it does.
-    if !carriesAttachment,
-      let question = messages.last(where: { $0.role == .user })?.content,
-      skipsNotes || EvieGrounding.needsLookup(question)
-    {
-      let grounding = await ground(
-        question: question,
-        roots: roots,
-        skipsNotes: skipsNotes,
-        emit: emit
-      )
+    if let question = messages.last(where: { $0.role == .user })?.content {
+      var grounding = EvieGroundingResult()
+      if !carriesAttachment, skipsNotes || EvieGrounding.needsLookup(question) {
+        grounding = await ground(
+          question: question,
+          roots: roots,
+          skipsNotes: skipsNotes,
+          emit: emit
+        )
+      }
+      // Arithmetic is grounded on every turn, including the ones the search
+      // above skipped: a sum is exactly what `EvieGrounding` refuses to look up,
+      // and an attached file does not stop the person asking what 15% of 3400
+      // is. It costs no I/O and no round trip, so there is nothing to weigh.
+      grounding.arithmeticFindings = EvieArithmeticGrounding.findings(for: question)
       if let message = grounding.message {
         conversation.append(message)
         if grounding.localFindings != nil {
