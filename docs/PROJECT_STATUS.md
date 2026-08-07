@@ -298,9 +298,12 @@ readiness only; they are not the Phase 1 performance suite.
 
 ## Known blockers
 
-- **`QA-006`: nothing visual has been formally accepted by the owner.** The
-  application is used daily and defects are reported from that use, which is not
-  the same thing as a pass. This is the first of the two release blockers.
+- ~~**`QA-006`: nothing visual has been formally accepted by the owner.**~~
+  **Passed 2026-08-07.** The owner used the event confirmation card against his
+  own calendar — "ela cadastrou pra hoje call cluemed meio dia perfeitamente" —
+  and accepted the whole of it: "pra mim está tudo aprovado". Recorded as his
+  words rather than paraphrased, because a pass is a person's judgement and not
+  a measurement anybody else can reproduce.
 - **`REL-001`: there is no release.** The mechanism to install one now exists and
   is tested; what is missing is a `1.0.0` section in the changelog, an ADR for the
   retrieval decision, and a decision on whether the release ships the app or the
@@ -361,15 +364,23 @@ readiness only; they are not the Phase 1 performance suite.
 
 Two things, in this order, and they are the two things between here and a release.
 
-**`QA-006` — the human pass.** Nothing has been formally accepted by eye. The
-overlay was rebuilt around a bounded card, the answer now scrolls inside it, the
-chevron was straightened twice, the settings panes gained forty-three help tags,
-the history window gained multi-select, export and thumbnails, and "O que ela
-sabe" gained two more panes — Mail e agenda, and Agendamentos. The event
-confirmation card joined them and has never been seen by a human at all: one
-event was created against the owner's own Calendar and deleted, which proves the
-script and not the card that asks first. All of it is unproven as a whole. This
-outranks every remaining feature.
+**`QA-006` — the human pass. Passed 2026-08-07.** The overlay rebuilt around a
+bounded card, the answer scrolling inside it, the chevron straightened twice, the
+forty-three help tags, the history window's multi-select and export and
+thumbnails, and the two panes added to "O que ela sabe" — Mail e agenda, and
+Agendamentos — were all in front of him as he used them, and each defect he found
+was fixed and re-shown.
+
+The event confirmation card was the last thing outstanding and is now the
+strongest evidence: he asked her to book a call, saw the card, pressed the
+button, and the appointment appeared where the card said it would. That is the
+whole path — proposal, card, press, result — exercised by the person it was built
+for, against his own calendar, rather than by a script against a throwaway event.
+
+What this does not cover, and should not be read as covering: the wake phrase
+(switched off, and the end-to-end check through the energy gate was never run),
+and the Automation consent prompt, which has still never been observed because
+every terminal used to test already held the grant.
 
 **`REL-001` — the first release.** What it needs: `QA-006` passed, an ADR for the
 retrieval decision, a `1.0.0` section in the changelog, and a decision on whether
