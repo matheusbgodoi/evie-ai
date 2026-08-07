@@ -491,7 +491,7 @@ extension EvieFileToolbox {
       return "Preciso de pelo menos duas letras para procurar."
     }
     let found = try scan(root: root, needle: needle, query: query)
-    if found.matches.isEmpty, let near = EvieNearestTerm.nearest(to: needle, in: found.read) {
+    if found.matches.isEmpty, let near = EvieNearestTerm.best(of: found.nearMisses) {
       // The term does not appear and something one letter away does. See
       // `EvieNearestTerm`: this is not a hypothetical typo, it is what the model
       // sends when it is asked about `cluemed`.
@@ -506,7 +506,9 @@ extension EvieFileToolbox {
   /// What one pass of the scan found, and the text it read looking.
   fileprivate struct ContentScan {
     var matches: [String] = []
-    var read: [String] = []
+    /// Words seen that are within one edit of what was asked for, counted as the
+    /// scan goes. Only these, never the text itself.
+    var nearMisses: [String: Int] = [:]
     var filesRead = 0
     var stoppedEarly = false
   }
@@ -573,9 +575,8 @@ extension EvieFileToolbox {
           continue
         }
         result.filesRead += 1
-        // Kept so a fruitless search can ask what it should have looked for.
-        // Bounded by the same file limit the scan already obeys.
-        result.read.append(entryPath + " " + excerpt.text)
+        EvieNearestTerm.accumulate(
+          from: excerpt.text, for: needle, into: &result.nearMisses)
 
         for line in Self.matchingLines(in: excerpt.text, needle: needle) {
           result.matches.append("\(entryPath): \(line)")

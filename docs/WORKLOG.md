@@ -2440,3 +2440,12 @@ nobody but the owner can fetch it.**
 - End to end the turn went from 45 s wrong to about 105 s right, the extra time
   being a second scan and a `read_file` — the fast version was the one that gave
   up. Ten tests added.
+
+- Follow-up the same day: the first version of the near-miss recovery kept the
+  full text of every file it scanned — up to 600 of them — so that a failed
+  search could look for what it should have asked. That is a cost paid on every
+  search, including the ones that worked, to serve the ones that did not. The
+  term being searched for is known before the scan starts, so the scan now counts
+  only the handful of words that could be within one edit of it and keeps no text
+  at all. Correctness unchanged; the successful-search path measured 64 s before
+  and after.

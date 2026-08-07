@@ -29,51 +29,61 @@ public enum EvieNearestTerm {
   /// a slow failed search.
   static let vocabularyLimit = 60_000
 
-  /// The most common word in `corpus` within one edit of `term`, or nil.
+  /// Tallies the words of `text` that are within one edit of `term`.
   ///
-  /// Candidates are filtered before any distance is computed — same first
-  /// letter, length within one — because edit distance over a whole vault's
-  /// vocabulary is the kind of thing that turns a 50 ms miss into a 5 s one.
-  public static func nearest(to term: String, in corpus: [String]) -> String? {
-    guard term.count >= minimumLength else {
-      return nil
+  /// The term being searched for is known before the search starts, so nothing
+  /// has to be kept in order to look for near misses afterwards — only the
+  /// handful of words that could be one. Candidates are filtered before any
+  /// distance is computed (same first letter, length within one), because edit
+  /// distance over a whole vault's vocabulary is what turns a 50 ms miss into a
+  /// 5 s one.
+  ///
+  /// An earlier version of this accumulated the full text of every file scanned
+  /// and only looked at it on failure. That is up to 600 files held in memory on
+  /// every search, including the searches that worked.
+  public static func accumulate(
+    from text: String,
+    for term: String,
+    into counts: inout [String: Int]
+  ) {
+    guard term.count >= minimumLength, let initial = term.first else {
+      return
     }
     let target = Array(term)
-    guard let initial = target.first else {
-      return nil
-    }
-
-    var counts: [String: Int] = [:]
-    var seen = 0
-    for text in corpus {
-      for token in text.lowercased().split(whereSeparator: { !$0.isLetter && !$0.isNumber }) {
-        seen += 1
-        if seen > vocabularyLimit {
-          break
-        }
-        guard token.first == initial,
-          abs(token.count - target.count) <= 1,
-          token.count >= minimumLength,
-          token != term.lowercased()
-        else {
-          continue
-        }
-        if isWithinOneEdit(Array(token), target) {
-          counts[String(token), default: 0] += 1
-        }
+    let lowered = term.lowercased()
+    for token in text.lowercased().split(whereSeparator: { !$0.isLetter && !$0.isNumber }) {
+      guard token.first == initial,
+        abs(token.count - target.count) <= 1,
+        token.count >= minimumLength,
+        token != lowered,
+        counts.count < vocabularyLimit
+      else {
+        continue
       }
-      if seen > vocabularyLimit {
-        break
+      if isWithinOneEdit(Array(token), target) {
+        counts[String(token), default: 0] += 1
       }
     }
+  }
 
-    // Most frequent wins, and ties break alphabetically so the result does not
-    // depend on the order the notes happened to be read in.
-    return
-      counts
+  /// The best of what `accumulate` gathered.
+  ///
+  /// Most frequent wins, and ties break alphabetically so the result does not
+  /// depend on the order the notes happened to be read in.
+  public static func best(of counts: [String: Int]) -> String? {
+    counts
       .sorted { $0.value == $1.value ? $0.key < $1.key : $0.value > $1.value }
       .first?
       .key
+  }
+
+  /// The most common word in `corpus` within one edit of `term`, or nil.
+  public static func nearest(to term: String, in corpus: [String]) -> String? {
+    var counts: [String: Int] = [:]
+    for text in corpus {
+      accumulate(from: text, for: term, into: &counts)
+    }
+    return best(of: counts)
   }
 
   /// Whether `a` becomes `b` with at most one insertion, deletion or
