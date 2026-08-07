@@ -96,10 +96,14 @@ final class EvieVaultIndex: ObservableObject {
     loadCache()
   }
 
+  /// The extension changed with the format, on purpose: a file called `.json`
+  /// that is not JSON is a trap for anybody who opens it, and keeping the two
+  /// names apart is what lets the loader recognise the old cache and convert it
+  /// rather than guess at it.
   static var defaultCacheURL: URL {
     EvieConfigurationLoader.defaultFileURL
       .deletingLastPathComponent()
-      .appendingPathComponent("vault-index.json", isDirectory: false)
+      .appendingPathComponent("vault-index.evx", isDirectory: false)
   }
 
   var isSemanticSearchAvailable: Bool {
@@ -299,73 +303,49 @@ final class EvieVaultIndex: ObservableObject {
 }
 
 extension EvieVaultIndex {
-  fileprivate struct CachedIndex: Codable {
-    let schemaVersion: Int
-    let builtAt: Date
-    let entries: [Entry]
-
-    struct Entry: Codable {
-      let noteTitle: String
-      let headingPath: [String]
-      let text: String
-      let path: String
-      let rootID: String
-      let vector: [Float]?
-    }
+  /// Where the cache written by every Evie before this one still sits.
+  ///
+  /// Derived from `cacheURL` rather than from the configuration folder, so a
+  /// test pointing the index at a temporary directory finds the old file in that
+  /// same directory.
+  var legacyCacheURL: URL {
+    cacheURL.deletingPathExtension().appendingPathExtension("json")
   }
 
-  fileprivate static let schemaVersion = 1
-
+  /// Reads the cache, converting the old one if that is what is there.
+  ///
+  /// A damaged file of either kind falls through and leaves the index empty,
+  /// which is the behaviour this always had: the folder is the source of truth,
+  /// and a cache that cannot be read is a cache to be rebuilt rather than
+  /// repaired. `EvieVaultIndexFile` refuses a truncated file outright instead of
+  /// returning the passages it managed to read, so "empty and rebuilding" is the
+  /// only failure state — never a half-loaded index that quietly answers fewer
+  /// questions than it should.
   fileprivate func loadCache() {
-    guard let data = try? Data(contentsOf: cacheURL, options: [.mappedIfSafe]),
-      let cached = try? JSONDecoder().decode(CachedIndex.self, from: data),
-      cached.schemaVersion == Self.schemaVersion
+    guard
+      let document = EvieVaultIndexFile.loadUpgrading(
+        cacheURL: cacheURL,
+        legacyURL: legacyCacheURL
+      )
     else {
       return
     }
-    passages = cached.entries.map {
-      EvieVaultPassage(
-        noteTitle: $0.noteTitle,
-        headingPath: $0.headingPath,
-        text: $0.text,
-        path: $0.path,
-        rootID: $0.rootID
-      )
-    }
-    vectors = cached.entries.map(\.vector)
-    lastBuilt = cached.builtAt
+    passages = document.passages
+    vectors = document.vectors
+    lastBuilt = document.builtAt
   }
 
   fileprivate func writeCache() {
-    let entries = zip(passages, vectors).map { passage, vector in
-      CachedIndex.Entry(
-        noteTitle: passage.noteTitle,
-        headingPath: passage.headingPath,
-        text: passage.text,
-        path: passage.path,
-        rootID: passage.rootID,
-        vector: vector
-      )
-    }
-    let document = CachedIndex(
-      schemaVersion: Self.schemaVersion,
+    let document = EvieVaultIndexFile.Document(
       builtAt: Date(),
-      entries: entries
+      passages: passages,
+      vectors: vectors
     )
-    guard let data = try? JSONEncoder().encode(document) else {
-      return
-    }
     try? FileManager.default.createDirectory(
       at: cacheURL.deletingLastPathComponent(),
       withIntermediateDirectories: true,
       attributes: [.posixPermissions: 0o700]
     )
-    try? data.write(to: cacheURL, options: .atomic)
-    // It contains the text of everything indexed, so it is as private as the
-    // vault is.
-    try? FileManager.default.setAttributes(
-      [.posixPermissions: 0o600],
-      ofItemAtPath: cacheURL.path
-    )
+    try? EvieVaultIndexFile.write(document, to: cacheURL)
   }
 }

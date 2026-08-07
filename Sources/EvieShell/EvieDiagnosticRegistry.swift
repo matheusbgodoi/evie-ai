@@ -274,6 +274,21 @@ enum EvieDiagnosticRegistry {
       await EvieDiagnostics.ragCheck(folder: arguments.url(), questions: arguments.values(from: 1))
     },
 
+    // Loads a cache file and says what it cost. Reads the old JSON cache too, so
+    // "the index got smaller and cheaper to read" is two measurements taken with
+    // the same instrument rather than an assertion about a rewrite.
+    EvieDiagnostic.immediate(
+      flag: "--index-check",
+      usage: "--index-check [arquivo] [saída]",
+      summary: "carrega o índice do vault e mede tamanho, tempo e memória"
+    ) { arguments in
+      let given = arguments.values()
+      EvieDiagnostics.indexCheck(
+        path: given.first,
+        writingTo: given.count > 1 ? given[1] : nil
+      )
+    },
+
     // The flag every scheduled job passes back. `launchd` wakes this bundle,
     // this runs the one prompt, the answer goes to the history and to a banner,
     // and the process quits — nothing of Evie's is alive in between.

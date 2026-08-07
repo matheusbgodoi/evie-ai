@@ -385,6 +385,11 @@ extension EvieDiagnostics {
     var cycles: Double
     var instructions: Double
     var footprintBytes: Double
+    /// The highest the footprint has been since this process started, which the
+    /// kernel keeps for us. Sampling before and after a piece of work cannot see
+    /// a spike that has already been released by the time the second sample is
+    /// taken, and a spike released quickly is exactly what a decoder produces.
+    var peakFootprintBytes: Double
 
     /// `ri_user_time` is in mach ticks, not nanoseconds, and the difference is
     /// not cosmetic: on this Mac the timebase is 125/3, so reading the raw value
@@ -408,13 +413,20 @@ extension EvieDiagnostics {
         }
       }
       guard read == 0 else {
-        return ProcessCost(cpuSeconds: 0, cycles: 0, instructions: 0, footprintBytes: 0)
+        return ProcessCost(
+          cpuSeconds: 0,
+          cycles: 0,
+          instructions: 0,
+          footprintBytes: 0,
+          peakFootprintBytes: 0
+        )
       }
       return ProcessCost(
         cpuSeconds: Double(info.ri_user_time + info.ri_system_time) * ticksToSeconds,
         cycles: Double(info.ri_cycles),
         instructions: Double(info.ri_instructions),
-        footprintBytes: Double(info.ri_phys_footprint)
+        footprintBytes: Double(info.ri_phys_footprint),
+        peakFootprintBytes: Double(info.ri_lifetime_max_phys_footprint)
       )
     }
   }
