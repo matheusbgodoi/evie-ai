@@ -15,7 +15,7 @@ set -euo pipefail
 readonly EVIE_BUNDLE_ID="com.matheusbgodoi.evie"
 readonly EVIE_APP_NAME="Evie"
 readonly EVIE_EXECUTABLE="evie-shell"
-readonly EVIE_SHORT_VERSION="0.1"
+readonly EVIE_SHORT_VERSION="1.0.0"
 readonly EVIE_SIGNING_IDENTITY_NAME="Evie Dev"
 
 readonly EVIE_SCRIPT_DIR="${0:A:h}"
