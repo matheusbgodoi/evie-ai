@@ -2249,3 +2249,45 @@ one is a trap this repository had already documented and then walked into anyway
   not now), `README.md` in "What she costs to run" and in the performance-suite
   limitation, and `docs/PROJECT_STATUS.md` where battery and energy were listed
   among the results that did not exist.
+
+## 2026-08-07 — Claude — the battery measurement, corrected
+
+- Phase: measurement only, no source changed
+- Occasion: the owner quit the applications that had contaminated the first
+  battery run and asked for it again. The re-run corrected the previous entry
+  rather than confirming it.
+- **The method was wrong the first time.** `AppleSmartBattery`'s `Amperage`
+  register refreshes about every 22 s, not every second. Logged raw, it holds one
+  value for around twenty samples and then jumps. The first pass sampled at 1 Hz
+  and reported "88 and 99 samples"; those windows held about five independent
+  readings each, and a median over them is a median over repeats. Replaced by
+  time-weighted plateaus with a `RemainingCapacity` cross-check, over 300 s
+  windows. The earlier figures should not be quoted.
+- Result, Adobe quit: **5.6 W idle against 31.1 W generating**, cross-checked at
+  27.2 W by the 282 mAh the battery says it lost over the same window. The two
+  methods agree under load and disagree at idle, where 13 mAh over five minutes
+  is at the register's resolution limit — reported, not relied on.
+- **The marginal cost reproduced across two differently-loaded machines.** With
+  Adobe running: 20.0 → 44.6 W, a difference of 24.6 W. With Adobe quit: 5.6 →
+  31.1 W, a difference of 25.5 W. The baselines differ threefold and the
+  differences agree within 4%. That is the best evidence in the document that the
+  marginal figure belongs to Evie and not to the machine.
+- Result: **Adobe idling cost more than half of what a question costs while
+  answering.** Quitting it moved idle draw from 20.0 W to 5.6 W — on this battery,
+  about 3.5 h of rest against about 12.6 h.
+- Revised per-question cost: 25.5 W marginal × 8.55 s = **218 J, 0.061 Wh** —
+  about **1,160 questions per charge**, **4.3% of the battery for fifty in a day**.
+- Result: **battery costs no speed.** A clean 32-question run — no sampler
+  spawning `ioreg` beside it — gave 4,940 tokens in 273.6 s, **18.1 tok/s**,
+  against 18.2 on AC.
+- Open question this raised: throughput drifted **13.9%** across those 32
+  questions, first quarter 19.4 tok/s against last quarter 16.7, where the ten-
+  question AC run had shown 7.3%. `pmset -g therm` recorded no warning level and
+  `thermalState` stayed `moderate` throughout, so macOS does not call it
+  throttling and the cause is unestablished. Recorded in `PROJECT_STATUS.md` as
+  the one performance question these measurements opened rather than closed.
+- Two runs measuring 23.2 and 14.2 tok/s were discarded rather than published: a
+  watt sampler was running beside them and neither is clean.
+- Documents corrected: `docs/RESOURCE_BUDGET.md` (the whole battery section, and
+  the sampling weakness now stated as a property of the register rather than only
+  of `--energy-check`), `README.md`, `docs/PROJECT_STATUS.md`.

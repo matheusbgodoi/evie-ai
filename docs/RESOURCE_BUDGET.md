@@ -252,59 +252,89 @@ Every figure above this line was taken on mains power, where the battery reports
 `Amperage = 0` and no wattage exists. The owner unplugged the machine so the one
 number the document could not produce could be produced.
 
-**Method.** Watts are `|Amperage| × Voltage` from the `AppleSmartBattery` entry in
-the IO registry, sampled at 1 Hz and reduced to a median over the window.
+**The register refreshes about every 22 s, and this was got wrong first.** Watts
+are `|Amperage| × Voltage` from the `AppleSmartBattery` entry in the IO registry.
 `Amperage` is a two's-complement negative while discharging and must be read as a
-signed 64-bit value; taken unsigned it reads as about 1.8×10¹⁹. The load is the
-same shape as the ten-question run above — one-paragraph general-knowledge
-questions in Portuguese, capped at 220 completion tokens, non-streaming, strictly
-one at a time — run continuously for two minutes so the sampler sees steady state
-rather than a single burst. Sampling starts 10 s after the load does.
+signed 64-bit value; taken unsigned it reads as about 1.8×10¹⁹, which is the first
+thing anybody reproducing this will hit. The second is subtler: **the register does
+not update at 1 Hz.** Logged raw, it holds one value for around 22 seconds and then
+jumps. A first pass at this measurement sampled at 1 Hz and reported "88 and 99
+samples", which was oversampling — those windows contained about five independent
+readings each, and a median over them is a median over repeats, not over evidence.
+That pass has been replaced by the figures below and its numbers should not be
+quoted. On top of that, the register sometimes reports `Amperage = 0` while
+genuinely on battery, which is indistinguishable from being plugged in.
 
-**Conditions, unchanged and deliberately not cleaned up:** Adobe Creative Cloud
-was running throughout at over two cores' worth of CPU, along with Chrome and a
-Claude Code session. The idle baseline below is therefore *this machine as its
-owner uses it*, not a floor. That inflates the baseline and shortens the battery
-life estimate; it does not affect the difference between the two columns, which
-is the figure attributable to Evie.
+**Method, corrected.** Keep only distinct readings, weight each by how long it
+stood, and cross-check the result against `RemainingCapacity` — the mAh the
+battery itself says it lost over the same window. Windows are 300 s rather than
+100 s so that several independent readings fall inside one. Load is the same shape
+as the ten-question run above: one-paragraph general-knowledge questions in
+Portuguese, capped at 220 completion tokens, non-streaming, one at a time.
 
-| Battery, 80% → 74%, Low Power Mode off | Idle | Generating |
+**Conditions.** Adobe Creative Cloud, which dominates every AC measurement in this
+document, was **quit** for this run. What remained was Chrome, Obsidian, Terminal
+and the Claude Code session taking the measurement — the last of which was the
+largest single consumer and cannot be removed, since it is the thing doing the
+measuring.
+
+| Battery 71% → 66%, Low Power Mode off | Idle | Generating |
 |---|---:|---:|
-| Samples | 88 | 99 |
-| Median draw | **20.0 W** | **44.6 W** |
-| Mean draw | 21.1 W | 40.3 W |
-| Range | 19.8 – 39.9 W | 22.7 – 45.0 W |
+| Draw, time-weighted | **5.6 W** | **31.1 W** |
+| Distinct readings / window | 6 in 300 s | 7 in 450 s |
+| Cross-check from mAh lost | 1.9 W (13 mAh) | **27.2 W** (282 mAh) |
 | Thermal state | moderate | moderate |
 | CPU throttling (`pmset -g therm`) | none recorded | none recorded |
 
-The mean is below the median in the generating column because the window opens
-while the draw is still climbing; the median is the steady-state figure and the
-mean is not. **A question costs about 24.6 W on top of whatever the machine was
-already spending.**
+**A question costs about 25.5 W on top of what the machine already spends.** The
+two methods agree under load — 31.1 W against 27.2 W — and disagree at idle, where
+13 mAh over five minutes is at the resolution limit of a register that moves in
+coarse steps. The idle cross-check is therefore reported and not relied on. The
+load cross-check, integrating 282 mAh, is the stronger of the two figures.
 
-**Throughput does not drop on battery.** Two consecutive two-minute runs produced
-15 questions / 2,283 tokens at **18.9 tok/s** and 16 questions / 2,396 tokens at
-**19.7 tok/s**. The AC figure for the same shape of work is 18.2 tok/s. Within the
-noise of a machine running other software, unplugging costs nothing in speed, and
-macOS recorded no thermal or performance warning level at any point.
+**The marginal cost reproduced across two differently-loaded machines.** The first
+pass, with Adobe running, put idle at 20.0 W and generating at 44.6 W — a
+difference of 24.6 W. This pass, with Adobe quit, puts them at 5.6 W and 31.1 W —
+a difference of 25.5 W. The baselines differ by a factor of three and the
+difference between them agrees within 4%. That is the strongest evidence in this
+document that the marginal figure is Evie's and not the machine's.
+
+**Adobe cost more at idle than half a question costs while generating.** Quitting
+it took idle draw from 20.0 W to 5.6 W. On this battery that is the difference
+between about 3.5 hours and about 12.6 hours of doing nothing.
+
+**Throughput does not drop on battery.** A clean 32-question run — no sampler
+competing — produced 4,940 tokens in 273.6 s: **18.1 tok/s**, 8.55 s and 154
+tokens per question. The AC figure for the same shape of work is 18.2 tok/s.
+Unplugging costs nothing in speed.
+
+**It does drift under sustained load, and further than the AC run suggested.**
+Across those 32 questions the first quarter ran at 19.4 tok/s and the last at
+16.7 — a **13.9% decline**, against the 7.3% recorded over ten questions on AC.
+`pmset -g therm` recorded no thermal or performance warning level at any point and
+`ProcessInfo.thermalState` stayed at `moderate`, so whatever this is, macOS does
+not call it throttling. It is a drift and not a cliff; question 32 was still
+faster than question 30. Two earlier runs in this session reported 23.2 and
+14.2 tok/s and are not quoted, because a watt sampler was spawning `ioreg` beside
+them and neither figure is clean.
 
 **Questions per charge.** This battery's `FullChargeCapacity` is 5,873 mAh at
-about 12.03 V — **70.6 Wh**, after 20 cycles, against a design capacity of 6,249
-mAh. At 24.6 W marginal and 7.6 s per question, one question costs **187 J, or
-0.052 Wh**. A full charge therefore holds roughly **1,360 questions** of marginal
-cost, and **fifty questions in a day cost about 3.7% of the battery**.
+about 12.0 V — **70.6 Wh**, after 20 cycles, against a design capacity of 6,249
+mAh. At 25.5 W marginal and 8.55 s per question, one question costs **218 J, or
+0.061 Wh**. A full charge therefore holds roughly **1,160 questions** of marginal
+cost, and **fifty questions in a day cost about 4.3% of the battery**.
 
 Three things that number is not:
 
-- **It is marginal, not total.** It excludes the 20 W the machine spends whether
+- **It is marginal, not total.** It excludes the 5.6 W the machine spends whether
   Evie exists or not. Total endurance while generating without pause would be
-  70.6 Wh ÷ 44.6 W ≈ 1.6 h, but nobody generates without pause, which is why the
+  70.6 Wh ÷ 31.1 W ≈ 2.3 h, but nobody generates without pause, which is why the
   marginal figure is the one quoted.
-- **It assumes this shape of question** — about 150 completion tokens. A long
+- **It assumes this shape of question** — about 154 completion tokens. A long
   answer costs proportionally more time and therefore more energy.
-- **It is not a battery-life estimate.** Idle draw here includes Adobe; with it
-  quit, the baseline would be lower and the endurance longer. That measurement
-  was not taken.
+- **It still is not a clean-room figure.** The 5.6 W baseline includes the Claude
+  Code session that took the measurement, and a genuinely idle Mac would be lower
+  still.
 
 **A weakness in `--energy-check` that this run exposed.** The command samples GPU
 at 1 Hz across its window but reads watts only at the start and at the end. Its

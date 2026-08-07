@@ -646,22 +646,31 @@ same machine on 2026-08-07, sampled at 1 Hz and reduced to a median:
 
 | Battery, Low Power Mode off | Idle | Generating |
 |---|---:|---:|
-| Draw (median of 88 / 99 samples) | **20.0 W** | **44.6 W** |
+| Draw, time-weighted | **5.6 W** | **31.1 W** |
+| Cross-check, from mAh the battery lost | 1.9 W | **27.2 W** |
 | Thermal state / CPU throttling | moderate / none | moderate / none |
 
-**A question costs about 24.6 W on top of what the machine already spends**, and
-about 7.6 s, which is **187 J — 0.052 Wh**. Against this battery's 70.6 Wh of
-real capacity that is roughly **1,360 questions per charge**, or **3.7% of the
-battery for fifty questions in a day**. That figure is marginal: it excludes the
-20 W the machine spends whether Evie exists or not, and that 20 W baseline had
-Adobe Creative Cloud in it.
+**A question costs about 25.5 W on top of what the machine already spends**, and
+about 8.6 s, which is **218 J — 0.061 Wh**. Against this battery's 70.6 Wh of
+real capacity that is roughly **1,160 questions per charge**, or **4.3% of the
+battery for fifty questions in a day**.
 
-**Unplugging costs no speed.** Two runs on battery produced 18.9 and 19.7 tokens
-per second, against 18.2 on AC, and macOS recorded no throttling in either.
+That marginal figure was measured twice on the same machine loaded two different
+ways — once with Adobe Creative Cloud running and once with it quit. The idle
+baselines differ by a factor of three, 20.0 W against 5.6 W, and the *difference*
+between idle and generating agrees within 4%. Which is also the other finding
+worth having: **Adobe idling cost more than half of what a question costs while
+answering**, and quitting it roughly tripled this Mac's endurance at rest.
+
+**Unplugging costs no speed.** A clean 32-question run on battery produced 4,940
+tokens in 273.6 s — **18.1 tok/s** against 18.2 on AC — with no throttling
+recorded. Throughput does drift under sustained load, 19.4 tok/s in the first
+quarter against 16.7 in the last, which macOS still does not call throttling.
 
 Run `evie-shell --energy-check` to reproduce any of it — noting that it samples
-watts only at the window's endpoints, which is a known weakness recorded with the
-rest of the method. Full conditions and every figure:
+watts only at the window's endpoints, and that the battery register itself
+refreshes only about every 22 s. Both are recorded with the method rather than
+worked around. Full conditions and every figure:
 [`docs/RESOURCE_BUDGET.md`](docs/RESOURCE_BUDGET.md).
 
 ---

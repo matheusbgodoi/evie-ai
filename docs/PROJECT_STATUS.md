@@ -331,10 +331,13 @@ readiness only; they are not the Phase 1 performance suite.
   instructions to build it, and then cutting and tagging it, which is the owner's
   to do.
 - The bounded first-test measurements exist, and sustained decode, energy and
-  battery draw have since been measured on this machine — 20.0 W idle against
-  44.6 W generating, 18.9–19.7 tok/s unplugged against 18.2 on AC, in
+  battery draw have since been measured on this machine — 5.6 W idle against
+  31.1 W generating, 18.1 tok/s unplugged against 18.2 on AC, in
   `docs/RESOURCE_BUDGET.md`. No long-context 16K/32K/64K comparison and no
   answer-quality result exists yet.
+- Throughput drifts about 14% down across 32 sustained questions with no
+  throttling reported by macOS. The cause is unestablished and it is the one
+  performance question these measurements opened rather than closed.
 - `Evie.app` is ad-hoc signed until `Scripts/evie-app identity` is run on the
   machine, and an ad-hoc copy has no certificate to compare an update against, so
   it refuses every update. The script now works; whether it has been run on this
