@@ -41,8 +41,14 @@ function signing_identity() {
   # A self-signed certificate gives a stable designated requirement, which is what
   # lets TCC prove build N+1 is the same code as build N. Ad-hoc signatures have
   # no stable requirement, so every rebuild loses the microphone grant.
-  if security find-identity -v -p codesigning 2>/dev/null \
-    | grep -q "${EVIE_SIGNING_IDENTITY_NAME}"; then
+  # Read, then match. Piping into `grep -q` under `set -o pipefail` can report
+  # the pipeline as failed even on a match — grep exits at the first hit and the
+  # writer dies of SIGPIPE — and here that failure means silently signing ad-hoc
+  # while a perfectly good certificate sits in the keychain. The same pattern
+  # made Scripts/evie-release refuse every bundle it was ever given.
+  local identities
+  identities=$(security find-identity -v -p codesigning 2>/dev/null || true)
+  if [[ "${identities}" == *"${EVIE_SIGNING_IDENTITY_NAME}"* ]]; then
     print -r -- "${EVIE_SIGNING_IDENTITY_NAME}"
   else
     print -r -- "-"
@@ -249,7 +255,7 @@ function status() {
     local signature
     signature=$(codesign -dv --verbose=2 "${target}" 2>&1 || true)
     print "Signature: $(print -r -- "${signature}" | grep -E '^(Signature|TeamIdentifier)' | tr '\n' ' ')"
-    if print -r -- "${signature}" | grep -q "adhoc"; then
+    if [[ "${signature}" == *adhoc* ]]; then
       print "  Ad-hoc: macOS will re-ask for permissions after each rebuild."
     fi
   fi

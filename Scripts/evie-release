@@ -68,7 +68,15 @@ print "Building…"
 
 # Refused rather than published. An ad-hoc bundle carries no certificate, so
 # every installation of it would reject every future update.
-if ! codesign -dv --verbose=2 "${EVIE_APP}" 2>&1 | grep -q "^Authority="; then
+#
+# Read into a variable first, then match. Piping into `grep -q` under
+# `set -o pipefail` reports the pipeline as failed even on a match: grep exits
+# at the first hit, codesign dies of SIGPIPE writing the rest, and the pipeline
+# takes codesign's 141. So this check refused *every* bundle, correctly signed
+# or not, and no release could ever be cut through it. Found while cutting
+# v1.0.0 against a bundle whose Authority was plainly "Evie Dev".
+readonly SIGNATURE=$(codesign -dv --verbose=2 "${EVIE_APP}" 2>&1 || true)
+if [[ "${SIGNATURE}" != *$'\n'Authority=* && "${SIGNATURE}" != Authority=* ]]; then
   print -u2 ""
   print -u2 "The build is signed ad-hoc, with no certificate."
   print -u2 "Nobody who installs it could ever verify an update from it."
