@@ -152,22 +152,10 @@ struct RootsSettingsView: View {
       }
     }
     .formStyle(.grouped)
-    .safeAreaInset(edge: .bottom) {
-      if let feedback = viewModel.feedback {
-        Label(
-          feedback.message,
-          systemImage: feedback.isError
-            ? "exclamationmark.triangle.fill"
-            : "checkmark.circle.fill"
-        )
-        .font(.callout)
-        .foregroundStyle(feedback.isError ? .red : .secondary)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(.horizontal, 16)
-        .padding(.vertical, 9)
-        .background(.bar)
-      }
-    }
+    .settingsFeedback(
+      viewModel.feedback?.message,
+      isError: viewModel.feedback?.isError == true
+    )
   }
 
   private var emptyState: some View {
