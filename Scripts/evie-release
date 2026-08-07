@@ -54,7 +54,14 @@ print "Setting the bundle version to ${VERSION}…"
 /usr/bin/sed -i '' "s/^readonly EVIE_SHORT_VERSION=.*/readonly EVIE_SHORT_VERSION=\"${VERSION}\"/" \
   "${EVIE_SCRIPT}"
 git add "${EVIE_SCRIPT}"
-git commit -q -m "Release ${TAG}"
+# Only if it actually changed. Cutting v1.0.0 failed after this commit and
+# before the tag, and the retry died here instead: `git commit` with nothing
+# staged is an error, and `set -e` turned that into an abort that said nothing
+# about the release. A half-finished release must be resumable by running the
+# same command again.
+if ! git diff --cached --quiet; then
+  git commit -q -m "Release ${TAG}"
+fi
 
 print "Building…"
 "${EVIE_SCRIPT}" build >/dev/null
