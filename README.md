@@ -22,6 +22,7 @@ and she goes back to being invisible.
 [Install](#install) ·
 [Using her](#using-her) ·
 [What she deliberately does not do](#what-she-deliberately-does-not-do) ·
+[What she costs to run](#what-she-costs-to-run) ·
 [Where things live](#where-things-live) ·
 [Build, test, release](#build-test-and-release) ·
 [Limitations](#honest-limitations) ·
@@ -537,7 +538,7 @@ Leaving her open costs nothing measurable: 0% of a core for both processes while
 idle, 10 MB resident for Evie and 9 MB for a server nobody has asked anything in a
 while, measured with its method written down (`docs/RESOURCE_BUDGET.md`). A
 question is a burst — 130% of one core of ten, back to idle within seconds — not a
-tax on the day.
+tax on the day. What that burst costs in heat and energy is measured too, below.
 
 **Nothing of hers runs between scheduled questions.** A schedule is a job
 `launchd` holds; when it fires, Evie starts, asks, answers, and exits.
@@ -550,6 +551,40 @@ Not built yet: writing to mail, changing or deleting a calendar event, Drive,
 WhatsApp, and workflow automations — she authors no macOS Shortcut and runs none.
 Creating an event is built, and is the one exception to the list above. She is
 told exactly which capabilities are wired up and will say so rather than pretend.
+
+---
+
+## What she costs to run
+
+Measured on one MacBook Pro (`Mac17,2`, Apple M5, 10 cores, 24 GB, macOS 27) on
+AC power, on 2026-08-07, with Adobe Creative Cloud, Chrome and a Terminal running
+throughout — the machine as it is actually used, not a clean room. Ten questions
+were asked back to back; the idle and recovery windows are 59 s and 58 s either
+side of them.
+
+| | Idle | Answering | Back to idle |
+|---|---:|---:|---:|
+| Model server CPU (% of one core, of ten) | 0.0% | 101.3% | 0.0% |
+| Model server resident memory | 513 MB | 1,566 MB peak | 1.1 GB after 60 s |
+| GPU utilisation (whole machine) | 20.5% | 74.8% mean, 87% peak | 21.4% |
+| System free memory | 48–49% | 29–38% | 49–52% |
+| Thermal state / CPU throttling | nominal / none | nominal / none | nominal / none |
+
+Ten questions took 95.4 s and produced 1,738 tokens — 9.5 s and 18.2 tokens per
+second each, with throughput drifting down 7.3% from the first five to the last
+five. The machine never throttled and macOS never left `nominal` thermal state.
+
+The number that puts it in proportion: over those same 95 seconds, Adobe Creative
+Cloud spent **2.5× more CPU than Evie did** — and unlike Evie it was spending it
+in the idle windows too, at around 250% of a core, continuously, for nothing
+anyone asked for. Evie's cost starts when you ask and stops when she answers.
+
+**Watts are not reported here, and that is not an oversight.** `powermetrics`
+needs `sudo`, and on mains power the battery reports zero current, so no honest
+wattage exists for this machine while plugged in. GPU utilisation is used as the
+proxy instead, and the gaps are listed rather than papered over. Run
+`evie-shell --energy-check` to reproduce any of it. Full method, conditions, and
+every figure: [`docs/RESOURCE_BUDGET.md`](docs/RESOURCE_BUDGET.md).
 
 ---
 

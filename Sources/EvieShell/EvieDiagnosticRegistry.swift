@@ -151,6 +151,20 @@ enum EvieDiagnosticRegistry {
       await EvieDiagnostics.wakeCostCheck(seconds: arguments.number() ?? 30)
     },
 
+    // Reports what this Mac will say about power and heat, which is less than a
+    // reader expects: watts per process need `sudo powermetrics`, and a check
+    // that asks for a password is a check nobody runs. What is left — GPU
+    // utilisation, thermal state, battery draw when actually on battery — is read
+    // without privileges, and the flag names the gaps out loud rather than
+    // leaving a silence where the watts should be.
+    EvieDiagnostic.terminating(
+      flag: "--energy-check",
+      usage: "--energy-check [segundos]",
+      summary: "o que esta máquina informa sobre energia e calor (30 s)"
+    ) { arguments in
+      await EvieDiagnostics.energyCheck(seconds: arguments.number() ?? 30)
+    },
+
     // Reads a file and prints exactly what Evie would receive. Useful on its own,
     // and the only way to check the reader without dragging something onto a
     // window.
