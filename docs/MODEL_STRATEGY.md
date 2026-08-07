@@ -85,6 +85,28 @@ Mac. The small synthetic responses that passed at this launch setting establish
 wiring only; they cannot replace long-context correctness or the 16K/32K/64K
 benchmark matrix.
 
+### The cached prefix decides where the clock goes
+
+The server runs with `--prompt-cache-mode single-prefix`, so the hidden system
+message is the cached prefix of every request. **42% of prompt tokens on this Mac
+are served from that cache**, measured over the last forty requests in the
+server's log (`75ec2f2`). Anything that changes on every turn and sits early in
+the prompt destroys that: the prefix stops matching and the whole thing is
+reprocessed.
+
+That is why Evie's clock is split rather than placed once. The **date** is in the
+system prompt, where it is unchanged for a whole day and the cache survives;
+`refreshSystemPrompt` runs before each turn and returns early when the text has
+not moved, so a session left open overnight stops answering with yesterday. The
+**exact time** is attached to the question, after everything cached, where the
+tokens were going to be new anyway. Two clock tests now assert the minute is
+absent from the system prompt rather than present, and both carry the reason,
+because they invert what they were originally written to check.
+
+A side effect worth keeping: each turn carries the time it was asked at, so "há
+quanto tempo eu perguntei isso" has an answer, and the timestamps of earlier turns
+never change — which is also what keeps the prefix stable.
+
 ## What is already quantized
 
 TurboFieldfare uses 4-bit MLX-affine weights for embeddings, attention, shared

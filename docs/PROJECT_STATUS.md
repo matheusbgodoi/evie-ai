@@ -1,6 +1,6 @@
 # Project status
 
-Last updated: 2026-08-06
+Last updated: 2026-08-07
 
 ## Current phase
 
@@ -32,7 +32,24 @@ only when a person presses a button.
 Three typed commands exist and are discoverable from a "/" menu: `/plano`
 decomposes a question into steps and runs them in order, `/buscar` shows the
 passages retrieval found and makes no model call at all, and `/web` skips the
-notes and answers from the web.
+notes and answers from the web. `/buscar` now shows the note rather than its
+storage format: LaTeX, wikilinks, tables and opening front matter are rendered or
+removed instead of being put on screen as punctuation.
+
+She knows the date, which she did not before: every answer touching "hoje", "esta
+semana" or a deadline was previously a guess written in the voice of a fact. The
+date is in the system prompt and the exact time rides with each question, for a
+measured reason recorded in `docs/MODEL_STRATEGY.md`.
+
+She reads Mail and Calendar, off by default, through the Apple applications that
+already hold the user's Gmail and iCloud — three read-only tools, no OAuth
+application and no token. She calculates rather than guessing: `calculate` is a
+recursive-descent parser over a fixed grammar, declared on every turn, deliberately
+not `NSExpression`.
+
+Scheduled work exists for the first time. A schedule is a prompt plus a trigger —
+daily, chosen weekdays, or a watched folder — held by `launchd` as a user
+LaunchAgent, with nothing of Evie's alive between firings.
 
 `Evie.app` exists with a stable bundle identifier. That was the hard blocker for
 every permission Evie will ever need — measured, an unbundled binary touching the
@@ -48,8 +65,12 @@ presses, and installs a download only when its code signature matches the runnin
 copy. See `docs/SECURITY.md` for what is checked and what was measured against
 tampered bundles.
 
-No Hermes runtime, persistent background service, account integration, or
-credential has been installed or configured. Completed conversations are personal
+No Hermes runtime, persistent background service, or credential has been installed
+or configured, and Evie still holds no account of her own: Mail and Calendar are
+read through the applications that already hold the user's, so there is no OAuth
+application and nothing on disk to revoke. Scheduled runs are `launchd` jobs, not
+a service — no process of Evie's exists between one firing and the next.
+Completed conversations are personal
 local state under `Application Support/Evie/Conversations`, now including the
 files that were attached to them; they remain outside Git and hidden prompts are
 never stored. TurboFieldfare source, model state, configuration, PID state, and
@@ -79,6 +100,24 @@ logs also remain under `~/Library`.
 - `EvieVaultIndex`, `EvieVaultRetriever`, `EviePassageRanker`, and `EvieQueryTerms`
   retrieve by meaning as well as by word, fusing title, BM25 and embedding
   rankings. See `docs/RAG.md`.
+- `EvieMailCalendar` holds three read-only tools — `read_mail`, `search_mail`,
+  `read_calendar` — as fixed AppleScript literals whose inputs travel as process
+  arguments through `on run argv`. Nothing that sends, deletes, marks read or
+  creates was declared. Off by default; `docs/SECURITY.md` records the two tests
+  that hold the boundary, including the break-out payloads run through the real
+  `osascript`.
+- `EvieCalculator` and `EvieCalculatorTool` evaluate arithmetic over a fixed
+  grammar with no I/O — Brazilian and foreign number formats, percentages, twelve
+  named functions, and refusals that are sentences in Portuguese rather than
+  `NaN`. Declared on every turn and behind no preference.
+- `EvieSchedule`, `EvieScheduleAgent`, `EviePropertyList` and the `EvieShell`
+  schedule types install user LaunchAgents that run the bundle with
+  `--run-schedule <id>`. Measured: `launchd` fired an installed job 83 s after
+  install at the minute asked for, the turn took 51 s, and the answer reached the
+  history; a `WatchPaths` job fired exactly once on a file landing in the folder.
+- The command-line diagnostics declare themselves in `EvieDiagnosticRegistry`, so
+  `--help` is the same list read out loud rather than a second list kept by hand.
+  The application delegate went from 1,438 lines to 71.
 - `EvieCommand` and `EvieSearchCommands` hold the typed-command catalogue and the
   read-only `/buscar` and `/web` commands; `EviePlan` and `EviePlanPrompts` hold
   the `/plano` decomposition and its parser.
@@ -129,7 +168,14 @@ logs also remain under `~/Library`.
 - The Node-RED workflow plane was researched and dropped against the constraint
   the user set — nothing resident, nothing in Docker. macOS Shortcuts is the
   recommendation in its place, and what she can and cannot do with it is measured
-  in `docs/AUTOMATIONS.md`. No automation code has been written.
+  in `docs/AUTOMATIONS.md`. No Shortcuts code has been written: nothing is
+  authored, signed, installed or run. What was built from that document is its
+  `launchd` half — schedules — and nothing else.
+- `EvieVaultIndex` is built at launch as well as when a folder is granted, prunes
+  directories that hold no human writing, and lists hidden ancestors. Before this
+  session the index was empty in normal use and every search of the notes answered
+  "não achei nada"; it now holds 8,629 passages from the user's four vault
+  folders.
 
 See `docs/implementation/VS_001.md` and the task ledger for exact boundaries and
 handoff evidence. The ledger has not been re-scored against this session and is
@@ -178,6 +224,13 @@ and the immediately following SSE request in 0.882 s. The warmed server had a
 3,215 MB physical footprint, the native shell 18 MB, both sampled at 0.0% idle CPU,
 and macOS reported 53% system-wide memory free. These tiny responses establish
 wiring only; they are not the Phase 1 model/context/energy benchmark.
+
+What it costs to leave Evie open was measured on 2026-08-07 and is recorded with
+its method in `docs/RESOURCE_BUDGET.md`: 0% CPU for both processes while idle,
+10 MB resident for the shell and 9 MB for a long-idle server, against a peak of
+130% of one core of ten and 1.66 GB resident for the server during one agentic
+turn, with system-wide free memory recovering within about nine seconds. That is
+an idle-and-burst measurement, not the benchmark matrix either.
 
 ## Decisions accepted for planning
 
@@ -263,6 +316,27 @@ readiness only; they are not the Phase 1 performance suite.
   Evie starts a configured local executable and trusts it.
 - The exact smaller text and vision model candidates must be pinned immediately
   before benchmarking because this area changes quickly.
+- **The persona does not know about Mail and Calendar.**
+  `EvieCapabilitySnapshot` gained a `calculates` flag and no equivalent for mail,
+  so with the switch on the loop declares three tools the system prompt never
+  mentions and `--print-persona` does not show. This is the safe direction of the
+  invariant — she cannot claim a capability she lacks — but it is the reverse of
+  what the arithmetic rule was written for, and the evidence in this project is
+  that a tool she was not told about is a tool she does not reach for. Found while
+  documenting; the file belongs to another agent.
+- The macOS Automation consent prompt for Mail and Calendar has never been
+  observed. The terminal used for verification already held the grant, and every
+  attempt to provoke a refusal was authorised too; the `errAEEventNotPermitted`
+  path is covered by unit tests against both wordings rather than by having been
+  seen.
+- **Notifications do not work through the framework on this Mac.**
+  `UNUserNotificationCenter.requestAuthorization` throws `UNErrorDomain 1` for a
+  locally-signed bundle, ad-hoc or signed with this project's certificate, and
+  `add()` then reports success while showing nothing. A schedule posts its banner
+  through `osascript` instead, and the answer is in the history either way. A
+  notarised identity would change this and is not available for a self-signed one.
+- The schedules pane, the Mail and Calendar pane, and everything else added this
+  session are unaccepted by eye, which is `QA-006` and not a separate blocker.
 - Location triggers require a trusted source such as a phone shortcut, Home
   Assistant, or a dedicated companion; the Mac alone does not provide a complete
   personal location event stream. Nothing event-driven is reachable at all under
@@ -275,11 +349,11 @@ readiness only; they are not the Phase 1 performance suite.
 Two things, in this order, and they are the two things between here and a release.
 
 **`QA-006` — the human pass.** Nothing has been formally accepted by eye. The
-overlay was rebuilt around a bounded card this session, the answer now scrolls
-inside it, the chevron was straightened twice, the settings panes gained
-forty-three help tags, and the history window gained multi-select, export and
-thumbnails. All of it is unproven as a whole. This outranks every remaining
-feature.
+overlay was rebuilt around a bounded card, the answer now scrolls inside it, the
+chevron was straightened twice, the settings panes gained forty-three help tags,
+the history window gained multi-select, export and thumbnails, and "O que ela
+sabe" gained two more panes — Mail e agenda, and Agendamentos. All of it is
+unproven as a whole. This outranks every remaining feature.
 
 **`REL-001` — the first release.** What it needs: `QA-006` passed, an ADR for the
 retrieval decision, a `1.0.0` section in the changelog, and a decision on whether
@@ -287,5 +361,7 @@ the release ships the app or the instructions to build it. The update mechanism
 now argues for shipping the app: it installs only a bundle signed with the same
 key, which a tagged source release cannot offer.
 
-Do not configure email, WhatsApp, Drive, automatic microphone, or workflow
-activation before their permission and validation gates pass.
+Do not configure WhatsApp, Drive, automatic microphone, or workflow activation
+before their permission and validation gates pass. Mail and Calendar are the one
+exception and only in the read direction: no credential is held, nothing is sent,
+deleted or marked read, and the switch is off until somebody turns it on.

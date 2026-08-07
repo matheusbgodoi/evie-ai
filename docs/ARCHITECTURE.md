@@ -93,6 +93,21 @@ the model can call changes anything. `propose_change` records a proposal and
 returns a result saying plainly that nothing happened. Prompt injection reaches a
 card, not a filesystem.
 
+**The loop no longer withdraws its tools on the last pass.** It used to, so the
+model would have to produce words, and this server rejects a tool call naming a
+tool that was not declared: `/web` died with
+`GemmaToolCallParserError.unknownTool("search_web")` at status 500, because the
+conversation the model was reading is nothing but tool calls and another one is
+the obvious continuation. The withdrawal caused the failure it existed to prevent.
+The tools stay declared on every pass now and the last pass declines them — each
+call gets a result saying no lookups remain, and then a user turn asks for an
+answer from what was found. A user turn, because this server refuses `developer`
+guidance once a conversation has started, measured twice in this project; and the
+tool results alone were verified to be insufficient, since with nothing else said
+the model simply asked again and the turn still ended empty. Verified end to end
+on the question that failed: four searches, 81 s, and an answer that says what it
+could not find rather than an error (`10c4da2`).
+
 The adjacent `Scripts/evie-runtime` development tool can explicitly prepare and
 manage the inference process for testing, but it is not linked into the
 application. The server must use `--max-context 65536`; the client cannot increase
@@ -106,7 +121,13 @@ a server launched at its 16K default.
   vault-index.json              cached passage embeddings, rebuilt from the vault
   config.json                   non-secret model preferences, 0600
   preferences.json              appearance, shortcuts, voice, web, wake, updates
+  schedules.json                the scheduled questions and their triggers, 0600
 ```
+
+The schedules themselves live in `~/Library/LaunchAgents`, one plist each, and
+their logs in `~/Library/Logs/Evie`. The plist carries the trigger and the
+schedule's identifier; the prompt stays in the `0600` store, because that
+directory is readable by anything running as this user.
 
 Media belongs to the conversation that attached it: deleting the conversation
 deletes the files, and anything a crash left behind is swept at launch, because a
@@ -134,6 +155,9 @@ system frameworks, and every process Evie starts.
 | Commands | `EvieCommand`, `EvieSearchCommands`, `EviePlan`, `EviePlanPrompts` |
 | Retrieval and grounding | `EvieVaultRetriever`, `EvieVaultPassage`, `EviePassageRanker`, `EvieQueryTerms`, `EvieGrounding`, `EvieAnswerProvenance`, `EvieWebSearch`, `EvieWebPassages` |
 | Files | `EvieRootRegistry`, `EvieFileToolbox`, `EvieScopedFileReader`, `EvieDocumentReader`, `EvieFileWriter`, `EvieFileChange`, `EvieChangeIntent` |
+| Mail and calendar | `EvieMailCalendar`, `EvieAppleScripts`, `EvieMailCalendarTool`, `EvieMailMessage`, `EvieCalendarEvent` |
+| Arithmetic | `EvieCalculator`, `EvieCalculatorTool` |
+| Schedules | `EvieSchedule`, `EvieScheduleTrigger`, `EvieScheduleAgent`, `EviePropertyList` |
 | Knowledge and identity | `EvieMemory`, `EvieSkill`, `EviePersona`, `EvieCapabilityContracts` |
 | Voice | `EvieTTS`, `OmniVoiceBatchTTSAdapter`, `EvieSpeechGate`, `EvieSilenceTrim`, `EvieWakePhrase`, `EvieWakeGate` |
 | Settings and release | `EvieConfiguration`, `EvieConfigurationLoader`, `EvieConfigurationStore`, `EviePreferences`, `EviePreferencesStore`, `EvieShortcut`, `EvieRelease` |
@@ -148,7 +172,9 @@ system frameworks, and every process Evie starts.
 | Overlay state | `OverlayViewModel` plus `+Turn`, `+History`, `+Plan`, `+Search`; `OverlayChromeModel` |
 | Other view models | `ConversationHistoryViewModel`, `EviePreferencesViewModel`, `ModelSettingsViewModel`, `EvieRootsViewModel`, `EvieMemoryViewModel`, `EvieSkillsViewModel`, `EvieVoiceLibraryViewModel` |
 | Audio | `EvieAudioCapture`, `EvieLevelMeter`, `EvieSpeechTranscription`, `EvieSpeechOutput`, `EvieOmniVoiceClient`, `EvieVoiceEngineLauncher`, `EvieWakeListener` |
-| Reading the world | `EvieVaultIndex`, `EvieVisionDescriber`, `EvieDocumentAttachment`, `EvieMediaStore`, `EvieWebClient`, `EvieSkillStore` |
+| Reading the world | `EvieVaultIndex`, `EvieVisionDescriber`, `EvieDocumentAttachment`, `EvieMediaStore`, `EvieWebClient`, `EvieSkillStore`, `EvieMailCalendarClient` |
+| Schedules | `EvieLaunchAgents`, `EvieScheduleStore`, `EvieScheduleRunner`, `EvieScheduleLock`, `EvieScheduleNotifier`, `EvieSchedulesViewModel` |
+| Diagnostics | `EvieDiagnostic`, `EvieDiagnosticRegistry`, `EvieDiagnostics` plus its five subject files |
 | Updating | `EvieUpdater`, `EvieBundleSignature` |
 | Views | `Views/`, plus `EvieOverlayView`, `QuickTextEntryView`, `ConversationHistoryView` |
 
@@ -160,6 +186,21 @@ contained became `+Turn` (the turn machinery), `+History` (paging earlier turns)
 changed, which is why the test suite was the check that it worked. The cost is
 that members the extensions reach are `internal` rather than `fileprivate`, since
 `fileprivate` is scoped to a file and there are now five of them.
+
+The diagnostics went the same way and for a sharper reason.
+`applicationDidFinishLaunching` was 370 lines of `CommandLine.arguments.contains`
+before it got round to launching anything, followed by 850 lines of the checks
+those branches called, and `--help` was not writable without a second list of
+flags kept by hand. Each check now declares its flag, how it is written, one line
+of what it does, and how many arguments must follow; dispatch is a lookup over
+that list and `--help` is the same list read out loud, so the two cannot drift.
+The implementations live in five files by subject and the delegate is 71 lines
+(`4a08c98`, `Sources/EvieShell/EvieDiagnosticRegistry.swift`). Three properties
+were preserved deliberately: the order flags are tested in, which decides who
+wins when two are on one line; the rule that a flag written without its arguments
+does not match at all and the application launches normally; and the main-actor
+isolation, since several checks hold the main actor for tens of seconds on
+purpose.
 
 ## Always-on control plane
 

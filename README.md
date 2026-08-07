@@ -90,6 +90,17 @@ ordinary sentences including the deliberately close "seis e meia" never exceed
 0.500. The constant is 0.6, sitting in that gap. "The first attempt used 0.7 and
 dropped 'ei ivi', which is exactly the mis-hearing that made her never come."
 
+**A fix that was already written did not travel.** Searching the notes had never
+found anything, and it took three faults stacked on each other to keep it that
+way: an index built only when a folder was granted, then a walk over the whole
+home folder — more than a million files, still going after 25 seconds — then a
+budget filled before it ever reached the vault. Underneath was a trap this
+repository had already documented, with its own measurement, in a neighbouring
+function: listing a directory with `.skipsHiddenFiles` returns nothing for an
+iCloud vault, because `~/Library` is hidden. Measured again at the second site: 0
+entries with the option, 2 without (`e5422cc`). The comment existed; nobody
+grepped for it. Both sites now point at each other.
+
 **And updates are checked against a key, not a promise.** Evie installs a
 download only if its code signature matches the copy already running, verified
 against deliberately tampered bundles of this very app (`fa82f39`).
@@ -235,6 +246,58 @@ chart, the system model reported four bars for four months at 120, 190, 90, 260,
 and the reader pulled the exact labels. "Alone, the description would risk
 inventing the numbers and the recognised text is a heap of digits with no shape"
 (`8f63c75`).
+
+### Your mail and your agenda
+
+Off by default, in Settings › O que ela sabe › Mail e agenda. Switched on, she can
+read the last messages, search them, and read a stretch of the calendar — through
+the Mail and Calendar applications that already hold your Gmail and iCloud. There
+is no account to connect, no Google application, and no token anywhere on this
+Mac.
+
+**She reads and nothing else.** No tool that sends, deletes, marks read or creates
+an event was written, so a message telling her to clear your inbox is asking for
+something that does not exist. The scripts are fixed text inside the application
+and everything you type travels beside them as an argument, never as part of the
+program — the same rule that keeps a web page from being an instruction, checked
+by a test that hands the real `osascript` three break-out payloads and asserts
+nothing happened (`docs/SECURITY.md`).
+
+### Knowing what day it is
+
+She did not, until recently. Every answer about "hoje", "esta semana" or how long
+is left until a deadline was a guess written in the voice of a fact. The date now
+sits in what she is told about herself and the exact time travels with each
+question — separately, and for a measured reason. The unchanging part of the
+prompt is a cache: 42% of prompt tokens on this Mac are served from it, over the
+last forty requests in the server's log. A prompt carrying the current minute
+changes every turn, so the cache never matches and the whole thing is reprocessed
+— precise to the minute, paid for on every question (`docs/MODEL_STRATEGY.md`).
+
+### Arithmetic
+
+Sums go to a calculator rather than to the model, because a wrong one looks
+exactly like every other sentence it writes. It is a real parser over a fixed
+grammar and deliberately not the system's expression evaluator, which would run
+function calls hidden inside the text. It reads `1.234,56` and `1,234.56` as the
+same number, takes percentages the way people ask for them — `15% de 240`, "de 80
+para 100" — and prints the reading it used above the result, so the one ambiguous
+case is visible rather than silent. Nothing comes back as `NaN`: a division by
+zero is a sentence explaining itself.
+
+### Asking her things while you are away
+
+Settings › O que ela sabe › Agendamentos: a question, and when to ask it — every
+day at a time, on the weekdays you choose, or whenever a folder changes. macOS
+wakes her, she asks it, she writes the answer into the history and posts a banner,
+and she exits. **Nothing of hers is running in between**: there is no daemon and
+no timer, only a job `launchd` already knows how to hold.
+
+A scheduled question is the same question a typed one is — same persona, same
+memories, same folders, same web setting — so it can do no more at eight in the
+morning than it could at the keyboard. Two that overlap do not queue: the second
+skips, because a summary of the morning delivered after the morning has started is
+worth less than the next one.
 
 ### Changing a file, once you say so
 
@@ -415,7 +478,9 @@ one without deleting the old.
 and not more, for a measured reason: macOS gives a tab bar a fixed amount of room
 and folds whatever does not fit into an overflow menu, so growing the window one
 tab at a time silently replaced the bar with a chevron
-(`Sources/EvieShell/Views/SettingsView.swift`).
+(`Sources/EvieShell/Views/SettingsView.swift`). New things go inside a tab
+instead: "O que ela sabe" now holds five panes — Pastas, Memória, Habilidades,
+Mail e agenda, Agendamentos.
 
 ---
 
@@ -424,6 +489,11 @@ tab at a time silently replaced the bar with a chevron
 **She never writes to your Obsidian vault.** She reads it to answer — what you
 wrote about a project, a company, a decision — and that is all. Your notes are a
 source, not a workspace she shares.
+
+**She reads your mail and never touches it.** No tool exists that sends, replies,
+deletes, files, or marks a message read, and none creates or changes a calendar
+event. Reading is off by default as well. The guarantee is not that she has been
+told to behave — it is that her vocabulary has no word for it.
 
 **She never sends anything without being told.** Web search is the only thing in
 Evie that reaches the network, it is off by default, and the switch says so in
@@ -439,14 +509,22 @@ want to. See above.
 **She does not run at login and does not keep the model warm for you.**
 `Scripts/evie-runtime start` is an explicit decision because it costs about 15 GB
 of memory, and the voice engine's 2.4 GB is the same decision made the same way.
+Leaving her open costs nothing measurable: 0% of a core for both processes while
+idle, 10 MB resident for Evie and 9 MB for a server nobody has asked anything in a
+while, measured with its method written down (`docs/RESOURCE_BUDGET.md`). A
+question is a burst — 130% of one core of ten, back to idle within seconds — not a
+tax on the day.
+
+**Nothing of hers runs between scheduled questions.** A schedule is a job
+`launchd` holds; when it fires, Evie starts, asks, answers, and exits.
 
 **She does not pretend a copy was a move.** When a rename crosses volumes the
 writer refuses, because "pretending a move happened when a copy did would be
 worse than refusing" (`Sources/EvieCore/EvieFileWriter.swift`).
 
-Not built yet: email, calendar, Drive, WhatsApp, automations, and scheduled work.
-She is told exactly which capabilities are wired up and will say so rather than
-pretend.
+Not built yet: writing to mail or the calendar, Drive, WhatsApp, and workflow
+automations — she authors no macOS Shortcut and runs none. She is told exactly
+which capabilities are wired up and will say so rather than pretend.
 
 ---
 
@@ -461,7 +539,13 @@ pretend.
 | What she remembers | `~/Library/Application Support/Evie/memory.json` |
 | Skills you wrote | `~/Library/Application Support/Evie/Skills/` |
 | Conversations | `~/Library/Application Support/Evie/Conversations/` |
-| Logs | `~/Library/Logs/Evie/` |
+| Scheduled questions | `~/Library/Application Support/Evie/schedules.json` |
+| The jobs that fire them | `~/Library/LaunchAgents/` |
+| Logs, including one per schedule | `~/Library/Logs/Evie/` |
+
+A schedule's prompt is deliberately not in its job file: `~/Library/LaunchAgents`
+is readable by anything running as you, and a prompt may say "resume meus e-mails
+não lidos". Only the identifier travels there.
 
 All of it is `0700`/`0600` and none of it is in this repository. Configuration is
 built-in defaults, then that JSON file, then environment overrides; invalid
@@ -505,9 +589,21 @@ evie-shell --ask-web "<question>"          # a real turn with the web switched o
 evie-shell --see <image>                   # what she sees in a picture, and reads in it
 evie-shell --skill-check "<question>"      # which skills a question loads, and the answer
 evie-shell --change-check                  # the whole propose-approve-perform path
+evie-shell --schedule-check                # installs a real launchd job, waits for it, reports
+evie-shell --schedules-check               # what is installed, and what launchd actually holds
+evie-shell --help                          # every check, listed by the checks themselves
 ```
 
-None of these open a window or ask for permission.
+None of these open a window or ask for permission. The list above is a selection;
+`--help` is generated from the same declarations dispatch uses, so it cannot drift
+from what exists (`Sources/EvieShell/EvieDiagnosticRegistry.swift`).
+
+Two claims that were only ever asserted in conversation are reproducible instead:
+
+```bash
+Scripts/evie-probe thinking   # asks for a reasoning mode three ways; all three accepted and ignored
+Scripts/evie-probe vision     # switches Wi-Fi off, checks the route is gone, then describes a capture
+```
 
 ### Updating
 
@@ -574,9 +670,14 @@ over this one when they disagree.
 - **Evie does not own the model server's lifecycle.** Idle unload, crash
   recovery, power policy, and automatic startup are not hers yet; the runtime is
   started and stopped by hand.
-- **Email, calendar, Drive, WhatsApp, automations, and scheduled work do not
-  exist**, and location triggers would need a trusted source the Mac alone does
-  not provide.
+- **Mail and calendar are read-only and unwritten in the other direction.** Drive,
+  WhatsApp and workflow automations do not exist, and location triggers would need
+  a trusted source the Mac alone does not provide. Scheduled work exists and is
+  new: `launchd` fires it and the answer lands in the history, but the banner it
+  posts goes through `osascript` because macOS refuses notifications to a
+  locally-signed bundle.
+- **The consent prompt for Mail and Calendar has never been observed.** The
+  refusal path is covered by tests against both wordings, not by having seen it.
 
 ---
 
