@@ -33,6 +33,10 @@ final class AppCoordinator: NSObject {
   private let updater = EvieUpdater()
   private let mediaStore = EvieMediaStore()
   private let wakeListener = EvieWakeListener()
+  /// Owned here, not by the settings window: its `reload()` sweeps orphan
+  /// LaunchAgents, and that has to happen at launch rather than the first time
+  /// somebody opens a pane.
+  private let schedulesViewModel = EvieSchedulesViewModel()
   /// True while push-to-talk is holding the microphone open, so releasing the key
   /// stops it but a click on the mark toggles instead.
   private var isHoldingToTalk = false
@@ -638,6 +642,7 @@ extension AppCoordinator {
         skillsViewModel: skillsViewModel,
         updater: updater,
         wakeListener: wakeListener,
+        schedulesViewModel: schedulesViewModel,
         preferencesPath: preferencesStore.fileURL.path,
         configurationPath: configurationStore.fileURL.path
       )

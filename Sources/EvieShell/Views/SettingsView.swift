@@ -17,6 +17,7 @@ struct SettingsView: View {
   @ObservedObject var skillsViewModel: EvieSkillsViewModel
   @ObservedObject var updater: EvieUpdater
   @ObservedObject var wakeListener: EvieWakeListener
+  @ObservedObject var schedulesViewModel: EvieSchedulesViewModel
   var preferencesPath: String = EviePreferencesStore.defaultFileURL.path
   var configurationPath: String = EvieConfigurationLoader.defaultFileURL.path
 
@@ -34,6 +35,7 @@ struct SettingsView: View {
 
       KnowledgeTabView(
         preferencesViewModel: preferencesViewModel,
+        schedulesViewModel: schedulesViewModel,
         rootsViewModel: rootsViewModel,
         memoryViewModel: memoryViewModel,
         skillsViewModel: skillsViewModel
@@ -109,6 +111,7 @@ private struct VoiceTabView: View {
 /// What she can reach, and what she has been allowed to keep.
 private struct KnowledgeTabView: View {
   @ObservedObject var preferencesViewModel: EviePreferencesViewModel
+  @ObservedObject var schedulesViewModel: EvieSchedulesViewModel
   @ObservedObject var rootsViewModel: EvieRootsViewModel
   @ObservedObject var memoryViewModel: EvieMemoryViewModel
   @ObservedObject var skillsViewModel: EvieSkillsViewModel
@@ -116,7 +119,7 @@ private struct KnowledgeTabView: View {
   var body: some View {
     VStack(spacing: 0) {
       PaneSelector(
-        titles: ["Pastas", "Memória", "Habilidades", "Mail e agenda"],
+        titles: ["Pastas", "Memória", "Habilidades", "Mail e agenda", "Agendamentos"],
         selection: $memoryViewModel.knowledgePane
       )
       switch memoryViewModel.knowledgePane {
@@ -126,11 +129,13 @@ private struct KnowledgeTabView: View {
         MemorySettingsView(viewModel: memoryViewModel)
       case 2:
         SkillsSettingsView(viewModel: skillsViewModel)
-      default:
+      case 3:
         MailCalendarSettingsView(
           viewModel: preferencesViewModel,
           setEnabled: preferencesViewModel.setMailAndCalendarEnabled
         )
+      default:
+        SchedulesSettingsView(viewModel: schedulesViewModel)
       }
     }
   }

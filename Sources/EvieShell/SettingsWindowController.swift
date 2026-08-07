@@ -14,6 +14,7 @@ final class SettingsWindowController: NSWindowController, NSWindowDelegate {
     skillsViewModel: EvieSkillsViewModel,
     updater: EvieUpdater,
     wakeListener: EvieWakeListener,
+    schedulesViewModel: EvieSchedulesViewModel,
     preferencesPath: String,
     configurationPath: String
   ) {
@@ -40,6 +41,7 @@ final class SettingsWindowController: NSWindowController, NSWindowDelegate {
         skillsViewModel: skillsViewModel,
         updater: updater,
         wakeListener: wakeListener,
+        schedulesViewModel: schedulesViewModel,
         preferencesPath: preferencesPath,
         configurationPath: configurationPath
       )
