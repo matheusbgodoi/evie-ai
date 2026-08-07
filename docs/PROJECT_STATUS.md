@@ -42,10 +42,16 @@ date is in the system prompt and the exact time rides with each question, for a
 measured reason recorded in `docs/MODEL_STRATEGY.md`.
 
 She reads Mail and Calendar, off by default, through the Apple applications that
-already hold the user's Gmail and iCloud — no OAuth application and no token. Mail
-is read-only. Since `383a92c` she can also create one calendar event: the tool she
-calls, `propose_event`, performs nothing and draws a card, and the event exists
-when a person presses the button. She calculates rather than guessing: `calculate`
+already hold the user's Gmail and iCloud — no OAuth application and no token.
+Since `383a92c` she can create one calendar event, and since `6dade94` she can
+send one message: the tools she calls, `propose_event` and `propose_mail`,
+perform nothing and draw a card, and the event or the message happens when a
+person presses the button. The mail card is the first thing in Evie whose primary
+action reaches somebody else and cannot be undone, so it shows every recipient in
+full and the entire body, offers a draft as well as a send, and has no
+auto-approve path under any setting. Deleting, replying, filing, marking read and
+attaching do not exist; inviting somebody to an event is impossible from a script
+on this Mac, measured. She calculates rather than guessing: `calculate`
 is a recursive-descent parser over a fixed grammar, declared on every turn,
 deliberately not `NSExpression`.
 
@@ -104,7 +110,7 @@ logs also remain under `~/Library`.
   rankings. See `docs/RAG.md`.
 - `EvieMailCalendar` holds three reading tools — `read_mail`, `search_mail`,
   `read_calendar` — as fixed AppleScript literals whose inputs travel as process
-  arguments through `on run argv`. Nothing that sends, deletes or marks read was
+  arguments through `on run argv`. Nothing that deletes, files or marks read was
   declared. Off by default; `docs/SECURITY.md` records the tests that hold the
   boundary, including the break-out payloads run through the real `osascript`.
 - `EvieCalendarEventProposal` and `EvieCalendarEventTool` add the fourth tool,
@@ -118,6 +124,19 @@ logs also remain under `~/Library`.
   when file auto-approval is on. Refusals rather than guesses: a timezone
   designator, an unknown calendar name, a start over five minutes past, a span
   over thirty days, an empty title, an end at or before the start.
+- `EvieMailProposal` and `EvieMailTool` add the fifth tool, `propose_mail`, on the
+  same switch. It sends nothing: it validates the recipients, refuses any address
+  the conversation does not contain, reads back the account the message would
+  leave from, and records a proposal drawn as a card that lists every recipient in
+  full with the whole body. Sending is `EvieMailSending` — `sendMail` and
+  `saveMailDraft` — a third protocol `EvieAgentLoop` does not hold, and the loop's
+  test stub has no sending function to offer, so no test can make the loop send.
+  The only callers are the card's two writing buttons in `AppCoordinator`, each
+  re-checking `mailAndCalendarEnabled` at the press; there is no auto-approve path
+  for mail under any setting. `add_attendee`, `invite_attendee`, `send_invite` and
+  `invite` are refused with a sentence, because Calendar on this Mac cannot take
+  an attendee from a script at all — measured, `docs/SECURITY.md`. See
+  ADR 0010 and ADR 0011.
 - `EvieCalculator` and `EvieCalculatorTool` evaluate arithmetic over a fixed
   grammar with no I/O — Brazilian and foreign number formats, percentages, twelve
   named functions, and refusals that are sentences in Portuguese rather than
@@ -305,9 +324,12 @@ readiness only; they are not the Phase 1 performance suite.
   words rather than paraphrased, because a pass is a person's judgement and not
   a measurement anybody else can reproduce.
 - **`REL-001`: there is no release.** The mechanism to install one now exists and
-  is tested; what is missing is a `1.0.0` section in the changelog, an ADR for the
-  retrieval decision, and a decision on whether the release ships the app or the
-  instructions to build it.
+  is tested. Two of the three things it needed are now written: the `1.0.0`
+  section of `CHANGELOG.md` gathers what the release contains, and the retrieval
+  decision is [ADR 0012](adr/0012-fused-local-retrieval.md). What remains is not
+  documentation — a decision on whether the release ships the app or the
+  instructions to build it, and then cutting and tagging it, which is the owner's
+  to do.
 - The bounded first-test measurements exist, but no sustained decode, long-context,
   16K/32K/64K comparison, battery, energy, or quality result exists yet.
 - `Evie.app` is ad-hoc signed until `Scripts/evie-app identity` is run on the
@@ -334,8 +356,9 @@ readiness only; they are not the Phase 1 performance suite.
 - ~~**The persona does not know about Mail and Calendar.**~~ Closed by `ea2344a`.
   `EvieCapabilitySnapshot` gained `readsMailAndCalendar`, so with the switch on
   the persona names `read_mail`, `search_mail` and `read_calendar`, says in
-  Portuguese that mail is read-only, and — since `383a92c` — instructs her to
-  call `propose_event` and never to claim she has already booked anything. The
+  Portuguese what she may do with mail, and — since `383a92c` — instructs her to
+  call `propose_event`, and since `6dade94` `propose_mail`, and never to claim she
+  has already booked or sent anything. The
   negative half was the point: without it, asked to schedule a call she searched
   the notes for a meeting that did not exist and reported not finding it.
 - The macOS Automation consent prompt for Mail and Calendar has never been
@@ -349,10 +372,11 @@ readiness only; they are not the Phase 1 performance suite.
   `add()` then reports success while showing nothing. A schedule posts its banner
   through `osascript` instead, and the answer is in the history either way. A
   notarised identity would change this and is not available for a self-signed one.
-- The schedules pane, the Mail and Calendar pane, the event confirmation card,
-  and everything else added this session are unaccepted by eye, which is `QA-006`
-  and not a separate blocker. The card is the newest of them and the one a person
-  has to read under time pressure to be worth anything.
+- The mail confirmation card has not been used by a person. The message sent and
+  the draft saved on 2026-08-07 prove the two scripts, not the card that asks
+  first — the same gap the event card had until `QA-006` closed it. It is the
+  card a person has to read under the most time pressure, and it is the only
+  surface added since that pass.
 - Location triggers require a trusted source such as a phone shortcut, Home
   Assistant, or a dedicated companion; the Mac alone does not provide a complete
   personal location event stream. Nothing event-driven is reachable at all under
@@ -382,15 +406,21 @@ What this does not cover, and should not be read as covering: the wake phrase
 and the Automation consent prompt, which has still never been observed because
 every terminal used to test already held the grant.
 
-**`REL-001` — the first release.** What it needs: `QA-006` passed, an ADR for the
-retrieval decision, a `1.0.0` section in the changelog, and a decision on whether
-the release ships the app or the instructions to build it. The update mechanism
-now argues for shipping the app: it installs only a bundle signed with the same
-key, which a tagged source release cannot offer.
+**`REL-001` — the first release.** What it needed: `QA-006` passed (2026-08-07),
+an ADR for the retrieval decision (now [ADR 0012](adr/0012-fused-local-retrieval.md)),
+a `1.0.0` section in the changelog (now written, and undated), and a decision on
+whether the release ships the app or the instructions to build it. Only the last
+one is left, and then the act of cutting the release itself — neither is a
+document. The update mechanism argues for shipping the app: it installs only a
+bundle signed with the same key, which a tagged source release cannot offer.
+Notarisation is not available for a self-signed identity, which constrains what
+that app can be.
 
 Do not configure WhatsApp, Drive, automatic microphone, or workflow activation
 before their permission and validation gates pass. Mail and Calendar are the one
-exception: no credential is held, nothing is sent, deleted or marked read, and
-the switch is off until somebody turns it on. The one thing that writes — an
-event, created from a button — is not a gate this paragraph relaxes, because no
-tool the model can call reaches it.
+exception: no credential is held, nothing is deleted or marked read, and the
+switch is off until somebody turns it on. The two things that write — an event
+created from a button, and a message sent from one — are not gates this paragraph
+relaxes, because no tool the model can call reaches either. A message does leave
+the Mac, which nothing else here does, and that is the reason its card shows
+every recipient in full and its approval can never be automatic.

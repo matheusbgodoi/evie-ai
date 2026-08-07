@@ -11,17 +11,26 @@ Six things landed since the snapshot below, and three of them move a phase.
   Drive do not exist" — but not by the route the phase describes. Mail and
   Calendar are read through the Apple applications that already hold the accounts,
   so there is no Google or Apple API scope, no token in the Keychain, and nothing
-  to revoke. Three reading tools, off by default. The exit criteria about
-  untrusted content and provenance are met; the ones about tokens and minimal
-  scopes are not met so much as sidestepped, and Drive remains untouched.
-- **Phase 7 (bounded write actions)** gains its second write, and the snapshot
-  below is out of date where it says "email and calendar writes do not exist".
-  Half of that still holds: nothing writes to mail. The calendar takes exactly
-  one write — creating an event — and it has the shape the phase asks for. The
-  tool the model calls, `propose_event`, performs nothing; creating is a separate
-  protocol the agent loop does not hold, so the approval is structural rather
-  than a policy the loop could be talked out of. No auto-approve path exists for
-  it, including when file auto-approval is on (`383a92c`, `b9bd7a0`).
+  to revoke. Three reading tools, off by default — plus two that propose and
+  belong to Phase 7 below. The exit criteria about untrusted content and
+  provenance are met; the ones about tokens and minimal scopes are not met so much
+  as sidestepped, and Drive remains untouched.
+- **Phase 7 (bounded write actions)** gains its second and third writes, and the
+  snapshot below is out of date where it says "email and calendar writes do not
+  exist" — neither half holds now. The calendar takes exactly one write, creating
+  an event (`383a92c`, `b9bd7a0`); mail takes one, sending a message, with saving
+  a draft beside it (`6dade94`). Both have the shape the phase asks for. The tools
+  the model calls, `propose_event` and `propose_mail`, perform nothing; creating
+  and sending are separate protocols the agent loop does not hold, so the approval
+  is structural rather than a policy the loop could be talked out of. No
+  auto-approve path exists for either, including when file auto-approval is on,
+  and for mail there is none under any setting at all. Mail is the first write in
+  this project that reaches somebody other than the owner, which is why its card
+  shows every recipient in full and refuses an address the conversation never
+  contained ([ADR 0010](adr/0010-refuse-unseen-mail-recipients.md),
+  [ADR 0011](adr/0011-draft-beside-send.md)). Replying, attaching, deleting,
+  filing and marking read remain unbuilt; inviting somebody to an event is not
+  unbuilt but impossible from a script here, measured (`docs/AUTOMATIONS.md`).
 - **Phase 6 (deterministic automation)** gains its trigger half. Schedules are
   `launchd` user agents — daily, chosen weekdays, or a watched folder — running
   Evie's own questions, with nothing resident between firings. The Shortcuts

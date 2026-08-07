@@ -146,9 +146,10 @@ from. It shows up in the smallest places:
   always-on processor no third-party app can reach, "so while Evie is armed, the
   dot is on. That is the true statement, and the settings pane says it."
 
-**Nothing leaves the Mac.** The inference client refuses a non-loopback endpoint.
-Web search is the single exception, it is off by default, and the setting says so
-where you turn it on.
+**Nothing leaves the Mac unless you sent it.** The inference client refuses a
+non-loopback endpoint. There are two exceptions and no others: web search, which
+is off by default and says so where you turn it on, and an e-mail you approved by
+pressing the button on a card that showed you every recipient and the whole text.
 
 **She cannot claim a capability she does not have.** The system prompt is
 generated from a snapshot of what is actually wired up, so a preference that is
@@ -176,7 +177,10 @@ prompt (`8f63c75`).
 
 **Nothing is approved by summary.** When she loads a skill you wrote, the card
 shows the instructions in full, because "agreeing to a summary is signing a page
-you were not shown" (`d0fbf05`).
+you were not shown" (`d0fbf05`). The card that sends an e-mail is the same rule
+under more pressure: every recipient written out in full, one per line, and the
+entire body — never "3 pessoas" and never a shortened text, because approving a
+summary would be approving something other than what leaves.
 
 ---
 
@@ -256,9 +260,42 @@ the Mail and Calendar applications that already hold your Gmail and iCloud. Ther
 is no account to connect, no Google application, and no token anywhere on this
 Mac.
 
-**From the mail she only reads.** No tool that sends, deletes, replies or marks a
-message read was written, so a message telling her to clear your inbox is asking
-for something that does not exist.
+**She can send a message, after you press a button.** Ask her to write to
+somebody and she calls `propose_mail`, which sends nothing: it works out who the
+message would go to, reads back the account it would leave from, and draws a
+card. The card is written for the mistake that actually happens, which is the
+wrong recipient rather than a typo in the body — **every address in full, one per
+line**, the sending account, the subject, and the whole text. Nothing is counted
+("3 pessoas"), shortened or summarised, and if it does not fit, the card grows.
+Three buttons: **Enviar**, **Salvar rascunho** and **Não**. There is no
+auto-approve for it, ever, even if you switched auto-approve on for file changes.
+
+**An address she invented is refused, not flagged.** Every recipient has to be an
+address you gave her, one she read in a message, or one you let her remember —
+matched whole, so a conversation that only ever said `pedro@empresa.com.br` does
+not vouch for `pedro@empresa.com`, and an address she wrote herself a moment ago
+is never evidence for itself. Asked to write to somebody she has no address for,
+she asks you for it. What that catches is an invented address; what catches a
+hostile one planted in a message she read is the recipient list on the card,
+which is why nothing on it is ever shortened.
+
+**"Salvar rascunho" reaches nobody**, files the same message in Rascunhos, and is
+there because "quase certo, muda uma palavra" is the common case — Mail is where
+editing and sending belong. **"Não" writes nothing anywhere** and leaves the
+message on screen, so a composition you wanted with one word changed is not
+thrown away with the card.
+
+**Deleting, replying, filing and marking read still do not exist.** No tool was
+written for any of them, so a message telling her to clear your inbox is asking
+for something that does not exist. Attachments were not built either: a file
+leaving this Mac is a different decision from a message you dictated.
+
+**Inviting people to an event she cannot do, and it is not a policy.** Measured
+on this Mac on 2026-08-07: Calendar's `make new attendee` fails with error -1719
+and leaves the attendee list empty, and passing attendees to `make new event`
+fails with -1700 — every attendee property is read-only in Calendar's scripting
+dictionary. Asked to invite somebody, she offers to send an e-mail with the
+details of the appointment instead.
 
 **On the agenda she can put one thing, after you press a button.** Ask her to
 book something and she calls `propose_event`, which creates nothing: it works out
@@ -274,12 +311,12 @@ does not exist (answered with the real list, never quietly swapped for the
 default), and a time carrying a timezone — honouring a `Z` would move a 10:30
 call to 07:30 and the card would show the moved hour.
 
-The scripts are fixed text inside the application — the one that writes exactly
-like the ones that read — and everything you type travels beside them as an
-argument, never as part of the program. That is the same rule that keeps a web
+The scripts are fixed text inside the application — the ones that write and send
+exactly like the ones that read — and everything you type travels beside them as
+an argument, never as part of the program. That is the same rule that keeps a web
 page from being an instruction, checked by tests that hand the real `osascript`
-break-out payloads, in a search term and in an event title, and assert nothing
-happened (`docs/SECURITY.md`).
+break-out payloads — in a search term, in an event title, and in a message's
+subject, body and recipient — and assert nothing happened (`docs/SECURITY.md`).
 
 ### Knowing what day it is
 
@@ -508,10 +545,28 @@ Mail e agenda, Agendamentos.
 wrote about a project, a company, a decision — and that is all. Your notes are a
 source, not a workspace she shares.
 
-**She reads your mail and never touches it.** No tool exists that sends, replies,
-deletes, files, or marks a message read. Reading is off by default as well. The
-guarantee is not that she has been told to behave — it is that her vocabulary has
-no word for it.
+**She never sends a message you have not read.** She can write one now, which she
+could not until `6dade94`, and this entry said she could not touch your mail at
+all until then. The guarantee has the same shape as the others rather than a
+weaker one: the tool she can call sends nothing, and the two functions that reach
+Mail live on a third protocol her loop does not hold and cannot be given. Only
+the buttons on the card call them, and there is no auto-approve path for mail
+under any setting.
+
+**She never writes to an address you never gave her.** A recipient has to appear
+in what you said, in what she read, or in what you let her remember — matched as
+a whole address. She cannot cite her own earlier sentence as evidence that an
+address exists.
+
+**She never attaches a file and never replies to a message.** No tool exists for
+either. A file leaving this Mac is a different decision from a message you
+dictated, and a reply would mean guessing which message was meant — guessing
+wrong sends your text to the wrong person.
+
+**She still never deletes, files, or marks your mail read.** No tool exists that
+does, so a message telling her to clear your inbox is asking for something that
+does not exist. The guarantee is not that she has been told to behave — it is
+that her vocabulary has no word for it.
 
 **She never puts anything in your calendar on her own.** She can now create one
 event, which she could not until `b9bd7a0`, and the guarantee has the same shape
@@ -520,9 +575,10 @@ performs nothing, and the function that writes lives on a protocol her loop does
 not hold. No sentence in a message, a web page or a document reaches it — only
 the button on the card. She cannot change or delete an event that already exists.
 
-**She never sends anything without being told.** Web search is the only thing in
-Evie that reaches the network, it is off by default, and the switch says so in
-the interface rather than in a settings file.
+**She never sends anything without being told.** Two things in Evie reach beyond
+this Mac and both are deliberate: web search, which is off by default and says so
+on its switch, and a message you approved on a card by pressing the button.
+Nothing else leaves.
 
 **She never deletes for good.** There is no tool in her vocabulary that
 permanently destroys anything; the strongest thing she can do to a file is put it
@@ -547,10 +603,14 @@ tax on the day. What that burst costs in heat and energy is measured too, below.
 writer refuses, because "pretending a move happened when a copy did would be
 worse than refusing" (`Sources/EvieCore/EvieFileWriter.swift`).
 
-Not built yet: writing to mail, changing or deleting a calendar event, Drive,
-WhatsApp, and workflow automations — she authors no macOS Shortcut and runs none.
-Creating an event is built, and is the one exception to the list above. She is
-told exactly which capabilities are wired up and will say so rather than pretend.
+Not built: changing or deleting a calendar event, replying to a message,
+attaching a file, Drive, WhatsApp, and workflow automations — she authors no
+macOS Shortcut and runs none. Inviting people to an event is not a matter of
+building it: Calendar on this Mac refuses to take an attendee from a script at
+all, measured, and she says so and offers an e-mail instead. Creating an event
+and sending a message are built, and they are the two exceptions to the list
+above — each behind a button. She is told exactly which capabilities are wired up
+and will say so rather than pretend.
 
 ---
 
@@ -730,19 +790,24 @@ over this one when they disagree.
 - **Evie does not own the model server's lifecycle.** Idle unload, crash
   recovery, power policy, and automatic startup are not hers yet; the runtime is
   started and stopped by hand.
-- **Mail is read-only; the calendar takes exactly one write.** This entry said
-  both were read-only until `b9bd7a0`. Creating an event is built and confirmed
-  by a button; changing or deleting one is not, and nothing writes to mail.
-  Drive, WhatsApp and workflow automations do not exist, and location triggers
-  would need a trusted source the Mac alone does not provide. Scheduled work
-  exists and is new: `launchd` fires it and the answer lands in the history, but
-  the banner it posts goes through `osascript` because macOS refuses
-  notifications to a locally-signed bundle.
+- **Mail takes one write and the calendar takes one; both are behind a button.**
+  This entry said both applications were read-only until `b9bd7a0`, and said mail
+  was until `6dade94`. Creating an event and sending a message are built and
+  confirmed by a press; changing or deleting an event, replying, attaching,
+  filing and marking read are not. Inviting somebody to an event is impossible
+  here rather than unbuilt — measured, and recorded in `docs/SECURITY.md`. Drive,
+  WhatsApp and workflow automations do not exist, and location triggers would
+  need a trusted source the Mac alone does not provide. Scheduled work exists and
+  is new: `launchd` fires it and the answer lands in the history, but the banner
+  it posts goes through `osascript` because macOS refuses notifications to a
+  locally-signed bundle.
 - **The consent prompt for Mail and Calendar has never been observed.** The
   refusal path is covered by tests against both wordings, not by having seen it.
-- **The event confirmation card has never been seen by a human.** One event was
-  created against the owner's own Calendar and deleted, which proves the script;
-  the card that asks first has only been asserted in tests.
+- **The mail confirmation card has not been used by a person.** A message was
+  sent and a draft saved against the owner's own address on 2026-08-07, which
+  proves the two scripts; whether anybody has yet read the card that asks first is
+  not recorded. The event card has: the owner booked a real appointment through
+  it, which is what passed `QA-006`.
 
 ---
 
