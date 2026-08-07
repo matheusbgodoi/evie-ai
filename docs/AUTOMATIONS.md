@@ -4,6 +4,13 @@ Status: recommendation, for a decision. Supersedes the Node-RED design previousl
 recorded under this name; that design is kept as an appendix because most of it
 survives the change of engine.
 
+**One part of this is now built and shipped.** Not the Shortcuts adapter — the
+triggers. Schedules run Evie's own questions on `launchd`, daily, on chosen
+weekdays, or when a watched folder changes, and Option 4 below is what they were
+built from. See *What was built — schedules, 2026-08-06* at the end of this
+document. Everything about Shortcuts in between remains research: no shortcut is
+authored, signed, installed, or run by any code in this repository.
+
 ## Se for para escolher hoje
 
 Fique com os Atalhos da Apple: eles enumeram em 11–26 ms, não deixam nenhum
@@ -57,7 +64,9 @@ because part of the answer is "she has most of this".
   the project's containment work, and if ever needed "should be a separate
   mechanism with its own confirmation, not a field on this one."
 - `Sources/EvieCore/EvieAgentLoop.swift` — a bounded tool-calling loop, four
-  iterations, four calls per iteration, with tools withdrawn on the last pass.
+  iterations, four calls per iteration. (It withdrew its tools on the last pass
+  when this was written; it no longer does, because the withdrawal was killing the
+  turn — see `docs/ARCHITECTURE.md`.)
 - `Sources/EvieCore/EvieTool.swift` — the tool-definition shape.
 - `Sources/EvieCore/SecureProcessRunner.swift` — already launches one bounded
   child process with no shell, no inherited environment, no inherited descriptors,
@@ -232,7 +241,8 @@ separate mechanism with its own confirmation." Adding a `passos:` key that runs
 things would be exactly the change that comment forbids.
 
 The second is that the agent loop is the wrong shape for a workflow. It is capped
-at four iterations, tools are withdrawn on the last pass, and the model decides
+at four iterations, the last pass declines to run anything further, and the model
+decides
 what to call. A workflow is deterministic by definition — the same steps, the same
 order, every time — and a model choosing steps is not a workflow, it is an answer
 that happens to have side effects. The existing comment in `EvieAgentLoop.swift`
@@ -928,6 +938,62 @@ Nothing was installed. The library is the same eight shortcuts it was this
 morning.
 
 ---
+
+## What was built — schedules, 2026-08-06
+
+Option 4's `launchd` half, and none of the rest. A schedule is a prompt and a
+trigger: every day at a time, on chosen weekdays at a time, or when a watched
+folder changes. Each becomes a user LaunchAgent — `StartCalendarInterval` for the
+clocks, `WatchPaths` for the folder — that runs this bundle with
+`--run-schedule <id>` and nothing else. Between one firing and the next there is
+no timer of Evie's, no daemon, and no process, which is the constraint this whole
+document was written under.
+
+The prompt goes through the same `EvieAgentLoop` a typed question goes through,
+with the persona, the memories, the granted folders and the web as they are
+configured. A scheduled question and a typed one are the same question asked by a
+different hand — including in what she is allowed to do with it.
+
+**Measured rather than assumed** (`c8ef4f3`). `--schedule-check` installs a real
+job for the next minute in a temporary folder, waits, and reports:
+
+| | |
+|---|---|
+| `launchd` fired the job | 83 s after install, at the minute asked for |
+| The turn | 51 s |
+| The answer | reached the conversation history |
+| A `WatchPaths` job of the same shape | fired exactly once on a file landing in the watched folder, exit 0 |
+
+Bounds and decisions worth keeping in one place:
+
+- **Twenty-four schedules at most**, a name of 80 characters and a prompt of
+  2,000 — long enough for a paragraph of instructions, short enough that the file
+  stays something a person can read (`Sources/EvieCore/EvieSchedule.swift`).
+- **Off means the plist is removed and the job unloaded**, not a flag the run
+  checks. A disabled schedule `launchd` still held would wake the application at
+  eight in the morning to do nothing, which is exactly the resident cost this
+  design exists to avoid.
+- **`ThrottleInterval` is 60 s for a watched folder.** The default is ten
+  seconds, and a folder gaining twenty files at once is one event per file; a
+  minute between starts turns a download burst into one run instead of twenty.
+- **Overlapping runs skip.** The second takes a non-blocking exclusive `flock`,
+  finds it held, writes `PULEI` to its log and exits.
+- **The prompt is not in the plist**, because `~/Library/LaunchAgents` is
+  readable by anything running as this user. See `docs/SECURITY.md`.
+- **Notifications fall back to `osascript`**, because
+  `UNUserNotificationCenter` refuses a locally-signed bundle on this Mac. Also
+  `docs/SECURITY.md`. The answer is in the history either way.
+
+**One earlier conclusion narrows.** This document says nothing event-driven is
+reachable under the constraint, because anything that listens is resident. That
+is still true of webhooks, MQTT, inbound mail and phone-pushed location. It is
+not true of a folder changing: `launchd` is already listening on this Mac, on
+behalf of the system, and `WatchPaths` borrows it. The rule the sentence was
+protecting holds — Evie starts nothing to wait — but the reachable set is larger
+than "clocks only".
+
+The Shortcuts adapter is still unwritten and the two open questions at the top of
+this document are still open.
 
 ## Appendix — what survives from the Node-RED design
 

@@ -1617,3 +1617,301 @@ repeat them.
   disabling Wi-Fi. Reported, not traceable to a commit here. What *is* traceable is
   the architecture that makes it plausible: `docs/VISION.md` records that the model
   runs in a system daemon, on-device, with nothing downloaded by Evie.
+
+**Both were made reproducible the same day** (`d33bac6`). `Scripts/evie-probe`
+re-runs them: the thinking probe asks for a reasoning mode three ways and shows
+all three accepted and ignored, which is worse than a refusal because a server
+that errors tells you where you stand; the vision probe switches Wi-Fi off, checks
+the network is actually gone — refusing to report anything if the Mac still has a
+route — and then describes a screen capture. The entries above stand as the record
+of what was known when; the claims are no longer "reported".
+
+## 2026-08-06 — Mail, Calendar, and the rule that made them safe
+
+- Three read-only tools — `read_mail`, `search_mail`, `read_calendar` — against
+  the two Apple applications, which already carry his Gmail and iCloud. **No OAuth
+  application, no token on disk, no account to set up**, which is the whole reason
+  this route was taken: the alternative was a Google Cloud project and a refresh
+  token for something the Mac can already read.
+- The door is AppleScript, and AppleScript has `do shell script`, so the design
+  turns on one rule: **no script is ever built by interpolation.** The three
+  programs are constants in the binary; inputs arrive through `on run argv`,
+  passed by `osascript -e <script> -- <args>` as process arguments that are never
+  parsed as code. A subject line is data on the way in as well as on the way out.
+- Two tests hold that rather than a comment. One asserts the sources contain no
+  `\(`, no `do shell script`, and none of the writing verbs. The other hands
+  `osascript` three real break-out payloads and checks the file they try to touch
+  does not exist afterwards — exit 0, empty stderr, no file, for all three.
+- Read-only **by construction**: no function that sends, deletes, marks or creates
+  was declared, so "apague os backups" asks for something that does not exist.
+  `refusedWritingNames` catches the model inventing `send_mail` and answers with a
+  sentence, because "essa ferramenta não existe" reads like a spelling problem and
+  gets tried again.
+- Bounded: eight messages by default and twenty at most, a 220-character snippet
+  rather than a body, forty events out of at most 120 collected, and a calendar
+  window that may not exceed a year. Inbox text is fenced like a web page, and for
+  a sharper reason — anyone who knows the address can put text in there.
+- Measured on this Mac, macOS 27, against the real applications, running the exact
+  script literals from the binary: `read_mail 5 all` 3.2 s over a 1,952-message
+  inbox; `read_mail 3 unread` 5.4 s with 1,244 unread, where the `whose` filter is
+  the cost; `search_mail "PUC" 5` 0.4 s; `read_calendar` for August 2026 5.0 s over
+  6 events in 4 calendars.
+- **Two things were found by running it rather than by reading it.** `messages of
+  inbox` then `item 1` returns a message from 13:09 while `message 1 of inbox`
+  returns the one from 21:44 — only the indexed form is newest first. And a real
+  event's location came back as three lines of postal address, which is why records
+  are delimited by ASCII 30 and 31 rather than by newlines.
+- **Not observed: the Automation consent prompt.** The terminal already held the
+  grant from earlier verification and every attempt to provoke a refusal was
+  authorised too. The `errAEEventNotPermitted` (-1743) path is covered by unit
+  tests against the Portuguese and English wording, not by having seen it. It is
+  recorded in `docs/PROJECT_STATUS.md` as an unverified path rather than passed
+  over.
+- Off by default behind `mail_and_calendar_enabled`, in Settings › O que ela sabe
+  › Mail e agenda. Somebody's inbox is not a default. The key is written by hand
+  into `CodingKeys` for the reason already documented at `EvieVoicePreferences`:
+  Foundation's snake-case conversions are not inverses around an acronym, and the
+  failure is a setting silently forgotten on every launch.
+
+## 2026-08-06 — a calculator, because a wrong sum looks like every other sentence
+
+- A language model doing arithmetic is a class of error that does not have to
+  exist, and it fails silently. `calculate` takes the expression and returns the
+  number.
+- **It is deliberately not `NSExpression`.** `NSExpression` evaluates function
+  calls and key paths, so handing it a string a model produced is closer to running
+  that string than to adding two numbers up. This is a hand-written
+  recursive-descent parser over a fixed grammar: numbers, `+ - * / ^`, a postfix
+  `%`, parentheses, unary minus, and twelve named functions. What is not in the
+  grammar cannot be evaluated — `system(2)` is an unknown name and
+  `self.description` is a character that does not belong in a sum.
+- Reading the number is the part that goes wrong without anybody noticing, because
+  1.234 is a thousand two hundred and thirty-four here and one point two three four
+  almost everywhere else. The rule: with both separators present the last one is
+  the decimal; a lone comma is always decimal; a lone dot is grouping only when
+  exactly three digits follow and the number does not open with a zero, which keeps
+  0.500 at half and 3.14159 at pi. Grouping is validated rather than tolerated —
+  1.2345,6 is refused, not turned into a number nobody wrote.
+- Because that case reads against the foreign convention, **every result carries
+  the reading that produced it**: "Expressão lida: 1234 + 15%" above "Resultado:
+  1.419,1", rendered without grouping so the reading is unambiguous on sight.
+- Percentages, which are most of what anybody calculates: `15% de 240`,
+  `240 + 15%` relative to what came before, a bare `15%` as a hundredth, and "de 80
+  para 100" as a change of 25%. The comma being decimal costs `min` and `max` their
+  argument separator, so those take a semicolon — and a comma that is not between
+  two digits is one too, which makes `max(1, 2)` work and `max(1,2)` a refusal
+  rather than a guess between 1.2 and two numbers.
+- **Nothing returns `NaN` and nothing returns silence.** Division by zero,
+  overflow, unbalanced parentheses, an unknown name, a square root of a negative —
+  each is a sentence in Portuguese the model can act on.
+- Declared on every turn and behind no preference: arithmetic carries no privacy
+  question and no I/O, and a calculator behind a switch is one nobody turns on.
+- Forty-odd tests: precedence, associativity, both number formats, every percentage
+  form, every refusal, and real sums with answers known in advance.
+
+## 2026-08-06 — the date once a day, the time every question
+
+- She did not know what day it was. `--print-persona` contained no date, so every
+  answer touching "hoje", "esta semana", "amanhã" or how long is left until a
+  deadline was a guess written in the voice of a fact, with nothing in the prompt
+  to check it against.
+- The obvious fix — put the clock in the system prompt and rebuild it each turn —
+  costs more than it looks. **That prompt is the cached prefix of every request,
+  and this Mac's server serves 42% of prompt tokens from that cache**, measured
+  over the last forty requests in its log. A prompt carrying the current minute
+  changes every turn, so the prefix never matches and the whole thing is
+  reprocessed: precise to the minute, paid for on every question.
+- So the two are separated. The **date** sits in the system prompt, unchanged for a
+  whole day; `refreshSystemPrompt` runs before each turn and returns early when the
+  text has not moved, so a session left open overnight stops answering with
+  yesterday. The **exact time** is attached to the question, after everything
+  cached, where the tokens were going to be new anyway.
+- The prompt opens with the moment in full — "quinta-feira, 6 de agosto de 2026,
+  23:42 (Horário Padrão de Brasília)". The weekday because most of what gets asked
+  is which day something falls on, and the timezone because a deadline without one
+  is only approximately a deadline.
+- `now` is a parameter defaulting to the moment of the call rather than a `Date()`
+  buried inside, which makes it testable and puts freshness in the caller's hands.
+- An unintended benefit worth keeping: each turn carries the time it was asked at,
+  so "há quanto tempo eu perguntei isso" has an answer, and the timestamps of
+  earlier turns never change — which is also what keeps the prefix stable.
+- **Two clock tests now assert the minute is absent rather than present.** That
+  inverts what they were written to check, so both carry the reason. The
+  determinism test fixes the moment, since two calls straddling a minute boundary
+  differ by design.
+- The arithmetic rule went in with the same change, gated on a `calculates` flag
+  that stayed false until the loop actually declared the tool: instructing her to
+  send every sum to a function nobody registered would turn an easy question into a
+  rejected request.
+
+## 2026-08-06 — schedules, held by launchd so Evie holds nothing
+
+- A schedule is a prompt and a trigger: every day at a time, on chosen weekdays at
+  a time, or when a watched folder changes. Each becomes a user LaunchAgent —
+  `StartCalendarInterval` for the clocks, `WatchPaths` for the folder — that runs
+  this bundle with `--run-schedule <id>` and nothing else. **Between one firing and
+  the next there is no timer of ours, no daemon and no process at all**, which is
+  the constraint this was built under, stated in capitals.
+- The prompt goes through the same `EvieAgentLoop` a typed question goes through,
+  with the persona, memories, granted folders and web as configured. A scheduled
+  question and a typed one are the same question asked by a different hand.
+- **Measured, not assumed.** `--schedule-check` installs a real job for the next
+  minute in a temporary folder, waits, and reports: `launchd` fired it 83 s after
+  install, at the minute asked for; the turn took 51 s; the answer reached the
+  conversation history. A `WatchPaths` job of the same shape fired exactly once on
+  a file landing in the watched folder, exit 0.
+- **The prompt is deliberately not in the plist.** `~/Library/LaunchAgents` is
+  readable by anything running as this user and a prompt may say "resume meus
+  e-mails não lidos"; it lives in the `0600` store instead, and only the identifier
+  travels on the command line.
+- **Notifications: the framework refuses this bundle.** `UNUserNotificationCenter`
+  needs no entitlement, but on this Mac `requestAuthorization` throws
+  `UNErrorDomain 1`, "Notifications are not allowed for this application", both
+  ad-hoc and signed with this project's own certificate — and `add()` then reports
+  success while showing nothing, which is the worse half. `NSUserNotification` is
+  not an alternative; it has been undeliverable for years. So the framework is
+  tried first, `osascript` posts the banner when it is refused, and the whole
+  answer is in the history either way.
+- **Two schedules that overlap do not queue.** The model is a single worker, and a
+  summary of the morning delivered after the morning has started is worth less than
+  the next run of the same schedule — so the second takes an exclusive
+  non-blocking `flock`, finds it held, writes "PULEI" to its log and exits.
+- `ThrottleInterval` is 60 s for a watched folder rather than the ten-second
+  default: a folder gaining twenty files at once is one event per file, and a
+  minute between starts turns a download burst into one run.
+- Off means the plist is removed and the job unloaded, not a flag the run checks. A
+  disabled schedule `launchd` still held would wake the application at eight in the
+  morning to do nothing.
+- The pane joins "O que ela sabe" as a fifth pane rather than becoming a sixth tab,
+  for the reason already measured in `SettingsView.swift`: macOS folds a tab bar it
+  cannot fit into an overflow chevron. Its view model is owned by the coordinator
+  rather than the settings window, because `reload()` sweeps LaunchAgents whose
+  schedule was deleted by hand, and that has to happen at launch rather than the
+  first time somebody opens a pane they may never open.
+
+## 2026-08-06 — the note index that was never built
+
+Kept as its own entry because it is one bug wearing three costumes, and the third
+one is a trap this repository had already documented and then walked into anyway.
+
+- **The index was only ever built when a folder was added or removed**, so a folder
+  granted in an earlier session produced no index at all. Every search of the notes
+  answered "não achei nada".
+- Fixed, and it then **walked the entire home folder**: over a million files across
+  more than 130,000 directories, still going after 25 seconds — 354,584 under
+  `~/Library`, 57,708 under `~/.bun`. It was not a slow build, it was an unbounded
+  one. The process sat at **0% CPU throughout**, which is what being blocked on I/O
+  looks like from outside, and is why it read as stopped rather than running.
+- Blanket-skipping `~/Library` is the obvious prune and is wrong here: Obsidian's
+  iCloud vault lives at `Library/Mobile Documents` and Google Drive and OneDrive at
+  `Library/CloudStorage`. Those are exactly the notes somebody means. So only those
+  two pass, and elsewhere a list of directory names that hold no human writing is
+  pruned by name at any depth, with `skipDescendants` rather than a filter — not
+  entering is the saving; entering and ignoring is the cost. A ceiling of 40,000
+  directories sits under all of it.
+- Pruned, and it filled its 12,000-passage budget on `~/Documents` and this
+  project's own source tree, stopping **before it reached the vault** — so the
+  notes the feature exists for were the one thing missing from it.
+- Pointed at the vault instead, and **the vault could not be found**.
+  `contentsOfDirectory` was called with `.skipsHiddenFiles`, and `~/Library`
+  carries the hidden flag, so listing the iCloud container the vault lives in
+  returns nothing. Measured: 0 entries with the option, 2 without.
+- **That trap was already documented in this repository**, in
+  `EvieVaultIndex.collect`, with its own measurement — 701 entries without the
+  option, 0 with. The fix was made there and never travelled, because nobody
+  looked. Both sites now carry the comment and point at each other. The lesson is
+  not "use fewer options": it is that a documented trap in one function is not a
+  fix in the next one, and a comment nobody greps for is a comment nobody has.
+- Ruled out along the way, with evidence rather than a guess: it is not a
+  permissions problem. The bundled application reads the vault fine — 8,629
+  passages in 0.2 s.
+- The index now holds 8,629 passages from the four folders that are actually his:
+  PUC-SP 7,690, Cluemed 534, Keymatic 361, EU 27. A search for "cluemed" reaches
+  185 passages and returns notes titled after it.
+
+## 2026-08-06 — smaller repairs, and what they cost to find
+
+- **Withdrawing the tools on the last pass was killing the turn.** `/web` died with
+  "generation failed", and the server's log named the cause exactly:
+  `GemmaToolCallParserError.unknownTool("search_web")` at status 500. The last pass
+  withdrew the tools so the model would have to produce words; it asks for a tool
+  anyway, because the conversation it is reading is nothing but tool calls and
+  another one is the obvious continuation — and this server rejects a call naming a
+  tool that was not declared. **The withdrawal caused the failure it existed to
+  prevent**, and turned a poor answer into no answer and an error blaming the
+  model. The tools stay declared now and the last pass declines them: each call
+  gets a result saying no lookups remain, then a user turn asks for an answer from
+  what was found. A user turn because this server refuses `developer` guidance once
+  a conversation has started, measured twice earlier in this project; and the tool
+  results alone were verified insufficient — with nothing else said the model simply
+  asked again and the turn still ended empty. Two tests changed rather than being
+  quietly adjusted: "the final request offers no tools" asserted the design that
+  was wrong. Verified end to end on the question that failed: four searches, 81 s,
+  and an answer that says what it could not find.
+- **`/buscar` was showing the storage format, not the note.** Dollars around every
+  formula, wikilinks as pairs of brackets, a block of YAML at the top, and rows of
+  pipes and dashes where a table used to be. The maths was the interesting one: the
+  old rule converted `$…$` only when it contained a backslash command, written to
+  keep R$ 1.234,56 intact. It did — and everything else with it, because most real
+  mathematics has no backslash in it. It is the other way round now: `$…$` is maths
+  unless the dollar is money, and money is recognised by the letter in front of it,
+  which also handles "custa R$ 10 e vende por R$ 20" where naive pairing would
+  swallow the sentence between the two amounts. Front matter is dropped only when a
+  note opens with it; a `---` in the middle is a horizontal rule and belongs to the
+  writing. Eleven tests, every example taken from a real search of this vault.
+- **The diagnostics moved out of the application's front door.**
+  `applicationDidFinishLaunching` was 370 lines of `CommandLine.arguments.contains`
+  before it launched anything, followed by 850 lines of the checks those branches
+  called, and `--help` could not be written without a second hand-kept list of
+  flags. Each check now declares its flag, its spelling, one line of what it does
+  and how many arguments must follow; `--help` is that list read out loud. The
+  delegate went from 1,438 lines to 71. Verified by running all of them rather than
+  by reading them, including that a flag written without its arguments does not
+  match at all and the application launches normally.
+- Three debts somebody else had found and left alone: the settings status bar
+  existed five times and the copies had already drifted; `/plano` carried its own
+  copy of the command parser that `/buscar` and `/web` share; and a TTS timeout
+  test flaked about twice per hundred runs. The last was the test, not the adapter
+  — macOS charges the first execution of a file it has never seen a provenance
+  check, measured over 200 launches at 29 ms median, 324 ms at the 99th percentile
+  and 450 ms at worst, against a 500 ms deadline, while 200 launches of an
+  already-executed file never passed 41 ms. The fixture warms the script before the
+  clock starts: 101 runs with 3 failures before, 150 runs with 0 after.
+
+## 2026-08-07 — found while writing this down
+
+- **The persona never mentions Mail or Calendar.** `EvieCapabilitySnapshot` gained
+  a `calculates` flag when the calculator landed, and nothing equivalent when the
+  readers did, so with the switch on the loop declares `read_mail`, `search_mail`
+  and `read_calendar` while the system prompt says nothing about them and
+  `--print-persona` shows nothing either. It fails in the safe direction — the
+  invariant is that she cannot claim a capability she does not have — but it is
+  exactly the inverse of the reason the arithmetic rule was given a paragraph of
+  its own: a tool rule that is absent gets skipped as surely as one that is buried.
+  Recorded rather than fixed; `EviePersona.swift` belongs to another agent this
+  session, and `docs/PROJECT_STATUS.md` carries it as a known gap.
+
+## 2026-08-07 — what it costs to leave her open
+
+- The question a reader has and this repository could not answer: what does Evie
+  cost when she is running and nobody is asking her anything? Measured on the
+  target Mac (base M5, 24 GB, macOS 27, AC power) against the installed bundle,
+  with the server already started, and written down with its method in
+  `docs/RESOURCE_BUDGET.md` so it can be repeated.
+- **Idle is genuinely idle**: 0% CPU for both the shell and the server over a
+  ten-second `cputime` delta, 10 MB resident for the shell and 9 MB for a server
+  that has been left alone. CPU is a `ps -o cputime=` delta rather than `ps`'s
+  lifetime average, which is the mistake that makes an idle process look busy or a
+  busy one look idle.
+- **A question is a burst, not a tax.** During one `--tools-check` turn the server
+  peaked at 130% of one core, of ten, and 1.66 GB resident; the shell stayed at 0%,
+  because it is waiting. System-wide free memory fell from 45–50% to 36% and was
+  back at 53–55% within nine seconds of the turn ending; the server's resident set
+  fell to 1.0 GB within six seconds and to 776 MB by thirty-six.
+- Two things the numbers do **not** say, recorded so nobody quotes them wrongly.
+  Resident memory is not the model — the weights are memory-mapped, so this is what
+  is paged in at that instant and not the 14.3 GB installation, and it is not
+  comparable to the 3,215 MB `ri_phys_footprint` figure elsewhere in these
+  documents. And the system-wide free percentage is the whole machine, with other
+  work running on it; the direction and the recovery are the finding, not the exact
+  percentage.

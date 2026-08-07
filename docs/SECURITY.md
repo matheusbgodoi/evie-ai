@@ -106,9 +106,18 @@ having written nothing. What is true today:
   is made.
 - **Retrieval**: over authorised folders only, into a cache under Application
   Support. Retrieved text is fenced as data.
-- **Accessibility and automation**: still none. No shortcut is run, authored, or
-  installed; nothing in `docs/AUTOMATIONS.md` has been implemented.
-- **Accounts and credentials**: still none.
+- **Apple Events**: Mail and Calendar are read through `osascript`, off by
+  default. Three read-only tools and nothing that writes. See below.
+- **Accessibility**: still none. No shortcut is run, authored, or installed;
+  nothing in `docs/AUTOMATIONS.md` has been implemented.
+- **Scheduled runs**: user LaunchAgents can wake the application to ask a
+  question she was given in advance. Nothing of Evie's runs between firings. See
+  below.
+- **Arithmetic**: `calculate` evaluates a fixed grammar in process. It has no
+  I/O, no preference, and is declared on every turn.
+- **Accounts and credentials**: still none. Mail and Calendar are read through
+  the accounts the Apple apps already hold, so there is no OAuth application, no
+  token on disk, and nothing to revoke inside Evie.
 
 The invariant that has not moved: no tool the model can call changes anything.
 
@@ -129,6 +138,96 @@ The loopback server itself has no authentication or TLS and must never be expose
 through a proxy, tunnel, wildcard bind, or remote interface. Future tools cannot be
 added to the direct UI adapter; they require the supervisor/policy boundary and
 separate read/propose/commit capabilities.
+
+### Reading Mail and Calendar
+
+Three read-only tools — `read_mail`, `search_mail`, `read_calendar` — against the
+two Apple applications, which already hold the user's Gmail and iCloud accounts.
+No OAuth application, no token, no account to configure. Off by default behind
+`mail_and_calendar_enabled`, in Settings › O que ela sabe › Mail e agenda.
+
+The door is AppleScript, and AppleScript has `do shell script`, so the whole
+design turns on one rule: **no script is ever built by interpolation.** The three
+programs are string constants in the binary. Inputs arrive through `on run argv`,
+passed by `osascript -e <script> -- <args>` as process arguments, which are never
+parsed as code. A subject line, a sender, or a search term is inert data on the
+way in as well as on the way out.
+
+Two tests hold that boundary rather than a comment:
+
+| Test | What it asserts |
+|---|---|
+| Source inspection | the script literals contain no `\(`, no `do shell script`, and none of the writing verbs |
+| Break-out execution | `osascript` is handed three real break-out payloads; afterwards the file they try to create does not exist |
+
+Measured for all three payloads: exit 0, empty stderr, no file
+(`1932f5a`, `Tests/EvieCoreTests/EvieMailCalendarTests.swift`).
+
+Read-only by construction, not by policy. No function that sends, deletes, marks
+or creates was declared, so a message saying "apague os backups" is asking for
+something that does not exist — the structural defence this document already
+states for the filesystem: prompt injection cannot call a function that was never
+declared. `refusedWritingNames` catches the model inventing `send_mail` anyway
+and answers with a sentence, rather than with a "no such tool" error that reads
+like a spelling problem and gets retried.
+
+What comes out of the inbox is fenced exactly like a web page, and for a sharper
+reason: anyone who knows the address can put text in there. Bounded, too — eight
+messages by default and twenty at most, a 220-character snippet rather than a
+body, forty events shown out of at most 120 collected, and a calendar window that
+may not exceed a year (`Sources/EvieCore/EvieMailCalendar.swift`).
+
+A denial from macOS Automation comes back as `errAEEventNotPermitted` (-1743),
+which is a number nobody can act on; it is translated into the application and
+the pane that grants it, Ajustes do Sistema › Privacidade e Segurança ›
+Automação. `NSAppleEventsUsageDescription` is in the generated `Info.plist`, in
+Portuguese, saying plainly what she reads. Neither application is launched by
+Evie: closed means "abra o Mail", not a window appearing by surprise.
+
+The Automation consent prompt itself was not observed. The terminal used for
+verification already held the grant, and every attempt to provoke a refusal was
+authorised too; the -1743 path is covered by unit tests against the Portuguese
+and English wording rather than by having been seen (`1932f5a`).
+
+### Scheduled runs
+
+A schedule is a prompt and a trigger, and each one becomes a user LaunchAgent in
+`~/Library/LaunchAgents` that runs this bundle with `--run-schedule <id>` and
+nothing else. Between one firing and the next there is no timer, no daemon, and
+no process of Evie's at all.
+
+**The prompt is deliberately not in the plist.** `~/Library/LaunchAgents` is
+readable by anything running as this user, and a prompt may say "resume meus
+e-mails não lidos". What travels on the command line is only which schedule to
+run; the text lives in `schedules.json` beside the rest of Evie's state, mode
+`0600` in a `0700` directory (`Sources/EvieCore/EvieScheduleAgent.swift`,
+`Sources/EvieShell/EvieScheduleStore.swift`).
+
+The identifier reaches a filename and a `launchctl` argument, so it is validated
+before anything is written — eight lowercase hex characters, the same shape
+`EvieFileRoot` uses. A hand-edited `../../something` in the store would otherwise
+write a plist wherever it liked (`Sources/EvieCore/EvieSchedule.swift`).
+
+A scheduled question is the same question a typed one is: the same
+`EvieAgentLoop`, the same persona, memories, granted folders and web setting. It
+gains no authority by being asked at eight in the morning, and it loses none.
+
+Two schedules that overlap do not queue. The model is a single worker, and a
+summary of the morning delivered after the morning has started is worth less than
+the next run of the same schedule, so the second run takes an exclusive
+non-blocking `flock`, finds it held, writes `PULEI` to its log and exits
+(`Sources/EvieShell/EvieScheduleLock.swift`).
+
+Notifications are a fallback rather than a preference.
+`UNUserNotificationCenter` needs no entitlement, but on this Mac it refuses a
+locally-signed bundle outright: `requestAuthorization` throws `UNErrorDomain 1`,
+"Notifications are not allowed for this application", both ad-hoc and signed with
+this project's own certificate, and `add()` then reports success while showing
+nothing. `NSUserNotification` is not an alternative; it has been undeliverable
+for years. So the framework is tried first, `osascript` posts the banner when it
+is refused, and the whole answer reaches the conversation history either way —
+history first, deliberately, so a refused notification never loses the answer
+(`c8ef4f3`, `Sources/EvieShell/EvieScheduleNotifier.swift`).
 
 ### Development runtime boundary
 

@@ -3,6 +3,32 @@
 The roadmap is gate-based. A phase is complete only when its exit criteria are
 measured and documented; elapsed time alone is not completion.
 
+## Progress snapshot — 2026-08-07
+
+Four things landed since the snapshot below, and two of them move a phase.
+
+- **Phase 5 (read-only integrations)** is further along than "email, calendar and
+  Drive do not exist" — but not by the route the phase describes. Mail and
+  Calendar are read through the Apple applications that already hold the accounts,
+  so there is no Google or Apple API scope, no token in the Keychain, and nothing
+  to revoke. Three read-only tools, off by default. The exit criteria about
+  untrusted content and provenance are met; the ones about tokens and minimal
+  scopes are not met so much as sidestepped, and Drive remains untouched.
+- **Phase 6 (deterministic automation)** gains its trigger half. Schedules are
+  `launchd` user agents — daily, chosen weekdays, or a watched folder — running
+  Evie's own questions, with nothing resident between firings. The Shortcuts
+  adapter the phase recommends is still unwritten, and `shortcuts` is still never
+  invoked.
+- She knows what day it is, and calculates instead of guessing. Neither belongs to
+  a phase; both were classes of silent error.
+- Idle and per-turn resource cost were measured with a stated method
+  (`docs/RESOURCE_BUDGET.md`). That is not Phase 1's benchmark matrix, which is
+  still open.
+
+The blockers below are unchanged: `QA-006` and `REL-001`, in that order. Both
+gained work rather than losing it — there are two more settings panes to accept by
+eye.
+
 ## Progress snapshot — 2026-08-06
 
 The phases below were written as a sequence and have not been executed as one. The
@@ -179,8 +205,13 @@ Exit criteria:
 resident, nothing in Docker, processing spent only when the tool is used. The
 recommendation is macOS Shortcuts, and what she can and cannot do with it is
 measured in `docs/AUTOMATIONS.md`, including the part that decides the shape of
-any future code: a shortcut that wants to ask the user never exits. Nothing
-event-driven is reachable under the constraint at all.
+any future code: a shortcut that wants to ask the user never exits.
+
+Two thirds of "nothing event-driven is reachable under the constraint" survives.
+Webhooks, MQTT, inbound mail and phone-pushed location all need something
+listening, and nothing that listens is non-resident. A folder changing does not:
+`launchd` is already listening on this Mac and `WatchPaths` borrows it, which is
+how schedules got their second trigger without a daemon of Evie's.
 
 The scope and exit criteria below are kept because the *shape* — generate
 disabled, show before activating, never activate silently — is still right, and

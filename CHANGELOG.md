@@ -6,6 +6,36 @@ All notable changes to Evie are documented here. Dates use `YYYY-MM-DD`.
 
 ### Added
 
+- She reads your Mail and your agenda. Three read-only tools against the Apple
+  applications that already hold your Gmail and iCloud, so there is no account to
+  connect, no Google application, and no token anywhere on the disk. Off by
+  default, in Settings › O que ela sabe › Mail e agenda — somebody's inbox is not
+  a default. Measured against the real applications: five messages in 3.2 s from a
+  1,952-message inbox, a search in 0.4 s, a month of the calendar in 5.0 s.
+- **She reads and never writes.** Nothing that sends, deletes, marks read or
+  creates a thing was built, so asking her to is asking for something that does
+  not exist. The scripts are fixed text in the application and what you type
+  travels beside them as data, never as part of the program — with a test that
+  hands the real `osascript` three break-out payloads and checks nothing happened.
+- She knows what day it is. She never did: every answer about "hoje", "esta
+  semana" or how long is left until a deadline was a guess written in the voice of
+  a fact. The date is now in what she is told about herself, and the exact time
+  goes with each question — separately, because a prompt that changed every minute
+  would throw away a cache that serves 42% of the prompt tokens on this Mac,
+  measured over the last forty requests in the server's log.
+- She calculates instead of guessing. `calculate` is a real parser over a fixed
+  grammar rather than the system's expression evaluator, which would run function
+  calls hidden in the text. It reads 1.234,56 and 1,234.56 as the same number, does
+  percentages the way people ask for them — "15% de 240", "de 80 para 100" — and
+  shows the reading that produced the result above the result. Nothing comes back
+  as `NaN`: a division by zero is a sentence explaining itself.
+- Schedules. Ask her something every day at eight, on the weekdays you choose, or
+  whenever a folder changes, in Settings › O que ela sabe › Agendamentos. macOS
+  wakes her, she asks the question, and she exits — there is nothing of hers
+  running in between. If two overlap the second skips rather than queues, since
+  waiting for the first would deliver the morning briefing after the morning.
+  Measured end to end: the job fired at the minute asked for, the answer reached
+  the history.
 - `/plano` breaks a hard question into steps and runs them in order, then writes
   the answer from what it found. It is a typed command and never a guess, because
   something that costs minutes should not start because a question looked
@@ -46,6 +76,22 @@ All notable changes to Evie are documented here. Dates use `YYYY-MM-DD`.
 
 ### Fixed
 
+- **Searching your notes found nothing, and had never found anything.** The index
+  was built only when you added or removed a folder, so a folder granted in an
+  earlier session had no index at all; once that was fixed it walked the whole home
+  folder — over a million files, still going after 25 seconds — and once that was
+  bounded it filled up before it ever reached the vault. And then the vault could
+  not be found, because listing skipped hidden entries and `~/Library`, where an
+  iCloud vault lives, is hidden. It now holds 8,629 passages from your four
+  folders, and a search for "cluemed" reaches 185 of them.
+- `/buscar` shows the note instead of the file it is stored in: formulas as
+  formulas, `[[links]]` as their titles, tables as tables, and no block of YAML at
+  the top. Money survives — "custa R$ 10 e vende por R$ 20" is not mathematics.
+- A question that needed several web searches ended in "generation failed" instead
+  of an answer. The last round of the search loop used to take her tools away so
+  she would have to write; she asked for one anyway, and the server rejects a call
+  to a tool that is no longer on the table. She keeps the tools now and is told
+  there is nothing left to look up. The question that failed answers in 81 s.
 - She speaks without the gaps. Blocks are now synthesised while the previous one
   plays, instead of after it finishes, which removes the pauses rather than
   shortening them — reported as "pausas longas de 5 ou 6 segundos do nada".
@@ -111,6 +157,16 @@ All notable changes to Evie are documented here. Dates use `YYYY-MM-DD`.
 
 ### Changed
 
+- The command-line checks list themselves. `--help` is generated from the same
+  declarations dispatch reads, so it cannot describe a check that no longer
+  exists, and the application's launch path went from 1,438 lines to 71.
+- `Scripts/evie-probe` re-runs two claims that had only ever been asserted in
+  conversation: that this model has no reasoning mode, and that sight works with
+  the network off. The second switches Wi-Fi off and refuses to report anything if
+  the Mac still has a route.
+- `OverlayViewModel` is five files instead of one of 2,278 lines, split along the
+  extensions it already contained. No behaviour changed, which is why the test
+  suite was the check that it worked.
 - One card per turn, not two. Your question is the card's title and its full text
   waits inside, so the column reads as a list of what you asked rather than a
   transcript of yourself.
