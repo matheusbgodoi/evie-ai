@@ -42,10 +42,12 @@ date is in the system prompt and the exact time rides with each question, for a
 measured reason recorded in `docs/MODEL_STRATEGY.md`.
 
 She reads Mail and Calendar, off by default, through the Apple applications that
-already hold the user's Gmail and iCloud — three read-only tools, no OAuth
-application and no token. She calculates rather than guessing: `calculate` is a
-recursive-descent parser over a fixed grammar, declared on every turn, deliberately
-not `NSExpression`.
+already hold the user's Gmail and iCloud — no OAuth application and no token. Mail
+is read-only. Since `383a92c` she can also create one calendar event: the tool she
+calls, `propose_event`, performs nothing and draws a card, and the event exists
+when a person presses the button. She calculates rather than guessing: `calculate`
+is a recursive-descent parser over a fixed grammar, declared on every turn,
+deliberately not `NSExpression`.
 
 Scheduled work exists for the first time. A schedule is a prompt plus a trigger —
 daily, chosen weekdays, or a watched folder — held by `launchd` as a user
@@ -100,12 +102,22 @@ logs also remain under `~/Library`.
 - `EvieVaultIndex`, `EvieVaultRetriever`, `EviePassageRanker`, and `EvieQueryTerms`
   retrieve by meaning as well as by word, fusing title, BM25 and embedding
   rankings. See `docs/RAG.md`.
-- `EvieMailCalendar` holds three read-only tools — `read_mail`, `search_mail`,
+- `EvieMailCalendar` holds three reading tools — `read_mail`, `search_mail`,
   `read_calendar` — as fixed AppleScript literals whose inputs travel as process
-  arguments through `on run argv`. Nothing that sends, deletes, marks read or
-  creates was declared. Off by default; `docs/SECURITY.md` records the two tests
-  that hold the boundary, including the break-out payloads run through the real
-  `osascript`.
+  arguments through `on run argv`. Nothing that sends, deletes or marks read was
+  declared. Off by default; `docs/SECURITY.md` records the tests that hold the
+  boundary, including the break-out payloads run through the real `osascript`.
+- `EvieCalendarEventProposal` and `EvieCalendarEventTool` add the fourth tool,
+  `propose_event`, on the same switch. It creates nothing: it resolves the
+  moments, reads back the writable calendar names, and records a proposal the
+  shell draws as a card. Creating is `EvieCalendarWriting.createEvent`, a separate
+  protocol that `EvieAgentLoop` does not hold — the loop's own test stub conforms
+  to the reading protocol only, so no test can make the loop write. The single
+  caller is the card's button in `AppCoordinator`, which re-checks
+  `mailAndCalendarEnabled` at the press; there is no auto-approve path, including
+  when file auto-approval is on. Refusals rather than guesses: a timezone
+  designator, an unknown calendar name, a start over five minutes past, a span
+  over thirty days, an empty title, an end at or before the start.
 - `EvieCalculator` and `EvieCalculatorTool` evaluate arithmetic over a fixed
   grammar with no I/O — Brazilian and foreign number formats, percentages, twelve
   named functions, and refusals that are sentences in Portuguese rather than
@@ -316,14 +328,13 @@ readiness only; they are not the Phase 1 performance suite.
   Evie starts a configured local executable and trusts it.
 - The exact smaller text and vision model candidates must be pinned immediately
   before benchmarking because this area changes quickly.
-- **The persona does not know about Mail and Calendar.**
-  `EvieCapabilitySnapshot` gained a `calculates` flag and no equivalent for mail,
-  so with the switch on the loop declares three tools the system prompt never
-  mentions and `--print-persona` does not show. This is the safe direction of the
-  invariant — she cannot claim a capability she lacks — but it is the reverse of
-  what the arithmetic rule was written for, and the evidence in this project is
-  that a tool she was not told about is a tool she does not reach for. Found while
-  documenting; the file belongs to another agent.
+- ~~**The persona does not know about Mail and Calendar.**~~ Closed by `ea2344a`.
+  `EvieCapabilitySnapshot` gained `readsMailAndCalendar`, so with the switch on
+  the persona names `read_mail`, `search_mail` and `read_calendar`, says in
+  Portuguese that mail is read-only, and — since `383a92c` — instructs her to
+  call `propose_event` and never to claim she has already booked anything. The
+  negative half was the point: without it, asked to schedule a call she searched
+  the notes for a meeting that did not exist and reported not finding it.
 - The macOS Automation consent prompt for Mail and Calendar has never been
   observed. The terminal used for verification already held the grant, and every
   attempt to provoke a refusal was authorised too; the `errAEEventNotPermitted`
@@ -335,8 +346,10 @@ readiness only; they are not the Phase 1 performance suite.
   `add()` then reports success while showing nothing. A schedule posts its banner
   through `osascript` instead, and the answer is in the history either way. A
   notarised identity would change this and is not available for a self-signed one.
-- The schedules pane, the Mail and Calendar pane, and everything else added this
-  session are unaccepted by eye, which is `QA-006` and not a separate blocker.
+- The schedules pane, the Mail and Calendar pane, the event confirmation card,
+  and everything else added this session are unaccepted by eye, which is `QA-006`
+  and not a separate blocker. The card is the newest of them and the one a person
+  has to read under time pressure to be worth anything.
 - Location triggers require a trusted source such as a phone shortcut, Home
   Assistant, or a dedicated companion; the Mac alone does not provide a complete
   personal location event stream. Nothing event-driven is reachable at all under
@@ -352,8 +365,11 @@ Two things, in this order, and they are the two things between here and a releas
 overlay was rebuilt around a bounded card, the answer now scrolls inside it, the
 chevron was straightened twice, the settings panes gained forty-three help tags,
 the history window gained multi-select, export and thumbnails, and "O que ela
-sabe" gained two more panes — Mail e agenda, and Agendamentos. All of it is
-unproven as a whole. This outranks every remaining feature.
+sabe" gained two more panes — Mail e agenda, and Agendamentos. The event
+confirmation card joined them and has never been seen by a human at all: one
+event was created against the owner's own Calendar and deleted, which proves the
+script and not the card that asks first. All of it is unproven as a whole. This
+outranks every remaining feature.
 
 **`REL-001` — the first release.** What it needs: `QA-006` passed, an ADR for the
 retrieval decision, a `1.0.0` section in the changelog, and a decision on whether
@@ -363,5 +379,7 @@ key, which a tagged source release cannot offer.
 
 Do not configure WhatsApp, Drive, automatic microphone, or workflow activation
 before their permission and validation gates pass. Mail and Calendar are the one
-exception and only in the read direction: no credential is held, nothing is sent,
-deleted or marked read, and the switch is off until somebody turns it on.
+exception: no credential is held, nothing is sent, deleted or marked read, and
+the switch is off until somebody turns it on. The one thing that writes — an
+event, created from a button — is not a gate this paragraph relaxes, because no
+tool the model can call reaches it.

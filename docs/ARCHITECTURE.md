@@ -2,7 +2,8 @@
 
 Status: the target architecture below is still the target. What is built is the
 native shell with a direct loopback client, an agent loop with read-only tools and
-one proposing writer, retrieval, voice in both directions, vision through the
+two proposing writers — one for files, one for calendar events, neither of which
+performs anything — retrieval, voice in both directions, vision through the
 system daemon, typed commands, and a self-update path. The `evied` supervisor does
 not exist; the application composition root is doing its job for now.
 
@@ -86,12 +87,16 @@ than leaving as an out-of-date boundary:
 - the application now starts a process — the voice engine, and only when a trained
   voice is asked for;
 - it now executes tools, in `EvieAgentLoop`, outside the transport;
-- one of those tools proposes a filesystem change, which a person then approves.
+- two of those tools propose — a filesystem change, and a calendar event — which
+  a person then approves.
 
 What has not changed is the invariant those abstinences were protecting: no tool
 the model can call changes anything. `propose_change` records a proposal and
-returns a result saying plainly that nothing happened. Prompt injection reaches a
-card, not a filesystem.
+returns a result saying plainly that nothing happened. `propose_event`, added in
+`383a92c`, has the same shape and is enforced by a stronger structure: creating
+the event is `EvieCalendarWriting`, a protocol `EvieAgentLoop` does not hold, so
+there is no path from a tool call to the Calendar app at all. Prompt injection
+reaches a card, not a filesystem and not an agenda.
 
 **The loop no longer withdraws its tools on the last pass.** It used to, so the
 model would have to produce words, and this server rejects a tool call naming a
@@ -155,7 +160,7 @@ system frameworks, and every process Evie starts.
 | Commands | `EvieCommand`, `EvieSearchCommands`, `EviePlan`, `EviePlanPrompts` |
 | Retrieval and grounding | `EvieVaultRetriever`, `EvieVaultPassage`, `EviePassageRanker`, `EvieQueryTerms`, `EvieGrounding`, `EvieAnswerProvenance`, `EvieWebSearch`, `EvieWebPassages` |
 | Files | `EvieRootRegistry`, `EvieFileToolbox`, `EvieScopedFileReader`, `EvieDocumentReader`, `EvieFileWriter`, `EvieFileChange`, `EvieChangeIntent` |
-| Mail and calendar | `EvieMailCalendar`, `EvieAppleScripts`, `EvieMailCalendarTool`, `EvieMailMessage`, `EvieCalendarEvent` |
+| Mail and calendar | `EvieMailCalendar`, `EvieAppleScripts`, `EvieMailCalendarTool`, `EvieMailMessage`, `EvieCalendarEvent`, `EvieCalendarEventProposal`, `EvieCalendarEventTool` |
 | Arithmetic | `EvieCalculator`, `EvieCalculatorTool` |
 | Schedules | `EvieSchedule`, `EvieScheduleTrigger`, `EvieScheduleAgent`, `EviePropertyList` |
 | Knowledge and identity | `EvieMemory`, `EvieSkill`, `EviePersona`, `EvieCapabilityContracts` |

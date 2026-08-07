@@ -6,17 +6,53 @@ All notable changes to Evie are documented here. Dates use `YYYY-MM-DD`.
 
 ### Added
 
-- She reads your Mail and your agenda. Three read-only tools against the Apple
+- She reads your Mail and your agenda. Three reading tools against the Apple
   applications that already hold your Gmail and iCloud, so there is no account to
   connect, no Google application, and no token anywhere on the disk. Off by
   default, in Settings › O que ela sabe › Mail e agenda — somebody's inbox is not
   a default. Measured against the real applications: five messages in 3.2 s from a
   1,952-message inbox, a search in 0.4 s, a month of the calendar in 5.0 s.
-- **She reads and never writes.** Nothing that sends, deletes, marks read or
-  creates a thing was built, so asking her to is asking for something that does
-  not exist. The scripts are fixed text in the application and what you type
-  travels beside them as data, never as part of the program — with a test that
-  hands the real `osascript` three break-out payloads and checks nothing happened.
+- **From the mail she only reads.** Nothing that sends, deletes or marks read was
+  built, so asking her to is asking for something that does not exist. The
+  scripts are fixed text in the application and what you type travels beside them
+  as data, never as part of the program — with a test that hands the real
+  `osascript` three break-out payloads and checks nothing happened.
+- **She can put one thing in your calendar, after you press a button.** Ask her
+  to book something and a card appears; the event exists when you agree and not
+  before. The card spells the weekday out — "terça-feira, 12 de agosto" — and
+  never shows an ISO string, because a wrong date is only catchable when it is
+  written the way you think, and a multi-day event repeats the weekday at both
+  ends. She names the calendar it will land in, read back from the app rather
+  than promised as "a padrão". Defaults: an hour when you gave no end, and the
+  first writable calendar when you named none.
+- She refuses rather than guesses when booking: an empty title, an end at or
+  before the start, a span over thirty days (that is a mistyped year), a start
+  more than five minutes in the past, a calendar name that does not exist
+  (answered with the real list, never quietly swapped), and a time carrying a
+  timezone — honouring a `Z` would move a 10:30 call to 07:30 and the card would
+  show the moved hour and be believed.
+- **The tool she calls to book creates nothing.** `propose_event` records a
+  proposal, exactly as file changes and memories already work. Writing to
+  Calendar lives on a protocol her loop does not hold, so no sentence in a
+  message, a web page or a document reaches it, and the test stub the loop runs
+  against cannot write even deliberately. There is no auto-approve for events,
+  including when you switched auto-approve on for file changes; the button
+  re-checks the Mail and agenda switch at the moment you press it. She still
+  cannot change or delete an event that already exists.
+- She is told what she can do with Mail and the calendar. The capability snapshot
+  had no entry for either, so with the switch on she held tools the persona had
+  never mentioned — and asked to schedule a call, she searched the notes for a
+  meeting that did not exist and reported not finding it. The negative half is
+  the one that mattered: without it she could not say "I can only read".
+- The sum is done before she is asked for it. `calculate` was declared on every
+  turn and she was told in capitals to use it, which is the instruction that had
+  already been declined twice over searching. Arithmetic now works the way
+  lookups do: the sum is found in the question, calculated, and handed over as
+  evidence. Deliberately narrow — "IC 25-26", "HTTP/2", "12/08" and "o artigo 5
+  da lei 8.078" all parse cleanly and all stay out. Measured against the running
+  model, twenty questions one at a time: ten easy sums 10/10 in her head, ten
+  harder ones of the same shapes 7/10 in her head against 10/10 grounded, and
+  grounded she answered in one completion instead of asking for the tool.
 - She knows what day it is. She never did: every answer about "hoje", "esta
   semana" or how long is left until a deadline was a guess written in the voice of
   a fact. The date is now in what she is told about herself, and the exact time
@@ -73,6 +109,24 @@ All notable changes to Evie are documented here. Dates use `YYYY-MM-DD`.
   which means that somebody who takes over the release page still cannot get code
   onto your Mac. If your copy is ad-hoc signed there is nothing to compare against,
   so it refuses every update rather than accepting any.
+
+### Changed
+
+- Opening a large vault stopped costing a second and a hundred megabytes. The
+  index was one JSON document, and a float in JSON is not four bytes — it is
+  `0.043117132`, eleven characters and a comma. The passages stay JSON; the
+  vectors go at the end as one contiguous run of raw Float32, mapped rather than
+  read. Measured on the same file both ways, through the new `--index-check`:
+  57.0 MB to 22.9 MB, 789 ms to 47 ms, and 151.0 MB of process peak to 49.8 MB.
+  A fingerprint over every vector's bit pattern and every passage's text is
+  identical in both formats, which is what says the smaller file lost nothing. A
+  damaged file is refused whole rather than half-loaded, and an existing
+  `vault-index.json` is converted in place instead of costing forty seconds of
+  re-embedding a vault that had not changed a line.
+- The permission sentence macOS shows for Mail and Calendar said she never
+  creates an event. That was true in the morning and false by the afternoon, so
+  it now says she reads the mail without sending, deleting or marking read, and
+  that she can create a calendar event only after you confirm it on a button.
 
 ### Fixed
 

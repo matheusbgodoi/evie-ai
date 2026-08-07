@@ -5,29 +5,46 @@ measured and documented; elapsed time alone is not completion.
 
 ## Progress snapshot — 2026-08-07
 
-Four things landed since the snapshot below, and two of them move a phase.
+Six things landed since the snapshot below, and three of them move a phase.
 
 - **Phase 5 (read-only integrations)** is further along than "email, calendar and
   Drive do not exist" — but not by the route the phase describes. Mail and
   Calendar are read through the Apple applications that already hold the accounts,
   so there is no Google or Apple API scope, no token in the Keychain, and nothing
-  to revoke. Three read-only tools, off by default. The exit criteria about
+  to revoke. Three reading tools, off by default. The exit criteria about
   untrusted content and provenance are met; the ones about tokens and minimal
   scopes are not met so much as sidestepped, and Drive remains untouched.
+- **Phase 7 (bounded write actions)** gains its second write, and the snapshot
+  below is out of date where it says "email and calendar writes do not exist".
+  Half of that still holds: nothing writes to mail. The calendar takes exactly
+  one write — creating an event — and it has the shape the phase asks for. The
+  tool the model calls, `propose_event`, performs nothing; creating is a separate
+  protocol the agent loop does not hold, so the approval is structural rather
+  than a policy the loop could be talked out of. No auto-approve path exists for
+  it, including when file auto-approval is on (`383a92c`, `b9bd7a0`).
 - **Phase 6 (deterministic automation)** gains its trigger half. Schedules are
   `launchd` user agents — daily, chosen weekdays, or a watched folder — running
   Evie's own questions, with nothing resident between firings. The Shortcuts
   adapter the phase recommends is still unwritten, and `shortcuts` is still never
   invoked.
-- She knows what day it is, and calculates instead of guessing. Neither belongs to
-  a phase; both were classes of silent error.
+- She knows what day it is, and calculates instead of guessing — and since
+  `915d3b0` the sum is found in the question and handed over as evidence rather
+  than requested of her. Measured against the running model, twenty questions:
+  ten easy sums were 10/10 unaided, and ten harder ones of the same shapes were
+  7/10 unaided against 10/10 grounded. Neither belongs to a phase; both were
+  classes of silent error.
+- The vault index stopped being JSON (`293fb29`). Same file, both ways, through
+  `--index-check`: 57.0 MB to 22.9 MB, 789 ms to 47 ms, 151.0 MB peak to
+  49.8 MB, with a fingerprint over every vector and passage identical across the
+  two formats. Not a phase gate; it is the cost of opening the index, which the
+  retrieval phases assume is close to free.
 - Idle and per-turn resource cost were measured with a stated method
   (`docs/RESOURCE_BUDGET.md`). That is not Phase 1's benchmark matrix, which is
   still open.
 
 The blockers below are unchanged: `QA-006` and `REL-001`, in that order. Both
 gained work rather than losing it — there are two more settings panes to accept by
-eye.
+eye, and now the event confirmation card as well, which no human has seen.
 
 ## Progress snapshot — 2026-08-06
 

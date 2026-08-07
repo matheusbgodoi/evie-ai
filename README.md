@@ -255,13 +255,30 @@ the Mail and Calendar applications that already hold your Gmail and iCloud. Ther
 is no account to connect, no Google application, and no token anywhere on this
 Mac.
 
-**She reads and nothing else.** No tool that sends, deletes, marks read or creates
-an event was written, so a message telling her to clear your inbox is asking for
-something that does not exist. The scripts are fixed text inside the application
-and everything you type travels beside them as an argument, never as part of the
-program — the same rule that keeps a web page from being an instruction, checked
-by a test that hands the real `osascript` three break-out payloads and asserts
-nothing happened (`docs/SECURITY.md`).
+**From the mail she only reads.** No tool that sends, deletes, replies or marks a
+message read was written, so a message telling her to clear your inbox is asking
+for something that does not exist.
+
+**On the agenda she can put one thing, after you press a button.** Ask her to
+book something and she calls `propose_event`, which creates nothing: it works out
+the date, reads back the real names of your calendars, and draws a card that
+spells the weekday out — "terça-feira, 12 de agosto" rather than an ISO stamp,
+because a wrong date is the thing you can only catch if it is written the way you
+think. The event exists when you press the button and not before. There is no
+auto-approve for it, even if you switched auto-approve on for file changes.
+
+She refuses rather than guesses: a date more than five minutes past, a span over
+thirty days, an empty title, an end at or before the start, a calendar name that
+does not exist (answered with the real list, never quietly swapped for the
+default), and a time carrying a timezone — honouring a `Z` would move a 10:30
+call to 07:30 and the card would show the moved hour.
+
+The scripts are fixed text inside the application — the one that writes exactly
+like the ones that read — and everything you type travels beside them as an
+argument, never as part of the program. That is the same rule that keeps a web
+page from being an instruction, checked by tests that hand the real `osascript`
+break-out payloads, in a search term and in an event title, and assert nothing
+happened (`docs/SECURITY.md`).
 
 ### Knowing what day it is
 
@@ -491,9 +508,16 @@ wrote about a project, a company, a decision — and that is all. Your notes are
 source, not a workspace she shares.
 
 **She reads your mail and never touches it.** No tool exists that sends, replies,
-deletes, files, or marks a message read, and none creates or changes a calendar
-event. Reading is off by default as well. The guarantee is not that she has been
-told to behave — it is that her vocabulary has no word for it.
+deletes, files, or marks a message read. Reading is off by default as well. The
+guarantee is not that she has been told to behave — it is that her vocabulary has
+no word for it.
+
+**She never puts anything in your calendar on her own.** She can now create one
+event, which she could not until `b9bd7a0`, and the guarantee has the same shape
+as the one above rather than a weaker one: the tool she can call proposes and
+performs nothing, and the function that writes lives on a protocol her loop does
+not hold. No sentence in a message, a web page or a document reaches it — only
+the button on the card. She cannot change or delete an event that already exists.
 
 **She never sends anything without being told.** Web search is the only thing in
 Evie that reaches the network, it is off by default, and the switch says so in
@@ -522,9 +546,10 @@ tax on the day.
 writer refuses, because "pretending a move happened when a copy did would be
 worse than refusing" (`Sources/EvieCore/EvieFileWriter.swift`).
 
-Not built yet: writing to mail or the calendar, Drive, WhatsApp, and workflow
-automations — she authors no macOS Shortcut and runs none. She is told exactly
-which capabilities are wired up and will say so rather than pretend.
+Not built yet: writing to mail, changing or deleting a calendar event, Drive,
+WhatsApp, and workflow automations — she authors no macOS Shortcut and runs none.
+Creating an event is built, and is the one exception to the list above. She is
+told exactly which capabilities are wired up and will say so rather than pretend.
 
 ---
 
@@ -670,14 +695,19 @@ over this one when they disagree.
 - **Evie does not own the model server's lifecycle.** Idle unload, crash
   recovery, power policy, and automatic startup are not hers yet; the runtime is
   started and stopped by hand.
-- **Mail and calendar are read-only and unwritten in the other direction.** Drive,
-  WhatsApp and workflow automations do not exist, and location triggers would need
-  a trusted source the Mac alone does not provide. Scheduled work exists and is
-  new: `launchd` fires it and the answer lands in the history, but the banner it
-  posts goes through `osascript` because macOS refuses notifications to a
-  locally-signed bundle.
+- **Mail is read-only; the calendar takes exactly one write.** This entry said
+  both were read-only until `b9bd7a0`. Creating an event is built and confirmed
+  by a button; changing or deleting one is not, and nothing writes to mail.
+  Drive, WhatsApp and workflow automations do not exist, and location triggers
+  would need a trusted source the Mac alone does not provide. Scheduled work
+  exists and is new: `launchd` fires it and the answer lands in the history, but
+  the banner it posts goes through `osascript` because macOS refuses
+  notifications to a locally-signed bundle.
 - **The consent prompt for Mail and Calendar has never been observed.** The
   refusal path is covered by tests against both wordings, not by having seen it.
+- **The event confirmation card has never been seen by a human.** One event was
+  created against the owner's own Calendar and deleted, which proves the script;
+  the card that asks first has only been asserted in tests.
 
 ---
 

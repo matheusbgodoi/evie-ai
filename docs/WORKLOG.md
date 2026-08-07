@@ -1644,6 +1644,8 @@ of what was known when; the claims are no longer "reported".
   does not exist afterwards — exit 0, empty stderr, no file, for all three.
 - Read-only **by construction**: no function that sends, deletes, marks or creates
   was declared, so "apague os backups" asks for something that does not exist.
+  (True as written on this date and superseded the next day for the calendar
+  half only — see 2026-08-07 below. Mail is unchanged.)
   `refusedWritingNames` catches the model inventing `send_mail` and answers with a
   sentence, because "essa ferramenta não existe" reads like a spelling problem and
   gets tried again.
@@ -1915,3 +1917,141 @@ one is a trap this repository had already documented and then walked into anyway
   documents. And the system-wide free percentage is the whole machine, with other
   work running on it; the direction and the recovery are the finding, not the exact
   percentage.
+
+## 2026-08-07 — four million floats that were being written as text
+
+- Commit: `293fb29`
+- The vault index was one JSON document, and a float in JSON is not four bytes —
+  it is `0.043117132`, eleven characters and a comma. 8,629 passages with a
+  512-dimension vector each are 17 MB of numbers; the file on this Mac was
+  57 MB, reading it meant decoding 4.4 million floats out of text, and the
+  footprint went to 151 MB for an index that occupies 11 MB once settled.
+- Each half is now stored the way it wants to be. The passages stay JSON — text
+  of varying length whose shape will change again — at about 6 MB. The vectors
+  are a rectangle of fixed-width numbers, so they go at the end as one contiguous
+  run of raw Float32 that a reader finds by arithmetic and copies straight into
+  the array it will live in. No intermediate `Data`, no `Array(data)`. The file
+  is mapped, not read.
+- Measured on this Mac, the same file both ways, through the new `--index-check`:
+
+  | | JSON | binary |
+  |---|---|---|
+  | size | 57.0 MB | 22.9 MB |
+  | read | 789 ms | 47 ms |
+  | process peak | 151.0 MB | 49.8 MB |
+
+  Warm-cache best of three; the first read of the 22.9 MB file after writing it
+  took 159 ms. The check also prints a fingerprint over every vector's bit
+  pattern and every passage's text, and both formats print `b588c8db9d14ca81` —
+  which is what says the smaller file lost nothing.
+- Byte order and float width are part of the format rather than an assumption
+  nobody wrote down: header integers little-endian, the vector block IEEE-754
+  binary32 in the host's order, with `supportsThisHost` stating it out loud so
+  decoding refuses rather than misreads if it is ever false. A damaged file is
+  refused whole — the length must be exactly what the header's arithmetic
+  implies, verified against the real 22.9 MB index truncated by 10,000 bytes —
+  because an index that quietly answers with two thirds of the vault is worse
+  than one that rebuilds. An existing `vault-index.json` is converted rather than
+  rebuilt, which saves forty seconds of re-embedding a vault that had not changed
+  a line.
+
+## 2026-08-07 — the sum done before she is asked for it
+
+- Commit: `915d3b0`
+- The calculator was declared on every turn and the persona told her, in
+  capitals, to send every sum to it — the same instruction already declined twice
+  over searching, which is why lookups happen before the model is asked rather
+  than being requested of it. Arithmetic now works the same way: the sum is found
+  in the question, calculated, and handed over as evidence beside the vault
+  passages and the web findings.
+- The rule is deliberately narrow, because the two failure modes are not
+  symmetric. An unnecessary search returns noise she can ignore; an unnecessary
+  sum puts a number in front of her, and a number is the one kind of evidence a
+  model uses whether or not it was asked for. A candidate must be an expression
+  with an operator between two operands, and either be the whole message or carry
+  a symbol that only ever means arithmetic — "IC 25-26", "HTTP/2", "12/08" and "o
+  artigo 5 da lei 8.078" all parse cleanly and all stay out. Words are never read
+  as operators unless the question said a calculation was wanted: "3 caixas de
+  12" is a statement, not a product. A calculator refusal drops the candidate
+  silently, because a refusal means this code read the sentence wrong, not that
+  the turn is broken.
+- Measured against the running model, twenty questions, one request at a time:
+  ten easy sums answered in her head with no calculator were **10/10** — the
+  premise that she gets these wrong is not true at that size. Ten harder ones of
+  the same shapes were **7/10 in her head against 10/10 grounded**, and grounded
+  she answered in one completion instead of asking for the tool. The three she
+  got wrong unaided were `4783 * 926` (off by 2.000), `3,7 * 8,9 * 12` and
+  `(12500 - 3480) / 7` — every one of them the kind of number that gets pasted
+  into a quote.
+
+## 2026-08-07 — telling her what she can do with Mail and the calendar
+
+- Commit: `ea2344a`. Closes the gap recorded above under "found while writing
+  this down", which said the persona never mentions Mail or Calendar and could
+  only be recorded because `EviePersona.swift` belonged to another agent.
+- Asked to schedule a call, she searched the notes for a meeting that did not
+  exist and reported not finding it — an answer to a question nobody asked. Two
+  faults behind it. The switch was off, so the tools were never declared, which
+  is working as designed. But `EvieCapabilitySnapshot` had no entry for Mail and
+  Calendar, so even with the switch on she would hold three tools the persona had
+  never mentioned.
+- It is announced in both directions and the negative half is the one that
+  matters: without it she cannot say "I can only read", she can only fail to find
+  something and describe the failure. `readsMailAndCalendar` now names the three
+  tools and states in Portuguese that mail is read-only.
+
+## 2026-08-07 — one thing she may put in the calendar, after he says yes
+
+- Commits: `383a92c` (the capability), `b9bd7a0` (the permission string macOS
+  shows). Supersedes the calendar half of "Read-only by construction" in the
+  2026-08-06 entry above; the mail half is untouched and stays true.
+- She could read the calendar and not write to it, so "marca call pela Cluemed
+  hoje 10:30" got an answer about not finding a meeting in his notes. She
+  proposes now, and nothing reaches the calendar until a button is pressed — the
+  same shape file changes and memories already have.
+- **`propose_event` creates nothing.** It resolves the moments, reads back the
+  real calendar names, and records a proposal the shell draws as a card. Writing
+  is `EvieCalendarWriting.createEvent`, deliberately a second protocol rather
+  than a fourth method on the reading one, and `EvieAgentLoop` holds only the
+  reader. The structural consequence is the interesting part for the security
+  document: the stub the loop's own tests run against conforms to
+  `EvieMailCalendarReading` and nothing else, **so no test can make the loop
+  write even deliberately**. There is no auto-approve path for events even when
+  file auto-approval is on, and the button re-reads `mailAndCalendarEnabled` at
+  the moment of the press — a card can sit on screen while somebody turns Mail
+  and agenda off.
+- The card is written for a person rather than for a machine. The weekday is
+  spelled out and no ISO string is ever shown, because the date is the thing the
+  model gets wrong and "terça-feira, 12 de agosto" is what makes a wrong one
+  visible when you asked for Monday; a multi-day event repeats the weekday at
+  both ends, which is where one of the two is usually the mistake. The calendar
+  it will land in is named, resolved to a real name before the card is drawn
+  rather than promised as "a padrão".
+- Defaults, and why: an hour when no end was given, because that is the shape of
+  the request that omits one; the first writable calendar when none was named.
+- Refused rather than guessed: an empty title; an end at or before the start; a
+  span over thirty days, which is a mistyped year; a start more than five minutes
+  in the past, which is almost always the wrong year rather than an intention;
+  any ISO string carrying `Z` or an offset, because silently honouring a `Z`
+  would move a 10:30 call to 07:30 and the card would show the moved hour and be
+  believed; and a named calendar that does not exist, answered with the real list
+  rather than redirected to the default — a work call in the family calendar is
+  not noticed until the wrong people see it.
+- The creating script obeys the rule the reading ones do: a compiled-in constant,
+  with title, calendar name and location travelling as process arguments through
+  `on run argv`, and both halves tested against the real `osascript` with a
+  break-out payload in the title. The reading set and the writing one are kept as
+  separate lists so the "no writing verb" assertion stays a real assertion
+  instead of a list with an exception in it. Verified against his own Calendar:
+  one event created in "Calendário", read back at 04:00 on Saturday, and deleted.
+- Mail is untouched. Sending is irreversible and reaches other people; an event
+  is neither, which is the whole reason this one was built.
+- **The `NSAppleEventsUsageDescription` said she never creates an event.** That
+  was true in the morning, and it is the string macOS shows while asking for the
+  Automation grant, so it was the whole sentence that had to change rather than a
+  detail. It now says mail is read without sending, deleting or marking read, and
+  that a calendar event is created only after confirmation on a button.
+- Unproven: **the confirmation card has never been seen by a human.** The event
+  created against his own Calendar proves the script, not the card that asks
+  first. That belongs to `QA-006`, with the "Mail e agenda" and "Agendamentos"
+  panes.
