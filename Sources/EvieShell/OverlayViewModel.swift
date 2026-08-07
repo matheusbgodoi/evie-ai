@@ -160,6 +160,12 @@ final class OverlayViewModel: ObservableObject {
   /// falls back to scanning for a substring, which is worse and is better than
   /// nothing.
   var retrieveFromVault: (@Sendable (String) async -> [EvieRetrievedPassage])?
+  /// How many passages of the notes are indexed right now.
+  ///
+  /// Asked before a search so "nothing matched" and "nothing has been read yet"
+  /// can be told apart — they produce the same empty result and mean opposite
+  /// things.
+  var indexedPassageCount: @MainActor () -> Int = { 0 }
   /// What she has been allowed to remember. Asked for when a turn starts rather
   /// than held, so a memory deleted in Settings stops applying to the next
   /// question rather than to the next launch.

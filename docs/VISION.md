@@ -140,3 +140,18 @@ immediately would guess at a question that has not been asked.
 A single turn carries at most 20 000 characters of document text, after which the
 evidence is cut with a visible marker. Without that ceiling a long PDF would push
 the actual question out of the model's context.
+
+## Verified offline
+
+The claim that sight is local was checked rather than reasoned about, because
+"on-device" and "on Apple's servers" are indistinguishable from inside the app.
+`Scripts/evie-probe vision` re-runs it: switch Wi-Fi off, confirm the network is
+actually gone, describe an image.
+
+Reading from 2026-08-06, macOS 27.0: with Wi-Fi off and `ping apple.com`
+failing, `--see` reported `visão disponível: true` and returned a correct
+description in 3.50 s.
+
+This also settles what it is *not*. Apple Intelligence can route some requests to
+Private Cloud Compute; `SystemLanguageModel.default` does not, and the radio
+being off is the proof.

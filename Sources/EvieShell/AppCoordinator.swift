@@ -131,6 +131,7 @@ final class AppCoordinator: NSObject {
     viewModel.grantedRoots = { [rootsViewModel] in rootsViewModel.roots }
     viewModel.memories = { [memoryViewModel] in memoryViewModel.entries }
     viewModel.installedSkills = { [skillsViewModel] in skillsViewModel.skills }
+    viewModel.indexedPassageCount = { [vaultIndex] in vaultIndex.passageCount }
     // Snapshotted per call rather than captured once: the index rebuilds when a
     // folder is granted, and a stale snapshot would search yesterday's vault.
     viewModel.retrieveFromVault = { [weak self] query in
@@ -332,6 +333,7 @@ final class AppCoordinator: NSObject {
     // her by name does not depend on having opened settings this session.
     updateWakeListening()
     attachMediaLifecycle()
+    buildVaultIndexIfMissing()
 
     // Evie has no Dock icon, so there is no ordinary way to reach Settings when a
     // shortcut is unavailable. This flag is that way out, and it is what makes the
@@ -938,6 +940,25 @@ extension AppCoordinator {
   /// Deleting a conversation deletes what was attached to it, and anything left
   /// behind by a crash is swept at launch — a folder of pictures nobody can
   /// reach is exactly the kind of thing that quietly fills a disk.
+  /// Builds the note index at launch when there is none.
+  ///
+  /// It used to be built only when a folder was added or removed, which meant a
+  /// folder authorised in an earlier session never produced an index at all —
+  /// every search of the notes answered "não achei nada" and every question
+  /// silently fell through to the web or to memory. The retrieval was fine; it
+  /// was never given anything to retrieve from.
+  ///
+  /// Cheap when a cache exists, since a rebuild only re-embeds files whose
+  /// contents changed. The first build over a real vault costs about forty
+  /// seconds and runs off the main actor.
+  fileprivate func buildVaultIndexIfMissing() {
+    let roots = rootsViewModel.roots
+    guard !roots.isEmpty, vaultIndex.passageCount == 0 else {
+      return
+    }
+    vaultIndex.rebuild(roots: roots)
+  }
+
   fileprivate func attachMediaLifecycle() {
     let store = mediaStore
     Task { @MainActor [weak self] in

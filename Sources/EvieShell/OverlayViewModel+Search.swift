@@ -24,6 +24,16 @@ extension OverlayViewModel {
       return
     }
 
+    // An index that does not exist yet and one that holds nothing relevant give
+    // the same empty answer, and the difference is everything: one means "your
+    // notes do not mention this" and the other means "I have not read them".
+    // Reporting the second as the first is how a search told him his notes were
+    // empty when they were only unread.
+    if indexedPassageCount() == 0 {
+      finishFailure(SearchCommandFailure.notesNotRead, requestID: requestID)
+      return
+    }
+
     updateActiveArtifact(with: "Procurando nas suas anotações…")
     let found = await retrieve(term)
     guard activeRequestID == requestID else {
@@ -89,6 +99,7 @@ extension OverlayViewModel {
   enum SearchCommandFailure: LocalizedError {
     case nothingToFind
     case noNotes
+    case notesNotRead
     case nothingToAsk
     case webIsOff
 
@@ -98,6 +109,9 @@ extension OverlayViewModel {
         "Escreva o que você quer achar depois de /buscar."
       case .noNotes:
         "Ainda não tenho anotações indexadas — autorize a pasta do seu vault em Configurações."
+      case .notesNotRead:
+        "Ainda estou lendo suas anotações pela primeira vez. Leva menos de um "
+          + "minuto; tente de novo em seguida."
       case .nothingToAsk:
         "Escreva a pergunta depois de /web."
       case .webIsOff:

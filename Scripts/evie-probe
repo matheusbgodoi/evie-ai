@@ -1,0 +1,101 @@
+#!/bin/zsh
+
+# Re-runs two claims that were made about this Mac, so neither has to be taken
+# on trust. Both were asserted in conversation before they were written down,
+# which is exactly the kind of claim this project is not supposed to contain.
+#
+#   thinking  Does the served model have a reasoning mode that can be toggled?
+#   vision    Does the image description work with the network switched off?
+
+set -euo pipefail
+
+readonly EVIE_MODEL_ENDPOINT="http://127.0.0.1:38433/v1/chat/completions"
+readonly EVIE_APP="${HOME}/Applications/Evie.app/Contents/MacOS/evie-shell"
+
+function usage() {
+  print "Usage: Scripts/evie-probe <thinking|vision>"
+}
+
+function thinking() {
+  print "Asking the served model for a reasoning mode, three ways."
+  print "A parameter that is accepted and then ignored is not support."
+  print ""
+  /usr/bin/python3 - "${EVIE_MODEL_ENDPOINT}" <<'PY'
+import json, sys, urllib.request
+
+endpoint = sys.argv[1]
+
+def ask(extra, label):
+    body = {
+        "model": "gemma-4-26b-a4b-it",
+        "messages": [{"role": "user", "content": "oi"}],
+        "max_tokens": 5,
+    }
+    body.update(extra)
+    request = urllib.request.Request(
+        endpoint, data=json.dumps(body).encode(),
+        headers={"Content-Type": "application/json"})
+    try:
+        with urllib.request.urlopen(request, timeout=120) as response:
+            message = json.load(response)["choices"][0]["message"]
+        print(f"  {label}: accepted, fields = {list(message.keys())}")
+    except Exception as error:
+        print(f"  {label}: refused — {error}")
+
+ask({"chat_template_kwargs": {"enable_thinking": True}}, "enable_thinking")
+ask({"reasoning_effort": "high"}, "reasoning_effort ")
+ask({"thinking": {"type": "enabled"}}, "thinking         ")
+
+print("")
+print("Now a question that would make a reasoning model think:")
+body = {
+    "model": "gemma-4-26b-a4b-it", "max_tokens": 300,
+    "messages": [{"role": "user", "content":
+        "Um trem sai de A a 60km/h e outro de B a 40km/h em sentidos opostos. "
+        "Distância 200km. Quando se encontram? Pense passo a passo."}],
+}
+request = urllib.request.Request(
+    endpoint, data=json.dumps(body).encode(),
+    headers={"Content-Type": "application/json"})
+with urllib.request.urlopen(request, timeout=600) as response:
+    message = json.load(response)["choices"][0]["message"]
+content = message.get("content") or ""
+print(f"  reasoning_content present: {message.get('reasoning_content') is not None}")
+print(f"  <think> tags present:      {'<think>' in content.lower()}")
+print(f"  opening: {content[:120]!r}")
+PY
+}
+
+function vision() {
+  if [[ ! -x "${EVIE_APP}" ]]; then
+    print -u2 "Evie is not installed at ${EVIE_APP}."
+    return 1
+  fi
+  local work
+  work=$(mktemp -d)
+  # A real file rather than a fixture, so nothing is being fed an answer.
+  /usr/bin/screencapture -x "${work}/frame.png"
+
+  print "Switching Wi-Fi off…"
+  /usr/sbin/networksetup -setairportpower en0 off
+  sleep 3
+  if /sbin/ping -c1 -t2 apple.com >/dev/null 2>&1; then
+    print -u2 "Still reachable — this Mac has another route up. Result would prove nothing."
+    /usr/sbin/networksetup -setairportpower en0 on
+    rm -rf "${work}"
+    return 1
+  fi
+  print "Offline confirmed. Describing an image:"
+  print ""
+  "${EVIE_APP}" --see "${work}/frame.png" 2>&1 | head -6
+  print ""
+  /usr/sbin/networksetup -setairportpower en0 on
+  print "Wi-Fi back on."
+  rm -rf "${work}"
+}
+
+case "${1:-}" in
+  thinking) thinking ;;
+  vision) vision ;;
+  *) usage; exit 1 ;;
+esac

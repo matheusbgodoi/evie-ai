@@ -227,3 +227,31 @@ The first VLM benchmark should include screenshots, photographed documents,
 Portuguese OCR, charts, UI state, and ordinary photos. A 3–4B model is preferred if
 quality passes; a larger model is acceptable on demand within the active resource
 budget.
+
+## The served model has no reasoning mode
+
+Asked for, because a toggle for it was requested. `Scripts/evie-probe thinking`
+re-runs this at any time; the reading below is from 2026-08-06 against
+`gemma-4-26b-a4b-it`.
+
+| asked for | result |
+| --- | --- |
+| `chat_template_kwargs.enable_thinking` | accepted, ignored |
+| `reasoning_effort` | accepted, ignored |
+| `thinking: {type: enabled}` | accepted, ignored |
+| `reasoning_content` in the reply | absent |
+| `<think>` tags in the output | absent |
+
+Every parameter is accepted and none of them changes anything, which is worse
+than a refusal: a server that errors tells you where you stand. Given a problem
+that would make a reasoning model think, this one writes its working out as
+ordinary visible prose — "Para resolver esse problema, vamos seguir um passo a
+passo lógico" — with nothing hidden behind it.
+
+So there is no phase to switch on or off. A setting called "Thinking" would be a
+switch wired to nothing, which is the exact defect this project has already had
+once, in the wake phrase.
+
+What *is* available is `/plano`, which is reasoning made explicit: the question
+is decomposed, the steps run in order, and the working is on screen rather than
+concealed.
