@@ -4,7 +4,48 @@ All notable changes to Evie are documented here. Dates use `YYYY-MM-DD`.
 
 ## [Unreleased]
 
-Nothing since the `1.0.0` section below was gathered.
+Nothing since the `1.0.1` section below.
+
+## [1.0.1] - 2026-08-07
+
+### Changed
+
+- **About two seconds off the first question of every session.** The hidden
+  instructions Evie is given went from 2,682 to 2,110 characters, and the time
+  before her first word went from 11.73 s to 9.59 s. Nothing she is told to do
+  changed: seven behaviours were checked against both versions — using the
+  calculator instead of doing sums in her head, how she addresses you, today's
+  date, refusing something that is not wired up instead of pretending, never
+  writing LaTeX, saying she does not know rather than inventing, and honouring
+  "em uma frase". The first attempt at the cut failed the LaTeX rule and was
+  thrown away.
+
+### Fixed
+
+- **A real e-mail address was taken out of two documents** before the repository
+  went public. The verification it recorded is unchanged; only the address is
+  gone.
+
+### Documented
+
+- **Where the time actually goes**, measured. Processing the prompt runs at about
+  70 tokens per second on this Mac — three times slower than writing the answer —
+  so the wait before the first word is set by how long her instructions are, not
+  by how long the answer is.
+- **The prompt cache is not what this project thought it was.** It holds one
+  entry, the previous request and the answer it produced, and only helps when the
+  next request continues that conversation. Three byte-identical requests each
+  took about 10 s, and the server logged `cached=0` for all three. Across 386
+  logged requests, 90% got no cache at all. Five questions asked as one
+  conversation cost 20.1 s; the same five asked separately cost 60.8 s.
+- **Why a smaller model would not be faster.** The model in use activates about
+  4B parameters per token despite its size, so a dense 7B or 9B would read more
+  per token and run slower — projected at 14 and 11 tokens per second against the
+  24.7 measured. And the repacker takes no other checkpoint, so nothing else can
+  be served without a second inference engine.
+- A licence: personal and domestic use free, commercial use and redistribution
+  not, copyright the author's. And continuous integration, which found on its
+  first run that the package manifest claimed macOS 15 while the code needs 26.
 
 ## [1.0.0] - 2026-08-07
 
