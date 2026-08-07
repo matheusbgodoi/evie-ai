@@ -23,6 +23,10 @@ public struct EvieAgentLoop: Sendable {
   /// Set only when the user switched web search on. Absent means the tools are
   /// never offered, which is the truth rather than a refusal she has to explain.
   public var web: (any EvieWebSearching)?
+  /// Set only when the user switched Mail and Calendar on. Absent means the
+  /// tools are never offered — the truth when the switch is off, and better than
+  /// declaring three functions whose only possible outcome is a refusal.
+  public var mailAndCalendar: (any EvieMailCalendarReading)?
   /// The vault, chunked and embedded. When present, grounding uses hybrid
   /// retrieval over it instead of scanning files for a substring — which finds
   /// nothing when the note says "valor da minha hora" and the question said
@@ -36,12 +40,14 @@ public struct EvieAgentLoop: Sendable {
   public init(
     toolbox: EvieFileToolbox = EvieFileToolbox(),
     web: (any EvieWebSearching)? = nil,
+    mailAndCalendar: (any EvieMailCalendarReading)? = nil,
     vault: (@Sendable (String) async -> [EvieRetrievedPassage])? = nil,
     offersChanges: Bool = false,
     maximumIterations: Int = EvieAgentLoop.maximumIterations
   ) {
     self.toolbox = toolbox
     self.web = web
+    self.mailAndCalendar = mailAndCalendar
     self.vault = vault
     self.offersChanges = offersChanges
     self.maximumIterations = maximumIterations
@@ -114,6 +120,9 @@ public struct EvieAgentLoop: Sendable {
       EvieFileToolbox.definitions + [EvieMemoryTool.definition, EvieSkillTool.definition]
     if web != nil {
       tools += EvieWebTool.definitions
+    }
+    if mailAndCalendar != nil {
+      tools += EvieMailCalendarTool.definitions
     }
     if offersChanges, !roots.isEmpty {
       tools.append(EvieChangeTool.definition)
@@ -256,6 +265,20 @@ public struct EvieAgentLoop: Sendable {
             readAddresses.append(address)
           }
           result = await Self.runWeb(webTool, call: call, using: web)
+        } else if let mailAndCalendar,
+          let appTool = EvieMailCalendarTool(rawValue: call.name)
+        {
+          result = await Self.runAppleApp(appTool, call: call, using: mailAndCalendar)
+        } else if EvieMailCalendarTool.refusedWritingNames.contains(call.name) {
+          // Reached only when the model invents a name that was never declared.
+          // Answered with a sentence rather than "essa ferramenta não existe",
+          // which reads as a typo and gets tried again with a different spelling.
+          result = EvieToolResult(
+            callID: call.id,
+            name: call.name,
+            content: EvieMailCalendarTool.writingRefusal,
+            isFailure: true
+          )
         } else if offersChanges, call.name == EvieChangeTool.name {
           let (outcome, proposal) = Self.recordChange(call, roots: roots, toolbox: toolbox)
           result = outcome
@@ -476,6 +499,19 @@ extension EvieAgentLoop {
       if call.name == EvieSkillTool.name {
         return "Escrevendo um jeito de fazer isso da próxima vez…"
       }
+      switch EvieMailCalendarTool(rawValue: call.name) {
+      case .readMail:
+        return "Lendo seu Mail…"
+      case .searchMail:
+        if let query = arguments["query"], !query.isEmpty {
+          return "Procurando \"\(query)\" no seu Mail…"
+        }
+        return "Procurando no seu Mail…"
+      case .readCalendar:
+        return "Vendo sua agenda…"
+      case nil:
+        break
+      }
       switch EvieWebTool(rawValue: call.name) {
       case .search:
         if let query = arguments["query"], !query.isEmpty {
@@ -543,6 +579,95 @@ extension EvieAgentLoop {
         callID: call.id,
         name: call.name,
         content: (error as? LocalizedError)?.errorDescription ?? "A web não respondeu.",
+        isFailure: true
+      )
+    }
+  }
+
+  /// Runs one of the Mail or Calendar tools and fences what comes back.
+  ///
+  /// A message is as hostile as a web page and arrives by a shorter road:
+  /// anyone who knows the address can put text in that inbox, addressed to Evie
+  /// if they like. It goes back through the same fence as a file's contents —
+  /// data, never instruction — and it can reach no tool that changes anything,
+  /// because none of the three does.
+  fileprivate static func runAppleApp(
+    _ tool: EvieMailCalendarTool,
+    call: EvieToolCall,
+    using apps: any EvieMailCalendarReading
+  ) async -> EvieToolResult {
+    let arguments = (try? call.arguments()) ?? [:]
+    do {
+      switch tool {
+      case .readMail:
+        let count = EvieMailCalendar.resolveCount(
+          arguments["count"],
+          fallback: EvieMailCalendar.defaultMessageCount,
+          maximum: EvieMailCalendar.maximumMessageCount
+        )
+        // The server hands booleans back as text, and a model writes "sim" and
+        // "1" as often as "true".
+        let unreadOnly = ["true", "1", "sim", "yes"].contains(
+          (arguments["unread_only"] ?? "").lowercased()
+        )
+        let messages = try await apps.readMail(count: count, unreadOnly: unreadOnly)
+        return EvieToolResult(
+          callID: call.id,
+          name: call.name,
+          content: EvieMailCalendar.describe(messages, unreadOnly: unreadOnly)
+        )
+
+      case .searchMail:
+        let term = (arguments["query"] ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+        guard term.count >= 2 else {
+          return EvieToolResult(
+            callID: call.id,
+            name: call.name,
+            content: "Preciso de pelo menos duas letras para procurar no Mail.",
+            isFailure: true
+          )
+        }
+        let count = EvieMailCalendar.resolveCount(
+          arguments["count"],
+          fallback: EvieMailCalendar.defaultMessageCount,
+          maximum: EvieMailCalendar.maximumMessageCount
+        )
+        let messages = try await apps.searchMail(term: term, count: count)
+        return EvieToolResult(
+          callID: call.id,
+          name: call.name,
+          content: EvieMailCalendar.describe(messages, matching: term)
+        )
+
+      case .readCalendar:
+        guard let from = EvieMailCalendar.parseDay(arguments["start"]),
+          let to = EvieMailCalendar.parseDay(arguments["end"]),
+          EvieMailCalendar.isUsableRange(from: from, to: to)
+        else {
+          return EvieToolResult(
+            callID: call.id,
+            name: call.name,
+            content: EvieMailCalendarError.badDateRange.localizedDescription,
+            isFailure: true
+          )
+        }
+        let events = try await apps.readCalendar(
+          from: from,
+          to: to,
+          limit: EvieMailCalendar.calendarCollectionCap
+        )
+        return EvieToolResult(
+          callID: call.id,
+          name: call.name,
+          content: EvieMailCalendar.describe(events, from: from, to: to)
+        )
+      }
+    } catch {
+      return EvieToolResult(
+        callID: call.id,
+        name: call.name,
+        content: (error as? LocalizedError)?.errorDescription
+          ?? "Não consegui falar com o app.",
         isFailure: true
       )
     }
