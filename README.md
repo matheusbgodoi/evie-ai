@@ -639,12 +639,30 @@ Cloud spent **2.5× more CPU than Evie did** — and unlike Evie it was spending
 in the idle windows too, at around 250% of a core, continuously, for nothing
 anyone asked for. Evie's cost starts when you ask and stops when she answers.
 
-**Watts are not reported here, and that is not an oversight.** `powermetrics`
-needs `sudo`, and on mains power the battery reports zero current, so no honest
-wattage exists for this machine while plugged in. GPU utilisation is used as the
-proxy instead, and the gaps are listed rather than papered over. Run
-`evie-shell --energy-check` to reproduce any of it. Full method, conditions, and
-every figure: [`docs/RESOURCE_BUDGET.md`](docs/RESOURCE_BUDGET.md).
+**On mains power no wattage exists** — `powermetrics` needs `sudo`, and a plugged-in
+battery reports zero current — so the figures above use GPU utilisation as the
+proxy. Unplugged, the battery reports a real current, and it was measured on the
+same machine on 2026-08-07, sampled at 1 Hz and reduced to a median:
+
+| Battery, Low Power Mode off | Idle | Generating |
+|---|---:|---:|
+| Draw (median of 88 / 99 samples) | **20.0 W** | **44.6 W** |
+| Thermal state / CPU throttling | moderate / none | moderate / none |
+
+**A question costs about 24.6 W on top of what the machine already spends**, and
+about 7.6 s, which is **187 J — 0.052 Wh**. Against this battery's 70.6 Wh of
+real capacity that is roughly **1,360 questions per charge**, or **3.7% of the
+battery for fifty questions in a day**. That figure is marginal: it excludes the
+20 W the machine spends whether Evie exists or not, and that 20 W baseline had
+Adobe Creative Cloud in it.
+
+**Unplugging costs no speed.** Two runs on battery produced 18.9 and 19.7 tokens
+per second, against 18.2 on AC, and macOS recorded no throttling in either.
+
+Run `evie-shell --energy-check` to reproduce any of it — noting that it samples
+watts only at the window's endpoints, which is a known weakness recorded with the
+rest of the method. Full conditions and every figure:
+[`docs/RESOURCE_BUDGET.md`](docs/RESOURCE_BUDGET.md).
 
 ---
 
@@ -774,8 +792,8 @@ From [Project status](docs/PROJECT_STATUS.md), which is the document to trust
 over this one when they disagree.
 
 - **The performance suite does not exist yet.** Bounded first-test measurements
-  were taken; sustained decode, long-context comparisons at 16K/32K/64K, battery,
-  energy, and answer-quality results have not been.
+  were taken, and sustained load, energy and battery draw have now been measured;
+  long-context comparisons at 16K/32K/64K and answer-quality results have not.
 - **Speech recognition is implemented but unmeasured.** The system reports
   Brazilian Portuguese available after a one-time language pack. Accuracy,
   latency after that download, barge-in, and energy cost are not yet benchmarked.

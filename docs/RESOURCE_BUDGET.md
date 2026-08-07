@@ -243,15 +243,76 @@ That is an independent reproduction of the sustained-load table above — a
 different tool, a different run, the same finding: a question roughly quadruples
 GPU utilisation and does not warm the machine enough for macOS to say so.
 
-**Battery life.** No estimate of questions-per-charge is given, because it
-cannot be honestly derived. The draw figure it would need does not exist while
-the machine is plugged in, and the machine was not unplugged to obtain one — it
-was in use by its owner at the time. The battery's own registry entries report a
-design capacity of 6,249 mAh at 12.45 V, which is roughly 78 Wh of stored energy,
-but multiplying that by a wattage nobody measured would be arithmetic dressed up
-as a measurement. To get the real number: unplug, run
-`evie-shell --energy-check 60` while idle and again while generating, and the
-watts line will populate itself.
+**Battery life** was the gap this section used to declare, and it is now measured.
+See [On battery](#on-battery-what-a-question-actually-costs--2026-08-07) below.
+
+### On battery: what a question actually costs — 2026-08-07
+
+Every figure above this line was taken on mains power, where the battery reports
+`Amperage = 0` and no wattage exists. The owner unplugged the machine so the one
+number the document could not produce could be produced.
+
+**Method.** Watts are `|Amperage| × Voltage` from the `AppleSmartBattery` entry in
+the IO registry, sampled at 1 Hz and reduced to a median over the window.
+`Amperage` is a two's-complement negative while discharging and must be read as a
+signed 64-bit value; taken unsigned it reads as about 1.8×10¹⁹. The load is the
+same shape as the ten-question run above — one-paragraph general-knowledge
+questions in Portuguese, capped at 220 completion tokens, non-streaming, strictly
+one at a time — run continuously for two minutes so the sampler sees steady state
+rather than a single burst. Sampling starts 10 s after the load does.
+
+**Conditions, unchanged and deliberately not cleaned up:** Adobe Creative Cloud
+was running throughout at over two cores' worth of CPU, along with Chrome and a
+Claude Code session. The idle baseline below is therefore *this machine as its
+owner uses it*, not a floor. That inflates the baseline and shortens the battery
+life estimate; it does not affect the difference between the two columns, which
+is the figure attributable to Evie.
+
+| Battery, 80% → 74%, Low Power Mode off | Idle | Generating |
+|---|---:|---:|
+| Samples | 88 | 99 |
+| Median draw | **20.0 W** | **44.6 W** |
+| Mean draw | 21.1 W | 40.3 W |
+| Range | 19.8 – 39.9 W | 22.7 – 45.0 W |
+| Thermal state | moderate | moderate |
+| CPU throttling (`pmset -g therm`) | none recorded | none recorded |
+
+The mean is below the median in the generating column because the window opens
+while the draw is still climbing; the median is the steady-state figure and the
+mean is not. **A question costs about 24.6 W on top of whatever the machine was
+already spending.**
+
+**Throughput does not drop on battery.** Two consecutive two-minute runs produced
+15 questions / 2,283 tokens at **18.9 tok/s** and 16 questions / 2,396 tokens at
+**19.7 tok/s**. The AC figure for the same shape of work is 18.2 tok/s. Within the
+noise of a machine running other software, unplugging costs nothing in speed, and
+macOS recorded no thermal or performance warning level at any point.
+
+**Questions per charge.** This battery's `FullChargeCapacity` is 5,873 mAh at
+about 12.03 V — **70.6 Wh**, after 20 cycles, against a design capacity of 6,249
+mAh. At 24.6 W marginal and 7.6 s per question, one question costs **187 J, or
+0.052 Wh**. A full charge therefore holds roughly **1,360 questions** of marginal
+cost, and **fifty questions in a day cost about 3.7% of the battery**.
+
+Three things that number is not:
+
+- **It is marginal, not total.** It excludes the 20 W the machine spends whether
+  Evie exists or not. Total endurance while generating without pause would be
+  70.6 Wh ÷ 44.6 W ≈ 1.6 h, but nobody generates without pause, which is why the
+  marginal figure is the one quoted.
+- **It assumes this shape of question** — about 150 completion tokens. A long
+  answer costs proportionally more time and therefore more energy.
+- **It is not a battery-life estimate.** Idle draw here includes Adobe; with it
+  quit, the baseline would be lower and the endurance longer. That measurement
+  was not taken.
+
+**A weakness in `--energy-check` that this run exposed.** The command samples GPU
+at 1 Hz across its window but reads watts only at the start and at the end. Its
+first battery run printed 37.4 W for an "idle" window whose median, sampled 88
+times a few minutes later, was 20.0 W. Two endpoint samples cannot separate a
+busy machine from a quiet one, and the tool should reduce watts over the window
+the way it already reduces GPU. Until it does, the wattage lines it prints are
+instantaneous samples and should be read as such.
 
 **What the fan was actually doing.** This investigation began because the owner
 heard his fan and asked whether it was Evie. At that moment three Adobe processes

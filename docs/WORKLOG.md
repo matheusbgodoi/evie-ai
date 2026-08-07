@@ -2213,3 +2213,39 @@ one is a trap this repository had already documented and then walked into anyway
 - `CHANGELOG.md` gains a `1.0.0` section gathering what the first release
   contains. It is not dated and `REL-001` is not marked done: cutting a release is
   an action and it is the owner's.
+
+## 2026-08-07 — Claude — what a question costs on battery
+
+- Phase: measurement only, no source changed
+- Occasion: the owner unplugged the Mac and asked for the figure the resource
+  document had been declaring missing since it was written — watts, and whether
+  running a local assistant on this machine makes sense at all.
+- Method: `|Amperage| × Voltage` from `AppleSmartBattery` in the IO registry,
+  sampled at 1 Hz and reduced to a median. `Amperage` is a two's-complement
+  negative while discharging; read unsigned it comes back as about 1.8×10¹⁹,
+  which is the shape of the bug anybody reproducing this will hit first. Load was
+  two minutes of continuous one-paragraph Portuguese questions capped at 220
+  completion tokens, non-streaming and one at a time, with sampling starting 10 s
+  in so the window sees steady state.
+- Result: **20.0 W idle against 44.6 W generating** (medians of 88 and 99
+  samples) — **24.6 W marginal**, 7.6 s per question, **187 J or 0.052 Wh each**.
+  Against this battery's real 70.6 Wh that is about **1,360 questions per charge**,
+  or **3.7% of the battery for fifty questions in a day**.
+- Result: **unplugging costs no speed.** 18.9 and 19.7 tok/s across two runs on
+  battery against 18.2 tok/s on AC, with no thermal or performance warning level
+  recorded in `pmset -g therm` at any point and `ProcessInfo.thermalState` at
+  `moderate` in both phases.
+- Conditions not cleaned up, deliberately: Adobe Creative Cloud held over two
+  cores throughout, so the 20 W baseline is this machine as its owner uses it and
+  not a floor. The difference between the columns is unaffected by that; the
+  endurance estimate is, and says so.
+- Finding against our own tooling: `--energy-check` samples GPU across its window
+  but reads watts only at the endpoints. Its first battery run printed 37.4 W for
+  an idle window whose 88-sample median minutes later was 20.0 W. Recorded in
+  `docs/RESOURCE_BUDGET.md` as a weakness with the fix named — reduce watts over
+  the window the way GPU already is. Not fixed here; this entry changed no source.
+- Documents corrected: `docs/RESOURCE_BUDGET.md` (the "no estimate of
+  questions-per-charge is given" paragraph, which was true when written and is
+  not now), `README.md` in "What she costs to run" and in the performance-suite
+  limitation, and `docs/PROJECT_STATUS.md` where battery and energy were listed
+  among the results that did not exist.

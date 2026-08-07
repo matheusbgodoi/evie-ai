@@ -330,8 +330,11 @@ readiness only; they are not the Phase 1 performance suite.
   documentation — a decision on whether the release ships the app or the
   instructions to build it, and then cutting and tagging it, which is the owner's
   to do.
-- The bounded first-test measurements exist, but no sustained decode, long-context,
-  16K/32K/64K comparison, battery, energy, or quality result exists yet.
+- The bounded first-test measurements exist, and sustained decode, energy and
+  battery draw have since been measured on this machine — 20.0 W idle against
+  44.6 W generating, 18.9–19.7 tok/s unplugged against 18.2 on AC, in
+  `docs/RESOURCE_BUDGET.md`. No long-context 16K/32K/64K comparison and no
+  answer-quality result exists yet.
 - `Evie.app` is ad-hoc signed until `Scripts/evie-app identity` is run on the
   machine, and an ad-hoc copy has no certificate to compare an update against, so
   it refuses every update. The script now works; whether it has been run on this
