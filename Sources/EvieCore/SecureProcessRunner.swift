@@ -188,7 +188,11 @@ extension SecureProcessRunner {
     to fileActions: inout posix_spawn_file_actions_t?
   ) -> Int32 {
     path.withCString { directory in
-      posix_spawn_file_actions_addchdir_np(&fileActions, directory)
+      // Not the `_np` spelling. That one is deprecated as of macOS 26, and this
+      // package deploys to 26, so the non-portable name is no longer the only
+      // one available. Under `-warnings-as-errors` the deprecation is a build
+      // failure rather than a note, which is how it was found.
+      posix_spawn_file_actions_addchdir(&fileActions, directory)
     }
   }
 

@@ -16,7 +16,7 @@ concurrency:
 jobs:
   build-and-test:
     name: Build and test
-    runs-on: macos-15
+    runs-on: macos-26
     timeout-minutes: 30
 
     steps:
@@ -39,19 +39,19 @@ jobs:
             ${{ runner.os }}-spm-${{ hashFiles('Package.swift') }}-
             ${{ runner.os }}-spm-
 
-      - name: Build
-        run: swift build --build-tests
+      - name: Build the application
+        # The product, not `--build-tests`. Building the test targets that way
+        # loses the Swift Testing macro plugin on a Command Line Tools
+        # toolchain — "plugin for module 'TestingMacros' not found" — which is
+        # the whole reason Scripts/test exists. Tests are built by the step
+        # below, through the shim that knows where the plugin lives.
+        run: swift build --product evie-shell
 
       - name: Test
-        # Scripts/test exists because Swift Testing discovery and rpaths need
-        # help with the Command Line Tools on the author's machine. It falls
-        # back to `swift test` where that help is unnecessary.
-        run: |
-          if [ -x Scripts/test ]; then
-            Scripts/test
-          else
-            swift test
-          fi
+        # Scripts/test resolves the Swift Testing macro plugin and rpaths for
+        # both a Command Line Tools and a full Xcode toolchain, and compiles
+        # with -warnings-as-errors.
+        run: Scripts/test
 
   documentation:
     name: Documentation
@@ -81,14 +81,24 @@ jobs:
           exit $status
 
       - name: A release must not be claimed before it is cut
-        # REL-001's own rule, enforced: the status document may not say the
-        # blocker is closed while the changelog still has no dated release.
+        # REL-001's own rule, enforced. This repository strikes a blocker
+        # through when it closes, so a struck-through REL-001 is the claim, and
+        # a dated 1.0.0 in the changelog is the evidence for it. One without the
+        # other is a document lying about the state of the project.
+        #
+        # A first attempt matched `REL-001.*passed` and failed on the true line
+        # "REL-001 — the first release. What it needs: QA-006 passed" — the
+        # check was wrong, not the document. Hence matching the convention
+        # rather than hopeful keywords.
         run: |
-          if grep -q '^## \[1\.0\.0\] - [0-9]' CHANGELOG.md; then
-            echo "1.0.0 is dated; nothing to check."
-          elif grep -qi 'REL-001.*\(done\|complete\|closed\|passed\)' docs/PROJECT_STATUS.md; then
-            echo "PROJECT_STATUS.md marks REL-001 finished, but CHANGELOG.md has no dated 1.0.0."
+          dated=$(grep -cE '^## \[1\.0\.0\] - [0-9]{4}-[0-9]{2}-[0-9]{2}' CHANGELOG.md || true)
+          struck=$(grep -cE '~~\*\*`REL-001`' docs/PROJECT_STATUS.md || true)
+          if [ "$struck" -gt 0 ] && [ "$dated" -eq 0 ]; then
+            echo "PROJECT_STATUS.md strikes REL-001 through, but CHANGELOG.md has no dated 1.0.0."
             exit 1
-          else
-            echo "1.0.0 undated and REL-001 not claimed. Consistent."
           fi
+          if [ "$dated" -gt 0 ] && [ "$struck" -eq 0 ]; then
+            echo "CHANGELOG.md dates 1.0.0, but PROJECT_STATUS.md still lists REL-001 as open."
+            exit 1
+          fi
+          echo "Release claim and changelog agree (dated=$dated, struck=$struck)."
