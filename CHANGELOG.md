@@ -12,11 +12,47 @@ All notable changes to Evie are documented here. Dates use `YYYY-MM-DD`.
   default, in Settings › O que ela sabe › Mail e agenda — somebody's inbox is not
   a default. Measured against the real applications: five messages in 3.2 s from a
   1,952-message inbox, a search in 0.4 s, a month of the calendar in 5.0 s.
-- **From the mail she only reads.** Nothing that sends, deletes or marks read was
-  built, so asking her to is asking for something that does not exist. The
+- **From the mail she only reads.** Nothing that deletes, archives or marks read
+  was built, so asking her to is asking for something that does not exist. The
   scripts are fixed text in the application and what you type travels beside them
   as data, never as part of the program — with a test that hands the real
   `osascript` three break-out payloads and checks nothing happened.
+- **She can send an e-mail, after you press a button.** Ask her to write to
+  somebody and a card appears with every recipient written out in full, address
+  included, the account it leaves from, the subject and the whole text. Nothing
+  is counted ("3 pessoas"), shortened or summarised, because the mistake this
+  catches is the wrong recipient rather than a typo in the body — and if it does
+  not fit, the card grows. The button says "Enviar", and the receipt afterwards
+  says plainly that it cannot be undone. Verified against the real Mail on
+  2026-08-07: one message to the owner's own address left, appeared in E-mails
+  enviados and arrived in the inbox.
+- **Saying no keeps the text, and there is a third button.** "Salvar rascunho"
+  files the same message in Rascunhos — it reaches nobody and Mail is where
+  editing and sending belong. "Não" sends nothing and writes nothing anywhere,
+  and leaves the message on screen so a composition you wanted with one word
+  changed is not thrown away with the card.
+- **An address she invented is refused, not flagged.** Every recipient must be an
+  address you gave her, one she read in a message, or one you let her remember —
+  compared as a whole address, so a conversation that only ever said
+  `pedro@empresa.com.br` does not vouch for `pedro@empresa.com`, and an address
+  an earlier assistant turn produced never counts as evidence for itself. A model
+  with no address for somebody does not stop; it writes one that looks right, and
+  a badge on the card would rely on you spotting which of three plausible
+  addresses is the invented one.
+- **The tool she calls to write mail sends nothing.** `propose_mail` records a
+  proposal, exactly as `propose_event` does. Sending lives on a third protocol
+  her loop does not hold, so no sentence in a message, a web page or a document
+  reaches it, and the stub the loop is tested against has no sending function to
+  offer. There is no auto-approve for mail, including when you switched
+  auto-approve on for file changes; the button re-checks the Mail and agenda
+  switch at the moment you press it. Attachments were not built: a file leaving
+  this Mac is a different decision from a message you dictated.
+- **Inviting people to an event is not possible on this Mac, and she says so.**
+  Measured on 2026-08-07: Calendar's `make new attendee` fails with error -1719
+  and leaves the attendee list empty, and passing attendees to `make new event`
+  fails with -1700 — every attendee property is read-only in Calendar's scripting
+  dictionary. So there is no invitation button; asked to invite somebody she
+  offers to send an e-mail with the details of the event instead.
 - **She can put one thing in your calendar, after you press a button.** Ask her
   to book something and a card appears; the event exists when you agree and not
   before. The card spells the weekday out — "terça-feira, 12 de agosto" — and

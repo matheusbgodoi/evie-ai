@@ -23,9 +23,9 @@ struct EvieMailCalendarScriptTests {
       #expect(!script.contains("\\("), "um script tem interpolação: \(script.prefix(60))")
       // Every one of them takes its inputs the only safe way there is.
       #expect(script.hasPrefix("on run argv"))
-      // `listCalendars` is the one script with nothing to pass it, so it has
-      // nothing to read out of `argv`. Every other one has to.
-      if script != EvieAppleScripts.listCalendars {
+      // The two listing scripts are the ones with nothing to pass them, so they
+      // have nothing to read out of `argv`. Every other one has to.
+      if script != EvieAppleScripts.listCalendars, script != EvieAppleScripts.listMailAccounts {
         #expect(script.contains("item 1 of argv"))
       }
     }
@@ -55,18 +55,41 @@ struct EvieMailCalendarScriptTests {
     }
   }
 
-  /// The one script that writes, held to what it is allowed to write.
+  /// The scripts that write, each held to the one thing it is allowed to do.
   ///
-  /// It creates an event and does nothing else — no deleting, no sending, no
-  /// touching a message. Checked because "creating is allowed now" is exactly
-  /// the kind of permission somebody widens by one line later.
-  @Test("the writing script only creates an event")
-  func writingScriptOnlyCreates() {
-    #expect(EvieAppleScripts.writing == [EvieAppleScripts.createEvent])
+  /// Checked one by one rather than as a set, because "creating is allowed now"
+  /// and "sending is allowed now" are exactly the kind of permission somebody
+  /// widens by one line later — and the line that matters is which verb appears
+  /// in which program.
+  @Test("each writing script does only its one thing")
+  func writingScriptsAreNarrow() {
+    #expect(
+      EvieAppleScripts.writing == [
+        EvieAppleScripts.createEvent, EvieAppleScripts.sendMail,
+        EvieAppleScripts.saveMailDraft,
+      ]
+    )
+
+    // The calendar one never touches Mail, and never sends.
     #expect(EvieAppleScripts.createEvent.contains("make new event"))
     for verb in ["delete", "send ", "set read status", "move ", "Mail"] {
       #expect(!EvieAppleScripts.createEvent.contains(verb), "\(verb) aparece no script que cria")
     }
+
+    // The mail ones never touch the Calendar, and never delete or file anything
+    // that already exists — they compose one message and stop.
+    for script in [EvieAppleScripts.sendMail, EvieAppleScripts.saveMailDraft] {
+      #expect(script.contains("make new outgoing message"))
+      for verb in ["delete", "set read status", "move ", "Calendar"] {
+        #expect(!script.contains(verb), "\(verb) aparece num script de e-mail")
+      }
+    }
+
+    // The only difference between them, stated as a test: one sends, and the
+    // other cannot.
+    #expect(EvieAppleScripts.sendMail.contains("send msg"))
+    #expect(!EvieAppleScripts.saveMailDraft.contains("send msg"))
+    #expect(EvieAppleScripts.saveMailDraft.contains("save msg"))
   }
 
   /// The end-to-end version of the same claim, run against the real
@@ -162,6 +185,47 @@ struct EvieMailCalendarScriptTests {
         !FileManager.default.fileExists(atPath: witness.path),
         "o payload executou: \(payload)"
       )
+    }
+  }
+
+  /// The same claim for the script that sends, where the stakes are highest.
+  ///
+  /// The subject, the body and the recipient are all text a model produced out of
+  /// something a person — or an e-mail — wrote, and all three reach the sending
+  /// script. Each payload is written to break out of a quoted AppleScript string
+  /// and run `do shell script "touch …"`.
+  ///
+  /// The sending account is deliberately one that cannot exist, so the script
+  /// returns `EVIE_CONTA_NAO_ACHADA` before `make new outgoing message` and this
+  /// test never composes, let alone sends, anything. That does not weaken it:
+  /// interpolation, if it happened anywhere, would happen while the source was
+  /// being assembled — long before the account is looked up — so the witness file
+  /// would exist either way.
+  ///
+  /// Measured on this Mac with Mail open: exit status 0, output
+  /// `EVIE_CONTA_NAO_ACHADA`, no file created, and nothing in Sent or Drafts.
+  @Test("a hostile subject, body and recipient are data, not code")
+  func hostileMessageDoesNothing() throws {
+    let witness = FileManager.default.temporaryDirectory
+      .appendingPathComponent("evie-injection-\(UUID().uuidString).txt")
+    try? FileManager.default.removeItem(at: witness)
+
+    let payloads = [
+      "assunto\"; do shell script \"touch \(witness.path)\"; --",
+      "\"} , subject:\"x\"); do shell script \"touch \(witness.path)\"; (\"",
+      "'; do shell script 'touch \(witness.path)'; '",
+    ]
+    // An address no account has, so the script stops before it composes.
+    let nowhere = "evie-conta-inexistente-\(UUID().uuidString)@exemplo.invalido"
+    for script in [EvieAppleScripts.sendMail, EvieAppleScripts.saveMailDraft] {
+      for payload in payloads {
+        let exit = try Self.runScript(script, arguments: [payload, payload, nowhere, payload])
+        #expect(exit == 0, "osascript saiu com \(exit) para \(payload)")
+        #expect(
+          !FileManager.default.fileExists(atPath: witness.path),
+          "o payload executou: \(payload)"
+        )
+      }
     }
   }
 
@@ -411,18 +475,23 @@ struct EvieMailCalendarToolTests {
   /// A model that invents `send_mail` gets a sentence it can act on rather than
   /// "essa ferramenta não existe", which reads as a spelling problem and gets
   /// tried again with a different spelling.
-  @Test("the refusal says she only reads, and names the one thing she proposes")
+  @Test("the refusal names the two things she proposes")
   func refusalIsExplicit() {
-    let offered = EvieMailCalendarTool.writingRefusal(offersEvents: true)
-    #expect(offered.contains("só leio"))
-    // The name of the function that does exist, so a model that reached for
-    // `create_event` has somewhere to go.
+    let offered = EvieMailCalendarTool.writingRefusal(offersProposals: true)
+    // The names of the functions that do exist, so a model that reached for
+    // `create_event` or `send_mail` has somewhere to go.
     #expect(offered.contains(EvieCalendarEventTool.name))
+    #expect(offered.contains(EvieMailTool.name))
+    // Measured, not policy: Calendar refuses to add an attendee by script, so
+    // the refusal says what to do instead of leaving the model to retry.
+    #expect(offered.contains("Convidar"))
 
     // With the switch off there is no such function, and naming one that is not
     // declared sends it round the loop for nothing.
-    let withheld = EvieMailCalendarTool.writingRefusal(offersEvents: false)
+    let withheld = EvieMailCalendarTool.writingRefusal(offersProposals: false)
+    #expect(withheld.contains("só leio"))
     #expect(!withheld.contains(EvieCalendarEventTool.name))
+    #expect(!withheld.contains(EvieMailTool.name))
 
     #expect(EvieMailCalendarTool.refusedWritingNames.contains("send_mail"))
     #expect(EvieMailCalendarTool.refusedWritingNames.contains("delete_event"))
@@ -711,6 +780,221 @@ struct EvieCalendarEventProposalTests {
       Set(EvieCalendarEventTool.definition.parameters.filter(\.isRequired).map(\.name))
         == ["title", "start"]
     )
+  }
+}
+
+@Suite("Evie mail proposals")
+struct EvieMailProposalTests {
+  private static let accounts = ["matheus@empresa.com", "matheus@pessoal.com"]
+  private static let known: Set<String> = [
+    "pedro@empresa.com", "ana@empresa.com", "matheus@empresa.com",
+  ]
+
+  private static func call(_ arguments: [String: String]) -> EvieToolCall {
+    let data = try? JSONSerialization.data(withJSONObject: arguments)
+    return EvieToolCall(
+      id: "1",
+      name: EvieMailTool.name,
+      argumentsJSON: data.flatMap { String(data: $0, encoding: .utf8) } ?? "{}"
+    )
+  }
+
+  private static func proposal(
+    _ arguments: [String: String]
+  ) -> Result<EvieMailProposal, EvieMailTool.RejectionReason> {
+    EvieMailTool.proposal(from: call(arguments), accounts: accounts, known: known)
+  }
+
+  @Test("with no account named it goes out from the first one")
+  func defaultsToTheFirstAccount() throws {
+    let proposal = try #require(
+      try? Self.proposal([
+        "to": "pedro@empresa.com", "subject": "Contrato", "body": "Segue.",
+      ]).get()
+    )
+
+    #expect(proposal.sender == "matheus@empresa.com")
+    #expect(proposal.recipients == ["pedro@empresa.com"])
+  }
+
+  /// The whole point of the card: he has to be able to see who this reaches,
+  /// which address it leaves from, and everything it says.
+  @Test("the card shows every recipient in full, the account, and the whole body")
+  func cardHidesNothing() {
+    let proposal = EvieMailProposal(
+      recipients: ["pedro@empresa.com", "ana@empresa.com"],
+      sender: "matheus@empresa.com",
+      subject: "Contrato",
+      body: "Oi Pedro,\n\nSegue o contrato revisado.\n\nMatheus"
+    )
+
+    // One address per line, which is only true because they are bullets: the
+    // card joins consecutive lines into one paragraph, and a run-on list is a
+    // list nobody reads down.
+    let rendered = EvieRichText(proposal.detail).plainText
+    #expect(rendered.contains("• pedro@empresa.com\n• ana@empresa.com"))
+    #expect(proposal.detail.contains("De: matheus@empresa.com"))
+    #expect(proposal.detail.contains("Assunto: Contrato"))
+    // The body whole, down to the sign-off — a summarised body would mean
+    // approving something other than what leaves.
+    #expect(proposal.detail.contains("Segue o contrato revisado."))
+    #expect(proposal.detail.contains("Matheus"))
+    // Never a count and never a shortened list: "2 pessoas" is the exact string
+    // that would hide the mistake this card exists to catch.
+    #expect(!proposal.detail.contains("2 pessoas"))
+    #expect(!proposal.detail.contains("…"))
+    // The button says the verb, and the title says which message.
+    #expect(proposal.summary.hasPrefix("Enviar e-mail"))
+  }
+
+  /// The sharpest risk in the feature: an address that is shaped exactly like a
+  /// real one and belongs to a stranger.
+  @Test("an address nobody mentioned is refused, not flagged")
+  func inventedAddressIsRefused() {
+    let result = Self.proposal([
+      "to": "pedro.silva@gmail.com", "subject": "Oi", "body": "Tudo bem?",
+    ])
+
+    guard case .failure(let reason) = result else {
+      Issue.record("um endereço inventado deveria ser recusado")
+      return
+    }
+    #expect(reason == .unknownAddress("pedro.silva@gmail.com"))
+    // And the refusal tells the model what to do instead of retrying.
+    #expect(reason.message.contains("Pergunte o endereço"))
+  }
+
+  /// Exact addresses rather than a substring search, because a conversation that
+  /// only ever said `pedro@empresa.com.br` must not vouch for `pedro@empresa.com`.
+  @Test("a longer domain does not vouch for a shorter one")
+  func prefixesDoNotCount() {
+    let known = EvieMailProposal.addresses(in: "escreve pro pedro@empresa.com.br, por favor.")
+
+    #expect(known == ["pedro@empresa.com.br"])
+    #expect(!known.contains("pedro@empresa.com"))
+  }
+
+  @Test("addresses are found inside prose, angle brackets and punctuation")
+  func addressesAreExtracted() {
+    let found = EvieMailProposal.addresses(
+      in: """
+        De: Pedro Alves <pedro@empresa.com>
+        Copiar ana@empresa.com? Falar com bruno@empresa.com.
+        """
+    )
+
+    #expect(found == ["pedro@empresa.com", "ana@empresa.com", "bruno@empresa.com"])
+  }
+
+  @Test("a display name around a known address still resolves to the address")
+  func displayNamesAreStripped() throws {
+    let proposal = try #require(
+      try? Self.proposal([
+        "to": "Pedro Alves <pedro@empresa.com>", "subject": "Oi", "body": "Olá.",
+      ]).get()
+    )
+
+    #expect(proposal.recipients == ["pedro@empresa.com"])
+  }
+
+  @Test("several recipients arrive as several addresses, with duplicates dropped")
+  func recipientsAreSplit() throws {
+    let proposal = try #require(
+      try? Self.proposal([
+        "to": "pedro@empresa.com, ana@empresa.com; PEDRO@empresa.com",
+        "subject": "Oi", "body": "Olá.",
+      ]).get()
+    )
+
+    #expect(proposal.recipients == ["pedro@empresa.com", "ana@empresa.com"])
+  }
+
+  /// The account is what the person on the other end sees, and it is the one
+  /// thing on the card he cannot fix afterwards.
+  @Test("an account that does not exist is refused, with the real ones")
+  func unknownAccountIsRefused() {
+    let result = Self.proposal([
+      "to": "pedro@empresa.com", "subject": "Oi", "body": "Olá.",
+      "from": "matheus@outra.com",
+    ])
+
+    guard case .failure(let reason) = result else {
+      Issue.record("uma conta inexistente deveria ser recusada")
+      return
+    }
+    #expect(reason.message.contains("matheus@empresa.com"))
+    #expect(reason.message.contains("matheus@pessoal.com"))
+  }
+
+  @Test("an empty subject or body is asked for rather than invented")
+  func emptyFieldsAreRefused() {
+    let noSubject = Self.proposal([
+      "to": "pedro@empresa.com", "subject": "  ", "body": "Olá.",
+    ])
+    let noBody = Self.proposal([
+      "to": "pedro@empresa.com", "subject": "Oi", "body": "   ",
+    ])
+    let noRecipient = Self.proposal(["to": " ", "subject": "Oi", "body": "Olá."])
+
+    #expect((try? noSubject.get()) == nil)
+    #expect((try? noBody.get()) == nil)
+    #expect((try? noRecipient.get()) == nil)
+  }
+
+  @Test("a subject on two lines becomes one line")
+  func subjectsAreSingleLine() throws {
+    let proposal = try #require(
+      try? Self.proposal([
+        "to": "pedro@empresa.com", "subject": "Contrato\nrevisado", "body": "Olá.",
+      ]).get()
+    )
+
+    #expect(proposal.subject == "Contrato revisado")
+  }
+
+  @Test("what is not an address is refused before it reaches Mail")
+  func addressesAreChecked() {
+    #expect(EvieMailProposal.isPlausibleAddress("pedro@empresa.com"))
+    #expect(EvieMailProposal.isPlausibleAddress("pedro.alves+nota@empresa.com.br"))
+    #expect(!EvieMailProposal.isPlausibleAddress("pedro@empresa"))
+    #expect(!EvieMailProposal.isPlausibleAddress("pedro empresa.com"))
+    #expect(!EvieMailProposal.isPlausibleAddress("pedro@@empresa.com"))
+    #expect(!EvieMailProposal.isPlausibleAddress("pedro@empresa..com"))
+    #expect(!EvieMailProposal.isPlausibleAddress("Pedro <pedro@empresa.com>"))
+    #expect(!EvieMailProposal.isPlausibleAddress("pedro@empresa.com, ana@empresa.com"))
+  }
+
+  /// The receipt has to say the thing nobody wants to read afterwards.
+  @Test("the receipt names who received it and admits it cannot be undone")
+  func receiptIsHonest() {
+    let proposal = EvieMailProposal(
+      recipients: ["pedro@empresa.com"],
+      sender: "matheus@empresa.com",
+      subject: "Contrato",
+      body: "Segue."
+    )
+
+    #expect(proposal.receipt.contains("pedro@empresa.com"))
+    #expect(proposal.receipt.contains("matheus@empresa.com"))
+    #expect(proposal.receipt.contains("não dá para voltar atrás"))
+    // And the draft one says the opposite just as plainly.
+    #expect(proposal.draftReceipt.contains("Nada foi enviado"))
+  }
+
+  /// The boundary, stated as a test: the only mail-writing name the model ever
+  /// sees is the one that draws a card.
+  @Test("the declared tool proposes and does not send")
+  func toolOnlyProposes() {
+    #expect(EvieMailTool.name == "propose_mail")
+    #expect(EvieMailTool.definition.summary.contains("NÃO envia nada"))
+    #expect(
+      Set(EvieMailTool.definition.parameters.filter(\.isRequired).map(\.name))
+        == ["to", "subject", "body"]
+    )
+    // Attachments are out of scope, so there is no parameter that could carry
+    // one — a file leaving this Mac is a different decision from a message he
+    // dictated.
+    #expect(!EvieMailTool.definition.parameters.contains { $0.name.contains("attach") })
   }
 }
 

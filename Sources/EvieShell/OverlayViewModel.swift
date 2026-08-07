@@ -117,6 +117,13 @@ final class OverlayViewModel: ObservableObject {
   /// Creates an event the user approved. Asynchronous where the file one is not,
   /// because this one waits on another application rather than on the disk.
   var onEventApproved: (@MainActor (EvieCalendarEventProposal) async -> EvieCalendarEventReceipt)?
+  /// Sends a message the user approved, or files it as a draft — the flag says
+  /// which. One closure rather than two because it is one decision about one
+  /// message, and two closures is how the sending one ends up called by the code
+  /// that meant to draft.
+  var onMailApproved: (
+    @MainActor (EvieMailProposal, Bool) async -> EvieMailReceipt
+  )?
   /// The skills installed right now, asked for per turn so a skill dropped into
   /// the folder works on the next question rather than the next launch.
   var installedSkills: @MainActor () -> [EvieSkill] = { [] }
@@ -201,6 +208,7 @@ final class OverlayViewModel: ObservableObject {
   var pendingChanges: [UUID: EvieFileChange] = [:]
   var pendingSkills: [UUID: EvieSkill] = [:]
   var pendingEvents: [UUID: EvieCalendarEventProposal] = [:]
+  var pendingMail: [UUID: EvieMailProposal] = [:]
   let visionDescriber = EvieVisionDescriber()
   /// Ceiling on how much document text one turn may carry, so a long PDF cannot
   /// silently push the actual question out of the model's context.
@@ -1045,6 +1053,53 @@ final class OverlayViewModel: ObservableObject {
       artifacts.removeAll { $0.id == id }
       pendingEvents[id] = nil
       primaryText = "Não marquei nada"
+      onLayoutInvalidated?()
+      return
+    }
+
+    if action.id.hasPrefix("mail-send:") {
+      artifacts.removeAll { $0.id == id }
+      if let proposal = pendingMail[id] {
+        performMailProposal(proposal, sending: true)
+      }
+      return
+    }
+    if action.id.hasPrefix("mail-draft:") {
+      artifacts.removeAll { $0.id == id }
+      if let proposal = pendingMail[id] {
+        performMailProposal(proposal, sending: false)
+      }
+      return
+    }
+    if action.id.hasPrefix("mail-skip:") {
+      let discarded = pendingMail[id]
+      artifacts.removeAll { $0.id == id }
+      pendingMail[id] = nil
+      // The text stays on screen instead of disappearing with the card. Nothing
+      // was sent and nothing was written anywhere — saying no must not reach Mail
+      // — but the message she wrote is work he may have wanted with one word
+      // changed, and a card that vanishes takes it with it. It is copyable, and
+      // asking again is the other way back.
+      if let discarded {
+        artifacts.append(
+          ArtifactCardModel(
+            kind: .email,
+            title: "Não enviei",
+            summary: discarded.detail,
+            isExpanded: false,
+            actions: [
+              ArtifactActionModel(
+                id: "copy",
+                title: "Copiar",
+                systemImage: "doc.on.doc",
+                role: .secondary
+              )
+            ]
+          )
+        )
+      }
+      primaryText = "Não enviei nada"
+      secondaryText = "O texto ficou aqui, caso você queira aproveitar"
       onLayoutInvalidated?()
       return
     }

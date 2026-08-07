@@ -316,10 +316,93 @@ struct EvieAgentLoopTests {
       emit: { _ in }
     )
 
+    // The three reading tools, plus `propose_event` and `propose_mail`.
     #expect(
       await on.toolsPerCall[0]
-        == (await off.toolsPerCall[0]) + EvieMailCalendarTool.definitions.count + 1
+        == (await off.toolsPerCall[0]) + EvieMailCalendarTool.definitions.count + 2
     )
+  }
+
+  /// The same property as the event card, where the stakes are higher: the tool
+  /// produces a proposal and reaches nothing that sends. `StubApps` has no
+  /// sending function to reach, and there is no way to give the loop one.
+  @Test("propose_mail produces a card and sends nothing")
+  func mailProposalSendsNothing() async throws {
+    let client = ScriptedClient(turns: [
+      .tools([
+        EvieToolCall(
+          id: "c1",
+          name: EvieMailTool.name,
+          argumentsJSON: """
+            {"to":"pedro@empresa.com","subject":"Contrato","body":"Segue o contrato."}
+            """
+        )
+      ]),
+      .text("Escrevi; confira na tela."),
+    ])
+
+    let outcome = try await EvieAgentLoop(mailAndCalendar: StubApps()).run(
+      messages: [
+        ChatMessage(
+          role: .user,
+          content: "manda um e-mail pro pedro@empresa.com sobre o contrato"
+        )
+      ],
+      roots: [],
+      client: client,
+      emit: { _ in }
+    )
+
+    #expect(outcome.mailProposals.count == 1)
+    #expect(outcome.mailProposals.first?.recipients == ["pedro@empresa.com"])
+    // The account the card will name, read from Mail rather than promised.
+    #expect(outcome.mailProposals.first?.sender == "matheus@empresa.com")
+    let told = outcome.appended.first { $0.role == .tool }?.content ?? ""
+    #expect(told.contains("NADA foi enviado"))
+  }
+
+  /// The sharpest failure this feature has: an address that looks right and
+  /// belongs to somebody else. It never reaches a card.
+  @Test("an address nobody mentioned produces no card")
+  func inventedAddressIsRefused() async throws {
+    let client = ScriptedClient(turns: [
+      .tools([
+        EvieToolCall(
+          id: "c1",
+          name: EvieMailTool.name,
+          argumentsJSON: """
+            {"to":"pedro.silva@gmail.com","subject":"Oi","body":"Tudo bem?"}
+            """
+        )
+      ]),
+      .text("Não sei o endereço dele."),
+    ])
+
+    let outcome = try await EvieAgentLoop(mailAndCalendar: StubApps()).run(
+      messages: [ChatMessage(role: .user, content: "manda um e-mail pro Pedro")],
+      roots: [],
+      client: client,
+      emit: { _ in }
+    )
+
+    #expect(outcome.mailProposals.isEmpty)
+    let told = outcome.appended.first { $0.role == .tool }?.content ?? ""
+    #expect(told.contains("pode ser inventado"))
+  }
+
+  /// A model must not be able to launder an address by writing it down itself.
+  @Test("an address only the assistant wrote does not count as known")
+  func assistantCannotVouchForAnAddress() {
+    let conversation = [
+      ChatMessage(role: .user, content: "manda um e-mail pro Pedro"),
+      ChatMessage(role: .assistant, content: "Claro, vou mandar para pedro@inventado.com."),
+      ChatMessage(role: .tool, content: "De: ana@empresa.com — assunto: contrato"),
+      ChatMessage(role: .system, content: "Lembre: o e-mail do Bruno é bruno@empresa.com."),
+    ]
+
+    let known = EvieAgentLoop.knownAddresses(in: conversation)
+
+    #expect(known == ["ana@empresa.com", "bruno@empresa.com"])
   }
 
   /// The property the card exists to guarantee: the tool call produces a
@@ -728,8 +811,9 @@ private struct StubWeb: EvieWebSearching {
 /// The Mail and Calendar apps, as far as the loop can see them.
 ///
 /// It conforms to `EvieMailCalendarReading` and nothing else, which is the point
-/// worth noticing: creating an event is on a different protocol that the loop
-/// does not hold, so no test could make the loop write even on purpose.
+/// worth noticing: creating an event is on a second protocol and sending a
+/// message is on a third, neither of which the loop holds. So no test can make
+/// the loop write or send, even deliberately — this stub could not be asked to.
 private struct StubApps: EvieMailCalendarReading {
   func readMail(count: Int, unreadOnly: Bool) async throws -> [EvieMailMessage] { [] }
 
@@ -738,6 +822,10 @@ private struct StubApps: EvieMailCalendarReading {
   func readCalendar(from: Date, to: Date, limit: Int) async throws -> [EvieCalendarEvent] { [] }
 
   func listCalendars() async throws -> [String] { ["Trabalho", "Família"] }
+
+  func listMailAccounts() async throws -> [String] {
+    ["matheus@empresa.com", "matheus@pessoal.com"]
+  }
 }
 
 /// Gathers emitted events from whatever context the loop runs on.

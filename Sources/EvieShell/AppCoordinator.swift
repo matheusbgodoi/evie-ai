@@ -201,6 +201,33 @@ final class AppCoordinator: NSObject {
         )
       }
     }
+    // The only path from a button to a message leaving this Mac. Like the
+    // calendar one it re-reads the switch at the moment of the press rather than
+    // trusting the card, and here that matters more: a card can sit on screen
+    // while he turns Mail and Calendar off, and honouring it then would be
+    // sending mail from an app he had just said no to.
+    viewModel.onMailApproved = { [weak self] proposal, sending in
+      guard let self, preferences.mailAndCalendarEnabled else {
+        return EvieMailReceipt(
+          outcome: .failed,
+          report: "O Mail está desligado agora, então não enviei nada."
+        )
+      }
+      do {
+        if sending {
+          try await EvieMailCalendarClient().sendMail(proposal)
+          return EvieMailReceipt(outcome: .sent, report: proposal.receipt)
+        }
+        try await EvieMailCalendarClient().saveMailDraft(proposal)
+        return EvieMailReceipt(outcome: .draft, report: proposal.draftReceipt)
+      } catch {
+        return EvieMailReceipt(
+          outcome: .failed,
+          report: (error as? LocalizedError)?.errorDescription
+            ?? (sending ? "Não consegui enviar o e-mail." : "Não consegui guardar o rascunho.")
+        )
+      }
+    }
     speechOutput.setQualitySteps(preferences.voice.resolvedQualitySteps)
     viewModel.onMemoryDecided = { [weak self] fact, keep in
       guard let self, keep else { return }

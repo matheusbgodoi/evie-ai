@@ -3,13 +3,15 @@ import Foundation
 
 /// The only part of Evie that talks to another application on this Mac.
 ///
-/// Everything it sends is a constant compiled into the binary — the three
-/// programs in `EvieAppleScripts` — and everything variable travels beside them
+/// Everything it hands to `osascript` is a constant compiled into the binary —
+/// the programs in `EvieAppleScripts` — and everything variable travels beside them
 /// as process arguments after `--`, where `osascript` hands it to `on run argv`
 /// as a value. Nothing the model writes and nothing a message contains is ever
 /// concatenated into a script. That is the whole security posture of this file,
 /// and it is the reason it is short enough to read in one sitting.
-struct EvieMailCalendarClient: EvieMailCalendarReading, EvieCalendarWriting, Sendable {
+struct EvieMailCalendarClient:
+  EvieMailCalendarReading, EvieCalendarWriting, EvieMailSending, Sendable
+{
   static let executable = URL(fileURLWithPath: "/usr/bin/osascript")
 
   /// How long a read may take before it is abandoned.
@@ -72,6 +74,62 @@ struct EvieMailCalendarClient: EvieMailCalendarReading, EvieCalendarWriting, Sen
       .split(separator: EvieMailCalendar.fieldSeparator, omittingEmptySubsequences: true)
       .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
       .filter { !$0.isEmpty }
+  }
+
+  func listMailAccounts() async throws -> [String] {
+    let output = try await run(EvieAppleScripts.listMailAccounts, arguments: [], app: .mail)
+    return
+      output
+      .split(separator: EvieMailCalendar.fieldSeparator, omittingEmptySubsequences: true)
+      .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+      .filter { !$0.isEmpty }
+  }
+
+  /// The one call in this file that reaches another person.
+  ///
+  /// It looks exactly like the reads, and that is the point: the subject, the
+  /// body, the sending address and each recipient travel as process arguments
+  /// beside a script that is a compiled-in constant, so a body a model wrote out
+  /// of something in an e-mail is a body. Every recipient is its own argument —
+  /// nothing is joined with commas and split again, because that split is where
+  /// one stray character becomes an extra address.
+  ///
+  /// It returns nothing and throws instead. There is no useful value here: the
+  /// message either went or it did not, and a `Bool` nobody is forced to read is
+  /// how "enviado" ends up on screen for a message that never left.
+  func sendMail(_ proposal: EvieMailProposal) async throws {
+    let output = try await run(
+      EvieAppleScripts.sendMail,
+      arguments: [proposal.subject, proposal.body, proposal.sender] + proposal.recipients,
+      app: .mail
+    )
+    switch output.trimmingCharacters(in: .whitespacesAndNewlines) {
+    case EvieMailCalendar.sentMarker:
+      return
+    case EvieMailCalendar.missingAccountMarker:
+      throw EvieMailCalendarError.accountGone(proposal.sender)
+    default:
+      // Anything else, including the empty string, is a script that did not get
+      // to its last line. Reported as not sent, which is the safe direction to be
+      // wrong in: he checks Sent and finds it, rather than believing it went.
+      throw EvieMailCalendarError.notSent
+    }
+  }
+
+  func saveMailDraft(_ proposal: EvieMailProposal) async throws {
+    let output = try await run(
+      EvieAppleScripts.saveMailDraft,
+      arguments: [proposal.subject, proposal.body, proposal.sender] + proposal.recipients,
+      app: .mail
+    )
+    switch output.trimmingCharacters(in: .whitespacesAndNewlines) {
+    case EvieMailCalendar.draftedMarker:
+      return
+    case EvieMailCalendar.missingAccountMarker:
+      throw EvieMailCalendarError.accountGone(proposal.sender)
+    default:
+      throw EvieMailCalendarError.failed(.mail, "o Mail não guardou o rascunho")
+    }
   }
 
   /// The one call in this file that changes something.
