@@ -1,7 +1,9 @@
 name: CI
 
-# Evie is a macOS application that talks to Apple frameworks, so there is no
-# useful Linux job here. The build and the tests are the whole of it.
+# Evie is a macOS application built against the macOS 27 SDK, and the newest
+# image GitHub offers is macOS 26.5. What can be checked here is checked here,
+# and what cannot is said plainly at the step that would have done it rather
+# than quietly left out.
 on:
   push:
     branches: [main, dev]
@@ -14,8 +16,8 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  build-and-test:
-    name: Build and test
+  build:
+    name: Build the core
     runs-on: macos-26
     timeout-minutes: 30
 
@@ -50,18 +52,25 @@ jobs:
         # newest runner GitHub offers is macos-26 (26.5, Xcode 26.6), so the
         # shell cannot be built here until a macOS 27 image exists.
         #
-        # What that leaves is still worth having: every one of the 618 tests
-        # lives in EvieCoreTests and depends only on EvieCore, so the suite runs
-        # in full. The gap is that `EvieShell` compiles nowhere but the author's
-        # Mac, and that is recorded in docs/PROJECT_STATUS.md rather than hidden
-        # behind a green tick.
+        # This proves that the half of the code holding the agent loop, the
+        # tools, retrieval and the permission boundary compiles somewhere other
+        # than one laptop. It does not prove the shell does. See below.
         run: swift build --target EvieCore
 
-      - name: Test
-        # --core-only because plain `swift test` builds EvieShell too, which
-        # needs an SDK no runner has. The flag and the reason live in
-        # Scripts/test rather than here, so the knowledge stays in one place.
-        run: Scripts/test --core-only
+      # There is no test step, and pretending otherwise would be worse than
+      # saying so. `swift test` builds every target including EvieShell, which
+      # needs the macOS 27 SDK. Building only EvieCoreTests and running with
+      # --skip-build works on the author's Command Line Tools, where the bundle
+      # is EvieCoreTests.xctest, and fails on a runner's full Xcode, where
+      # SwiftPM looks for a whole-package EviePackageTests.xctest that a
+      # single-target build never produces.
+      #
+      # So the 618 tests run on one Mac and are reported in every commit that
+      # touches them. This is recorded as a limitation in docs/PROJECT_STATUS.md
+      # rather than left for somebody to infer from a short workflow.
+      #
+      # What unblocks it: a macOS 27 runner image, at which point this becomes
+      # `run: Scripts/test` and the comment goes.
 
   documentation:
     name: Documentation

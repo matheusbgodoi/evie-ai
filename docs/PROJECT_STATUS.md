@@ -389,6 +389,16 @@ readiness only; they are not the Phase 1 performance suite.
   the "nothing resident" constraint — see `docs/AUTOMATIONS.md`.
 - `docs/implementation/TASKS.md` has not been re-scored since this session and
   understates what is done.
+- **CI cannot build the shell or run the tests, and builds only `EvieCore`.**
+  `EvieShell` needs the macOS 27 SDK — `EvieVisionDescriber` uses `Attachment`
+  from FoundationModels, which the 26 SDK does not define, and the
+  `if #available(macOS 27, *)` around it decides what runs rather than what
+  compiles. GitHub's newest image is macOS 26.5 with Xcode 26.6. Building
+  `EvieCoreTests` alone and running with `--skip-build` was tried and works on
+  this Mac's Command Line Tools, where the bundle is `EvieCoreTests.xctest`, and
+  fails on a runner's full Xcode, which looks for a whole-package
+  `EviePackageTests.xctest` that a single-target build never produces. So the
+  618 tests run on one machine. A macOS 27 runner image closes this.
 
 ## Next recommended action
 
