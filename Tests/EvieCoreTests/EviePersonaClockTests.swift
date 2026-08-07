@@ -81,7 +81,10 @@ struct EviePersonaClockTests {
     )
 
     #expect(prompt.contains("hoje"))
-    #expect(prompt.contains("Nunca chute a data"))
+    // The wording shortened when the prompt was cut to buy back prompt-processing
+    // time; the rule did not. What is asserted is the prohibition, not the sentence
+    // it used to be written in.
+    #expect(prompt.contains("nunca chute"))
   }
 
   @Test("the calculator instruction appears only once the tool is offered")
@@ -91,7 +94,7 @@ struct EviePersonaClockTests {
 
     capabilities.calculates = true
     let prompt = EviePersona.evie.systemPrompt(capabilities: capabilities)
-    #expect(prompt.contains("TODA CONTA VAI PARA A FERRAMENTA calculate"))
+    #expect(prompt.contains("TODA conta vai para calculate"))
     #expect(prompt.contains("inclusive as fáceis"))
   }
 
@@ -102,7 +105,7 @@ struct EviePersonaClockTests {
     let prompt = EviePersona.evie.systemPrompt(capabilities: .allEnabled)
 
     guard
-      let arithmetic = prompt.range(of: "TODA CONTA VAI PARA A FERRAMENTA"),
+      let arithmetic = prompt.range(of: "TODA conta vai para calculate"),
       let sources = prompt.range(of: "ANTES DE RESPONDER QUALQUER PERGUNTA DE FATO")
     else {
       Issue.record("uma das duas regras sumiu do prompt")

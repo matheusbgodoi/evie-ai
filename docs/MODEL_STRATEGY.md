@@ -85,13 +85,60 @@ Mac. The small synthetic responses that passed at this launch setting establish
 wiring only; they cannot replace long-context correctness or the 16K/32K/64K
 benchmark matrix.
 
-### The cached prefix decides where the clock goes
+### The prompt cache is not what this document said it was
 
-The server runs with `--prompt-cache-mode single-prefix`, so the hidden system
-message is the cached prefix of every request. **42% of prompt tokens on this Mac
-are served from that cache**, measured over the last forty requests in the
-server's log (`75ec2f2`). Anything that changes on every turn and sits early in
-the prompt destroys that: the prefix stops matching and the whole thing is
+The server runs with `--prompt-cache-mode single-prefix`, and this document used
+to read that as a prefix cache: the hidden system message cached once and reused
+by every request. **It is not.** `ServerPromptCache.swift` in the pinned runtime
+holds exactly one entry — the previous request's prompt *plus the answer it
+produced* — and hits only when the incoming request extends it, or continues it
+by one turn. A fresh question carrying an identical system message never matches.
+
+Measured 2026-08-07, three byte-identical requests in a row:
+
+| | TTFT | server log |
+|---|---:|---|
+| 1st | 10.11 s | `prompt=710 cached=0` |
+| 2nd | 10.40 s | `prompt=710 cached=0` |
+| 3rd | 10.30 s | `prompt=710 cached=0` |
+
+Across the whole server log — 386 completed requests — **90% were served with
+`cached=0`**, and 23% of all prompt tokens came from the cache. The 105 requests
+carrying 500 tokens or more of prompt took **52.9 s on average**. The earlier
+"42% of prompt tokens" figure was measured over a different, forty-request
+window and is not wrong; it is not the whole picture either.
+
+**Prompt processing costs about 70 tokens per second on this Mac**, which is
+three times *slower* than decode. TTFT is therefore linear in the size of the
+system prompt:
+
+| system prompt | TTFT |
+|---:|---:|
+| none | 0.66 s |
+| 263 tokens | 4.36 s |
+| 526 tokens | 7.74 s |
+| 705 tokens | 10.68 s |
+
+**What this costs, and what makes it free.** Five questions asked as one
+continuing conversation against five asked as fresh ones, same persona, same
+model:
+
+| | continuing | fresh each time |
+|---|---:|---:|
+| question 1 | 12.53 s | 12.51 s |
+| question 2 | **1.35 s** | 11.45 s |
+| question 3 | **1.59 s** | 12.40 s |
+| question 4 | **2.40 s** | 12.19 s |
+| question 5 | **2.24 s** | 12.23 s |
+| total | **20.1 s** | 60.8 s |
+
+`startNewConversation()` is called only when the user asks for it, so Evie
+already does the right thing; the toll is paid on the first question after a
+launch or a deliberate new conversation. Of thirteen stored conversations, nine
+hold a single question.
+
+Anything that changes on every turn and sits early in the prompt destroys even
+the continuing case: the prefix stops matching and the whole thing is
 reprocessed.
 
 That is why Evie's clock is split rather than placed once. The **date** is in the

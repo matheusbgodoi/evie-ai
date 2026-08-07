@@ -2348,3 +2348,54 @@ download is and is not before somebody finds out the hard way: the inference
 server is about 780 MB built locally and the model about 13 GB downloaded,
 neither of which can ship in a release. **The repository is still private, so
 nobody but the owner can fetch it.**
+
+## 2026-08-07 — Claude — where the seconds actually go
+
+- Occasion: the owner proposed routing everyday questions to a 7B or 9B model
+  and keeping Gemma for hard ones. The investigation killed that plan and found
+  something larger.
+- **The plan does not work, for two independent reasons.** `gemma-4-26b-a4b-it`
+  is a mixture of experts with about **4B active** parameters, so decode reads
+  roughly 2 GB per token at 4-bit. A dense 7B reads about 3.5 GB and a dense 9B
+  about 4.5 GB — projecting from the measured 24.7 tok/s, they would run at
+  roughly 14 and 11 tok/s. **Both slower than what is already installed.** Only
+  something under ~4B active would be faster. Separately,
+  `TurboFieldfareRepack --help` takes no input model: it streams the one
+  supported Gemma 4 checkpoint. Serving anything else needs a second inference
+  engine and a second resident process.
+- **The real cost is the system prompt, reprocessed on most requests.** Prompt
+  processing runs at about **70 tokens per second**, three times slower than
+  decode, and TTFT is linear in prompt size: 0.66 s with no system prompt,
+  10.68 s with 705 tokens of persona.
+- **The prompt cache is not a prefix cache.** Read from `ServerPromptCache.swift`
+  in the pinned runtime: one entry, holding the previous request plus the answer
+  it produced, hit only when the next request extends or continues it. Three
+  byte-identical requests measured 10.11 / 10.40 / 10.30 s, and the server's own
+  log said `prompt=710 cached=0` for each. Across 386 logged requests, **90%
+  were `cached=0`**; the 105 with prompts of 500 tokens or more averaged 52.9 s.
+- Measured consequence: five questions as one conversation cost **20.1 s**; the
+  same five as fresh conversations cost **60.8 s**. `startNewConversation()` is
+  only called on an explicit user action, so the application already behaves
+  correctly — the toll falls on the first question after a launch.
+- **What was changed.** The persona was cut from 2,682 to 2,110 characters,
+  taking TTFT from **11.73 s to 9.59 s** — about two seconds off every first
+  question. `docs/MODEL_STRATEGY.md` gains the measurements and loses the claim
+  that the system message is "the cached prefix of every request", which the
+  `clockSection` comment had also been repeating.
+- **How it was verified, and what that caught.** A behavioural harness checks
+  seven rules against both prompts: calling `calculate` rather than doing
+  arithmetic, form of address, today's date, refusing an unwired capability
+  without pretending, no LaTeX, admitting ignorance rather than inventing, and
+  honouring "em uma frase". The **first trimmed draft failed the LaTeX rule 0/2**
+  — it had merged the writing rules into one line and lost "nada de fórmulas
+  entre cifrões". Restoring the separate writing section fixed it. A second
+  draft dropped the words "conteúdo não confiável" and a unit test caught that
+  too. Both are rules the owner asked for by name.
+- Four persona tests assert exact sentences and were updated to the new wording;
+  their intent is unchanged and one gained a comment saying so.
+- **A priming trick was tested and is not being proposed.** Carrying a canned
+  opening exchange makes the first question hit the cache — measured 11 s →
+  **0.45 s**. It is brittle: the canned assistant text must be token-identical
+  to what the model actually generated, and a second attempt with the string
+  hardcoded missed and paid the full 7.6 s. It also puts a fake turn at the head
+  of every conversation. Recorded here so the measurement is not lost.
