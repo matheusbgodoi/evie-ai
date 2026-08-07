@@ -119,7 +119,7 @@ extension EvieDiagnostics {
         let outcome = try await loop.run(
           messages: [
             ChatMessage(role: .system, content: persona),
-            ChatMessage(role: .user, content: question),
+            ChatMessage(role: .user, content: EvieBrevityPreamble.annotated(question)),
           ],
           roots: roots,
           client: client,
@@ -177,7 +177,7 @@ extension EvieDiagnostics {
             role: .system,
             content: EviePersona.evie.systemPrompt(capabilities: capabilities)
           ),
-          ChatMessage(role: .user, content: question),
+          ChatMessage(role: .user, content: EvieBrevityPreamble.annotated(question)),
         ],
         roots: roots,
         client: TurboFieldfareClient(configuration: configuration),
@@ -221,7 +221,7 @@ extension EvieDiagnostics {
             role: .system,
             content: EviePersona.evie.systemPrompt(capabilities: capabilities)
           ),
-          ChatMessage(role: .user, content: question),
+          ChatMessage(role: .user, content: EvieBrevityPreamble.annotated(question)),
         ],
         roots: [],
         client: TurboFieldfareClient(configuration: configuration),
@@ -369,7 +369,7 @@ extension EvieDiagnostics {
             content: EviePersona.evie.systemPrompt(capabilities: capabilities)
           ),
           ChatMessage(role: .system, content: guidance),
-          ChatMessage(role: .user, content: question),
+          ChatMessage(role: .user, content: EvieBrevityPreamble.annotated(question)),
         ],
         roots: [],
         client: TurboFieldfareClient(configuration: configuration),

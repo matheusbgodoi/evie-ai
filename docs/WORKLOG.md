@@ -2399,3 +2399,44 @@ nobody but the owner can fetch it.**
   to what the model actually generated, and a second attempt with the string
   hardcoded missed and paid the full 7.6 s. It also puts a fake turn at the head
   of every conversation. Recorded here so the measurement is not lost.
+
+## 2026-08-07 — she answered about the wrong company
+
+- Occasion: the owner asked "em uma frase, me diga o que é a cluemed" and got a
+  paragraph about **Keymatic**, citing a note whose heading is "1. Em uma frase".
+  Told "eu perguntei cluemed, nao keymatic", she replied that she found no
+  mention of "cluemed" in his notes — which hold 173 passages containing it.
+- **Two independent defects, both reproduced.**
+- **One: "em uma frase" switches the search off.** Same question, same vault,
+  only the opening differs:
+
+  | question | tools called |
+  |---|---|
+  | `o que é a cluemed?` | `list_roots → search_content ×2 → read_file` |
+  | `me diga o que é a cluemed` | `list_roots → search_content` |
+  | `em uma frase, me diga o que é a cluemed` | **none**, 3/3 |
+
+  She reads a request about the *length of the answer* as permission to answer
+  from memory. Two attempts to fix it in the system prompt failed 3/3 each — one
+  beside the source-order list, one at the very end of the prompt, the position
+  this project has found carries most weight. The preamble sits at the front of
+  the user's own message and outweighs both. So `EvieBrevityPreamble` appends a
+  reminder after the question instead, on the turns that need it: 3/3 searching.
+  The question itself is never rewritten.
+- **Two: the model cannot say "cluemed".** Asked to repeat it exactly it returns
+  `cluumed`, every time; asked to spell it, `c-l-u-e-m-e-d`, correctly;
+  `keymatic` comes back untouched. The corruption reaches the tool call —
+  `Lendo suas anotações sobre "cluumed"` — and `cluumed` matches 0 passages
+  against 173 for `cluemed`. `EvieNearestTerm` recovers a term that matched
+  nothing if something within one edit exists, on the failure path only, in both
+  the retriever and `search_content`. See `docs/RAG.md`.
+- Verified before blaming the wrong thing: the persistent index is complete
+  (8,629 passages), `--rag-check` retrieves the right passages for the right
+  spelling, and the failing conversation was a **new** one, so no earlier
+  Keymatic turn was in context.
+- Also checked, because the persona had been cut hours earlier: the pre-trim
+  persona was built into a worktree and fails identically, 2/2. **The trim did
+  not cause this.**
+- End to end the turn went from 45 s wrong to about 105 s right, the extra time
+  being a second scan and a `read_file` — the fast version was the one that gave
+  up. Ten tests added.

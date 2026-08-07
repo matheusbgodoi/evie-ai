@@ -490,11 +490,62 @@ extension EvieFileToolbox {
     guard needle.count >= 2 else {
       return "Preciso de pelo menos duas letras para procurar."
     }
+    let found = try scan(root: root, needle: needle, query: query)
+    if found.matches.isEmpty, let near = EvieNearestTerm.nearest(to: needle, in: found.read) {
+      // The term does not appear and something one letter away does. See
+      // `EvieNearestTerm`: this is not a hypothetical typo, it is what the model
+      // sends when it is asked about `cluemed`.
+      let retry = try scan(root: root, needle: near, query: near)
+      if !retry.matches.isEmpty {
+        return render(retry, query: near, corrected: query, root: root)
+      }
+    }
+    return render(found, query: query, corrected: nil, root: root)
+  }
 
+  /// What one pass of the scan found, and the text it read looking.
+  fileprivate struct ContentScan {
     var matches: [String] = []
-    var queue: [(path: String, depth: Int)] = [("", 0)]
+    var read: [String] = []
     var filesRead = 0
     var stoppedEarly = false
+  }
+
+  fileprivate func render(
+    _ scan: ContentScan,
+    query: String,
+    corrected: String?,
+    root: EvieFileRoot
+  ) -> String {
+    guard !scan.matches.isEmpty else {
+      return """
+        Não achei "\(query)" no texto de nenhum arquivo de \(root.displayName) \
+        (procurei em \(scan.filesRead)).
+        """
+    }
+    // When the term was corrected, say so in the result rather than silently.
+    // The model has to be able to tell the owner which word actually matched,
+    // and a correction nobody is told about is a different kind of wrong answer.
+    var answer =
+      corrected.map {
+        "Não achei \"\($0)\", mas achei \"\(query)\" em \(root.displayName) "
+          + "— provavelmente é a mesma coisa escrita errada. Trechos:\n"
+      } ?? "Trechos com \"\(query)\" em \(root.displayName):\n"
+    answer += scan.matches.joined(separator: "\n")
+    if scan.stoppedEarly {
+      answer += "\n(parei aqui; pode haver mais)"
+    }
+    return answer
+  }
+
+  fileprivate func scan(
+    root: EvieFileRoot,
+    needle: String,
+    query: String
+  ) throws -> ContentScan {
+
+    var result = ContentScan()
+    var queue: [(path: String, depth: Int)] = [("", 0)]
 
     search: while !queue.isEmpty {
       let (path, depth) = queue.removeFirst()
@@ -512,8 +563,8 @@ extension EvieFileToolbox {
         guard Self.isProbablyText(entry.name) else {
           continue
         }
-        if filesRead >= Self.maximumFilesSearched {
-          stoppedEarly = true
+        if result.filesRead >= Self.maximumFilesSearched {
+          result.stoppedEarly = true
           break search
         }
 
@@ -521,30 +572,21 @@ extension EvieFileToolbox {
         guard let excerpt = try? reader.read(root: root.url, relativePath: entryPath) else {
           continue
         }
-        filesRead += 1
+        result.filesRead += 1
+        // Kept so a fruitless search can ask what it should have looked for.
+        // Bounded by the same file limit the scan already obeys.
+        result.read.append(entryPath + " " + excerpt.text)
 
         for line in Self.matchingLines(in: excerpt.text, needle: needle) {
-          matches.append("\(entryPath): \(line)")
-          if matches.count >= Self.maximumContentMatches {
-            stoppedEarly = true
+          result.matches.append("\(entryPath): \(line)")
+          if result.matches.count >= Self.maximumContentMatches {
+            result.stoppedEarly = true
             break search
           }
         }
       }
     }
-
-    guard !matches.isEmpty else {
-      return """
-        Não achei "\(query)" no texto de nenhum arquivo de \(root.displayName) \
-        (procurei em \(filesRead)).
-        """
-    }
-    var answer = "Trechos com \"\(query)\" em \(root.displayName):\n"
-    answer += matches.joined(separator: "\n")
-    if stoppedEarly {
-      answer += "\n(parei aqui; pode haver mais)"
-    }
-    return answer
+    return result
   }
 
   /// Lines containing the term, trimmed to something a model can read.

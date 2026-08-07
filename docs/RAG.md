@@ -228,3 +228,40 @@ for tools and response. Large sources are paged or summarized with provenance.
 Indexes, extracted content, caches, and collection manifests with private paths stay
 outside Git. Deleting a collection deletes its derived local content and verifies
 that no active index references remain.
+
+## When the search term is one letter wrong — 2026-08-07
+
+Retrieval assumed the word it is given is the word that was meant. That is true
+of a person typing and not true of the model asking.
+
+Measured against `gemma-4-26b-a4b-it`, asked to repeat a word exactly:
+
+| asked | returned |
+|---|---|
+| `cluemed` | **`cluumed`** |
+| `cluemed cluemed cluemed` | `cluumed cluumed cluumed` |
+| spell it letter by letter | `c-l-u-e-m-e-d` — correct |
+| `keymatic` | `keymatic` — correct |
+
+The letters survive and the word does not, on this one word, which happens to be
+the name of one of the owner's companies. It reaches the tools: the agent was
+observed calling `search_content` with `cluumed`, which matches **0** passages
+where `cluemed` matches **173**. What the owner read was "não encontrei nenhuma
+menção" about a company with its own folder in his vault, followed by an invented
+description of it.
+
+`EvieNearestTerm` gives a term that matched nothing one chance to be a near miss:
+the most frequent word in what was searched that is within a single insertion,
+deletion or substitution. It is wired into two places, both only on the failure
+path — `EvieVaultRetriever.retrieve`, and `search_content`, which is a literal
+substring scan and does not go through the retriever at all.
+
+Three deliberate limits. A search that found something is **never**
+second-guessed. Words shorter than five letters are never corrected, because one
+edit is most of them and "casa" is not a misspelt "cara". And when a correction
+is used, `search_content` says so in the result — "não achei X, mas achei Y" —
+because a correction nobody is told about is its own kind of wrong answer.
+
+It costs a second scan when it fires. End to end on the vault this took the turn
+from 45 s to about 105 s, which also bought an extra `read_file`: the 45 s
+version was the one that gave up.

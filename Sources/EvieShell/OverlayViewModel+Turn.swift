@@ -856,7 +856,7 @@ extension OverlayViewModel {
     // at, which is both true and what keeps the prefix stable.
     let asked = ChatMessage(
       role: .user,
-      content: "[\(Self.timestamp())] \(userMessage.content)"
+      content: "[\(Self.timestamp())] \(EvieBrevityPreamble.annotated(userMessage.content))"
     )
 
     // Evidence goes immediately before the question so the model reads the

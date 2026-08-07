@@ -4,7 +4,16 @@ All notable changes to Evie are documented here. Dates use `YYYY-MM-DD`.
 
 ## [Unreleased]
 
-Nothing since the `1.0.1` section below.
+### Fixed
+
+- **She answers about the company you asked about.** Asking "em uma frase, o que
+  é a cluemed" got a paragraph about a different company, and then a flat "não
+  encontrei nenhuma menção" about one you keep a folder of notes on. Two separate
+  faults, both now fixed and both with tests: asking for a short answer was
+  switching the search off entirely, and the model cannot write the word
+  "cluemed" — it returns "cluumed", which matches nothing. A search term that
+  finds nothing now gets one chance to be a near miss, and when that happens she
+  says which word actually matched instead of quietly substituting it.
 
 ## [1.0.1] - 2026-08-07
 

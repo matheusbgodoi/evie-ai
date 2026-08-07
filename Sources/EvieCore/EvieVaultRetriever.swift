@@ -85,9 +85,22 @@ public struct EvieVaultRetriever: Sendable {
     }
 
     let terms = EvieQueryTerms.extract(from: question)
-    let byTitle = rankByTitle(terms: terms, in: passages)
-    let byWords = rankByWords(question, in: passages)
+    var byTitle = rankByTitle(terms: terms, in: passages)
+    var byWords = rankByWords(question, in: passages)
     let byMeaning = rankByMeaning(question, in: passages, vectors: vectors)
+
+    // Not one word of the question appears anywhere. Before giving up, allow for
+    // the term being off by a letter — see `EvieNearestTerm` for the measured
+    // reason that happens without anybody mistyping anything. Only on this path:
+    // a search that found something is never second-guessed.
+    if byTitle.isEmpty && byWords.isEmpty {
+      let corpus = passages.map { $0.noteTitle + " " + $0.text }
+      let corrected = terms.compactMap { EvieNearestTerm.nearest(to: $0, in: corpus) }
+      if !corrected.isEmpty {
+        byTitle = rankByTitle(terms: corrected, in: passages)
+        byWords = rankByWords(corrected.joined(separator: " "), in: passages)
+      }
+    }
 
     // Nothing matched any way. Saying so beats returning the least bad passage,
     // which reads as an answer.
