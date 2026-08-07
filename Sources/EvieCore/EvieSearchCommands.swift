@@ -86,9 +86,44 @@ public enum EvieVaultSearchReport {
       ? "1 trecho sobre \"\(query)\":"
       : "\(retrieved.count) trechos sobre \"\(query)\":"
     let body = retrieved.map { found in
-      "**\(found.passage.breadcrumb)**\n\(condensed(found.passage.text))"
+      "**\(found.passage.breadcrumb)**\n\(condensed(readable(found.passage.text)))"
     }
     return ([heading] + body).joined(separator: "\n\n")
+  }
+
+  /// A note as somebody would want to read it, rather than as it is stored.
+  ///
+  /// A vault is full of writing meant for an editor, not for a reader: a
+  /// wikilink is a pair of brackets, a note opens with a block of YAML nobody
+  /// asked to see, and a table degenerates into a row of pipes and dashes once
+  /// it is out of its grid. None of that is the note; all of it was on screen.
+  ///
+  /// The maths is handled elsewhere, in `EvieRichText`, which every card runs
+  /// its text through.
+  static func readable(_ text: String) -> String {
+    var body = Substring(text)
+
+    // Front matter, but only when the note opens with it. A `---` in the middle
+    // of a note is a horizontal rule and belongs to the writing.
+    if body.hasPrefix("---\n"), let close = body.range(of: "\n---", range: body.index(body.startIndex, offsetBy: 3)..<body.endIndex) {
+      body = body[close.upperBound...]
+    }
+
+    var result = String(body)
+    // `[[Nota|como aparece]]` shows the label; `[[Nota]]` shows the name. Either
+    // way the brackets are punctuation for Obsidian, not for a person.
+    while let open = result.range(of: "[["), let close = result.range(of: "]]", range: open.upperBound..<result.endIndex) {
+      let inner = result[open.upperBound..<close.lowerBound]
+      let shown = inner.split(separator: "|").last.map(String.init) ?? String(inner)
+      result.replaceSubrange(open.lowerBound..<close.upperBound, with: shown)
+    }
+    // A table separator carries no information once the table is gone.
+    result = result
+      .split(separator: "\n", omittingEmptySubsequences: false)
+      .filter { !$0.allSatisfy { "|-: ".contains($0) } || $0.isEmpty }
+      .joined(separator: "\n")
+
+    return result.trimmingCharacters(in: .whitespacesAndNewlines)
   }
 
   /// The passage, cut at a word rather than mid-syllable when it is too long.

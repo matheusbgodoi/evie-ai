@@ -301,8 +301,20 @@ extension EvieRichText {
     return result + rest
   }
 
-  /// Only converts `$…$` when the content actually looks like mathematics —
-  /// that is, when it contains a backslash command.
+  /// Converts `$…$`, except where the dollar is money.
+  ///
+  /// The rule used to be the other way round: convert only when the content held
+  /// a backslash command, so that `R$ 1.234,56` survived. It survived, and so did
+  /// everything else — `$y=f(x)$`, `$f_x$`, `$2^8$` and `$+$` all reached the
+  /// screen with their dollars showing, because none of them contains a
+  /// backslash. Most real mathematics does not. The guard against one rare case
+  /// was refusing the common one.
+  ///
+  /// Currency is recognised by what precedes the dollar instead: in Brazilian
+  /// text it is written `R$`, and dollars written that way come in pairs across a
+  /// sentence — "custa R$ 10 e vende por R$ 20" — where naive pairing would
+  /// swallow the sentence between them. Both openers are preceded by a letter,
+  /// so both are refused, and the sentence survives.
   fileprivate static func replacingDollarMath(_ text: String) -> String {
     var result = ""
     var rest = Substring(text)
@@ -313,7 +325,13 @@ extension EvieRichText {
         break
       }
       let inner = afterDollar[afterDollar.startIndex..<end]
-      guard inner.contains("\\") else {
+      let precededByLetter =
+        start > rest.startIndex && rest[rest.index(before: start)].isLetter
+      // A newline between the two dollars means they were never a pair, and a
+      // very long run means the same. Either way it is prose that happens to
+      // contain two dollar signs.
+      guard !precededByLetter, !inner.contains("\n"), inner.count <= 120, !inner.isEmpty
+      else {
         result += rest[rest.startIndex...start]
         rest = afterDollar
         continue
