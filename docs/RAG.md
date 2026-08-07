@@ -1,43 +1,90 @@
 # Local RAG design
 
-Status: **agentic retrieval over authorised folders is implemented and in use.**
-The embedding-index design below is *not* built, and the reason is worth reading
-before anyone builds it.
+Status: **retrieval over authorised folders is implemented and in use, matching on
+meaning as well as on words.** The full pipeline design further down — staged
+extraction, a reranker model, QMD — is still *not* built, and the reasons are
+worth reading before anyone builds it.
 
-## What was built instead of an index
+## What was built
 
-Evie retrieves by searching, as a step she chooses, using the same read-only tools
-that reach any authorised folder: `search_content` looks inside the text,
-`search_files` looks at names, `read_file` opens what looks relevant. She decides
-whether to search at all, what to search for, and whether to follow a result by
-opening the file.
+Three signals over the passages of the authorised folders, fused with Reciprocal
+Rank Fusion because their scores are not on a common scale and never will be: the
+note's **title** (weighted double, because the person named the note themselves),
+the **words** (BM25), and the **meaning** (cosine over `NLContextualEmbedding`,
+the model macOS already ships). `EvieVaultIndex` embeds each passage once and
+caches it, re-embedding only what changed.
 
-Verified 5 August 2026 against the user's own Obsidian vault — 197 notes across
-`EU/`, `Cluemed/`, `Keymatic/`, `PUC-SP/`. Asked *"o que eu tenho anotado sobre a
-Cluemed?"*, she called `list_roots` then `search_content`, and answered in 42
-seconds with the company being a healthtech, the user's role, the site and
-Instagram handle, the files involved, and a specific note about an Eurofarma
-funding conversation including the CEO's objection to corporate VC on the cap
-table. Reproduce with:
+Every choice came from a measurement taken before anything was designed. A
+paraphrase pair — "quanto eu cobro pela consultoria" against "o valor da minha
+hora" — scored 0.796, against 0.933 for a sentence that was actually unrelated, so
+the signal is real. And the contextual model took **8 ms** per passage against
+**30 ms** for the static sentence embedding: better and four times faster, which
+settled it. 6,112 passages at 8 ms is 136 s — far too slow per question, fine
+once, which is what makes the cache the architecture rather than an optimisation.
+A question then costs about 700 ms.
+
+Passages carry where they came from, so an answer can cite "Cluemed › Captação ›
+Eurofarma" rather than "nas suas anotações", and a paragraph that only says "eles"
+is still findable.
+
+### What this replaced, and why the old reasoning was wrong
+
+Retrieval used to be a substring scan through `search_content`. It found "Cluemed"
+because that is a rare exact token, and would find nothing for "quanto eu cobro"
+against a note saying "valor da minha hora". This document previously argued
+against an index on the grounds that scanning is always current and cannot answer
+from a stale copy. That is true and was not the point: the scan could not answer
+the question at all.
+
+Query terms are extracted with `NLTagger` rather than a stopword list. The first
+attempt used one, and was *worse* than what it replaced — "o que eu tenho sobre a
+Cluemed" returned a chemistry lesson, because "tenho" survived the list and, being
+rare in a vault of technical notes, earned a high inverse-document-frequency
+weight. Stopword lists assume the meaningless words can be enumerated; IDF assumes
+rare means informative. Both are wrong here. Part of speech decides instead, and
+lemmatising came with it, which matters more in Portuguese than in English.
+
+Three bugs were found by running it rather than by reasoning about it: the vault
+indexed as empty because `.skipsHiddenFiles` discards everything beneath a hidden
+ancestor and `~/Library` carries the hidden flag (701 entries without the option,
+0 with it); the credential denylist was applied to the absolute path, so that same
+component refused the vault outright; and the fallback for "the tagger recognised
+nothing" also fired when it recognised everything and filtered it all, putting
+every function word back.
+
+An earlier end-to-end verification, 5 August 2026, against the user's own Obsidian
+vault — 197 notes across `EU/`, `Cluemed/`, `Keymatic/`, `PUC-SP/` — asked *"o que
+eu tenho anotado sobre a Cluemed?"* and got the company, the user's role, the site
+and Instagram handle, the files involved, and a specific note about an Eurofarma
+funding conversation, in 42 seconds. Reproduce with:
 
 ```bash
 evie-shell --ask-folder "<vault>" "O que eu tenho anotado sobre a Cluemed?"
 ```
 
-### Why not embeddings
+### `/buscar` — the same retrieval, without the model
 
-An index would answer faster and would match on meaning rather than on the word
-that happens to be typed. It would also need building, rebuilding on every edit,
-and storing a second copy of everything the user has written. For a vault of a few
-hundred notes on the machine that owns them, scanning is fast enough, is always
-current, needs no storage, and cannot answer from a stale copy of a note that
-changed this morning. The failure mode of a stale index — a confident answer from
-text the user already deleted — is worse than the failure mode of scanning, which
-is being slower.
+Typing `/buscar` runs **exactly the retrieval an ordinary question runs** and
+shows what it found — note, section, text — and stops there. Nothing about the
+retrieval changes; the command is a way to look at it directly.
 
-The point at which this stops being true is measurable, not a matter of taste:
-when a search takes long enough to be felt, or when the vault outgrows
-`maximumFilesSearched`. The pipeline below is the design for that day.
+No model call is made at any point, **including when nothing is found**. The user
+asked to search, and an answer written from memory shown where a search result
+belongs is a lie about where it came from. It leaves no trace in the conversation
+either, because quoting the user's notes back as something Evie said would strip
+the fence that keeps note text data rather than instruction.
+
+`/web` is its opposite and is documented with the loop rather than here: it skips
+the notes and forces a lookup. Both are anchored at the start of the message and
+require a boundary after the name, and the test that matters is the one listing
+prose that must not trigger them — "/webhook do Stripe parou" and "/buscarei um
+jeito" are things somebody wrote.
+
+### Still not built: an inverted index
+
+Retrieval is about 700 ms of a roughly 60 s turn. The model is the cost. Building
+an inverted index would be effort spent where nothing is measurable, and it stays
+unbuilt until a measurement says otherwise.
 
 ### Bounds, and why they are visible
 

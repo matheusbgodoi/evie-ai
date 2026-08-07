@@ -1,7 +1,10 @@
 # System architecture
 
-Status: target architecture proposed; VS-002 native/direct-client shell with local
-visible history and settings implemented for validation.
+Status: the target architecture below is still the target. What is built is the
+native shell with a direct loopback client, an agent loop with read-only tools and
+one proposing writer, retrieval, voice in both directions, vision through the
+system daemon, typed commands, and a self-update path. The `evied` supervisor does
+not exist; the application composition root is doing its job for now.
 
 ## Design principles
 
@@ -40,8 +43,8 @@ visible history and settings implemented for validation.
        ┌────────────┼────────────┼──────────────┐          │
        │            │            │              │          │
  ┌─────▼────┐ ┌─────▼────┐ ┌─────▼─────┐ ┌─────▼────┐ ┌───▼─────┐
- │ Gemma /  │ │ RAG local│ │ tools and │ │ Node-RED │ │ STT/TTS │
- │ Turbo    │ │ retrieval│ │ adapters  │ │ workflows│ │ + vision│
+ │ Gemma /  │ │ RAG local│ │ tools and │ │ macOS    │ │ STT/TTS │
+ │ Turbo    │ │ retrieval│ │ adapters  │ │ Shortcuts│ │ + vision│
  └──────────┘ └──────────┘ └───────────┘ └──────────┘ └─────────┘
 ```
 
@@ -74,27 +77,89 @@ adding a filesystem/network implementation to the direct UI client remains
 forbidden.
 
 This direct connection is accepted only for the current prototype under
-[ADR 0006](adr/0006-direct-turbo-vertical-slice.md). The application starts no
-process, executes no tools, carries no credential, and rejects non-loopback hosts.
-VS-002 adds only a native visible-conversation store and non-secret configuration
-writer; neither can authorize model actions. The adjacent `Scripts/evie-runtime`
-development tool can explicitly prepare and manage the process for testing, but it
-is not linked into the application. The server must use `--max-context 65536`; the
-client cannot increase a server launched at its 16K default.
+[ADR 0006](adr/0006-direct-turbo-vertical-slice.md). The client still carries no
+credential and rejects non-loopback hosts, and it still never executes a tool.
+
+Three of the original abstinences no longer hold, and they are worth naming rather
+than leaving as an out-of-date boundary:
+
+- the application now starts a process — the voice engine, and only when a trained
+  voice is asked for;
+- it now executes tools, in `EvieAgentLoop`, outside the transport;
+- one of those tools proposes a filesystem change, which a person then approves.
+
+What has not changed is the invariant those abstinences were protecting: no tool
+the model can call changes anything. `propose_change` records a proposal and
+returns a result saying plainly that nothing happened. Prompt injection reaches a
+card, not a filesystem.
+
+The adjacent `Scripts/evie-runtime` development tool can explicitly prepare and
+manage the inference process for testing, but it is not linked into the
+application. The server must use `--max-context 65536`; the client cannot increase
+a server launched at its 16K default.
 
 ```text
 ~/Library/Application Support/Evie/
   Conversations/<uuid>.json    visible user/assistant history, 0600
+  Media/                        attachments kept with the conversation that used them
+  Skills/                       markdown instructions the user can write by hand
+  vault-index.json              cached passage embeddings, rebuilt from the vault
   config.json                   non-secret model preferences, 0600
+  preferences.json              appearance, shortcuts, voice, web, wake, updates
 ```
+
+Media belongs to the conversation that attached it: deleting the conversation
+deletes the files, and anything a crash left behind is swept at launch, because a
+folder of pictures nobody can reach is how a disk quietly fills.
 
 The UI keeps a complete visible session for persistence while constructing a
 separate bounded copy for each inference request. Hidden prompts are always
 reconstructed in memory. See [ADR 0008](adr/0008-local-conversation-history.md).
 
-The waveform view is data-driven but receives no microphone or output-audio samples
-in this slice. Voice states exist in the stable event vocabulary for future workers,
-not as a claim that voice is operational.
+The waveform view is driven by real microphone and playback levels. Voice states in
+the event vocabulary now describe activity that happens.
+
+## Module and file map
+
+Two targets. `EvieCore` is dependency-free, has no AppKit, and holds everything
+that can be reasoned about without a window. `EvieShell` owns the window, the
+system frameworks, and every process Evie starts.
+
+`EvieCore`, by what it is for:
+
+| Area | Types |
+|---|---|
+| Transport and loop | `AgentClient`, `TurboFieldfareClient`, `EvieAgentLoop`, `EvieToolCallAccumulator`, `EvieTool` |
+| Conversation | `ChatMessage`, `EvieConversation`, `EvieConversationStore`, `EvieConversationExport`, `EvieInteraction`, `EvieArtifact`, `EvieRichText` |
+| Commands | `EvieCommand`, `EvieSearchCommands`, `EviePlan`, `EviePlanPrompts` |
+| Retrieval and grounding | `EvieVaultRetriever`, `EvieVaultPassage`, `EviePassageRanker`, `EvieQueryTerms`, `EvieGrounding`, `EvieAnswerProvenance`, `EvieWebSearch`, `EvieWebPassages` |
+| Files | `EvieRootRegistry`, `EvieFileToolbox`, `EvieScopedFileReader`, `EvieDocumentReader`, `EvieFileWriter`, `EvieFileChange`, `EvieChangeIntent` |
+| Knowledge and identity | `EvieMemory`, `EvieSkill`, `EviePersona`, `EvieCapabilityContracts` |
+| Voice | `EvieTTS`, `OmniVoiceBatchTTSAdapter`, `EvieSpeechGate`, `EvieSilenceTrim`, `EvieWakePhrase`, `EvieWakeGate` |
+| Settings and release | `EvieConfiguration`, `EvieConfigurationLoader`, `EvieConfigurationStore`, `EviePreferences`, `EviePreferencesStore`, `EvieShortcut`, `EvieRelease` |
+| Presentation-adjacent | `EvieOverlayGeometry`, `EvieThinkingWave` |
+| Process | `SecureProcessRunner` |
+
+`EvieShell`, by what it owns:
+
+| Area | Types |
+|---|---|
+| Composition and windows | `EvieShellApp`, `AppCoordinator`, `OverlayPanelController`, `SettingsWindowController`, `ConversationHistoryWindowController`, `GlobalHotKeyController` |
+| Overlay state | `OverlayViewModel` plus `+Turn`, `+History`, `+Plan`, `+Search`; `OverlayChromeModel` |
+| Other view models | `ConversationHistoryViewModel`, `EviePreferencesViewModel`, `ModelSettingsViewModel`, `EvieRootsViewModel`, `EvieMemoryViewModel`, `EvieSkillsViewModel`, `EvieVoiceLibraryViewModel` |
+| Audio | `EvieAudioCapture`, `EvieLevelMeter`, `EvieSpeechTranscription`, `EvieSpeechOutput`, `EvieOmniVoiceClient`, `EvieVoiceEngineLauncher`, `EvieWakeListener` |
+| Reading the world | `EvieVaultIndex`, `EvieVisionDescriber`, `EvieDocumentAttachment`, `EvieMediaStore`, `EvieWebClient`, `EvieSkillStore` |
+| Updating | `EvieUpdater`, `EvieBundleSignature` |
+| Views | `Views/`, plus `EvieOverlayView`, `QuickTextEntryView`, `ConversationHistoryView` |
+
+`OverlayViewModel` was one file of 2,278 lines holding cards, attachments,
+commands, plans, proposals, persistence and the request lifecycle. It is now five:
+the type keeps its state and lifecycle, and the four extensions it already
+contained became `+Turn` (the turn machinery), `+History` (paging earlier turns),
+`+Plan` (the `/plano` runner) and `+Search` (`/buscar` and `/web`). Nothing else
+changed, which is why the test suite was the check that it worked. The cost is
+that members the extensions reach are `internal` rather than `fileprivate`, since
+`fileprivate` is scoped to a file and there are now five of them.
 
 ## Always-on control plane
 
@@ -104,12 +169,19 @@ A SwiftUI/AppKit menu-bar utility owns the overlay, microphone feedback, audio
 playback presentation, result cards, approvals, and optional history window. It
 must not load ML models directly.
 
-VS-002 implements this as a SwiftPM development executable using an accessory
-application policy, AppKit status item, borderless nonactivating `NSPanel`, native
-vibrancy, Carbon hotkeys, SwiftUI content, a deliberate history window, and a
-model-settings window. Signed `.app` packaging, login-item registration, shortcut
-preferences, and target behavior across Spaces/displays are not yet implemented
-or accepted.
+This is a SwiftPM executable packaged as an accessory `.app` with a stable bundle
+identifier: AppKit status item, borderless nonactivating `NSPanel`, native
+vibrancy, Carbon hotkeys, SwiftUI content, a history window, and a settings
+window. Being an accessory application has consequences the code has to respect —
+there is no Dock tile to click, so an `NSOpenPanel.runModal()` that takes
+activation for the whole application and hands it back to whatever the system
+considers frontmost is indistinguishable from the settings window closing. The
+settings pickers are sheets on the asking window for that reason; the overlay's
+own attach button stays modal deliberately, because a sheet on a small floating
+panel would look wrong and ⌥Space brings the overlay back.
+
+Login-item registration and target behaviour across Spaces/displays are still not
+implemented or accepted.
 
 ### `evied` supervisor
 
@@ -193,7 +265,13 @@ Receives text, voice reference/profile, and output path/stream. OmniVoice CLI is
 the baseline cold implementation. A persistent Python provider is allowed only if
 benchmark evidence justifies model reuse or streaming.
 
-`VOI-007` now implements the backend-neutral request/audio/error contract and a
+What shipped is a local HTTP engine on `127.0.0.1:3900` rather than the one-shot
+CLI adapter, started by `EvieVoiceEngineLauncher` when a trained voice is asked
+for and never at login. `EvieSpeechOutput` synthesises the answer in blocks and
+plays them through an `AVAudioEngine`, synthesising the next block while the
+current one plays. `docs/VOICE.md` carries the measurements.
+
+`VOI-007` also implements the backend-neutral request/audio/error contract and a
 one-shot adapter targeting the inspected `omnivoice-infer-batch` 0.3.12 contract.
 It sends text/reference transcript as JSONL on stdin, requires explicit absolute
 executable/model/Hugging Face cache/reference paths, asks supported libraries to
@@ -202,39 +280,47 @@ process group. Cancellation/timeout terminate descendants; private request
 directories/WAVs are `0700`/`0600`, outputs are capped at 64 MiB and structurally
 validated as RIFF/WAVE, and cleanup is best effort on failure or discard. The
 configured executable is trusted local code: this adapter neither network-sandboxes
-it nor verifies its version/hash yet. No UI composition, playback, voice-profile
-store, or real inference is implemented, and no OmniVoice daemon/app remains
-active.
+it nor verifies its version/hash yet — which is still true of the HTTP engine that
+superseded it. That adapter itself remains unwired: playback, the voice library,
+and real inference all go through the engine instead.
 
 ### Vision worker
 
-Loads only when an image is attached or a vision tool is called. It returns a
-structured observation containing description, OCR, layout, entities, uncertainty,
-and source-image identity. The text agent decides what the observation means.
+There is no vision worker. `EvieVisionDescriber` calls the system's own on-device
+model, which runs in a system daemon, so no weights enter Evie's address space and
+nothing is downloaded. It is kept beside the text reader rather than replacing it:
+the description gives the structure of a chart and the reader gives the exact
+characters, and neither alone is enough. See `docs/VISION.md`.
 
-### Retrieval workers
+### Retrieval
 
-Embedding and optional reranking are separate from the always-on store. SQLite and
-keyword indexes can remain open; model processes can load for a query or scheduled
-indexing and then unload.
+`EvieVaultIndex` embeds passages once with the system's contextual embedding model
+and caches the result, re-embedding only what changed. There is no separate
+process and no reranker model. `docs/RAG.md` records why an inverted index was not
+built.
 
 ## Deterministic automation plane
 
-Node-RED owns event-driven workflows. Its responsibilities are timing, webhooks,
-state transitions, retries, and connector calls that do not require semantic
-judgment. The LLM is a bounded node used only for tasks such as classification,
-summarization, extraction, or drafting.
+Node-RED was the plan and is not the answer. The constraint is nothing resident,
+nothing in Docker, and processing spent only when the tool is used; Node-RED is a
+Node.js HTTP server with a browser editor, and residency is the whole point of it.
 
-Evie receives only a narrow workflow API:
+The recommendation is macOS Shortcuts — the visual editor the user already owns,
+driven by the tool loop Evie already has, with no resident process of her own.
+`docs/AUTOMATIONS.md` records what was measured, including the parts that do not
+work: `shortcuts sign` reads the file extension rather than the content, so exit 0
+means the bytes parsed and nothing more; installing a shortcut is one human click,
+which is the approval gate the old design was going to build as policy, enforced
+instead by the operating system; and a shortcut that wants to ask the user
+produces no output and never exits, which is indistinguishable from a slow one.
 
-- list and inspect;
-- validate a candidate;
-- create/import as disabled;
-- compare a draft with the active revision;
-- request approval;
-- enable/disable after approval;
-- trigger an approved flow;
-- read execution status and redacted logs.
+Nothing event-driven survives the constraint. No webhooks, no MQTT, no inbound
+mail, no phone-pushed location: anything event-driven needs something listening,
+and nothing that listens is non-resident.
+
+The narrow workflow API the old design proposed — list, inspect, validate, import
+as disabled, diff, request approval, enable, trigger, read redacted logs — remains
+the right shape for whatever is eventually built, and none of it is written.
 
 ## Configuration and development runtime
 
@@ -283,6 +369,15 @@ The broader target layout still reserves `~/Library/Caches/Evie/` for recreatabl
 caches, macOS Keychain for future secrets, and explicitly selected paths for
 personal sources and voice references. None of those capabilities is implemented
 by this slice.
+
+## Update path
+
+`EvieRelease` models a GitHub release, `EvieUpdater` performs three separate
+presses — look, download, install — and `EvieBundleSignature` decides whether the
+download may replace the running copy. Nothing is installed silently and nothing
+is installed that was not signed with the same key as the copy already running.
+What the two checks catch, and what was measured against tampered bundles, is in
+`docs/SECURITY.md`.
 
 ## Failure containment
 

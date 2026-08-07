@@ -1,7 +1,8 @@
 # Voice architecture
 
-Status: the loop is closed. The microphone, speech recognition, and the spoken
-answer all work. Wake word and call mode do not.
+Status: the loop is closed. The microphone, speech recognition, call mode, and the
+spoken answer all work. The wake phrase is implemented, measured, and off by
+default; the one check that matters for it has not been run.
 
 ## The output path — 2026-08-05
 
@@ -42,10 +43,21 @@ the only route to Evie sounding like anything other than a 2005 screen reader.
 
 ## The cloned voice — measured 2026-08-05
 
-The local OmniVoice engine runs as a separate process on `127.0.0.1:3900`, started
-and stopped by `Scripts/evie-voice`. It holds a 2.4 GB model resident, which is
-why Evie does not start it herself: a heavy worker that starts itself takes a
-resource decision away from the person whose machine it is.
+The local OmniVoice engine runs as a separate process on `127.0.0.1:3900`. It
+holds a 2.4 GB model resident, which is why it does not come up at login: a heavy
+worker that starts itself takes a resource decision away from the person whose
+machine it is.
+
+**Corrected 2026-08-06.** That reasoning stands; where the decision was read from
+was wrong. Nothing in the application ever started the engine, so choosing a
+trained voice in settings did nothing audible, the log file did not exist, and a
+crash was indistinguishable from a process that had never run — which is how an
+evening was spent looking for the wrong bug. Choosing a trained voice *is* the
+decision, so that is the trigger now: never at login, never for a system voice.
+Failing to start says why and falls back to a system voice rather than falling
+silent. Verified with `--voice-engine-check` against a stopped engine: up in
+6.66 s with both trained profiles found. `Scripts/evie-voice` still starts and
+stops it by hand.
 
 Two profiles already existed on this Mac, both Portuguese clones, including one of
 the user's own voice.
@@ -60,18 +72,66 @@ the user's own voice.
 | Long sentence, 16 steps | 8.68 s | 9.63 s | 1.1× |
 | Through Evie, first audio | — | **2.30 s** | — |
 
-Two conclusions drive the implementation. Eight steps is the setting that keeps a
-conversation moving. And the per-call overhead dominates short text — 1.9× for a
-sentence against 1.1× for a paragraph — so **chunking by sentence is wrong for
-this engine**. Evie synthesises the opening sentence alone, for a fast first word,
-then everything after it in a single block.
+Eight steps is the setting that keeps a conversation moving. The other conclusion
+drawn here — that the per-call overhead dominates short text, so chunking is wrong
+for this engine — was **wrong, and the reason is the next section**. The overhead
+was not the engine.
 
-### The thirty-seven second trap
+### The reference transcript, and the twelve seconds nobody was paying for
 
-A profile stored without its reference text costs a one-off Whisper pass to
-transcribe the reference. Measured: **36.97 s** to first audio on a profile with
-no `ref_text`, against 2.30 s on one that has it. `Scripts/evie-voice voices`
-reports which profiles carry their text, and `warm` pays the cost up front.
+A cloned voice whose `ref_text` is empty makes the backend run Whisper over its
+reference recording **every time it speaks**. Not once. Every phrase. Measured on
+this Mac with the same phrase:
+
+| Profile | Time |
+|---|---|
+| Designed voice, no reference audio | 1.5 s |
+| Cloned voice, `ref_text` empty | 19.1 s |
+| The same voice, `ref_text` stored | 1.7 s |
+
+Twelve seconds of speech went from 20.4 s to 3.4 s — four times slower than real
+time to three times faster. The engine was never slow.
+
+An earlier measurement of the same fault recorded 36.97 s to first audio against
+2.30 s, and blamed a one-off Whisper pass. It is not one-off. That is the
+correction.
+
+A voice trained through Evie carries its transcript already; one made in the
+engine's own application does not, which is where the affected profile came from.
+Evie now fills in any that are missing, once, when the engine comes up — a single
+Whisper pass over a ten-second clip, measured at 7 s, ever — and says which voices
+it prepared, because a voice silently becoming ten times faster is worth a
+sentence. The `PUT` that stores it takes JSON, not the multipart its neighbouring
+endpoints take: multipart is rejected with 422, measured.
+
+### Blocks, pipelined
+
+With the fixed cost understood, the answer is spoken in blocks bounded at 280
+characters — roughly fifteen seconds of speech for about 3.9 s of work. The fixed
+part of a call is about 1.5 s, plus 0.16× the audio produced, both measured.
+
+Before that bound existed, everything after the opening sentence went into one
+enormous synthesis, and a two-thousand-character answer produced the first
+sentence and then silence: when the big block did not come back, the loop skipped
+it without a word. A block that fails now says so.
+
+The loop also waited for a block to finish playing before starting to synthesise
+the next, so every gap between blocks was the whole cost of the next one. Reported
+from outside as "pausas longas de 5 ou 6 segundos do nada", which is exactly what
+a serial loop sounds like. Each block is now synthesised while the previous one
+plays; synthesis takes roughly a quarter of the time a block takes to play, so
+overlapping them removes the gap rather than shortening it. The prefetch is
+unstructured, so cancelling its parent does not reach it — `stop()` cancels it
+explicitly, or it would finish a synthesis nobody is waiting for and hold the
+engine busy for the next thing that is.
+
+### Silence trimming
+
+Every synthesised phrase carried a little silence at each end. Sensible for one
+phrase, and the reason two played back to back have a gap neither sentence asked
+for. `EvieSilenceTrim` removes it, leaving 40 ms in place so a plosive does not
+start with a click. Silence *inside* a phrase is left alone: that is punctuation
+being spoken.
 
 ### Designed voices cost less than cloned ones
 
@@ -92,9 +152,33 @@ Measured, warm, for a two-and-a-half-second sentence at eight steps:
 All of them are faster than real time. Designed voices are cheaper still, because
 there is no reference to encode.
 
-Every profile pays the Whisper pass once. `Scripts/evie-voice warm` now speaks
-once with each: measured at 23.0 s for the one profile without stored reference
-text and between 0.5 s and 1.4 s for the rest.
+`Scripts/evie-voice warm` speaks once with each profile: measured at 23.0 s for
+the one profile without stored reference text and between 0.5 s and 1.4 s for the
+rest. That 23.0 s was read at the time as a one-off warming cost. It was not — see
+the reference-transcript section above. Warming is now unnecessary for that
+reason, and the transcript is filled in instead.
+
+### Speaking on demand
+
+Every answer card carries a speaker button. Pressing it is a person pointing at
+something and asking to hear it, which is not the same question as whether she
+answers out loud on her own — so it does not consult the speech preferences at
+all. It does bring the engine up like any other request to speak, and falls back
+to a system voice, saying why, if it cannot.
+
+It toggles, because the thing you most want to do to a voice reading four
+paragraphs at you is stop it. The button tracks a single `onSpeakingChanged`
+signal rather than deriving its state from `onStarted` and `onFinished`
+separately, which gets it wrong the first time those fire out of order — a
+barge-in stops and starts in the same breath. It carries three states, idle,
+preparing and speaking, because the couple of seconds of synthesis before the
+first sound made the press look like it had missed.
+
+Whether a question is spoken back is pinned at submission rather than read when
+the answer arrives. Reading it late meant a typed question could be spoken aloud
+with "falar quando eu digitar" off: open the microphone while a typed question is
+in flight and the flag flips underneath it. The switch was never consulted
+wrongly; the question was.
 
 ### On cloning someone else's voice
 
@@ -174,8 +258,78 @@ and no Brazilian Portuguese WER has been measured here.
 
 ### Not measured, not claimed
 
-No audio has been transcribed. Accuracy in real rooms, latency after the language
-download, barge-in behaviour, and energy cost are all unknown.
+Speech is transcribed daily and the recogniser has never been scored. There is no
+Brazilian Portuguese WER for it, no latency figure after the language download, no
+barge-in measurement, and no energy number.
+
+## The wake phrase — 2026-08-06
+
+`EvieWakePhrase` matches by edit distance over the phrase with its spaces
+stripped, and **the threshold was measured rather than picked**. "Evie" is not a
+Portuguese word, so a pt-BR recogniser builds it out of real ones. Measured
+against what this recogniser actually produces:
+
+| Heard | Score |
+|---|---|
+| "ei ivi", "ei evi", "ei eve", "ei e vi" | 0.667 – 1.000 |
+| Twelve ordinary sentences, including "seis e meia" and "aquele vinho" | never above 0.500 |
+
+0.6 sits in that gap. The first attempt at 0.7 dropped "ei ivi", which is exactly
+the mis-hearing that would have kept her from coming.
+
+Variants separate on semicolons, not commas. The first attempt split "Ei, Evie" in
+two, discarded "Ei" as too short, and left her listening for a bare "Evie" —
+worse than the phrase that was configured.
+
+Before this, the switch and the text field in settings were wired to nothing.
+Nothing in the code read either preference, so "Ei, Evie" could never have worked:
+the interface promised a feature that did not exist.
+
+### What arming costs
+
+The promise was to measure before optimising. Measured on this Mac over three
+40-second windows, in a room with speech in it:
+
+| State | CPU |
+|---|---|
+| Stopped, nothing armed | 0.03% of one core |
+| Armed | 1.01% |
+| Armed, through the energy gate | 0.84% |
+
+**Both of us had assumed worse.** The objection to the feature was that it
+consumes the machine, and that assumption was wrong. About one percent of one core
+is what it costs. What it costs is not CPU.
+
+`EvieWakeGate` feeds the recogniser only while the level is above an adaptive
+floor, with a pre-roll ring so the first syllable is not eaten. It works, and it is
+tested. But it opened for 44.8% of buffers in this room and returned 0.84% against
+a predicted 0.47% — it is not switching off as cleanly as the arithmetic says it
+should, and 0.17 percentage points of one core is not a saving that earns a ring
+buffer in the audio path. It is kept because it is written and tested and only
+reachable when the wake phrase is switched on, which it is not. It is not
+recommended.
+
+### What it costs that is not CPU
+
+While armed there is no waveform, no listening state, nothing on screen, and
+nothing kept beyond an 80-character tail thrown away every minute. What cannot be
+hidden is the orange microphone dot: macOS shows it for any application holding
+the microphone, and "Hey Siri" is exempt only because it runs on hardware no
+third-party application can reach. The settings pane says that plainly rather than
+implying otherwise, and shows what the recogniser actually heard, which is the
+only honest way to tune a name it has never seen.
+
+`docs/SIRI.md` describes the route that avoids the dot entirely — an App Intent,
+letting Siri's own always-on hardware do the listening and hand Evie the turn with
+her microphone shut. It needs a paid Developer Program membership: observed, the
+App Intents daemon rejected Evie's own bundle for having no Team ID.
+
+### The check that has not been run
+
+Nobody should turn this on yet. The end-to-end check — that the configured phrase
+still wakes her through the gate — **was not performed**. The threshold is
+measured against transcripts, and the CPU cost is measured, and neither of those
+is the same as speaking to her across a room and having her come.
 
 ## Original research
 
@@ -231,6 +385,13 @@ hard negatives, keep a held-out evaluation set, and pass both a false-reject tar
 and an 8–24 hour false-activation/energy test before default activation. The
 initial target is at most one false wake in eight hours and below 5–10% false
 rejects in the user's environments; these are proposed gates, not measured values.
+
+**What shipped is not this.** No classifier was trained and no enrolment exists.
+The implementation runs the system recogniser over a continuous capture and
+matches its transcript by edit distance, with the threshold measured against real
+mis-hearings rather than against a held-out set. The gates in the paragraph above
+remain unmet, which is the reason the feature is off by default. See "The wake
+phrase" above for what was measured instead.
 
 ## STT candidates
 

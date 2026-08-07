@@ -3,21 +3,60 @@
 The roadmap is gate-based. A phase is complete only when its exit criteria are
 measured and documented; elapsed time alone is not completion.
 
-## Progress snapshot — 2026-08-04
+## Progress snapshot — 2026-08-06
 
-- Phase 0 has a documented architecture, threat model, resource hypotheses,
-  evaluation gates, ADRs, and multi-agent handoff contract.
-- Phase 1 is open. The streaming client and a pinned development-runtime controller
-  exist; TurboFieldfare's release products built, the 14.3 GB Gemma installation
-  verified, and non-streaming plus SSE synthetic inference passed at a declared
-  64K on the target Mac. The 16K/32K/64K correctness/performance matrix remains
-  open.
-- Phase 2 has an early source implementation through VS-002: menu bar, floating
-  panel, launch-focused continuous quick text, native visual components,
-  cancellation, local visible-history sessions, and model settings. Supervisor,
-  lifecycle, packaging, voice, tools, and target UI acceptance remain open.
-- `QA-001` is intentionally deferred at the user's request. No phase exit gate is
-  inferred from a successful compile.
+The phases below were written as a sequence and have not been executed as one. The
+work went where the user needed it, so Phase 3 and Phase 4 are substantially built
+while Phase 1 is still open and Phase 2's supervisor does not exist. This snapshot
+is the honest ordering; the phase definitions are kept because their exit criteria
+are still the right gates.
+
+**What is done, by phase:**
+
+- **Phase 0** — complete. Architecture, threat model, resource hypotheses,
+  evaluation gates, ADRs, and the handoff contract.
+- **Phase 3 (voice)** — mostly done, ahead of Phase 1 and 2. Speech in, speech
+  out, call mode, on-demand speech, cloned and designed voices, barge-in, and a
+  wake phrase that is implemented and off. What is missing is the measurement:
+  no Brazilian Portuguese WER, no false-accept/false-reject rates, no energy
+  figure, and no end-to-end wake check.
+- **Phase 4 (memory and RAG)** — mostly done, in a form the phase did not
+  anticipate: no staged extraction pipeline, no reranker, no QMD. Title + BM25 +
+  embeddings fused with RRF over a cached index, with provenance on every passage.
+  Memory is propose-and-confirm and bounded.
+- **Phase 5 (read-only integrations)** — partly done and out of order. Web search
+  ships, off by default. Scoped file search ships. Email, calendar and Drive do
+  not exist.
+- **Phase 7 (bounded write actions)** — partly done, well ahead of its phase. The
+  filesystem writer proposes and a person approves; deleting is the Trash. Email
+  and calendar writes do not exist.
+- **Phase 1** — open. The streaming client and a pinned development-runtime
+  controller exist; TurboFieldfare's release products built, the 14.3 GB Gemma
+  installation verified, and non-streaming plus SSE synthetic inference passed at
+  a declared 64K. The 16K/32K/64K correctness/performance matrix remains open, and
+  no smaller model has been compared.
+- **Phase 2** — the shell is well past prototype and the supervisor is not
+  started. `evied`, worker lifecycle, idle unload, crash recovery, power policy,
+  and login-item registration are all unwritten. The application does now own one
+  process — the voice engine, started when a trained voice is chosen.
+- **Phase 6 (visual automation)** — Node-RED is dropped, not deferred. See
+  `docs/AUTOMATIONS.md`; the replacement is macOS Shortcuts and no code exists.
+- **Phase 8, Phase 9** — untouched.
+
+**What actually blocks the next step**, in order:
+
+1. `QA-006` — the human acceptance pass. Nothing visual has been formally
+   accepted, and the interface changed substantially this session.
+2. `REL-001` — the first release. The update mechanism exists and verifies a
+   signature; what is missing is a `1.0.0` changelog section, an ADR for the
+   retrieval decision, and a decision on what the release ships.
+3. The two open Shortcuts questions, each estimated at half an hour, before any
+   automation code is written.
+4. Phase 1's benchmark matrix, which nothing currently depends on but which the
+   model-selection decision cannot be made without.
+
+`QA-001` remains deferred at the user's request. No phase exit gate is inferred
+from a successful compile.
 
 The development controller is a readiness aid, not a Phase 2 supervisor. Its
 explicit `start`/`stop` workflow does not satisfy idle unload, recovery, power,
@@ -135,6 +174,18 @@ Exit criteria:
 - failures cannot mutate remote or local data.
 
 ## Phase 6 — visual deterministic automation
+
+**Superseded.** Node-RED does not survive the constraint the user set — nothing
+resident, nothing in Docker, processing spent only when the tool is used. The
+recommendation is macOS Shortcuts, and what she can and cannot do with it is
+measured in `docs/AUTOMATIONS.md`, including the part that decides the shape of
+any future code: a shortcut that wants to ask the user never exits. Nothing
+event-driven is reachable under the constraint at all.
+
+The scope and exit criteria below are kept because the *shape* — generate
+disabled, show before activating, never activate silently — is still right, and
+because macOS enforces the approval click itself, where a bug in Evie cannot
+bypass it.
 
 Scope:
 

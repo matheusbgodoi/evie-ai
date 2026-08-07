@@ -6,6 +6,75 @@ All notable changes to Evie are documented here. Dates use `YYYY-MM-DD`.
 
 ### Added
 
+- `/plano` breaks a hard question into steps and runs them in order, then writes
+  the answer from what it found. It is a typed command and never a guess, because
+  something that costs minutes should not start because a question looked
+  complicated. A step that fails does not end the run — the gap is named in the
+  answer rather than quietly missing from it. Measured: the same question went from
+  425 s to 223.7 s once later steps stopped carrying every earlier finding whole.
+- Type "/" and the commands appear, each row saying what it costs. `/plano` costs
+  minutes, which is a bad thing to discover by waiting.
+- `/buscar` shows what is in your notes — note, section, text — and makes no model
+  call at all, not even when nothing is found. `/web` skips the notes and answers
+  from the web, and refuses outright if web search is switched off rather than
+  answering from memory under a question that says where the answer must come from.
+- "Ei, Evie" now actually listens. The switch and the field existed before and were
+  wired to nothing. It is off by default and stays off: arming it costs about 1% of
+  one core, measured, but it holds the microphone, and macOS shows the orange dot
+  for as long as it does. The settings pane says so, and shows what the recogniser
+  actually heard, which is the only honest way to tune a name it has never seen.
+- A speaker button on every answer, to hear it on demand. It does not consult the
+  "speak automatically" switches — pressing it is you asking for this one — and it
+  toggles, because the thing you most want to do to a voice reading four paragraphs
+  at you is stop it.
+- Attach files without sending them. They sit as chips beside the field, several at
+  a time, each with a thumbnail and a cross that takes it back, and they go with
+  the next message and only with it. ⌘V attaches a copied file, or a screenshot.
+- What you attached is kept with the conversation, so it can be read back whole
+  instead of as an answer about a picture nobody can see. Images are stored as
+  HEIC: a full-screen capture went from 1050 KB to 211 KB, measured. PDFs are kept
+  byte for byte.
+- The history window does what it looked like it could: select several
+  conversations, export them, delete a set or all of them, and see what was
+  attached. Export is Markdown with YAML front matter, so a conversation drops
+  straight into an Obsidian vault, and clicking an attachment reveals it in Finder.
+- Evie can update herself from a release, in three separate presses, and installs a
+  download only if it was signed with the same key as the copy already running —
+  which means that somebody who takes over the release page still cannot get code
+  onto your Mac. If your copy is ad-hoc signed there is nothing to compare against,
+  so it refuses every update rather than accepting any.
+
+### Fixed
+
+- She speaks without the gaps. Blocks are now synthesised while the previous one
+  plays, instead of after it finishes, which removes the pauses rather than
+  shortening them — reported as "pausas longas de 5 ou 6 segundos do nada".
+- A trained voice is up to ten times faster. A cloned voice stored without its
+  reference transcript made the engine transcribe its own reference recording every
+  single time it spoke: 19.1 s per phrase against 1.7 s once stored, measured. Evie
+  fills in the missing transcript once, when the engine starts, and says which
+  voices it prepared.
+- She reads the whole answer instead of the first sentence and then falling silent.
+- Choosing a trained voice now starts the voice engine. Nothing ever did, so
+  choosing one did nothing audible and there was no way to tell a crash from a
+  process that had never run.
+- A typed question is no longer read out loud with "falar quando eu digitar" off.
+- The same answer is no longer shown twice after every turn.
+- A long answer scrolls inside its card instead of scrolling its own title, its
+  question and its buttons off the screen.
+- Opening a file picker in Settings no longer risks taking the settings window with
+  it.
+- Attaching a picture no longer sends Evie to a search engine for something that is
+  already in front of her — and no longer credits a source that contributed
+  nothing.
+- The chevron is straight, and stays straight after use.
+- Copying says "Copiado". Buttons fire when you release them, so you can change
+  your mind by dragging off.
+- Every control in Settings says what it does when you hover it. There were seven
+  such labels in the whole application; there are now forty-three.
+
+### Added
+
 - Retrieval over your notes finds things by meaning, not only by the words you
   happened to type. Ask "quanto eu cobro" and a note saying "valor da minha hora"
   is reachable. Three signals are fused: the note's title, the words themselves,

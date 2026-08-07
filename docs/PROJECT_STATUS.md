@@ -1,64 +1,59 @@
 # Project status
 
-Last updated: 2026-08-05
+Last updated: 2026-08-06
 
 ## Current phase
 
-**Phase 1 inference validation and Phase 2 native-shell prototyping are in
-progress.**
+**Phase 1 inference validation is still open. Phase 2 native-shell work is far
+past prototyping, and Phase 3 and Phase 4 have been overtaken by working code.**
 
-VS-003 through VS-006 are implemented at source level.
-
-Evie now has her own identity rather than presenting as a front end for a local
+Evie has her own identity rather than presenting as a front end for a local
 server: the hidden persona names her creator and how he is addressed, no surface
 mentions the model or the inference server, and the loopback port moved to 38433
 so it cannot collide with another project. The overlay can be moved, resized, and
-reset; its height follows what SwiftUI actually measured, which is what fixed the
-clipped background fade. The placeholder glyph became an ASCII key that tilts in
-three dimensions and lights up only while something real is happening — idle CPU
-with the overlay visible measured 0.0%, down from 8.1% in the first attempt.
+reset; its height follows what SwiftUI actually measured. Everything configurable
+is reachable through a settings window, and forty-three help tags across its panes
+now say what each control does when it is hovered.
 
-Everything configurable is now reachable: a five-tab settings window covering
-shortcuts, voice, appearance, model, and diagnostics, with every shortcut
-recordable, disableable, and resettable, and conflicts or system refusals named in
-place.
+The voice loop is closed in both directions. The microphone is granted and used,
+the system recogniser turns speech into a typed question, and the answer is spoken
+either automatically or on demand through a speaker button on the card. The
+cloned/designed voice engine is started when a trained voice is asked for and not
+before, so the 2.4 GB it holds resident is a consequence of a decision the user
+made rather than of Evie starting at login.
+
+She reads. Images and PDFs go through the system's own text recognition, and the
+system's own vision model describes what a picture shows, with no download and no
+second process. She reads the folders the user authorises, and retrieval over
+those folders now matches on meaning rather than on the exact word typed. She can
+search the web, off by default. She can propose a change to a file, which happens
+only when a person presses a button.
+
+Three typed commands exist and are discoverable from a "/" menu: `/plano`
+decomposes a question into steps and runs them in order, `/buscar` shows the
+passages retrieval found and makes no model call at all, and `/web` skips the
+notes and answers from the web.
 
 `Evie.app` exists with a stable bundle identifier. That was the hard blocker for
 every permission Evie will ever need — measured, an unbundled binary touching the
-microphone hangs forever rather than failing. The microphone and speech
-recognition are implemented on top of it, but no audio has been transcribed: that
-needs a grant which is deliberately left for the user.
+microphone hangs forever rather than failing. `Scripts/evie-app identity`, which
+had never once worked, now does: it no longer passes an `-legacy` flag LibreSSL
+does not have, no longer sends both `openssl` invocations to `/dev/null`, scripts
+the trust step instead of routing it through Keychain Access, and asserts the
+result rather than assuming it. Until it is run on a given machine the copy is
+ad-hoc signed, and an ad-hoc copy refuses every update.
 
-She can also read. Images and PDFs, including scanned ones, are read through the
-system's own text recognition with no model downloaded, verified end to end
-against the model in Portuguese and against a document attempting prompt
-injection.
-
-The first half of filesystem access exists: a reader contained by the kernel
-rather than by path-string checks, with the escapes proven by test. Nothing can
-grant it a folder yet, so it is unreachable from the interface — that is the next
-piece.
-
-The Phase 0 planning foundation is complete enough to support bounded code work.
-VS-001 and VS-002 are implemented at source level: the native shell now supports
-continuous quick text, complete local visible-history records, resume/delete UI,
-and non-secret model settings while retaining the transient overlay as default.
-The local first-test slice now also has typed configuration and an explicit
-development-runtime controller. On this target Mac, TurboFieldfare revision
-`7a99f2a635e3adf7ed0720b882d2edb600f2f0da` has been cloned outside Git and its
-release repacker/server products have built successfully. The Gemma download and
-repack completed; the upstream verifier passed all 37 files, and model discovery,
-non-streaming inference, and SSE inference passed on loopback at a declared 64K.
-The VS-002 release shell has been rebuilt and relaunched against the healthy local
-server. Model discovery, a synthetic non-streaming response, and SSE `[DONE]`
-passed again. Shortcut, focus-after-completion, Spaces, display, history, settings,
-cancellation, and visual behavior remain manual `QA-001`/`QA-005` work.
+The application can update itself from a GitHub release, in three deliberate
+presses, and installs a download only when its code signature matches the running
+copy. See `docs/SECURITY.md` for what is checked and what was measured against
+tampered bundles.
 
 No Hermes runtime, persistent background service, account integration, or
-credential has been installed or configured. Completed conversations are now
-personal local state under `Application Support/Evie/Conversations`; they remain
-outside Git and hidden prompts are never stored. TurboFieldfare source, model
-state, configuration, PID state, and logs also remain under `~/Library`.
+credential has been installed or configured. Completed conversations are personal
+local state under `Application Support/Evie/Conversations`, now including the
+files that were attached to them; they remain outside Git and hidden prompts are
+never stored. TurboFieldfare source, model state, configuration, PID state, and
+logs also remain under `~/Library`.
 
 ## Implementation snapshot
 
@@ -72,22 +67,42 @@ state, configuration, PID state, and logs also remain under `~/Library`.
   preserves empty event separators across arbitrary transport fragmentation and
   CR/LF variants.
 - `EvieRootRegistry`, `EvieFileToolbox`, and `EvieAgentLoop` let Evie read the
-  folders the user granted, through five read-only tools over the contained
-  reader. Nothing in the schema writes. The model is handed opaque root
-  identifiers and never a filesystem path.
-- `evie-shell` is a SwiftUI/AppKit menu-bar development executable with a
-  transparent floating `NSPanel`, launch-focused and repeatable quick text, native
-  glass result cards, a deliberate history window, and a model-settings window.
+  folders the user granted, through read-only tools over the contained reader. The
+  model is handed opaque root identifiers and never a filesystem path.
+- `EvieFileWriter` and `EvieChangeIntent` implement moving, renaming, and trashing
+  inside those folders. The tool the model calls performs nothing: it records a
+  proposal and the change happens when a person presses a button, or — only when
+  the user's own message asked for a change — automatically, and is reported in
+  the conversation afterwards either way. Deleting means the Trash; a move fails
+  rather than overwriting; the file's identity is re-checked at the instant of the
+  change.
+- `EvieVaultIndex`, `EvieVaultRetriever`, `EviePassageRanker`, and `EvieQueryTerms`
+  retrieve by meaning as well as by word, fusing title, BM25 and embedding
+  rankings. See `docs/RAG.md`.
+- `EvieCommand` and `EvieSearchCommands` hold the typed-command catalogue and the
+  read-only `/buscar` and `/web` commands; `EviePlan` and `EviePlanPrompts` hold
+  the `/plano` decomposition and its parser.
+- `EvieRelease`, `EvieUpdater`, and `EvieBundleSignature` implement the update
+  check, the download, and the two signature checks that gate installation.
+- `EvieWakePhrase`, `EvieWakeGate`, and `EvieWakeListener` implement the wake
+  phrase and its optional energy gate. It is off by default and should stay off
+  until the end-to-end check named in `docs/VOICE.md` has been performed.
+- `EvieMediaStore` and `EvieStoredMedia` keep what was attached to a conversation
+  so it can be read back whole; `EvieConversationExport` writes a conversation out
+  as Markdown with YAML front matter.
+- `evie-shell` is a SwiftUI/AppKit menu-bar executable with a transparent floating
+  `NSPanel`, quick text, a "/" command menu, attachment chips, answer cards that
+  scroll inside themselves, a history window, and a settings window.
 - The composition root talks directly to TurboFieldfare only for this reversible
   slice. ADR 0006 records why this is not the future trust/lifecycle boundary.
 - `EvieConfigurationLoader` applies built-in defaults, an optional versioned local
   JSON file, then supported environment overrides; invalid settings surface an
   actionable startup error and no credential is read or printed.
-- `CORE-005` nominal read/propose/commit contracts now make authority opaque and
+- `CORE-005` nominal read/propose/commit contracts make authority opaque and
   non-serializable, bound serialized identifiers/collections/depth/bytes and plan
   lifetime, revalidate revision/binding, redact material metadata, and require
-  explicit-user evidence for delete. There is deliberately no real tool executor
-  yet.
+  explicit-user evidence for delete. The filesystem writer is the first capability
+  to sit behind an approval card; the general broker it describes is still unbuilt.
 - `Scripts/evie-runtime` provides an explicit development-only doctor, setup,
   configure, verify, start, stop, status, synthetic smoke, and shell-launch
   workflow. It pins the runtime and 64K launch shape but is not `evied`, a login
@@ -98,58 +113,60 @@ state, configuration, PID state, and logs also remain under `~/Library`.
   `0700`/`0600` permissions and atomic replacement. Model context is bounded from
   an in-memory copy independently, and termination waits for pending history
   writes. History scanning contains a malformed/unavailable failure to that
-  individual file, retains readable sessions, and shows only an opaque
-  unavailable-record count. There is still no semantic memory, prompt/result
-  diagnostic logging, or RAG.
-- The reusable waveform and the new reactive ring are present but receive no audio
-  data; microphone capture, STT, TTS invocation/playback, and a configured personal
-  voice are not active, and the UI says so. Clicking the mark asks for voice and is
-  told plainly that voice is not wired yet.
+  individual file. `EvieConversation` decodes media with `decodeIfPresent`, so a
+  conversation saved before attachments were kept still opens.
+- The waveform and the reactive ring are driven by real microphone and playback
+  levels. `EvieLevelMeter` reads the room's own noise floor rather than comparing
+  against constants measured once in one room.
 - `EviePersona` generates the hidden system message from an explicit capability
-  snapshot, so a capability cannot be described in prose without being built. Every
-  flag is currently false except plain text.
-- `EviePreferences` stores appearance, eight configurable shortcut actions, and the
-  voice switches in a `preferences.json` separate from the model configuration. The
-  call-mode/speech dependency is enforced in the type. No settings UI reaches it yet.
+  snapshot, so a capability cannot be described in prose without being built.
+- `EviePreferences` stores appearance, the configurable shortcut actions, the
+  voice switches, the web-search switch, the wake phrase, and the update
+  preferences in a `preferences.json` separate from the model configuration.
 - `EvieOverlayGeometry` resolves the panel rectangle from preferences and connected
   displays; the overlay can be dragged, resized, and reset, and recovers to the
   anchored default when the saved display is disconnected.
-- Current research pins a deny-by-default Hermes candidate, QMD/DDGS directions,
-  and a native “E aí, ívi” wake-word path. None is installed or enabled by Evie.
-- A backend-neutral TTS protocol and defensive source-only OmniVoice batch adapter are
-  source implemented and synthetically tested. They do not load a model, generate
-  real audio, inspect a voice profile, verify the configured executable identity,
-  network-sandbox it, or connect to UI/playback yet.
+- The Node-RED workflow plane was researched and dropped against the constraint
+  the user set — nothing resident, nothing in Docker. macOS Shortcuts is the
+  recommendation in its place, and what she can and cannot do with it is measured
+  in `docs/AUTOMATIONS.md`. No automation code has been written.
 
 See `docs/implementation/VS_001.md` and the task ledger for exact boundaries and
-handoff evidence.
+handoff evidence. The ledger has not been re-scored against this session and is
+behind the code.
 
 ## Current conclusion
 
 The project is viable on a base Apple M5 MacBook Pro with 24 GB unified memory if
 heavy components are isolated and loaded on demand.
 
-The preferred first technical hypothesis is:
+Two parts of the original hypothesis have now been settled by measurement rather
+than by argument:
 
-- Hermes Agent as the tool and session runtime;
+- **The inference server serialises.** Three concurrent requests took 23.3 s
+  against 8.1 s for one. Fanning work out across parallel agents costs 2.9× and
+  buys nothing on this machine; sequential specialised steps are what `/plano`
+  does instead.
+- **Node-RED does not survive the "nothing resident" constraint.** A bare `node`
+  process doing nothing costs 37.8 MB on this Mac, against the 4 MB the idle
+  TurboFieldfare server costs, and Node-RED is that floor plus 227 packages.
+
+The remaining hypothesis is:
+
 - TurboFieldfare serving Gemma 4 26B-A4B IT at a declared 64K context;
 - FP16 KV cache for the baseline; prior Q4 work failed upstream quality/speed gates,
   and Q8/hybrid KV is deferred unless measurements justify custom kernels;
 - a native macOS overlay and supervisor that remain lightweight while idle;
-- separate on-demand workers for vision, RAG indexing/reranking, STT, and
-  OmniVoice TTS;
-- Node-RED for deterministic visual workflows;
+- on-demand workers for TTS, and the system's own daemons for vision and speech
+  recognition, which cost no memory in Evie's address space;
+- macOS Shortcuts, not Node-RED, for deterministic visual workflows;
 - a read/propose/commit permission boundary for every integration.
 
-The researched agent candidate is Hermes `v2026.8.3` at
-`3c27eb6234bf91b8ceee9e9071591b31e9b148cb`, behind `evied` with native dangerous
-toolsets disabled. The retrieval candidate is QMD `v2.5.3` behind an on-demand
-collection-isolating worker; DDGS `v9.9.3` is the first no-key web-search prototype.
-All pins remain uninstalled hypotheses until their gates pass.
+Hermes remains an uninstalled hypothesis; the agent loop in `EvieCore` has been
+carrying the work it was proposed for. The retrieval decision was made without
+QMD: `docs/RAG.md` records what was built and why an index was not.
 
-This remains a hypothesis until the Phase 1 benchmarks pass.
-
-One toolchain observation is now established for this exact machine: the pinned
+One toolchain observation is established for this exact machine: the pinned
 TurboFieldfare release server and repacker built with Apple Command Line Tools,
 without a full Xcode installation. Upstream still specifies Xcode 26, so this does
 not replace the upstream prerequisite or prove another installation will behave
@@ -172,15 +189,18 @@ wiring only; they are not the Phase 1 model/context/energy benchmark.
 - The high-quality Gemma model is preserved as the primary candidate instead of
   being replaced prematurely by a smaller model.
 - Simple known commands should bypass an LLM when a deterministic action exists.
+  `/buscar` is the first one that does: it makes no model call at all.
+- Expensive behaviour is entered by typing a command, never guessed from the shape
+  of a question. Something that costs minutes must not start because a question
+  looked complicated.
 - Vision and TTS are specialist workers, not permanent parts of the main model.
-- Heavy processes must support idle unload and pressure-aware eviction.
+  Vision turned out to be a system daemon, which is better than a worker.
+- Heavy processes must support idle unload and pressure-aware eviction, and must
+  not start themselves. The voice engine starts when a trained voice is chosen.
 - Real credentials and personal state are configured locally but never committed.
 - All future commits must maintain status, worklog, changelog, and relevant design
   documentation.
-- The first executable uses a backend-neutral core plus a direct, loopback-only
-  TurboFieldfare adapter; supervisor/Hermes integration remains a later phase.
-- A UI state must be backed by observed activity. VS-001 never claims microphone,
-  tool, or external-action activity.
+- A UI state must be backed by observed activity.
 
 See the ADR index for decision status.
 
@@ -189,27 +209,22 @@ See the ADR index for decision status.
 1. Measure TurboFieldfare on the exact base M5/24 GB machine at 16K, 32K, and 64K:
    peak/resident memory, prompt processing, first-token latency, decode rate,
    correctness, idle resource use, and cold/warm startup.
-2. Confirm Hermes core tool schemas are accepted by TurboFieldfare's supported JSON
-   Schema subset and complete multi-step calls reliably.
-3. Compare the primary Gemma with at least one 4B-class and one 9B-class local
+2. Compare the primary Gemma with at least one 4B-class and one 9B-class local
    model on the Evie evaluation suite.
-4. Benchmark local STT candidates on Brazilian Portuguese and noisy microphone
-   input.
-5. Benchmark OmniVoice MPS cold start, warm generation, peak memory, real-time
-   factor, and sentence chunking on this Mac.
-6. Text recognition is settled and measured; see `docs/VISION.md`. What remains
-   open is image *understanding* — a chart, a screenshot, a photograph. Two routes
-   exist and neither is pinned: the system vision model, measured at +15 MB in
-   this process because it runs in a daemon, and the 0.81 GB projector for the
-   model already installed, which would need the inference server to accept
-   multimodal input.
-7. Validate the source-implemented bottom-centered overlay and global command
-   shortcuts without productizing them yet; focus, Spaces, full-screen,
-   multiple-display, and accessibility behavior still require target QA.
-8. Validate Node-RED draft/import/disable/approve/enable behavior through a narrow
-   adapter without exposing unrestricted administration to the model.
-9. Run `QA-005` for repeated follow-ups, restart/resume, deletion, environment-
-   managed settings, and response-completion focus behavior.
+3. Benchmark local STT candidates on Brazilian Portuguese and noisy microphone
+   input. The system recogniser is in daily use and has never been scored: no
+   Brazilian Portuguese WER exists for it or for the FluidAudio challenger.
+4. Confirm the wake phrase end to end — that the configured phrase still wakes her
+   through the energy gate. The threshold and the CPU cost are measured; this is
+   not, and until it is the feature must stay off.
+5. Validate the overlay and global command shortcuts on the target display:
+   focus, Spaces, full-screen, multiple-display, and accessibility behaviour.
+6. Run `QA-005` for repeated follow-ups, restart/resume, deletion, environment-
+   managed settings, and response-completion focus behaviour.
+7. Settle the two open Shortcuts questions before any automation code: whether a
+   shortcut can be run end to end from Evie, and which prompts appear when
+   `Evie.app` rather than Terminal is the responsible process. Both are estimated
+   at half an hour in `docs/AUTOMATIONS.md`.
 
 The bounded first-test readiness checks are complete: model repack, upstream
 verification, loopback health at 65,536 tokens, model discovery, non-streaming and
@@ -218,75 +233,59 @@ readiness only; they are not the Phase 1 performance suite.
 
 ## Known blockers
 
+- **`QA-006`: nothing visual has been formally accepted by the owner.** The
+  application is used daily and defects are reported from that use, which is not
+  the same thing as a pass. This is the first of the two release blockers.
+- **`REL-001`: there is no release.** The mechanism to install one now exists and
+  is tested; what is missing is a `1.0.0` section in the changelog, an ADR for the
+  retrieval decision, and a decision on whether the release ships the app or the
+  instructions to build it.
 - The bounded first-test measurements exist, but no sustained decode, long-context,
   16K/32K/64K comparison, battery, energy, or quality result exists yet.
-- The SwiftPM shell launches and remains resident, but has not been manually
-  accepted for shortcuts, focus, Spaces, displays, accessibility, cancellation,
-  or rendered response behavior.
-- `Evie.app` exists but its signature is ad-hoc, which has no stable designated
-  requirement, so the first permission granted will not survive a rebuild until
-  `Scripts/evie-app identity` is run and the certificate is trusted for code
-  signing in Keychain Access. That step cannot be scripted.
-- The application is not notarized and is not a login item.
-- No audio has been transcribed. Speech recognition is implemented and the system
-  reports Brazilian Portuguese available with a one-time language pack, but
-  accuracy, latency after that download, barge-in, and energy cost are unmeasured.
-- Evie cannot search the web. She speaks, reads the folders granted in Settings ›
-  Pastas, searches inside their text, and manages her own voices.
-- Semantic memory across conversations does not exist. Retrieval is agentic search
-  over authorised folders, which is not the same thing: she can find what the user
-  wrote, and remembers nothing she was told.
-- Nothing that writes, moves, or trashes exists, and nothing should until the
-  approval card does. The bypass switch the user asked for is unwritten pending
-  his answer on its scope.
-- Nothing in VS-003 has been accepted by eye on the target display. Dragging,
-  resizing, the reset control, the corrected fade, the legibility of the mark, the
-  light/dark palette, and now the Pastas tab and the progress lines shown during a
-  lookup are all `QA-006`.
+- `Evie.app` is ad-hoc signed until `Scripts/evie-app identity` is run on the
+  machine, and an ad-hoc copy has no certificate to compare an update against, so
+  it refuses every update. The script now works; whether it has been run on this
+  machine is not recorded here.
+- The application is not notarized and is not a login item. Notarisation is not
+  available for a self-signed identity, which constrains what `REL-001` can be.
+- Speech recognition accuracy, latency, barge-in behaviour, and energy cost are
+  unmeasured, though the recogniser is in daily use.
+- Semantic memory across conversations is propose-and-confirm only: she remembers
+  what the user confirmed and nothing else, bounded at sixty entries and two
+  thousand recalled characters. She does not learn from a conversation by herself.
+- The wake phrase holds the microphone whenever it is armed, which macOS shows as
+  the orange dot and which cannot be hidden. `docs/SIRI.md` describes the route
+  that would avoid it and why it needs a paid Developer Program membership.
 - The development controller can explicitly health-check/start/stop the pinned
   TurboFieldfare server at `--max-context 65536`, but Evie's application does not
   own lifecycle, idle unload, crash recovery, power policy, or automatic startup.
-- OmniVoice performance and the format of the user's existing voice assets have
-  not been inspected locally.
-- The target Mac has OmniVoice/Whisper tooling and model caches, and the source
-  adapter validates the separate cached Higgs tokenizer requirement. No real Evie
-  audio request, microphone permission, TTS output, STT benchmark, or personal
-  voice-reference inspection has occurred.
-- Before activation, the OmniVoice worker still needs a trusted pinned
-  executable/model manifest, a version probe, startup cleanup of orphaned private
-  temporary directories, and supervisor lifecycle integration.
+- The voice engine's identity and model manifest are still unpinned and unverified.
+  Evie starts a configured local executable and trusts it.
 - The exact smaller text and vision model candidates must be pinned immediately
   before benchmarking because this area changes quickly.
 - Location triggers require a trusted source such as a phone shortcut, Home
   Assistant, or a dedicated companion; the Mac alone does not provide a complete
-  personal location event stream.
+  personal location event stream. Nothing event-driven is reachable at all under
+  the "nothing resident" constraint — see `docs/AUTOMATIONS.md`.
+- `docs/implementation/TASKS.md` has not been re-scored since this session and
+  understates what is done.
 
 ## Next recommended action
 
-Three things, in this order.
+Two things, in this order, and they are the two things between here and a release.
 
-**`QA-006` — the human pass, now the only thing between here and a release.**
-Nothing visual has been accepted by eye. The adaptive end-of-speech gate is tested
-against recorded level sequences but has never been spoken at. The waveform, the
-Pastas and Vozes tabs, the collapsed prompts, and the corrected card controls are
-all unproven in use. This outranks every remaining feature.
+**`QA-006` — the human pass.** Nothing has been formally accepted by eye. The
+overlay was rebuilt around a bounded card this session, the answer now scrolls
+inside it, the chevron was straightened twice, the settings panes gained
+forty-three help tags, and the history window gained multi-select, export and
+thumbnails. All of it is unproven as a whole. This outranks every remaining
+feature.
 
-**`REL-001` — the first release.** The user has asked for one once the current
-round is finished. What it needs: `QA-006` passed, an ADR for the retrieval
-decision, a `1.0.0` section in the changelog, and a decision on whether the
-release ships the app or the instructions to build it. Notarisation is *not*
-available — the signing identity is self-signed — so the honest form is a tagged
-source release with the four-command install, not a downloadable `.app`.
+**`REL-001` — the first release.** What it needs: `QA-006` passed, an ADR for the
+retrieval decision, a `1.0.0` section in the changelog, and a decision on whether
+the release ships the app or the instructions to build it. The update mechanism
+now argues for shipping the app: it installs only a bundle signed with the same
+key, which a tagged source release cannot offer.
 
-**`UI-011` / `POL-002` — the approval card.** Reading shipped without needing one.
-Nothing should write, move, or trash before it exists. The user has also asked
-for a bypass switch so he never has to approve anything by hand; its exact scope
-is an open question put to him, and no code for it has been written.
-
-**`QA-006` — the human pass.** Nothing in the last five slices has been accepted
-by eye. Dragging, resizing, the reset control, the corrected fade, the legibility
-of the mark, the palette in light and dark, and now the Pastas tab and the
-progress lines during a lookup are all unproven.
-
-Do not configure email, WhatsApp, Drive, file mutation, automatic microphone, or
-workflow activation before their permission and validation gates pass.
+Do not configure email, WhatsApp, Drive, automatic microphone, or workflow
+activation before their permission and validation gates pass.

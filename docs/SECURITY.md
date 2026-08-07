@@ -87,12 +87,34 @@ tools must not inherit Accessibility.
 Avoid Full Disk Access. Use user-selected roots/bookmarks or an explicit local
 allowlist. Consider a separate macOS user for high-risk autonomous experiments.
 
-### VS-001/VS-002 boundary
+### The current boundary
 
-The native executable has no account, filesystem, Accessibility, microphone,
-automation, web-search, RAG, or tool capability. Its direct TurboFieldfare adapter
+The sentence that used to sit here — that the native executable has no account,
+filesystem, Accessibility, microphone, automation, web-search, RAG, or tool
+capability — is now false in most of its parts, and leaving it would be worse than
+having written nothing. What is true today:
+
+- **Microphone**: granted and used, including continuously while the wake phrase
+  is armed. macOS shows the orange dot throughout and it cannot be suppressed.
+- **Filesystem**: read inside folders the user authorised, contained by the kernel
+  rather than by path-string checks. Writing exists and proposes: the tool the
+  model calls performs nothing, and a person presses the button. Deleting means
+  the Trash.
+- **Web**: off by default, and the one switch in the application that changes what
+  leaves the Mac. Addresses that are not the public web — loopback, private
+  ranges, `.local`, the cloud metadata endpoint — are refused before any request
+  is made.
+- **Retrieval**: over authorised folders only, into a cache under Application
+  Support. Retrieved text is fenced as data.
+- **Accessibility and automation**: still none. No shortcut is run, authored, or
+  installed; nothing in `docs/AUTOMATIONS.md` has been implemented.
+- **Accounts and credentials**: still none.
+
+The invariant that has not moved: no tool the model can call changes anything.
+
+Its direct TurboFieldfare adapter
 rejects non-loopback hosts, sends no credential, and logs no prompt/result body.
-VS-002 persists only visible conversation history under Application Support using
+Visible conversation history persists under Application Support using
 an actor-isolated, schema-versioned, per-record store. The directory is mode
 `0700`, records are `0600`, writes replace atomically, and hidden system/developer
 messages never enter the record. The system prompt accurately describes these
@@ -190,6 +212,47 @@ The source-only OmniVoice adapter passes offline-resolution flags only to suppor
 libraries; it does not sandbox a configured executable from the network. Treat that
 executable as trusted local code and do not activate TTS until its identity/version
 and model manifest are pinned, outputs are supervised, and orphan cleanup exists.
+
+## Updating the application
+
+Evie can replace herself with a build from a GitHub release. That is a path from
+the internet to executable code on this Mac, so it is the most security-relevant
+thing in the application, and it is built to fail closed.
+
+**Three separate presses.** Look, download, install. Nothing happens in the
+background and nothing is installed silently.
+
+**A download is installed only when its code signature matches the running copy.**
+The verification is two checks, because neither is enough alone, and which catches
+what was measured against tampered copies of this very bundle:
+
+| Check | Catches |
+|---|---|
+| The signature seal | an edited `Info.plist`, a flipped byte, an added resource |
+| The leaf certificate | an attacker who re-signs the bundle with their own key |
+
+The seal alone would be defeated by re-signing. The certificate alone would not
+notice a modified bundle that was never re-signed. Together they mean that an
+attacker who takes over the GitHub account still cannot produce a bundle Evie will
+install, because they cannot produce one signed with a key that never left this
+Mac.
+
+**It fails closed in both directions.** An ad-hoc running copy has no certificate
+to compare against, so it refuses every update rather than accepting any. That is
+the correct behaviour and it is also a real consequence: until
+`Scripts/evie-app identity` has been run on a machine, that copy cannot update
+itself at all.
+
+`Scripts/evie-app identity` had never once worked. It passed `openssl`'s `-legacy`
+flag, which the LibreSSL macOS ships does not have, and sent both `openssl`
+invocations to `/dev/null` — so the p12 was never written, the import failed
+against a missing file in silence, and Evie stayed ad-hoc signed while the script
+reported nothing wrong. Errors are no longer discarded, the trust step is scripted
+rather than a trip through Keychain Access, and the result is asserted rather than
+assumed.
+
+The identity is self-signed, so the build is not notarized and cannot be. That
+constrains what a release can be; see `docs/PROJECT_STATUS.md`.
 
 ## Update and dependency policy
 

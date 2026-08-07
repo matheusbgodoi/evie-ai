@@ -1125,3 +1125,495 @@ assumes rare means informative.
 nothing is measurable.
 
 - Validation: `Scripts/test` 357/357 in 33 suites.
+
+## 2026-08-05 — two bugs of the same shape
+
+- **The same answer shown twice.** The live card was keyed on a fresh identifier
+  while a restored one was keyed on the answer's, so the two schemes could never
+  agree. Every turn therefore looked unshown the moment it finished: "Ver 1
+  mensagem anterior" appeared after each answer, and pressing it prepended a
+  second copy of the turn just given. Both paths key on the question now, which
+  is the one thing they both have.
+- **A typed question read out loud with the switch off.** The switch was never
+  consulted wrongly; the *question* was. Whether the prompt had been spoken was
+  read from ambient state at the moment the answer arrived, tens of seconds after
+  it was asked — open the microphone while a typed question is in flight and the
+  flag flips underneath it. Pinned at submission now, when it is still true of
+  that turn.
+- Worth naming together: both are state that describes the present being asked a
+  question about the past. That is the shape to look for.
+
+## 2026-08-05 — VOI-022: the engine nobody started
+
+- Choosing a trained voice in settings did nothing audible, the log file did not
+  exist, and there was no way to tell a crash from a process that had never run.
+  An evening went into looking for the wrong bug. Nothing in the application ever
+  started the voice engine.
+- The original reasoning stands — 2.4 GB resident is a decision that belongs to
+  the person whose machine it is — and what was wrong was *where that decision was
+  read from*. Choosing a trained voice **is** the decision, so that is the trigger:
+  never at login, never for a system voice. Failing to start says why and falls
+  back to a system voice rather than falling silent.
+- Verified with `--voice-engine-check` against a stopped engine: up in 6.66 s with
+  both trained profiles found.
+
+## 2026-08-06 — UPD-001: updating from a release, if it was signed by the same key
+
+- Three separate presses — look, download, install — and a download is installed
+  only when its code signature matches the running copy.
+- **The verification is two checks because neither is enough alone**, and which is
+  which was measured against tampered copies of this very bundle: the seal catches
+  an edited `Info.plist`, a flipped byte, and an added resource; the leaf
+  certificate catches an attacker who re-signs. An attacker who takes over the
+  GitHub account still cannot produce a bundle signed with a key that never left
+  this Mac.
+- Fails closed in both directions. An ad-hoc running copy has no certificate to
+  compare against, so it refuses every update rather than accepting any.
+- **`Scripts/evie-app identity` had never once worked.** It passed `openssl`'s
+  `-legacy` flag, which the LibreSSL macOS ships does not have, and sent both
+  `openssl` invocations to `/dev/null` — so the p12 was never written, the import
+  failed against a missing file in silence, and Evie stayed ad-hoc signed with the
+  script reporting nothing wrong. Errors are no longer discarded, the trust step is
+  scripted rather than a trip through Keychain Access, and the result is asserted
+  instead of assumed.
+- Recorded in `docs/SECURITY.md`.
+
+## 2026-08-06 — VOI-023: the wake phrase, and what arming actually costs
+
+- **The switch and the text field were wired to nothing.** No code read either
+  preference, so "Ei, Evie" could never have worked: the interface promised a
+  feature that did not exist.
+- Matching is by edit distance over the phrase with spaces stripped, and **the
+  threshold was measured rather than picked**. "Evie" is not a Portuguese word, so
+  a pt-BR recogniser builds it from real ones: "ei ivi", "ei evi", "ei eve" and
+  "ei e vi" score 0.667 to 1.000, while twelve ordinary sentences including "seis e
+  meia" and "aquele vinho" never pass 0.500. 0.6 sits in that gap. The first
+  attempt at 0.7 dropped "ei ivi", which is exactly the mis-hearing that would have
+  kept her from coming.
+- Variants separate on semicolons, not commas. The first attempt split "Ei, Evie"
+  in two, discarded "Ei" as too short, and left her listening for a bare "Evie" —
+  worse than the phrase configured.
+- **Then it was measured, and the assumption behind the whole objection was
+  wrong.** Three 40-second windows on this Mac, in a room with speech in it:
+  stopped 0.03% of one core, armed 1.01%, armed through an energy gate 0.84%. Both
+  of us had assumed worse. Arming costs about one percent of one core. What it
+  costs is not CPU.
+- The gate feeds the recogniser only above an adaptive floor, with a pre-roll ring
+  so the first syllable is not eaten. Eighteen tests over the ring, the floor and
+  the pre-roll. But it opened for 44.8% of buffers in this room and returned 0.84%
+  against a predicted 0.47% — 0.17 percentage points of one core is not a saving
+  that earns a ring buffer in the audio path. Kept because it is written and tested
+  and only reachable when the phrase is on, which it is not. **Not recommended.**
+- **The end-to-end check was not performed.** Nobody should turn this on until the
+  phrase has been spoken across a room and she has come.
+- What cannot be hidden is the orange microphone dot: macOS shows it for any app
+  holding the microphone, and "Hey Siri" is exempt only because it runs on hardware
+  no third-party app can reach. The settings pane says so plainly, and shows what
+  the recogniser actually heard — the only honest way to tune a name it has never
+  seen.
+- Added `docs/SIRI.md`, which answers the question this feature raises better than
+  the feature does: an App Intent lets Siri's own always-on hardware do the
+  listening and hand Evie the turn, microphone shut, no dot. It needs a paid
+  Developer Program membership — observed, the App Intents daemon rejected Evie's
+  own bundle for having no Team ID.
+
+## 2026-08-06 — CMD-001: `/plano`, and making it cost half
+
+- One model call to write the plan, one per step, one to answer. **Strictly
+  sequential, which is measured rather than cautious:** this Mac serves one model,
+  and three concurrent requests took 23.3 s against 8.1 s for a single one, so
+  fanning steps out costs 2.9× and buys nothing.
+- A typed command and never a guess. Something that costs minutes must not start
+  because a question looked complicated, so "/planos de saúde" and "meu /plano é
+  esse" stay ordinary questions.
+- The plan comes back as a numbered list rather than JSON, because a 26B model
+  produces a clean list far more reliably than valid JSON and a malformed plan
+  throws away the whole call. The parser reads the shapes a local model actually
+  writes — "1.", "2)", "1 -", bullets, bold — skips the preamble models put above
+  their lists, refuses a one-step plan as the question it is, and caps a rambling
+  one.
+- A step that fails does not end the run: four findings and one gap is a better
+  evening than four minutes and no answer. The gap is named in the final answer,
+  and cancelled stays distinguishable from failed.
+- **Then halved: 425 s to 223.7 s on the same question, measured before and
+  after.** Three changes, each aimed at what the measurement showed:
+  - the step ceiling drops from six to four — the five-step run's answer rested
+    almost entirely on its first three steps;
+  - a later step carries only the *opening* of each earlier finding. The steps had
+    been slowing down — 42.5, 49.6, 65.0, 72.7, 75.4 s — because each carried every
+    earlier finding whole, so the prompt grew and generation with it. Re-measured:
+    34.7, 40.2, 51.2 against 42.5, 49.6, 65.0. The synthesis pass, which actually
+    writes from the findings, still gets them whole;
+  - the planner may not end on a step that concludes. The five-step plan's last
+    step was "determinar a recomendação final" — 75 s redoing what the synthesis
+    pass does next.
+- A separate small lesson: Swift's `print` block-buffers to a pipe, so the check
+  whose whole value is watching a slow thing happen in stages produced nothing at
+  all until the process exited — seven minutes of staring at an empty file.
+- Also adds `settle(summary:)`, because the six places that cleared request state
+  one field at a time are exactly how a request leaks and leaves the stop button
+  lit with nothing running.
+
+## 2026-08-06 — CMD-002: the "/" menu
+
+- `/plano` shipped invisible. There was no way to learn it existed except being
+  told, which for a discoverability feature is the same as not existing.
+- One catalogue now holds every command, so a new one cannot be added without also
+  being findable, and each row says what the command costs — minutes, in `/plano`'s
+  case, which is a bad thing to discover by waiting.
+- The menu stays shut for everything that is not the start of a command, including
+  "2/3" and a question with a slash in it. The trailing space is what closes it:
+  "/plano " means the command has been named and the rest is its question, and
+  trimming that space made the menu sit over the field for as long as the question
+  took to write.
+- Return completes while the menu is open and sends when it is not, since sending
+  "/pl" would run nothing and lose what was typed. Escape closes the menu before it
+  closes Evie.
+
+## 2026-08-06 — SRC-002: `/buscar` and `/web`
+
+- Two typed commands, both read-only.
+- `/buscar` runs the same vault retrieval an ordinary question runs and shows the
+  passages — note, section, text — and stops. **No model call at any point,
+  including when nothing is found:** the user asked to search, and an answer
+  written from memory shown where a search result belongs is a lie about where it
+  came from. It leaves no trace in the conversation either, because quoting his
+  notes back as something Evie said would strip the fence that keeps note text data
+  rather than instruction.
+- `/web` skips the notes and answers from the web. The notes-first order is
+  enforced in the loop rather than requested of the model — **the model declined
+  that instruction twice** — so the only honest way to skip a step is to say so
+  where the order is decided. One flag on `EvieAgentLoop.run`, next to the one
+  attachments already use. It also forces the lookup, and refuses outright when web
+  search is switched off rather than quietly answering from memory under a question
+  that says where the answer must come from.
+- The test that matters is the one listing prose that must not trigger them:
+  "/webhook do Stripe parou" and "/buscarei um jeito" are things somebody wrote.
+
+## 2026-08-06 — ATT-001: attachments as chips, and what is kept
+
+- **Picking a file used to send it.** It read the file immediately, announced
+  "Lendo o arquivo…", and put a card in the answer list, so a document that had
+  only been chosen looked exactly like one that had been answered. Nothing had
+  reached the model and nothing on screen said so.
+- Files are chips beside the field now, several at a time, each with a cross that
+  takes it back. They go with the next message and only with it, which is the whole
+  difference between attaching and sending. The reading still starts on attach,
+  because it is local work and doing it while the question is typed is time the
+  send would otherwise pay — what changed is that it is silent. A send waits for an
+  unfinished read rather than going without it; removing a chip cancels its read.
+- An attachment with no text is a complete message. Refusing it for an empty field
+  meant the only way to ask about a document was to type something first, and there
+  is nothing to type.
+- The chip carries a thumbnail. A paperclip and a filename answer "is something
+  attached" but not "which one", and for a screenshot the filename answers nothing
+  at all. One path covers both kinds — `NSImage` renders the first page of a PDF —
+  downscaled on the way in, since the chip is 26 points tall.
+- ⌘V attaches what is on the clipboard: a copied file if there is one, otherwise a
+  screenshot written to a temporary file so everything downstream still reads from
+  a URL. It only intercepts the keystroke when the clipboard holds something
+  readable, because refusing an ordinary text paste would be worse than having no
+  paste at all.
+- **The file pickers were attached to the window that asked for them.** Evie is an
+  accessory app, and `NSOpenPanel.runModal()` takes activation for the whole
+  application then hands it back to whatever the system considers frontmost — which
+  for an accessory app is regularly not the settings window, and losing it that way
+  is indistinguishable from it closing. Both pickers in Settings are sheets now.
+  Reported as "opening 'O que ela sabe' closes settings"; **not reproduced** by
+  driving the tab and its three sub-panes through the accessibility API, so this
+  fixes a real defect on the same path rather than a confirmed cause.
+- **Searching the web for what was already on the screen.** A painting attached
+  with "sobre o que é esta imagem?" sent Evie to a search engine, which returned
+  Google's own help pages about identifying images. None of it reached the answer —
+  that came entirely from having looked at the picture — but the seconds were spent
+  and the card claimed "Usei a web · support.google.com", crediting a source that
+  contributed nothing. The grounding decision only ever saw the question text; it
+  sees the attachment now, and when a file is attached nothing is looked up.
+  Provenance gained a third fact for the same reason: an answer drawn entirely from
+  a picture used to report "usei só o que eu já sabia — pode conter erro", which is
+  the warning for an answer with nothing behind it.
+- **What was attached is kept.** What reaches the model is the text pulled out of a
+  file, which is the right thing to send and the wrong thing to keep: a saved
+  conversation saying "a imagem mostra uma cordilheira" with no way to see the
+  image is a record of an answer with its question missing. Pictures are re-encoded
+  as HEIC, scaled to 2048 points on the longest side first. Measured with
+  `--media-check`: a full-screen capture 1050 KB → 211 KB, a small JPEG 29 KB →
+  4 KB. PDFs are copied byte for byte — already compressed, and re-encoding one
+  risks losing a font or a form field for a saving that is not there.
+- The files belong to the conversation that attached them: deleting it deletes
+  them, and anything a crash left behind is swept at launch. `EvieConversation`
+  decodes media with `decodeIfPresent`, so every conversation saved before today
+  still opens — the synthesised decoder demands every stored property, which is
+  exactly how the preferences file was once reported as corrupted when it was only
+  older.
+
+## 2026-08-06 — VOI-024: the whole answer, without the gaps
+
+- **She read the first sentence of a long answer and fell silent.** Everything
+  after that sentence went into a single enormous synthesis, and when it did not
+  come back the loop skipped it without a word.
+- **The reason for one big block turned out to be a bug in someone else's
+  process.** A cloned voice whose `ref_text` is empty makes the backend run Whisper
+  over its reference recording *every time it speaks*. Measured on this Mac with
+  the same phrase: designed voice with no reference audio 1.5 s; cloned voice,
+  `ref_text` empty, 19.1 s; the same voice with `ref_text` stored, 1.7 s. Twelve
+  seconds of speech went from 20.4 s to 3.4 s — four times slower than real time to
+  three times faster. **The engine was never slow.**
+  - A voice trained through Evie carries its transcript; one made in the engine's
+    own application does not, which is where the affected profile came from. Evie
+    fills in any that are missing, once, when the engine comes up — a single
+    Whisper pass over a ten-second clip, measured at 7 s, ever — and says which
+    voices it prepared, because a voice silently becoming ten times faster is worth
+    a sentence.
+  - The `PUT` that stores it takes JSON, not the multipart its neighbouring
+    endpoints take. Measured: multipart is rejected with 422.
+  - This also retires the "thirty-seven second trap" in `docs/VOICE.md`, which
+    recorded the same fault and called the Whisper pass one-off. It is not one-off.
+- With the fixed cost understood — about 1.5 s plus 0.16× the audio produced —
+  blocks are bounded at 280 characters, roughly fifteen seconds of speech for about
+  3.9 s of work, so playback stays ahead of synthesis and one failure costs a
+  paragraph rather than the rest of the answer. A block that fails says so.
+- **Then the gaps.** The loop waited for a block to finish playing before starting
+  to synthesise the next, so every gap was the whole cost of the next block —
+  reported from outside as "pausas longas de 5 ou 6 segundos do nada", which is
+  exactly what a serial loop sounds like. Each block is now synthesised while the
+  previous plays, which removes the gap rather than shortening it. The prefetch is
+  unstructured, so `stop()` cancels it explicitly or it would hold the engine busy
+  for the next thing that needs it.
+- Stop stopped the audio but never said so, so the button that had just been
+  pressed went on offering to stop something already stopped, and the mark kept
+  pulsing red — the visuals were reset only from `onFinished`, which means "the
+  speech ran out". `onSpeakingChanged` covers both endings and is where that
+  decision lives now.
+- Every synthesised phrase carried a little silence at each end: sensible for one
+  phrase, and the reason two played back to back have a gap neither sentence asked
+  for. Trimmed, with 40 ms left so a plosive does not start with a click. Silence
+  *inside* a phrase is left alone — that is punctuation being spoken.
+- A speaker button on every card hears an answer on demand. Pressing it is a person
+  pointing at something and asking to hear it, which is not the same question as
+  whether she answers out loud on her own, so it does not consult the speech
+  preferences at all. It carries three states — idle, preparing, speaking — because
+  the couple of seconds before the first sound made the press look like it missed.
+- `AVAudioPCMBuffer` is not `Sendable` and a `Task`'s result must be, so buffers
+  cross in an `@unchecked` box. Honest here rather than a shrug: they are made
+  inside the synthesis, handed over once, and only ever touched on the main actor.
+
+## 2026-08-06 — UI-017: the card, rebuilt around what it is
+
+- **A long answer scrolled its own header off the screen.** It was laid out at full
+  height and the list of cards did the scrolling, so reading the middle of one
+  scrolled away its title, its question and its Copiar button. The card was also
+  taller than the window, so the overlay drew past its own bounds.
+- Three patches had been fighting: a scroll view for the list, a margin so the card
+  shadows had somewhere to fall, and a matching negative padding to put the edges
+  back. The negative padding made the stack draw beyond its own layout box, so the
+  window was sized shorter than what it drew. There is no outer scroll view now:
+  the stack is a stack, each card caps its own text and scrolls inside itself, and
+  the window is exactly as tall as what it draws.
+- The bubble grows with the answer up to 460 points and then stays put while the
+  text moves inside it. The height is measured rather than left to the scroll view,
+  because a `ScrollView` has no height of its own and takes whatever it is offered
+  — framed at the ceiling alone, a two-line answer would sit in a box the size of a
+  twenty-line one. The bar appears only when it actually scrolls, and is shown
+  rather than hidden where it does: a bounded box with no visible bar looks exactly
+  like text that was cut off, which is the complaint.
+- **The title is the answer now, not the question.** The question reads well while
+  you are still looking at what you typed and badly a minute later: a column headed
+  "oi", "e aí" and "e isso?" says nothing about which answer is which. It is the
+  opening of the answer, cut at the first sentence so it settles early and stops
+  moving while the rest streams in. The question is still on the card, above the
+  answer, whenever it is open.
+- "Aguardando o primeiro trecho…" was a status report pretending to be content: it
+  sat where the answer would go and had to be read to discover it said nothing.
+  Three travelling dots say the same without asking to be read — and not a spinner,
+  which would claim progress it cannot measure, since how long a local model takes
+  is the one thing nobody knows.
+  - The wave under the dots started as a triangle, which is symmetric about its
+    midpoint, so the dots a third and two thirds along sat at identical brightness
+    at every instant. The row bounced rather than travelled. **A test asserting the
+    three are distinct caught it; looking at it once and approving it would not
+    have.**
+- A new question clears the screen rather than merely closing what was there.
+  Closing was not enough: a closed card is still a card, so the window kept growing
+  a row of titles nobody asked for.
+- Buttons fire on mouse-up inside their bounds instead of on mouse-down, and push
+  in while held. Firing on the way down gave a press no acknowledgement and no way
+  to change your mind by dragging off. Copying said nothing at all; it shows a
+  green check and "Copiado" for two seconds, because instant and invisible is the
+  worst combination.
+- The scroll bar had six points of clearance, which cleared the thin resting state
+  and nothing else. macOS thickens an overlay scroller while it is dragged, and
+  again for anybody who sets scroll bars to always show. Fifteen clears the widest.
+- "Ver mensagens anteriores" moved twice. Floating it over the cards avoided a
+  flicker loop — in the flow it pushed the card out from under the pointer that
+  summoned it — but solved that by covering the first two lines of every answer,
+  which is worse than the problem it fixed. Keying it on the pointer being anywhere
+  over the overlay settles both.
+- The button offering to undo a resize is gone from the overlay. Shaping the window
+  the way you wanted it should not be rewarded with a permanent control offering to
+  undo that. Settings › Aparência still has it.
+
+## 2026-08-06 — HIS-001: the history window does what it looked like it could
+
+- Selecting more than one conversation, exporting, deleting a set, deleting
+  everything, and seeing what was attached — none of it existed, and the two
+  toolbar buttons that did exist had no help tag, so hovering them taught you
+  nothing.
+- Export is Markdown with YAML front matter, which is what makes a file useful in
+  the Obsidian vault this user already keeps. Assistant content passes through byte
+  for byte because it is already Markdown; user content is quoted line by line
+  instead, since a question containing "---" on its own line would close the front
+  matter and turn the rest of the document into something else.
+- File names map the characters a path cannot carry, cut to 80, and dedupe within
+  one export — two conversations can share a title and silently overwriting one is
+  data loss.
+- Attachments appear beside the message they went with, images as thumbnails, and
+  clicking one reveals it in Finder. The history view model takes the coordinator's
+  media store rather than building a second one over the same folder: two objects
+  owning one directory is how a change through one becomes invisible to the other.
+- **A reported text corruption was investigated and not reproduced.** A stream test
+  now serves a Portuguese SSE body cut at every byte offset, in LF and CRLF
+  framing, and asserts the reassembled text is identical. It documents that the
+  client reads one byte at a time and only builds a `String` from a complete line,
+  so a multi-byte character split across a network chunk **is not expressible** —
+  which matters, because 71 of 769 deltas in a real answer carried multi-byte
+  characters. Whatever the user saw, the streaming client did not cause it, and the
+  cause is still unknown.
+
+## 2026-08-06 — UI-018: say what a control does when you hover it
+
+- He hovered over the buttons in Configurações expecting the little yellow label
+  macOS shows everywhere else, got nothing, and had no way to tell what they were
+  for. There were seven help tags in the whole application; there are forty-three
+  across the settings panes now, in Portuguese, on every control whose purpose is
+  not its own label — and on the disabled ones especially, since a help tag still
+  appears on a greyed-out control and that is exactly the thing somebody hovers to
+  ask about.
+- **Two controls were not reachable at all.** The voice-selection circle in the
+  library was an `Image` with a tap gesture, which the keyboard cannot focus and
+  VoiceOver reads as decoration. Every skill row was a `Toggle` with an empty
+  label, announced as an anonymous switch.
+- Destructive buttons were painted red by hand without carrying the role, and the
+  two that cannot be undone did not ask. Deleting a trained voice and forgetting
+  everything she knows now confirm. Removing a folder, a skill or a memory line
+  does not: those are re-grantable, in the Trash, or one sentence. "Remover" on a
+  system voice stops being red altogether — it hides a row the section below brings
+  straight back, so the red was promising a deletion that never happens.
+- The rest is convention: `LabeledContent` for value readouts, hierarchical
+  rendering for filled status symbols, a `ProgressView` instead of an hourglass
+  that sat perfectly still, no minimise button, and a frame autosave name so the
+  window stops re-centring itself on top of someone who moved it.
+
+## 2026-08-06 — AUT-010: what the Atalhos can actually do
+
+- The constraint arrived in capitals: no Docker, nothing resident, embedded in the
+  app, processing spent only when the tool is used. **Node-RED does not survive
+  it**, and removing Docker does not help — what Docker was hiding is a Node.js
+  HTTP server with a browser editor, and residency is the whole point of it. A bare
+  `node` process doing nothing costs 37.8 MB on this Mac, against the 4 MB the idle
+  TurboFieldfare server costs. Node-RED is that floor plus 227 packages.
+- The recommendation is macOS Shortcuts: the visual editor he already owns, driven
+  by the tool loop she already has. `shortcuts list` returns in 26 ms and 22 MB of
+  transient RSS; invocation is 87–151 ms from Swift `Process` with stdin closed and
+  a two-entry environment; Evie adds no resident process of her own. The store
+  itself is TCC-locked, but the CLI enumerates it anyway.
+- **A second pass, and one conclusion had to be walked back.** The first pass
+  concluded from `shortcuts sign` exiting 0 that Evie can author a workflow.
+  `shortcuts sign` reads the *file extension*, not the content: Apple's own
+  shortcut named `.plist` is rejected, an empty dictionary named `.shortcut` is
+  signed happily, and so is a workflow whose only action identifier is invented. So
+  exit 0 means the bytes parsed, and a pipeline reporting success on it would be
+  reporting nothing.
+- The action library turned out to be readable after all. `shortcuts list` shows
+  shortcuts, not actions, and there is no subcommand for actions — but the
+  identifiers are in the dyld shared cache and the names are in WorkflowKit's
+  string table, and both independently say 365. App actions are App Intents bundles
+  inside each `.app`: 215 across 24 apps. That inventory includes the part he will
+  not like — Obsidian, Chrome, Claude, Telegram and Canva publish nothing, and
+  Notion and Figma are not installed. What he gets natively is the Apple apps,
+  Focus, Home, Apple Intelligence as a workflow step, and a Run Shell Script action
+  that reaches everything else.
+- Installing is still one human click. That is the approval gate the old design was
+  going to build as policy, enforced instead by the operating system, where a bug
+  in Evie cannot bypass it.
+- **The failure mode that decides the shape of any future code:** a shortcut that
+  wants to ask the user produced no stdout, no stderr and no exit at 60 s, and
+  there is no way to tell that apart from a slow one. `SecureProcessRunner` already
+  kills a process group on timeout, which is the reason this is a week of work
+  rather than a subsystem.
+- Node-RED wins the "who can build it" axis outright, structurally rather than as a
+  matter of taste: its schema is published and its wiring is symbolic, while a
+  shortcut wires steps together with character offsets into a prompt string, which
+  a model can silently get wrong in a file that still signs and installs.
+- The trade is stated where he can refuse it: no webhooks, no MQTT, no inbound
+  mail, no phone-pushed location. Anything event-driven needs something listening,
+  and nothing that listens is non-resident.
+- What is not measured is labelled as such, and there is a lot of it. No successful
+  end-to-end run. Nothing was installed — the library is the same eight shortcuts
+  it was that morning, verified before and after, and every invocation ran under a
+  kill-timeout on its process group.
+
+## 2026-08-06 — REF-001: splitting the overlay view model
+
+- `OverlayViewModel` had reached **2,278 lines** and was still growing by accretion
+  — cards, attachments, commands, plans, proposals, persistence and the request
+  lifecycle, all in one file that nobody reads before editing.
+- The four extensions it already contained were the seams, so this is a move and
+  nothing else: `+Turn`, `+History`, `+Plan` and `+Search` each get a file and the
+  type keeps its state and lifecycle. No behaviour changed, which is why the tests
+  are the check that it worked.
+- The cost is real and worth naming: members the extensions reach are `internal`
+  now rather than `private` or `fileprivate`, because `fileprivate` is scoped to a
+  file and there are five. Within one module that is a smaller loss than a file
+  this long, but it is a loss.
+- **An earlier attempt widened visibility with a regex that matched the wrong
+  declarations and left 286 errors. Reverted rather than chased** — a refactor that
+  has to be debugged is one that changed something.
+- Validation: `Scripts/test` 461/461.
+
+## 2026-08-06 — the things that went wrong
+
+Kept together so they are not lost among the features.
+
+- **A `git add -A` swept `.claude/worktrees` into the repository.** Those are
+  throwaway checkouts that background agents work in; committing them nests
+  repositories inside this one. Ignored now.
+- **The crooked chevron was "fixed" against the wrong cause.** The first
+  explanation was that its origin rounded to a whole point, leaving the two arms on
+  different half-pixel phases on a 2× display, and it was snapped to the device
+  pixel grid. It still looked crooked, and worse after use. The actual causes were
+  two and neither was rounding: an SF Symbol's image is a canvas with the mark
+  somewhere inside it and not in the middle — `chevron.up` sits high in its box and
+  `chevron.down` sits low, so centring the box put the mark off-centre in opposite
+  directions for the two halves of one toggle — and the glyph lived *inside* the
+  background layer, so the hover transform reached it through the hierarchy rather
+  than by intent, which is the "worse after use" half. The opaque bounds are read
+  from the alpha channel now and it is the ink that gets centred, and the glyph and
+  the circle are siblings.
+- **The 286-error regex refactor**, above, reverted.
+- **The server-degradation claim** was retracted on 2026-08-05 and is recorded in
+  its own entry: the 1657-second request behind it was measured across a closed
+  lid, and both `Date()` and the server's own timer count standby. There is no
+  uptime defect. It is repeated here only because it is the same category of
+  mistake as the chevron — a confident explanation that fitted the symptom.
+
+## 2026-08-06 — questions answered rather than built
+
+Three investigations that produced an answer and no feature. The first is
+reproducible from this repository; the other two were established by hand during
+the session and left no artefact in it, so they are recorded as reported rather
+than as measurements anyone can re-run. Whoever needs to depend on them should
+repeat them.
+
+- **The streaming client does not corrupt text.** Reproducible: the test described
+  in the history-window entry above serves a Portuguese SSE body cut at every byte
+  offset in both framings and asserts the reassembled text is identical. A
+  multi-byte character split across a network chunk is not expressible by this
+  client. The reported corruption was not reproduced and its cause is unknown.
+- **This model has no thinking mode.** Three request parameters intended to enable
+  one were accepted and ignored. Reported, not traceable to a commit or a test
+  here; there is nothing in the repository that depends on it either way.
+- **The vision model is Apple's own and works with the network off**, verified by
+  disabling Wi-Fi. Reported, not traceable to a commit here. What *is* traceable is
+  the architecture that makes it plausible: `docs/VISION.md` records that the model
+  runs in a system daemon, on-device, with nothing downloaded by Evie.
