@@ -2180,8 +2180,8 @@ one is a trap this repository had already documented and then walked into anyway
   runs the real `osascript` against both with three break-out payloads in the
   subject, the body and the recipient — with a sending account that cannot exist,
   so the script stops before composing anything.
-- Verified against the real Mail: one message, from `matheusgodoi.engbio@gmail.com`
-  to the same address, subject "Teste da Evie — envio de e-mail". It appears in
+- Verified against the real Mail: one message, from the owner's own address to
+  that same address, subject "Teste da Evie — envio de e-mail". It appears in
   E-mails enviados and arrived in the inbox. A draft was saved and deleted the
   same way. Nothing was sent to anybody else.
 - **`NSAppleEventsUsageDescription` said she never sends mail.** That is the string

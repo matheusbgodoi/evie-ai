@@ -276,8 +276,8 @@ an e-mail carrying the details of the event, through `propose_mail`. Recorded
 here and in `docs/AUTOMATIONS.md` so nobody promises it later.
 
 Verified against the real Mail on 2026-08-07 (`6dade94`): one message, from
-`matheusgodoi.engbio@gmail.com` to the same address, subject "Teste da Evie —
-envio de e-mail". It appears in E-mails enviados and arrived in the inbox. A
+the owner's own address to that same address, subject "Teste da Evie — envio de
+e-mail". It appears in E-mails enviados and arrived in the inbox. A
 draft was saved and deleted the same way. Nothing was sent to anybody else.
 
 **The calendar can now be written to, and the boundary is where the writing
