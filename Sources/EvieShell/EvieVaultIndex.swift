@@ -165,39 +165,92 @@ final class EvieVaultIndex: ObservableObject {
   }
 
   /// Reads every text file in the granted folders and cuts it into passages.
+  /// Directory names that cannot hold notes, and cost a great deal to walk.
+  ///
+  /// Without this the index walks everything inside a granted folder. Measured
+  /// on this Mac with the home folder granted: over a million files in more than
+  /// 130,000 directories, and still going after 25 seconds — 354,584 of them
+  /// under `~/Library` and 57,708 under `~/.bun` alone. The build never
+  /// finished, so every search of the notes answered "nao achei nada" while the
+  /// walk ground on in the background.
+  ///
+  /// Matched on a directory's own name rather than a path, so it prunes at any
+  /// depth.
+  nonisolated static let skippedDirectories: Set<String> = [
+    "node_modules", "DerivedData", "Caches", "Containers", "Group Containers",
+    "Application Support", "Logs", "Cookies", "WebKit", "Safari", "Mail",
+    "Messages", "Photos Library.photoslibrary", "Music", "Movies",
+    "site-packages", "venv", "vendor", "Pods", "target", "dist", "build",
+    "__pycache__", "Trash",
+  ]
+
+  /// The only places inside `~/Library` worth walking.
+  ///
+  /// Blanket-skipping `Library` is the obvious move and it is wrong here:
+  /// Obsidian's iCloud vault lives at `Library/Mobile Documents`, and Google
+  /// Drive and OneDrive appear under `Library/CloudStorage`. Those are exactly
+  /// the notes somebody means. Everything else under Library is application
+  /// state, and none of it is anybody's writing.
+  nonisolated static let librarySubdirectories: Set<String> = [
+    "Mobile Documents", "CloudStorage",
+  ]
+
+  /// A ceiling on directories visited, so a folder nobody anticipated cannot
+  /// turn the build into something that never ends.
+  nonisolated static let maximumDirectories = 40_000
+
+  /// Whether to walk into a directory at all.
+  nonisolated static func shouldSkip(directory name: String, at components: [String]) -> Bool {
+    if name.hasPrefix(".") || skippedDirectories.contains(name) {
+      return true
+    }
+    if components.count >= 2, components[0] == "Library" {
+      return !librarySubdirectories.contains(components[1])
+    }
+    return false
+  }
+
   nonisolated static func collect(from roots: [EvieFileRoot]) -> [EvieVaultPassage] {
     var passages: [EvieVaultPassage] = []
+    var visitedDirectories = 0
 
     for root in roots {
       guard
-        // No `.skipsHiddenFiles`, and the reason is worth keeping: `~/Library`
-        // carries the hidden flag, and that option discards everything beneath a
-        // hidden ancestor — so a vault inside it, which is exactly where
-        // Obsidian's iCloud vault lives, enumerates as *empty*. Measured on this
-        // Mac: 701 entries without the option, 0 with it. Dotfiles are filtered
-        // below instead, which is what was actually wanted.
+        // No `.skipsHiddenFiles`: `~/Library` carries the hidden flag, and that
+        // option discards everything beneath a hidden ancestor — so a vault
+        // inside it enumerates as empty. Measured: 701 entries without the
+        // option, 0 with it. Dotfiles are pruned by name instead.
         let walker = FileManager.default.enumerator(
           at: root.url,
-          includingPropertiesForKeys: [.isRegularFileKey],
+          includingPropertiesForKeys: [.isRegularFileKey, .isDirectoryKey],
           options: [.skipsPackageDescendants]
         )
       else {
         continue
       }
       for case let url as URL in walker {
-        guard passages.count < maximumPassages else {
+        guard passages.count < maximumPassages, visitedDirectories < maximumDirectories
+        else {
           return passages
         }
         let relative = url.path
           .replacingOccurrences(of: root.url.path, with: "")
           .trimmingCharacters(in: CharacterSet(charactersIn: "/"))
-
-        // The same denylist the reader uses, applied *inside* the granted folder
-        // rather than to the whole path. Checking the absolute path meant a vault
-        // living in `~/Library/Mobile Documents` — which is where Obsidian's
-        // iCloud vault is — was refused entirely, because one of the components
-        // on the way to it happened to be called `Library`.
         let components = relative.split(separator: "/").map(String.init)
+
+        if (try? url.resourceValues(forKeys: [.isDirectoryKey]))?.isDirectory == true {
+          visitedDirectories += 1
+          // Pruned with `skipDescendants` rather than filtered afterwards: not
+          // reading a directory is cheap, not walking into it is the saving.
+          if shouldSkip(directory: url.lastPathComponent, at: components) {
+            walker.skipDescendants()
+          }
+          continue
+        }
+
+        // The reader's denylist, applied inside the granted folder rather than
+        // to the whole path — checking the absolute path refused a vault under
+        // `~/Library/Mobile Documents` because a component was called `Library`.
         guard
           !components.contains(where: { $0.hasPrefix(".") }),
           !components.contains(where: EvieScopedFileReader.isDenied),
