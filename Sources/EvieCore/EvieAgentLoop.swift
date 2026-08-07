@@ -148,15 +148,80 @@ public struct EvieAgentLoop: Sendable {
       try Task.checkCancellation()
 
       let isLastIteration = iteration == maximumIterations - 1
-      // On the last pass the tools are withdrawn. Offering them again would
-      // invite a call that can no longer be honoured, and the model would stop
-      // having said nothing to the user.
+      // The tools stay declared on every pass, including the last.
+      //
+      // They used to be withdrawn there, to stop the model asking for something
+      // that could no longer be honoured. It backfired: the model asks anyway —
+      // the conversation it is reading is full of tool calls, so another one is
+      // the obvious continuation — and this server rejects a call naming a tool
+      // that was not declared. Measured in its log:
+      //
+      //   failed phase=generating status=500
+      //   error=GemmaToolCallParserError.unknownTool("search_web")
+      //
+      // A 500 is worse than a wasted call: the turn dies and the person is told
+      // the model failed, when what happened is that Evie asked it to answer
+      // without the vocabulary it needed to refuse properly. Declaring the tools
+      // and simply not running them keeps the request well formed.
       let step = try await Self.completeOnce(
         messages: conversation,
-        tools: isLastIteration ? [] : tools,
+        tools: tools,
         client: client,
         emit: emit
       )
+
+      // On the last pass a tool call is not honoured, but it is answered: the
+      // model is told the lookups are finished and asked for what it has. One
+      // extra completion, only in the case that used to be a dead turn.
+      if isLastIteration, let calls = step.message.toolCalls, !calls.isEmpty {
+        appended.append(step.message)
+        conversation.append(step.message)
+        for call in calls {
+          let refusal = EvieToolResult(
+            callID: call.id,
+            name: call.name,
+            content: "Não há mais consultas disponíveis nesta pergunta.",
+            isFailure: true
+          )
+          conversation.append(refusal.message)
+          appended.append(refusal.message)
+        }
+        // Said as a user turn, because this server refuses `developer`
+        // guidance once a conversation has started — measured twice earlier in
+        // this project. A tool result alone was not enough: with the tools still
+        // declared the model simply asked again, and the turn ended empty.
+        conversation.append(
+          ChatMessage(
+            role: .user,
+            content: """
+              Chega de buscas. Responda agora, em português, com o que você já \
+              achou acima. Se o que você achou não responde tudo, diga o que \
+              ficou faltando em vez de procurar de novo.
+              """
+          )
+        )
+        let closing = try await Self.completeOnce(
+          messages: conversation,
+          tools: tools,
+          client: client,
+          emit: emit
+        )
+        appended.append(closing.message)
+        return Outcome(
+          appended: appended,
+          answer: closing.message.content,
+          toolCallCount: toolCallCount,
+          exhausted: closing.message.content.isEmpty,
+          memoryProposals: memoryProposals,
+          provenance: .from(
+            toolCalls: toolNames,
+            readAddresses: readAddresses,
+            readAttachment: carriesAttachment
+          ),
+          changeProposals: changeProposals,
+          skillProposals: skillProposals
+        )
+      }
 
       guard let calls = step.message.toolCalls, !calls.isEmpty else {
         appended.append(step.message)

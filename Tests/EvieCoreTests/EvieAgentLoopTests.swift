@@ -115,12 +115,27 @@ struct EvieAgentLoopTests {
     )
 
     #expect(outcome.exhausted)
-    #expect(await client.callCount == 3)
+    // The ceiling is three passes plus the one closing request, which is what
+    // asks for words after the last tool call is declined rather than executed.
+    #expect(await client.callCount == 4)
   }
 
-  /// The last pass withdraws the tools so the model has to produce words.
-  @Test("the final request offers no tools")
-  func lastIterationWithdrawsTools() async throws {
+  /// The tools stay declared on every pass, and the last one refuses to run
+  /// them rather than pretending they do not exist.
+  ///
+  /// This test used to assert the opposite — that the final request offered no
+  /// tools — and that design was wrong in a way only the server could show. The
+  /// model asks for a tool on the last pass regardless, because the conversation
+  /// it is reading is full of tool calls, and a call naming a tool that was not
+  /// declared is rejected outright:
+  ///
+  ///     failed phase=generating status=500
+  ///     error=GemmaToolCallParserError.unknownTool("search_web")
+  ///
+  /// The turn died and the person was told the model had failed. Withdrawing the
+  /// tools caused the failure it was meant to prevent.
+  @Test("the tools stay declared, and the last pass declines to use them")
+  func lastIterationDeclinesRatherThanWithdrawing() async throws {
     let client = ScriptedClient(
       turns: Array(
         repeating: .tools([
@@ -138,13 +153,12 @@ struct EvieAgentLoopTests {
     )
 
     let offered = await client.toolsPerCall
-    #expect(offered.count == 2)
-    // What matters is that the last pass has none, not the exact count of the
-    // first — that number changes every time a tool is added, and asserting it
-    // only produces a test that has to be edited rather than one that catches
-    // anything.
-    #expect(offered[0] > 0)
-    #expect(offered[1] == 0)
+    // Three requests, not two: the last pass answers the call it will not run
+    // and then asks once for words.
+    #expect(offered.count == 3)
+    // Every one carries the declarations. Asserting the exact count would only
+    // produce a test that has to be edited each time a tool is added.
+    #expect(offered.allSatisfy { $0 > 0 })
   }
 
   /// Every call needs an answer, honoured or not, or the next request is
