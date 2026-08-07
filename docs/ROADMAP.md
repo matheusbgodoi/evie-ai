@@ -51,9 +51,10 @@ Six things landed since the snapshot below, and three of them move a phase.
   (`docs/RESOURCE_BUDGET.md`). That is not Phase 1's benchmark matrix, which is
   still open.
 
-The blockers below are unchanged: `QA-006` and `REL-001`, in that order. Both
-gained work rather than losing it — there are two more settings panes to accept by
-eye, and now the event confirmation card as well, which no human has seen.
+Both blockers below have since closed. `QA-006` passed on 2026-08-07 when the
+owner used the event confirmation card against his own calendar, and `REL-001`
+was cut the same day as `v1.0.0`, shipping the application rather than the
+instructions to build it.
 
 ## Progress snapshot — 2026-08-06
 
@@ -97,15 +98,16 @@ are still the right gates.
 
 **What actually blocks the next step**, in order:
 
-1. `QA-006` — the human acceptance pass. Nothing visual has been formally
-   accepted, and the interface changed substantially this session.
-2. `REL-001` — the first release. The update mechanism exists and verifies a
-   signature; what is missing is a `1.0.0` changelog section, an ADR for the
-   retrieval decision, and a decision on what the release ships.
+1. ~~`QA-006` — the human acceptance pass.~~ Passed 2026-08-07.
+2. ~~`REL-001` — the first release.~~ Cut 2026-08-07 as `v1.0.0`, shipping the
+   application, because the updater installs only a bundle signed with the same
+   key and a source tag cannot offer that.
 3. The two open Shortcuts questions, each estimated at half an hour, before any
    automation code is written.
 4. Phase 1's benchmark matrix, which nothing currently depends on but which the
-   model-selection decision cannot be made without.
+   model-selection decision cannot be made without. Energy, battery draw and
+   sustained decode are now measured (`docs/RESOURCE_BUDGET.md`); the
+   16K/32K/64K comparison and the quality suite are not.
 
 `QA-001` remains deferred at the user's request. No phase exit gate is inferred
 from a successful compile.

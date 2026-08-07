@@ -323,13 +323,12 @@ readiness only; they are not the Phase 1 performance suite.
   and accepted the whole of it: "pra mim está tudo aprovado". Recorded as his
   words rather than paraphrased, because a pass is a person's judgement and not
   a measurement anybody else can reproduce.
-- **`REL-001`: there is no release.** The mechanism to install one now exists and
-  is tested. Two of the three things it needed are now written: the `1.0.0`
-  section of `CHANGELOG.md` gathers what the release contains, and the retrieval
-  decision is [ADR 0012](adr/0012-fused-local-retrieval.md). What remains is not
-  documentation — a decision on whether the release ships the app or the
-  instructions to build it, and then cutting and tagging it, which is the owner's
-  to do.
+- ~~**`REL-001`: there is no release.**~~ **Cut 2026-08-07 as `v1.0.0`.** The
+  owner decided it ships the application rather than the instructions, on the
+  argument the update mechanism makes for itself: it installs only a bundle
+  signed with the same key, which a source tag cannot offer. The download is the
+  9.9 MB bundle; the roughly 13 GB model is not in it and is fetched by
+  `Scripts/evie-runtime setup` on the machine that will run it.
 - The bounded first-test measurements exist, and sustained decode, energy and
   battery draw have since been measured on this machine — 5.6 W idle against
   31.1 W generating, 18.1 tok/s unplugged against 18.2 on AC, in
@@ -340,8 +339,9 @@ readiness only; they are not the Phase 1 performance suite.
   performance question these measurements opened rather than closed.
 - `Evie.app` is ad-hoc signed until `Scripts/evie-app identity` is run on the
   machine, and an ad-hoc copy has no certificate to compare an update against, so
-  it refuses every update. The script now works; whether it has been run on this
-  machine is not recorded here.
+  it refuses every update. It has now been run here: the installed bundle reports
+  `Authority=Evie Dev`, not an ad-hoc signature, which is what made `v1.0.0`
+  publishable at all.
 - The application is not notarized and is not a login item. Notarisation is not
   available for a self-signed identity, which constrains what `REL-001` can be.
 - Speech recognition accuracy, latency, barge-in behaviour, and energy cost are
@@ -422,13 +422,13 @@ What this does not cover, and should not be read as covering: the wake phrase
 and the Automation consent prompt, which has still never been observed because
 every terminal used to test already held the grant.
 
-**`REL-001` — the first release.** What it needed: `QA-006` passed (2026-08-07),
-an ADR for the retrieval decision (now [ADR 0012](adr/0012-fused-local-retrieval.md)),
-a `1.0.0` section in the changelog (now written, and undated), and a decision on
-whether the release ships the app or the instructions to build it. Only the last
-one is left, and then the act of cutting the release itself — neither is a
-document. The update mechanism argues for shipping the app: it installs only a
-bundle signed with the same key, which a tagged source release cannot offer.
+**`REL-001` — the first release. Cut 2026-08-07 as `v1.0.0`.** It needed
+`QA-006` passed (2026-08-07), an ADR for the retrieval decision
+([ADR 0012](adr/0012-fused-local-retrieval.md)), a `1.0.0` section in the
+changelog, and a decision on whether the release ships the app or the
+instructions to build it. The owner chose the app, on the argument the update
+mechanism makes for itself: it installs only a bundle signed with the same key,
+which a tagged source release cannot offer.
 Notarisation is not available for a self-signed identity, which constrains what
 that app can be.
 

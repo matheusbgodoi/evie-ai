@@ -6,16 +6,19 @@ All notable changes to Evie are documented here. Dates use `YYYY-MM-DD`.
 
 Nothing since the `1.0.0` section below was gathered.
 
-## [1.0.0] — not released yet
+## [1.0.0] - 2026-08-07
 
-This section gathers what the first release contains. It carries no date because
-no release has been cut: that is `REL-001`, it is an action rather than a
-document, and it is the owner's. What still has to be decided before it can
-happen is whether the release ships the application or the instructions to build
-it — the update mechanism argues for the application, since it installs only a
-bundle signed with the same key. Notarisation is not available for a self-signed
-identity, which constrains what that application can be
-(`docs/PROJECT_STATUS.md`).
+The first release. It ships **the application**, signed with the same key the
+updater checks against, because a source tag cannot offer that and the update
+path is the one thing a first release has to get right.
+
+Two things it is honest about rather than quiet about. It is **not notarised** —
+that is not available for a self-signed identity — so the first launch needs
+right-click → Open, once. And the application is 9.9 MB while the model it talks
+to is about 13 GB: the model is **not** in this download, is not redistributable
+here, and is fetched by `Scripts/evie-runtime setup` on the machine that will run
+it. Installing Evie is fast; making her answer the first question is a large
+one-time download (`README.md`).
 
 What it is, in one line each:
 

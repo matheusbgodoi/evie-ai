@@ -405,6 +405,30 @@ repository was taken there; none of them are estimates for other hardware.
 
 ## Install
 
+### What the download is, and what it is not
+
+The release on GitHub is the **application: about 10 MB.** It is not the whole
+of Evie, and the difference matters before you start.
+
+| | Size | Where it comes from |
+|---|---:|---|
+| `Evie.app` | ~10 MB | the GitHub release, or `Scripts/evie-app build` |
+| The inference server | ~780 MB | built on your Mac by `Scripts/evie-runtime setup` |
+| The language model | ~13 GB | downloaded by the same command |
+
+The model is not in the release and could not be: it is a large third-party
+artefact under its own licence, and GitHub caps a release asset at 2 GB anyway.
+So **installing Evie takes seconds and making her answer takes a long download**
+— once, on each machine, needing about 25 GB free. There is no way around that
+which does not involve someone else holding your model, and the point of this
+project is that nobody does.
+
+The application is **signed but not notarised**, because notarisation is not
+available for a self-signed identity. The first launch therefore needs
+right-click → Open once; after that macOS stops asking.
+
+### From source
+
 Four commands, once. Everything lands outside this checkout, in
 `~/Library/Application Support/Evie/`.
 
