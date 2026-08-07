@@ -1,0 +1,80 @@
+# Evie — Personal Use Licence
+
+Copyright © 2026 Matheus Barboza de Godoi. All rights reserved.
+
+This is not an open-source licence. The software is made publicly readable so
+that it can be studied and used personally. Every right not granted below is
+retained by the copyright holder.
+
+## What you may do
+
+You may download, install, run, read and modify this software **for your own
+personal, domestic and non-commercial use**, on machines you own or control.
+
+You may study the source and the documentation freely, and quote from them with
+attribution — for study, teaching, review, journalism or research.
+
+## What you may not do
+
+You may not, without prior written permission from the copyright holder:
+
+1. **Use it commercially.** This includes use inside a business or by a sole
+   trader, use in producing goods or services offered to others, and any use
+   that is part of paid work.
+2. **Sell, licence, rent, or otherwise charge for it**, in whole or in part,
+   whether on its own, bundled with something else, or as a service.
+3. **Redistribute it**, modified or unmodified, in source or binary form. Fork
+   it on a hosting service to propose a change back if you wish; do not
+   publish it as your own distribution.
+4. **Use it to train, fine-tune or evaluate a machine-learning model** that is
+   distributed or offered to others.
+5. **Remove or obscure this licence, the copyright notice, or the attribution**
+   in any copy you keep.
+
+Permission for any of the above may be granted, and must be in writing. Ask.
+
+## Contributions
+
+If you send a change and it is accepted, you keep the copyright in what you
+wrote and grant the copyright holder an unlimited, irrevocable, royalty-free
+right to use, modify, relicense and distribute it as part of this software.
+
+## What this licence does not cover
+
+It covers the contents of this repository and nothing else. Everything Evie
+talks to has its own terms, and they are not affected by this document:
+
+- **The language model.** It is not distributed here, is downloaded separately,
+  and is governed by its own licence.
+- **The inference server**, the voice engine, and any other third-party
+  component, each under its own licence.
+- **Apple's frameworks and operating system.**
+- **Your own data.** Nothing in this licence gives anyone any right to your
+  notes, mail, calendar or files. Evie runs on your machine and this repository
+  receives nothing from it.
+
+## No warranty, no liability
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+COPYRIGHT HOLDER BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER
+IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
+CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+
+This software reads personal files, mail and calendar entries, and can send
+e-mail and create calendar events when a person presses a button. It is a
+personal project, not audited software. Read `docs/SECURITY.md` before granting
+it anything, and decide for yourself.
+
+## Governing law
+
+This licence is governed by the laws of the Federative Republic of Brazil.
+
+---
+
+*Sobre esta licença, em português: você pode usar a Evie livremente para uso
+pessoal e doméstico, ler e modificar o código, e estudar tudo o que está aqui.
+Não pode vender, usar comercialmente, nem redistribuir. Todos os direitos são de
+Matheus Barboza de Godoi. Para qualquer uso além disso, peça autorização por
+escrito.*

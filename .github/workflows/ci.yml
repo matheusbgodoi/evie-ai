@@ -1,0 +1,94 @@
+name: CI
+
+# Evie is a macOS application that talks to Apple frameworks, so there is no
+# useful Linux job here. The build and the tests are the whole of it.
+on:
+  push:
+    branches: [main, dev]
+  pull_request:
+    branches: [main, dev]
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-and-test:
+    name: Build and test
+    runs-on: macos-15
+    timeout-minutes: 30
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Record the toolchain
+        # Printed rather than asserted: when a build breaks on a runner and not
+        # on the author's Mac, this is the first thing anybody wants to see.
+        run: |
+          swift --version
+          xcodebuild -version
+          sw_vers
+
+      - name: Cache build products
+        uses: actions/cache@v4
+        with:
+          path: .build
+          key: ${{ runner.os }}-spm-${{ hashFiles('Package.swift') }}-${{ github.sha }}
+          restore-keys: |
+            ${{ runner.os }}-spm-${{ hashFiles('Package.swift') }}-
+            ${{ runner.os }}-spm-
+
+      - name: Build
+        run: swift build --build-tests
+
+      - name: Test
+        # Scripts/test exists because Swift Testing discovery and rpaths need
+        # help with the Command Line Tools on the author's machine. It falls
+        # back to `swift test` where that help is unnecessary.
+        run: |
+          if [ -x Scripts/test ]; then
+            Scripts/test
+          else
+            swift test
+          fi
+
+  documentation:
+    name: Documentation
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Every document referenced by another must exist
+        # The repository's rule is that a claim lives in a document and is
+        # linked, not restated. A link that rots breaks that rule silently, so
+        # it is checked rather than trusted.
+        run: |
+          status=0
+          while IFS= read -r file; do
+            while IFS= read -r target; do
+              [ -z "$target" ] && continue
+              case "$target" in http*|mailto:*|'#'*) continue ;; esac
+              resolved="$(dirname "$file")/${target%%#*}"
+              if [ ! -e "$resolved" ]; then
+                echo "$file -> $target (missing)"
+                status=1
+              fi
+            done < <(grep -oE '\]\([^)]+\)' "$file" | sed 's/^](//; s/)$//')
+          done < <(find . -name '*.md' -not -path './.build/*' -not -path './.git/*')
+          exit $status
+
+      - name: A release must not be claimed before it is cut
+        # REL-001's own rule, enforced: the status document may not say the
+        # blocker is closed while the changelog still has no dated release.
+        run: |
+          if grep -q '^## \[1\.0\.0\] - [0-9]' CHANGELOG.md; then
+            echo "1.0.0 is dated; nothing to check."
+          elif grep -qi 'REL-001.*\(done\|complete\|closed\|passed\)' docs/PROJECT_STATUS.md; then
+            echo "PROJECT_STATUS.md marks REL-001 finished, but CHANGELOG.md has no dated 1.0.0."
+            exit 1
+          else
+            echo "1.0.0 undated and REL-001 not claimed. Consistent."
+          fi

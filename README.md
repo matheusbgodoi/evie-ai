@@ -858,3 +858,14 @@ Start with [Project status](docs/PROJECT_STATUS.md) for what is true today and
 [decisions](docs/adr/README.md).
 
 Working on this repository: read [AGENTS.md](AGENTS.md) first.
+
+---
+
+## Licence
+
+**Personal and domestic use, free. Commercial use, selling, and redistribution,
+no.** Copyright © 2026 Matheus Barboza de Godoi, all rights reserved. The source
+is readable so it can be studied and run, which is not the same as open source.
+Full terms, including what the licence does *not* cover — the language model, the
+inference server, Apple's frameworks, and your own data — in
+[LICENSE](LICENSE).
