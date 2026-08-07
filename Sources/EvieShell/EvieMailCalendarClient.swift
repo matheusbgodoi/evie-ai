@@ -9,7 +9,7 @@ import Foundation
 /// as a value. Nothing the model writes and nothing a message contains is ever
 /// concatenated into a script. That is the whole security posture of this file,
 /// and it is the reason it is short enough to read in one sitting.
-struct EvieMailCalendarClient: EvieMailCalendarReading, Sendable {
+struct EvieMailCalendarClient: EvieMailCalendarReading, EvieCalendarWriting, Sendable {
   static let executable = URL(fileURLWithPath: "/usr/bin/osascript")
 
   /// How long a read may take before it is abandoned.
@@ -63,6 +63,43 @@ struct EvieMailCalendarClient: EvieMailCalendarReading, Sendable {
       app: .calendar
     )
     return EvieMailCalendar.parseEvents(output)
+  }
+
+  func listCalendars() async throws -> [String] {
+    let output = try await run(EvieAppleScripts.listCalendars, arguments: [], app: .calendar)
+    return
+      output
+      .split(separator: EvieMailCalendar.fieldSeparator, omittingEmptySubsequences: true)
+      .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+      .filter { !$0.isEmpty }
+  }
+
+  /// The one call in this file that changes something.
+  ///
+  /// It looks exactly like the reads, and that is the point: the title, the
+  /// calendar name and the location travel as process arguments beside a script
+  /// that is a compiled-in constant, so a title written by a model out of
+  /// something in an e-mail is a title. The ten integers are the two moments,
+  /// never a formatted date — the script rebuilds them with arithmetic, which no
+  /// locale can reinterpret.
+  func createEvent(_ proposal: EvieCalendarEventProposal) async throws -> String {
+    let moments =
+      EvieMailCalendar.components(of: proposal.startsAt)
+      + EvieMailCalendar.components(of: proposal.endsAt)
+    let output = try await run(
+      EvieAppleScripts.createEvent,
+      arguments: [proposal.title, proposal.calendarName, proposal.location]
+        + moments.map(String.init),
+      app: .calendar
+    )
+    let landed = output.trimmingCharacters(in: .whitespacesAndNewlines)
+    guard landed != EvieMailCalendar.missingCalendarMarker else {
+      throw EvieMailCalendarError.calendarGone(proposal.calendarName)
+    }
+    guard !landed.isEmpty else {
+      throw EvieMailCalendarError.failed(.calendar, "o Calendário não confirmou o compromisso")
+    }
+    return landed
   }
 }
 

@@ -175,6 +175,32 @@ final class AppCoordinator: NSObject {
         return (error as? LocalizedError)?.errorDescription ?? "Não consegui fazer isso."
       }
     }
+    // The only path from a button to the Calendar app. Re-checks the switch at
+    // the moment of the press rather than trusting the card: a card can sit on
+    // screen while somebody turns Mail and Calendar off, and honouring it then
+    // would be reaching into an app he had just said no to.
+    viewModel.onEventApproved = { [weak self] proposal in
+      guard let self, preferences.mailAndCalendarEnabled else {
+        return EvieCalendarEventReceipt(
+          created: false,
+          report: "O Mail e o Calendário estão desligados agora, então não criei nada."
+        )
+      }
+      do {
+        let landed = try await EvieMailCalendarClient().createEvent(proposal)
+        // The calendar is read back from what the app answered, not repeated
+        // from what was asked for, so the receipt says where it actually is.
+        var created = proposal
+        created.calendarName = landed
+        return EvieCalendarEventReceipt(created: true, report: created.receipt)
+      } catch {
+        return EvieCalendarEventReceipt(
+          created: false,
+          report: (error as? LocalizedError)?.errorDescription
+            ?? "Não consegui criar o compromisso."
+        )
+      }
+    }
     speechOutput.setQualitySteps(preferences.voice.resolvedQualitySteps)
     viewModel.onMemoryDecided = { [weak self] fact, keep in
       guard let self, keep else { return }

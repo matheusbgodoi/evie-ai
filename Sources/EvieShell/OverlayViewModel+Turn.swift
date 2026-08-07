@@ -333,6 +333,77 @@ extension OverlayViewModel {
     onLayoutInvalidated?()
   }
 
+  /// Puts a suggested event on screen with two buttons and no default.
+  ///
+  /// The card is where a wrong date gets caught, so it is written for a person
+  /// rather than for a machine: the weekday spelled out, the hours, how long it
+  /// lasts and which calendar it lands in. She resolved "hoje 10:30" from a
+  /// sentence, and models get dates wrong — this is the step that makes that
+  /// survivable instead of silent.
+  func presentEventProposal(_ proposal: EvieCalendarEventProposal) {
+    artifacts.append(
+      ArtifactCardModel(
+        id: proposal.id,
+        kind: .calendar,
+        title: proposal.summary,
+        summary: proposal.detail,
+        isExpanded: true,
+        actions: [
+          ArtifactActionModel(
+            id: "event-do:\(proposal.id.uuidString)",
+            title: "Marcar",
+            systemImage: "calendar.badge.plus",
+            role: .primary
+          ),
+          ArtifactActionModel(
+            id: "event-skip:\(proposal.id.uuidString)",
+            title: "Não",
+            systemImage: "xmark",
+            role: .secondary
+          ),
+        ]
+      )
+    )
+    pendingEvents[proposal.id] = proposal
+    onLayoutInvalidated?()
+  }
+
+  /// Creates it and says where it landed.
+  ///
+  /// Asynchronous because it is: the Calendar app answers in its own time, the
+  /// same seconds a read takes. Nothing is claimed until it has answered — a
+  /// "Feito" written before the app confirmed is how somebody ends up with a
+  /// meeting they think exists.
+  ///
+  /// There is no automatic path here, unlike file changes. Auto-approval exists
+  /// for undoing things on his own disk; an event is a commitment, and the card
+  /// is the whole feature.
+  func performEventProposal(_ proposal: EvieCalendarEventProposal) {
+    pendingEvents[proposal.id] = nil
+    guard let onEventApproved else {
+      return
+    }
+    primaryText = "Marcando…"
+    onLayoutInvalidated?()
+
+    Task { @MainActor [weak self] in
+      let receipt = await onEventApproved(proposal)
+      guard let self else {
+        return
+      }
+      artifacts.append(
+        ArtifactCardModel(
+          kind: receipt.created ? .calendar : .error,
+          title: receipt.created ? "Marcado" : "Não consegui marcar",
+          summary: receipt.report,
+          isExpanded: true
+        )
+      )
+      primaryText = receipt.created ? "Compromisso criado" : "Nada foi criado"
+      onLayoutInvalidated?()
+    }
+  }
+
   /// Puts a suggested skill on screen with its instructions visible.
   ///
   /// The instructions are shown in full rather than summarised, because agreeing
@@ -443,6 +514,9 @@ extension OverlayViewModel {
     }
     for skill in outcome.skillProposals {
       presentSkillProposal(skill)
+    }
+    for event in outcome.eventProposals {
+      presentEventProposal(event)
     }
     for change in outcome.changeProposals {
       if autoApproveChanges {

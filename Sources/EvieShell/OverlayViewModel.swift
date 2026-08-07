@@ -114,6 +114,9 @@ final class OverlayViewModel: ObservableObject {
   }
   /// Carries out a change the user approved, and reports what happened.
   var onChangeApproved: (@MainActor (EvieFileChange) -> String)?
+  /// Creates an event the user approved. Asynchronous where the file one is not,
+  /// because this one waits on another application rather than on the disk.
+  var onEventApproved: (@MainActor (EvieCalendarEventProposal) async -> EvieCalendarEventReceipt)?
   /// The skills installed right now, asked for per turn so a skill dropped into
   /// the folder works on the next question rather than the next launch.
   var installedSkills: @MainActor () -> [EvieSkill] = { [] }
@@ -197,6 +200,7 @@ final class OverlayViewModel: ObservableObject {
   /// Changes shown but not yet answered, so a button press knows what it means.
   var pendingChanges: [UUID: EvieFileChange] = [:]
   var pendingSkills: [UUID: EvieSkill] = [:]
+  var pendingEvents: [UUID: EvieCalendarEventProposal] = [:]
   let visionDescriber = EvieVisionDescriber()
   /// Ceiling on how much document text one turn may carry, so a long PDF cannot
   /// silently push the actual question out of the model's context.
@@ -1026,6 +1030,21 @@ final class OverlayViewModel: ObservableObject {
       artifacts.removeAll { $0.id == id }
       pendingChanges[id] = nil
       primaryText = "Não mexi em nada"
+      onLayoutInvalidated?()
+      return
+    }
+
+    if action.id.hasPrefix("event-do:") {
+      artifacts.removeAll { $0.id == id }
+      if let proposal = pendingEvents[id] {
+        performEventProposal(proposal)
+      }
+      return
+    }
+    if action.id.hasPrefix("event-skip:") {
+      artifacts.removeAll { $0.id == id }
+      pendingEvents[id] = nil
+      primaryText = "Não marquei nada"
       onLayoutInvalidated?()
       return
     }

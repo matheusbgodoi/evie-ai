@@ -296,6 +296,93 @@ struct EvieAgentLoopTests {
     #expect(await noFolder.toolsPerCall[0] == (await off.toolsPerCall[0]))
   }
 
+  /// Proposing an event rides on the Mail and Calendar switch, because it is the
+  /// same app and the same Automation grant.
+  @Test("proposing an event is offered only with Mail and Calendar on")
+  func eventToolFollowsTheAppsSwitch() async throws {
+    let off = ScriptedClient(turns: [.text("Ok.")])
+    _ = try await EvieAgentLoop().run(
+      messages: [ChatMessage(role: .user, content: "marca uma call")],
+      roots: [],
+      client: off,
+      emit: { _ in }
+    )
+
+    let on = ScriptedClient(turns: [.text("Ok.")])
+    _ = try await EvieAgentLoop(mailAndCalendar: StubApps()).run(
+      messages: [ChatMessage(role: .user, content: "marca uma call")],
+      roots: [],
+      client: on,
+      emit: { _ in }
+    )
+
+    #expect(
+      await on.toolsPerCall[0]
+        == (await off.toolsPerCall[0]) + EvieMailCalendarTool.definitions.count + 1
+    )
+  }
+
+  /// The property the card exists to guarantee: the tool call produces a
+  /// proposal and reaches nothing that writes. `StubApps` would record a create;
+  /// there is no way for the loop to ask it for one.
+  @Test("propose_event produces a card and creates nothing")
+  func eventProposalCreatesNothing() async throws {
+    let start = try #require(EvieMailCalendar.parseMoment("2099-08-07T10:30"))
+    let client = ScriptedClient(turns: [
+      .tools([
+        EvieToolCall(
+          id: "c1",
+          name: EvieCalendarEventTool.name,
+          argumentsJSON: #"{"title":"Call Cluemed","start":"2099-08-07T10:30"}"#
+        )
+      ]),
+      .text("Sugeri; confirme na tela."),
+    ])
+    let apps = StubApps()
+
+    let outcome = try await EvieAgentLoop(mailAndCalendar: apps).run(
+      messages: [ChatMessage(role: .user, content: "marca call pela cluemed 10:30")],
+      roots: [],
+      client: client,
+      emit: { _ in }
+    )
+
+    #expect(outcome.eventProposals.count == 1)
+    #expect(outcome.eventProposals.first?.title == "Call Cluemed")
+    #expect(outcome.eventProposals.first?.startsAt == start)
+    // The calendar the card will name, read from the app rather than promised.
+    #expect(outcome.eventProposals.first?.calendarName == "Trabalho")
+    // And the model is told, in words, that nothing happened.
+    let told = outcome.appended.first { $0.role == .tool }?.content ?? ""
+    #expect(told.contains("NADA foi criado"))
+  }
+
+  /// A date the model got wrong comes back as a sentence it can act on, and no
+  /// card is drawn.
+  @Test("a start in the past produces no card")
+  func pastEventIsRefused() async throws {
+    let client = ScriptedClient(turns: [
+      .tools([
+        EvieToolCall(
+          id: "c1",
+          name: EvieCalendarEventTool.name,
+          argumentsJSON: #"{"title":"Call","start":"2001-08-07T10:30"}"#
+        )
+      ]),
+      .text("A data que eu montei já passou."),
+    ])
+
+    let outcome = try await EvieAgentLoop(mailAndCalendar: StubApps()).run(
+      messages: [ChatMessage(role: .user, content: "marca call")],
+      roots: [],
+      client: client,
+      emit: { _ in }
+    )
+
+    #expect(outcome.eventProposals.isEmpty)
+    #expect(outcome.appended.first { $0.role == .tool }?.content.contains("já passou") == true)
+  }
+
   /// A page is the least trustworthy text Evie reads. What comes back has to
   /// arrive labelled, or a page that asserts something confidently becomes the
   /// answer.
@@ -636,6 +723,21 @@ private struct StubWeb: EvieWebSearching {
     case refused
     var errorDescription: String? { "recusei esse endereço" }
   }
+}
+
+/// The Mail and Calendar apps, as far as the loop can see them.
+///
+/// It conforms to `EvieMailCalendarReading` and nothing else, which is the point
+/// worth noticing: creating an event is on a different protocol that the loop
+/// does not hold, so no test could make the loop write even on purpose.
+private struct StubApps: EvieMailCalendarReading {
+  func readMail(count: Int, unreadOnly: Bool) async throws -> [EvieMailMessage] { [] }
+
+  func searchMail(term: String, count: Int) async throws -> [EvieMailMessage] { [] }
+
+  func readCalendar(from: Date, to: Date, limit: Int) async throws -> [EvieCalendarEvent] { [] }
+
+  func listCalendars() async throws -> [String] { ["Trabalho", "Família"] }
 }
 
 /// Gathers emitted events from whatever context the loop runs on.

@@ -290,9 +290,21 @@ extension EviePersona {
     if capabilities.readsMailAndCalendar {
       available.append(
         "Você pode ler o Mail e o Calendário deste Mac com read_mail, search_mail e "
-          + "read_calendar. Só ler: você não envia, não apaga, não marca como lida e "
-          + "não cria compromisso. Se ele pedir para marcar ou enviar algo, diga que "
-          + "você só consegue ler."
+          + "read_calendar. No Mail é só leitura: você não envia, não apaga e não marca "
+          + "como lida. Se ele pedir para enviar um e-mail, diga que você só consegue ler."
+      )
+      // The one action she has, said as an instruction to call a function.
+      // Phrased around the mistake the loop actually made before this existed:
+      // asked to schedule something, she searched the notes for a meeting that
+      // did not exist. The date rule is here rather than in the tool summary
+      // because it is the failure the card is there to catch.
+      available.append(
+        "Para marcar um compromisso, chame propose_event. Você não cria nada sozinha: "
+          + "isso mostra um cartão e o compromisso só existe se \(creatorPreferredName) "
+          + "confirmar — então nunca diga que já marcou, diga que a sugestão está na tela. "
+          + "Resolva a data e a hora você mesma a partir da data de hoje e mande "
+          + "AAAA-MM-DDTHH:MM; não procure nas anotações um compromisso que ele está "
+          + "pedindo para criar agora."
       )
     } else {
       unavailable.append("ler o Mail ou a agenda")

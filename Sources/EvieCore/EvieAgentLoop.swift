@@ -75,6 +75,9 @@ public struct EvieAgentLoop: Sendable {
     public var changeProposals: [EvieFileChange] = []
     /// Ways of working she asked to keep. Nothing installed.
     public var skillProposals: [EvieSkill] = []
+    /// Events she asked to create. Nothing is in the calendar: the loop cannot
+    /// reach the app that writes, only the one that reads.
+    public var eventProposals: [EvieCalendarEventProposal] = []
   }
 
   /// Runs the turn.
@@ -112,6 +115,7 @@ public struct EvieAgentLoop: Sendable {
     var memoryProposals: [String] = []
     var changeProposals: [EvieFileChange] = []
     var skillProposals: [EvieSkill] = []
+    var eventProposals: [EvieCalendarEventProposal] = []
     var toolNames: [String] = []
     var readAddresses: [String] = []
     // Memory is offered alongside the file tools, and is the only one of them
@@ -129,6 +133,11 @@ public struct EvieAgentLoop: Sendable {
     }
     if mailAndCalendar != nil {
       tools += EvieMailCalendarTool.definitions
+      // Proposing an event rides on the same switch as reading the calendar,
+      // because it is the same permission surface: the same app, the same
+      // Automation grant, the same "sim" in the same System Settings pane. A
+      // second switch would be a second thing to explain for no extra decision.
+      tools.append(EvieCalendarEventTool.definition)
     }
     if offersChanges, !roots.isEmpty {
       tools.append(EvieChangeTool.definition)
@@ -239,7 +248,8 @@ public struct EvieAgentLoop: Sendable {
             readAttachment: carriesAttachment
           ),
           changeProposals: changeProposals,
-          skillProposals: skillProposals
+          skillProposals: skillProposals,
+          eventProposals: eventProposals
         )
       }
 
@@ -257,7 +267,8 @@ public struct EvieAgentLoop: Sendable {
             readAttachment: carriesAttachment
           ),
           changeProposals: changeProposals,
-          skillProposals: skillProposals
+          skillProposals: skillProposals,
+          eventProposals: eventProposals
         )
       }
 
@@ -280,6 +291,12 @@ public struct EvieAgentLoop: Sendable {
           let appTool = EvieMailCalendarTool(rawValue: call.name)
         {
           result = await Self.runAppleApp(appTool, call: call, using: mailAndCalendar)
+        } else if let mailAndCalendar, call.name == EvieCalendarEventTool.name {
+          let (outcome, proposal) = await Self.recordEvent(call, using: mailAndCalendar)
+          result = outcome
+          if let proposal {
+            eventProposals.append(proposal)
+          }
         } else if EvieMailCalendarTool.refusedWritingNames.contains(call.name) {
           // Reached only when the model invents a name that was never declared.
           // Answered with a sentence rather than "essa ferramenta não existe",
@@ -287,7 +304,7 @@ public struct EvieAgentLoop: Sendable {
           result = EvieToolResult(
             callID: call.id,
             name: call.name,
-            content: EvieMailCalendarTool.writingRefusal,
+            content: EvieMailCalendarTool.writingRefusal(offersEvents: mailAndCalendar != nil),
             isFailure: true
           )
         } else if offersChanges, call.name == EvieChangeTool.name {
@@ -356,7 +373,8 @@ public struct EvieAgentLoop: Sendable {
             readAttachment: carriesAttachment
           ),
       changeProposals: changeProposals,
-      skillProposals: skillProposals
+      skillProposals: skillProposals,
+      eventProposals: eventProposals
     )
   }
 }
@@ -511,6 +529,9 @@ extension EvieAgentLoop {
       }
       if call.name == EvieSkillTool.name {
         return "Escrevendo um jeito de fazer isso da próxima vez…"
+      }
+      if call.name == EvieCalendarEventTool.name {
+        return "Montando o compromisso para você conferir…"
       }
       switch EvieMailCalendarTool(rawValue: call.name) {
       case .readMail:
@@ -682,6 +703,59 @@ extension EvieAgentLoop {
         content: (error as? LocalizedError)?.errorDescription
           ?? "Não consegui falar com o app.",
         isFailure: true
+      )
+    }
+  }
+
+  /// Turns an event request into a card, and creates nothing.
+  ///
+  /// The calendars are read here rather than at the button, so the card can name
+  /// the one the event will land in and so a name the model invented fails while
+  /// it still has a turn left to fix it. Reading them is the only thing this
+  /// function does to the app.
+  fileprivate static func recordEvent(
+    _ call: EvieToolCall,
+    using apps: any EvieMailCalendarReading
+  ) async -> (EvieToolResult, EvieCalendarEventProposal?) {
+    let calendars: [String]
+    do {
+      calendars = try await apps.listCalendars()
+    } catch {
+      return (
+        EvieToolResult(
+          callID: call.id,
+          name: call.name,
+          content: (error as? LocalizedError)?.errorDescription
+            ?? "Não consegui falar com o Calendário.",
+          isFailure: true
+        ),
+        nil
+      )
+    }
+
+    switch EvieCalendarEventTool.proposal(from: call, calendars: calendars) {
+    case .failure(let reason):
+      return (
+        EvieToolResult(
+          callID: call.id, name: call.name, content: reason.message, isFailure: true
+        ),
+        nil
+      )
+
+    case .success(let proposal):
+      return (
+        EvieToolResult(
+          callID: call.id,
+          name: call.name,
+          content: """
+            Sugestão mostrada ao Matheus: \(proposal.summary), \
+            \(EvieCalendarEventProposal.stampFormatter.string(from: proposal.startsAt)), \
+            na agenda \(proposal.calendarName). NADA foi criado — só acontece se \
+            ele confirmar na tela. Não diga que já marcou; diga que a sugestão \
+            está aí esperando.
+            """
+        ),
+        proposal
       )
     }
   }

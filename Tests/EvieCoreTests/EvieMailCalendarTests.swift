@@ -23,7 +23,11 @@ struct EvieMailCalendarScriptTests {
       #expect(!script.contains("\\("), "um script tem interpolação: \(script.prefix(60))")
       // Every one of them takes its inputs the only safe way there is.
       #expect(script.hasPrefix("on run argv"))
-      #expect(script.contains("item 1 of argv"))
+      // `listCalendars` is the one script with nothing to pass it, so it has
+      // nothing to read out of `argv`. Every other one has to.
+      if script != EvieAppleScripts.listCalendars {
+        #expect(script.contains("item 1 of argv"))
+      }
     }
   }
 
@@ -34,14 +38,34 @@ struct EvieMailCalendarScriptTests {
     for script in EvieAppleScripts.all {
       #expect(!script.contains("do shell script"))
       #expect(!script.contains("System Events"))
-      // Reading only. None of the writing verbs appears anywhere.
-      //
-      // The trailing space on `send ` is load-bearing: `sender of m` is how a
-      // message says who it came from, and it is the first thing every one of
-      // these scripts reads.
+    }
+  }
+
+  /// Reading only, for the ones that read.
+  ///
+  /// The trailing space on `send ` is load-bearing: `sender of m` is how a
+  /// message says who it came from, and it is the first thing every one of these
+  /// scripts reads.
+  @Test("the reading scripts contain no verb that writes")
+  func readingScriptsOnlyRead() {
+    for script in EvieAppleScripts.reading {
       for verb in ["delete", "make new", "send ", "set read status", "move "] {
         #expect(!script.contains(verb), "\(verb) aparece num script que deveria só ler")
       }
+    }
+  }
+
+  /// The one script that writes, held to what it is allowed to write.
+  ///
+  /// It creates an event and does nothing else — no deleting, no sending, no
+  /// touching a message. Checked because "creating is allowed now" is exactly
+  /// the kind of permission somebody widens by one line later.
+  @Test("the writing script only creates an event")
+  func writingScriptOnlyCreates() {
+    #expect(EvieAppleScripts.writing == [EvieAppleScripts.createEvent])
+    #expect(EvieAppleScripts.createEvent.contains("make new event"))
+    for verb in ["delete", "send ", "set read status", "move ", "Mail"] {
+      #expect(!EvieAppleScripts.createEvent.contains(verb), "\(verb) aparece no script que cria")
     }
   }
 
@@ -94,6 +118,70 @@ struct EvieMailCalendarScriptTests {
         "2026; do shell script \"touch \(witness.path)\"", "8", "1", "2026", "8", "2", "5",
       ]
     )
+    #expect(exit != 0, "a coerção deveria falhar")
+    #expect(!FileManager.default.fileExists(atPath: witness.path))
+  }
+
+  /// The same claim for the script that writes, where the stakes are higher.
+  ///
+  /// The title is the hostile field: it is text a model produced out of
+  /// something a person — or an e-mail — wrote, and it is the only free-form
+  /// string that reaches the creating script. The payload is written to break out
+  /// of a quoted AppleScript string and run `do shell script "touch …"`.
+  ///
+  /// The calendar name is deliberately one that cannot exist, so the script
+  /// returns its marker before reaching `make new event` and this test never puts
+  /// anything in anybody's calendar. That does not weaken it: interpolation, if
+  /// it happened anywhere, would happen while the source was being assembled —
+  /// long before the calendar is looked up — so the witness file would exist
+  /// either way.
+  ///
+  /// Measured on this Mac with Calendar open: exit status 0, output
+  /// `EVIE_AGENDA_NAO_ACHADA`, no file created, and nothing new in the calendar.
+  @Test("a hostile event title is data, not code")
+  func hostileEventTitleDoesNothing() throws {
+    let witness = FileManager.default.temporaryDirectory
+      .appendingPathComponent("evie-injection-\(UUID().uuidString).txt")
+    try? FileManager.default.removeItem(at: witness)
+
+    let payloads = [
+      "reunião\"; do shell script \"touch \(witness.path)\"; --",
+      "\"} , summary:\"x\"); do shell script \"touch \(witness.path)\"; (\"",
+      "'; do shell script 'touch \(witness.path)'; '",
+    ]
+    // A name no calendar has, so the script stops before it creates anything.
+    let nowhere = "EVIE-AGENDA-INEXISTENTE-\(UUID().uuidString)"
+    for payload in payloads {
+      let exit = try Self.runScript(
+        EvieAppleScripts.createEvent,
+        arguments: [payload, nowhere, payload]
+          + ["2099", "1", "1", "10", "0", "2099", "1", "1", "11", "0"]
+      )
+      #expect(exit == 0, "osascript saiu com \(exit) para \(payload)")
+      #expect(
+        !FileManager.default.fileExists(atPath: witness.path),
+        "o payload executou: \(payload)"
+      )
+    }
+  }
+
+  /// A word where an hour belongs must fail the coercion and take the script
+  /// down with it, exactly as it does for the reading calendar script.
+  @Test("a hostile time argument fails to coerce and creates nothing")
+  func hostileTimeArgumentDoesNothing() throws {
+    let witness = FileManager.default.temporaryDirectory
+      .appendingPathComponent("evie-injection-\(UUID().uuidString).txt")
+    try? FileManager.default.removeItem(at: witness)
+
+    let exit = try Self.runScript(
+      EvieAppleScripts.createEvent,
+      arguments: ["Teste", "Pessoal", ""]
+        + [
+          "2099", "1", "1", "10; do shell script \"touch \(witness.path)\"", "0",
+          "2099", "1", "1", "11", "0",
+        ]
+    )
+
     #expect(exit != 0, "a coerção deveria falhar")
     #expect(!FileManager.default.fileExists(atPath: witness.path))
   }
@@ -323,11 +411,24 @@ struct EvieMailCalendarToolTests {
   /// A model that invents `send_mail` gets a sentence it can act on rather than
   /// "essa ferramenta não existe", which reads as a spelling problem and gets
   /// tried again with a different spelling.
-  @Test("the refusal says she only reads")
+  @Test("the refusal says she only reads, and names the one thing she proposes")
   func refusalIsExplicit() {
-    #expect(EvieMailCalendarTool.writingRefusal.contains("só leio"))
+    let offered = EvieMailCalendarTool.writingRefusal(offersEvents: true)
+    #expect(offered.contains("só leio"))
+    // The name of the function that does exist, so a model that reached for
+    // `create_event` has somewhere to go.
+    #expect(offered.contains(EvieCalendarEventTool.name))
+
+    // With the switch off there is no such function, and naming one that is not
+    // declared sends it round the loop for nothing.
+    let withheld = EvieMailCalendarTool.writingRefusal(offersEvents: false)
+    #expect(!withheld.contains(EvieCalendarEventTool.name))
+
     #expect(EvieMailCalendarTool.refusedWritingNames.contains("send_mail"))
     #expect(EvieMailCalendarTool.refusedWritingNames.contains("delete_event"))
+    // Still refused: the name of the thing that creates an event is
+    // `propose_event`, and it draws a card rather than creating one.
+    #expect(EvieMailCalendarTool.refusedWritingNames.contains("create_event"))
   }
 
   /// What comes out of the inbox is the one local source a stranger can write
@@ -373,6 +474,243 @@ struct EvieMailCalendarToolTests {
 
     #expect(described.contains("mostrei os \(EvieMailCalendar.maximumEventCount) primeiros"))
     #expect(!described.contains("Evento 59"))
+  }
+}
+
+@Suite("Evie calendar event proposals")
+struct EvieCalendarEventProposalTests {
+  private static let calendars = ["Trabalho", "Família"]
+
+  private static func call(_ arguments: [String: String]) -> EvieToolCall {
+    let data = try? JSONSerialization.data(withJSONObject: arguments)
+    return EvieToolCall(
+      id: "1",
+      name: EvieCalendarEventTool.name,
+      argumentsJSON: data.flatMap { String(data: $0, encoding: .utf8) } ?? "{}"
+    )
+  }
+
+  private static func moment(_ text: String) throws -> Date {
+    try #require(EvieMailCalendar.parseMoment(text))
+  }
+
+  /// The request this was built for: "marca call pela cluemed pra mim hoje 10:30
+  /// da manhã", once she has resolved the date herself.
+  @Test("a start with no end lasts an hour, in the first calendar")
+  func defaultsAreApplied() throws {
+    let now = try Self.moment("2026-08-07T09:00")
+    let result = EvieCalendarEventTool.proposal(
+      from: Self.call(["title": "Call Cluemed", "start": "2026-08-07T10:30"]),
+      calendars: Self.calendars,
+      now: now
+    )
+
+    let proposal = try #require(try? result.get())
+    #expect(proposal.title == "Call Cluemed")
+    #expect(proposal.duration == EvieCalendarEventProposal.defaultDuration)
+    #expect(proposal.endsAt == (try Self.moment("2026-08-07T11:30")))
+    // Not "a agenda padrão": a real name, resolved before the card is drawn.
+    #expect(proposal.calendarName == "Trabalho")
+  }
+
+  /// The whole point of the card. Somebody who asked for segunda has to be able
+  /// to see that terça is what she resolved.
+  @Test("the card spells the weekday out and names the calendar")
+  func cardIsLegible() throws {
+    let proposal = EvieCalendarEventProposal(
+      title: "Call Cluemed",
+      startsAt: try Self.moment("2026-08-11T10:30"),
+      endsAt: try Self.moment("2026-08-11T11:30"),
+      calendarName: "Trabalho"
+    )
+
+    #expect(proposal.summary.contains("Call Cluemed"))
+    #expect(proposal.detail.contains("terça-feira"))
+    #expect(proposal.detail.contains("11 de agosto de 2026"))
+    #expect(proposal.detail.contains("10:30 às 11:30"))
+    #expect(proposal.detail.contains("1 h"))
+    #expect(proposal.detail.contains("Agenda: Trabalho"))
+    // Never an ISO stamp: that is the form a person reads as correct because it
+    // reads as machine output.
+    #expect(!proposal.detail.contains("2026-08-11"))
+  }
+
+  /// After it exists, it has to be findable — and undoable.
+  @Test("the receipt says where it landed")
+  func receiptNamesThePlace() throws {
+    let proposal = EvieCalendarEventProposal(
+      title: "Call Cluemed",
+      startsAt: try Self.moment("2026-08-11T10:30"),
+      endsAt: try Self.moment("2026-08-11T11:30"),
+      calendarName: "Trabalho"
+    )
+
+    #expect(proposal.receipt.contains("Trabalho"))
+    #expect(proposal.receipt.contains("terça-feira"))
+    #expect(proposal.receipt.contains("Calendário"))
+  }
+
+  /// A date in the past is almost always a resolution mistake — the wrong year,
+  /// or last Friday instead of the next one — and refusing is friendlier than
+  /// filing it where he will never look.
+  @Test("a start in the past is refused, and the refusal shows the date it read")
+  func pastIsRefused() throws {
+    let now = try Self.moment("2026-08-07T14:00")
+    let result = EvieCalendarEventTool.proposal(
+      from: Self.call(["title": "Call", "start": "2025-08-07T10:30"]),
+      calendars: Self.calendars,
+      now: now
+    )
+
+    guard case .failure(let reason) = result else {
+      Issue.record("uma data do ano passado deveria ser recusada")
+      return
+    }
+    #expect(reason.message.contains("já passou"))
+    // The date it actually resolved, so the model can see what it got wrong.
+    #expect(reason.message.contains("2025"))
+  }
+
+  /// Not zero tolerance: a turn takes seconds, "marca agora" is a real request,
+  /// and failing on a clock that moved during the request helps nobody.
+  @Test("a start a minute ago is still honoured")
+  func recentPastIsAllowed() throws {
+    let now = try Self.moment("2026-08-07T10:31")
+    let result = EvieCalendarEventTool.proposal(
+      from: Self.call(["title": "Call", "start": "2026-08-07T10:30"]),
+      calendars: Self.calendars,
+      now: now
+    )
+
+    #expect((try? result.get()) != nil)
+  }
+
+  @Test("an empty title is asked for rather than invented")
+  func emptyTitleIsRefused() throws {
+    let now = try Self.moment("2026-08-07T09:00")
+    let result = EvieCalendarEventTool.proposal(
+      from: Self.call(["title": "   ", "start": "2026-08-07T10:30"]),
+      calendars: Self.calendars,
+      now: now
+    )
+
+    guard case .failure(let reason) = result else {
+      Issue.record("um compromisso sem título deveria ser recusado")
+      return
+    }
+    #expect(reason == .missingTitle)
+  }
+
+  /// A name that is slightly wrong must not quietly become the default one: a
+  /// work call landing in the family calendar is not noticed until the wrong
+  /// people are looking at it.
+  @Test("an unknown calendar is refused, with the real names")
+  func unknownCalendarIsRefused() throws {
+    let now = try Self.moment("2026-08-07T09:00")
+    let result = EvieCalendarEventTool.proposal(
+      from: Self.call([
+        "title": "Call", "start": "2026-08-07T10:30", "calendar": "Trampo",
+      ]),
+      calendars: Self.calendars,
+      now: now
+    )
+
+    guard case .failure(let reason) = result else {
+      Issue.record("uma agenda inexistente deveria ser recusada")
+      return
+    }
+    #expect(reason.message.contains("Trabalho"))
+    #expect(reason.message.contains("Família"))
+  }
+
+  @Test("a calendar named in another case still matches")
+  func calendarMatchIsCaseInsensitive() throws {
+    let now = try Self.moment("2026-08-07T09:00")
+    let result = EvieCalendarEventTool.proposal(
+      from: Self.call([
+        "title": "Call", "start": "2026-08-07T10:30", "calendar": "trabalho",
+      ]),
+      calendars: Self.calendars,
+      now: now
+    )
+
+    #expect((try? result.get())?.calendarName == "Trabalho")
+  }
+
+  @Test("an end before the start, and an end a year away, are both refused")
+  func endsAreChecked() throws {
+    let now = try Self.moment("2026-08-07T09:00")
+    let backwards = EvieCalendarEventTool.proposal(
+      from: Self.call([
+        "title": "Call", "start": "2026-08-07T10:30", "end": "2026-08-07T09:30",
+      ]),
+      calendars: Self.calendars,
+      now: now
+    )
+    let endless = EvieCalendarEventTool.proposal(
+      from: Self.call([
+        "title": "Call", "start": "2026-08-07T10:30", "end": "2027-08-07T11:30",
+      ]),
+      calendars: Self.calendars,
+      now: now
+    )
+
+    #expect((try? backwards.get()) == nil)
+    #expect((try? endless.get()) == nil)
+  }
+
+  /// A timezone designator would move the event without saying so, and the card
+  /// would show the moved hour and be believed. This Mac has one clock.
+  @Test("a moment is read without a locale, and a timezone is refused")
+  func momentsAreParsed() throws {
+    let moment = try #require(EvieMailCalendar.parseMoment("2026-08-07T10:30"))
+    let parts = Calendar.current.dateComponents(
+      [.year, .month, .day, .hour, .minute],
+      from: moment
+    )
+    #expect(parts.month == 8)
+    #expect(parts.day == 7)
+    #expect(parts.hour == 10)
+    #expect(parts.minute == 30)
+
+    // Seconds are accepted and ignored; a model writes them about half the time.
+    #expect(EvieMailCalendar.parseMoment("2026-08-07T10:30:00") == moment)
+    #expect(EvieMailCalendar.parseMoment("2026-08-07 10:30") == moment)
+
+    #expect(EvieMailCalendar.parseMoment("2026-08-07T10:30Z") == nil)
+    #expect(EvieMailCalendar.parseMoment("2026-08-07T10:30-03:00") == nil)
+    #expect(EvieMailCalendar.parseMoment("amanhã de manhã") == nil)
+    #expect(EvieMailCalendar.parseMoment("2026-08-07") == nil)
+    #expect(EvieMailCalendar.parseMoment("2026-08-07T25:00") == nil)
+  }
+
+  /// The five integers the script rebuilds a moment from, so no date literal is
+  /// ever parsed in the machine's locale.
+  @Test("a moment travels as five integers")
+  func componentsRoundTrip() throws {
+    let moment = try Self.moment("2026-08-07T10:30")
+
+    #expect(EvieMailCalendar.components(of: moment) == [2026, 8, 7, 10, 30])
+  }
+
+  @Test("a length is spelled the way a person says one")
+  func durationsAreSpelled() {
+    #expect(EvieCalendarEventProposal.spell(1_800) == "30 min")
+    #expect(EvieCalendarEventProposal.spell(3_600) == "1 h")
+    #expect(EvieCalendarEventProposal.spell(5_400) == "1 h 30 min")
+    #expect(EvieCalendarEventProposal.spell(2 * 24 * 3_600) == "2 dias")
+  }
+
+  /// The boundary, stated as a test: the only calendar-writing name the model
+  /// ever sees is the one that draws a card.
+  @Test("the declared tool proposes and does not create")
+  func toolOnlyProposes() {
+    #expect(EvieCalendarEventTool.name == "propose_event")
+    #expect(EvieCalendarEventTool.definition.summary.contains("NÃO cria nada"))
+    #expect(
+      Set(EvieCalendarEventTool.definition.parameters.filter(\.isRequired).map(\.name))
+        == ["title", "start"]
+    )
   }
 }
 
