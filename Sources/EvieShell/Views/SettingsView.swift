@@ -33,6 +33,7 @@ struct SettingsView: View {
       .tabItem { Label("Voz", systemImage: "waveform") }
 
       KnowledgeTabView(
+        preferencesViewModel: preferencesViewModel,
         rootsViewModel: rootsViewModel,
         memoryViewModel: memoryViewModel,
         skillsViewModel: skillsViewModel
@@ -107,6 +108,7 @@ private struct VoiceTabView: View {
 
 /// What she can reach, and what she has been allowed to keep.
 private struct KnowledgeTabView: View {
+  @ObservedObject var preferencesViewModel: EviePreferencesViewModel
   @ObservedObject var rootsViewModel: EvieRootsViewModel
   @ObservedObject var memoryViewModel: EvieMemoryViewModel
   @ObservedObject var skillsViewModel: EvieSkillsViewModel
@@ -114,7 +116,7 @@ private struct KnowledgeTabView: View {
   var body: some View {
     VStack(spacing: 0) {
       PaneSelector(
-        titles: ["Pastas", "Memória", "Habilidades"],
+        titles: ["Pastas", "Memória", "Habilidades", "Mail e agenda"],
         selection: $memoryViewModel.knowledgePane
       )
       switch memoryViewModel.knowledgePane {
@@ -122,8 +124,13 @@ private struct KnowledgeTabView: View {
         RootsSettingsView(viewModel: rootsViewModel)
       case 1:
         MemorySettingsView(viewModel: memoryViewModel)
-      default:
+      case 2:
         SkillsSettingsView(viewModel: skillsViewModel)
+      default:
+        MailCalendarSettingsView(
+          viewModel: preferencesViewModel,
+          setEnabled: preferencesViewModel.setMailAndCalendarEnabled
+        )
       }
     }
   }

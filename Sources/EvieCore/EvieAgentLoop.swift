@@ -117,7 +117,13 @@ public struct EvieAgentLoop: Sendable {
     // Memory is offered alongside the file tools, and is the only one of them
     // that is about her rather than about the disk. It still changes nothing.
     var tools =
-      EvieFileToolbox.definitions + [EvieMemoryTool.definition, EvieSkillTool.definition]
+      EvieFileToolbox.definitions
+      + [
+        EvieMemoryTool.definition, EvieSkillTool.definition,
+        // Always declared. Arithmetic has no privacy dimension and no I/O, and a
+        // calculator behind a switch is a calculator nobody turns on.
+        EvieCalculatorTool.definition,
+      ]
     if web != nil {
       tools += EvieWebTool.definitions
     }
@@ -285,6 +291,8 @@ public struct EvieAgentLoop: Sendable {
           if let proposal {
             changeProposals.append(proposal)
           }
+        } else if call.name == EvieCalculatorTool.name {
+          result = EvieCalculatorTool.execute(call)
         } else if call.name == EvieSkillTool.name {
           if let skill = EvieSkillTool.skill(from: call) {
             skillProposals.append(skill)

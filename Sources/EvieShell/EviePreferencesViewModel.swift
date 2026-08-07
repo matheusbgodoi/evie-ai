@@ -175,6 +175,14 @@ final class EviePreferencesViewModel: ObservableObject {
 
   // MARK: - Internet
 
+  func setMailAndCalendarEnabled(_ enabled: Bool) {
+    apply(
+      successMessage: enabled
+        ? "Ela pode ler seu Mail e sua agenda agora."
+        : "Ela não lê mais seu Mail nem sua agenda."
+    ) { $0.mailAndCalendarEnabled = enabled }
+  }
+
   func setWebSearchEnabled(_ enabled: Bool) {
     apply(
       successMessage: enabled

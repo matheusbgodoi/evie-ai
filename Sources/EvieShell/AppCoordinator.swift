@@ -146,6 +146,9 @@ final class AppCoordinator: NSObject {
       self?.skillsViewModel.install(skill)
     }
     viewModel.isWebSearchEnabled = { [weak self] in self?.preferences.webSearchEnabled ?? false }
+    viewModel.isMailAndCalendarEnabled = { [weak self] in
+      self?.preferences.mailAndCalendarEnabled ?? false
+    }
     viewModel.fileChangePolicy = { [weak self] in
       guard let self else { return (false, false) }
       return (preferences.fileChangesEnabled, preferences.autoApproveChanges)
@@ -212,6 +215,9 @@ final class AppCoordinator: NSObject {
     // offer to look, and the moment a folder is authorised she must know she
     // can. Claiming either wrongly is the fastest way to make her useless.
     capabilities.readsLocalFiles = hasGrantedFolders
+    // Declared unconditionally: the tool is always offered, so the persona may
+    // always tell her to use it.
+    capabilities.calculates = true
     capabilities.searchesTheWeb = preferences.webSearchEnabled
     capabilities.speaksAnswers =
       preferences.voice.speechOutputEnabled && !EvieSpeechOutput.availableVoices().isEmpty

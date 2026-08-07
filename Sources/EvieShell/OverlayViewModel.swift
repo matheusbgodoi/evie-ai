@@ -103,6 +103,9 @@ final class OverlayViewModel: ObservableObject {
   /// Whether web search is switched on, asked for at the start of every turn so
   /// turning it off takes effect on the next question.
   var isWebSearchEnabled: @MainActor () -> Bool = { false }
+  /// Whether she may read the Mail and Calendar apps. Off unless switched on:
+  /// somebody's inbox is not a default.
+  var isMailAndCalendarEnabled: @MainActor () -> Bool = { false }
   /// Whether she may suggest changing a file, and whether a suggestion happens
   /// without a button. Both asked for per turn, so switching them off in Settings
   /// applies to the next question rather than the next launch.
@@ -851,6 +854,8 @@ final class OverlayViewModel: ObservableObject {
     // to be told so is a slower answer for nothing.
     let roots = grantedRoots()
     let web: (any EvieWebSearching)? = isWebSearchEnabled() ? EvieWebClient() : nil
+    let apps: (any EvieMailCalendarReading)? =
+      isMailAndCalendarEnabled() ? EvieMailCalendarClient() : nil
     let changePolicy = fileChangePolicy()
     // Read from his own message, not from the model's decision: a proposal that
     // came out of a document must still stop at a button.
@@ -913,7 +918,7 @@ final class OverlayViewModel: ObservableObject {
 
     requestTask = Task { @MainActor [weak self] in
       do {
-        guard !roots.isEmpty || web != nil else {
+        guard !roots.isEmpty || web != nil || apps != nil else {
           for try await event in client.stream(messages: requestMessages) {
             try Task.checkCancellation()
             self?.receive(event, requestID: requestID, userMessage: userMessage)
@@ -926,6 +931,7 @@ final class OverlayViewModel: ObservableObject {
         // not close over the outer closure's mutable binding.
         let outcome = try await EvieAgentLoop(
           web: web,
+          mailAndCalendar: apps,
           vault: self?.retrieveFromVault,
           offersChanges: changePolicy.offers
         ).run(

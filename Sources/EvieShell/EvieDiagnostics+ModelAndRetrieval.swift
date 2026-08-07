@@ -12,6 +12,9 @@ extension EvieDiagnostics {
   static func printPersona() {
     var capabilities = EvieCapabilitySnapshot.textOnly
     capabilities.readsImagesAndDocuments = true
+    // Always true in the running app — the tool is declared on every turn — so
+    // the diagnostic has to say so too, or it prints a persona nobody receives.
+    capabilities.calculates = true
     if EvieAudioCapture.isBundled, #available(macOS 26, *) {
       capabilities.listensToSpeech = EvieSpeechTranscription.isSupported
     }
