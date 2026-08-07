@@ -4,6 +4,10 @@ All notable changes to Evie are documented here. Dates use `YYYY-MM-DD`.
 
 ## [Unreleased]
 
+Nothing since the `1.0.2` section below.
+
+## [1.0.2] - 2026-08-07
+
 ### Fixed
 
 - **She answers about the company you asked about.** Asking "em uma frase, o que
@@ -14,6 +18,11 @@ All notable changes to Evie are documented here. Dates use `YYYY-MM-DD`.
   "cluemed" — it returns "cluumed", which matches nothing. A search term that
   finds nothing now gets one chance to be a near miss, and when that happens she
   says which word actually matched instead of quietly substituting it.
+
+  It costs time when it fires: the question that used to be answered wrongly in
+  45 s is now answered correctly in about 105 s, because she scans again with the
+  corrected word and then opens the note. The fast version was the one that gave
+  up.
 
 ## [1.0.1] - 2026-08-07
 
