@@ -39,13 +39,23 @@ jobs:
             ${{ runner.os }}-spm-${{ hashFiles('Package.swift') }}-
             ${{ runner.os }}-spm-
 
-      - name: Build the application
-        # The product, not `--build-tests`. Building the test targets that way
-        # loses the Swift Testing macro plugin on a Command Line Tools
-        # toolchain — "plugin for module 'TestingMacros' not found" — which is
-        # the whole reason Scripts/test exists. Tests are built by the step
-        # below, through the shim that knows where the plugin lives.
-        run: swift build --product evie-shell
+      - name: Build the core
+        # `EvieCore`, not the `evie-shell` product, and this is a real
+        # limitation rather than a preference.
+        #
+        # `EvieShell` needs the macOS 27 SDK. `EvieVisionDescriber` uses
+        # `Attachment` from FoundationModels, which exists in the 27 SDK and not
+        # in 26. The `if #available(macOS 27, *)` around it governs what runs,
+        # not what compiles, so a 26 SDK fails to find the symbol at all. The
+        # newest runner GitHub offers is macos-26 (26.5, Xcode 26.6), so the
+        # shell cannot be built here until a macOS 27 image exists.
+        #
+        # What that leaves is still worth having: every one of the 618 tests
+        # lives in EvieCoreTests and depends only on EvieCore, so the suite runs
+        # in full. The gap is that `EvieShell` compiles nowhere but the author's
+        # Mac, and that is recorded in docs/PROJECT_STATUS.md rather than hidden
+        # behind a green tick.
+        run: swift build --target EvieCore
 
       - name: Test
         # Scripts/test resolves the Swift Testing macro plugin and rpaths for
