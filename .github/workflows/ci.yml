@@ -58,10 +58,10 @@ jobs:
         run: swift build --target EvieCore
 
       - name: Test
-        # Scripts/test resolves the Swift Testing macro plugin and rpaths for
-        # both a Command Line Tools and a full Xcode toolchain, and compiles
-        # with -warnings-as-errors.
-        run: Scripts/test
+        # --core-only because plain `swift test` builds EvieShell too, which
+        # needs an SDK no runner has. The flag and the reason live in
+        # Scripts/test rather than here, so the knowledge stays in one place.
+        run: Scripts/test --core-only
 
   documentation:
     name: Documentation

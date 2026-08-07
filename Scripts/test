@@ -30,4 +30,23 @@ elif [[ -f "${xcode_testing_plugin}" ]]; then
   )
 fi
 
+# `--core-only` builds just the test target and its dependency, then runs the
+# suite without letting SwiftPM rebuild the package.
+#
+# It exists for continuous integration, not for this Mac. `swift test` builds
+# every target including `EvieShell`, and `EvieShell` needs the macOS 27 SDK —
+# `EvieVisionDescriber` uses `Attachment` from FoundationModels, which the 26
+# SDK does not define, and the `if #available(macOS 27, *)` around it decides
+# what runs rather than what compiles. GitHub's newest macOS image is 26.5, so
+# a runner cannot build the shell at all. Every one of the tests lives in
+# `EvieCoreTests` and depends only on `EvieCore`, so the whole suite still runs
+# there.
+#
+# Delete this branch when a macOS 27 runner image exists.
+if [[ "${1:-}" == "--core-only" ]]; then
+  shift
+  swift build --target EvieCoreTests "${swift_test_arguments[@]}"
+  exec swift test --skip-build "${swift_test_arguments[@]}" "$@"
+fi
+
 exec swift test "${swift_test_arguments[@]}" "$@"
