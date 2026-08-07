@@ -1575,9 +1575,9 @@ nothing is measurable.
 
 Kept together so they are not lost among the features.
 
-- **A `git add -A` swept `.claude/worktrees` into the repository.** Those are
-  throwaway checkouts that background agents work in; committing them nests
-  repositories inside this one. Ignored now.
+- **A `git add -A` swept the tooling's worktree directory into the repository.**
+  Those are throwaway checkouts; committing them nests repositories inside this
+  one. Ignored now.
 - **The crooked chevron was "fixed" against the wrong cause.** The first
   explanation was that its origin rounded to a whole point, leaving the two arms on
   different half-pixel phases on a 2× display, and it was snapped to the device
@@ -2214,7 +2214,7 @@ one is a trap this repository had already documented and then walked into anyway
   contains. It is not dated and `REL-001` is not marked done: cutting a release is
   an action and it is the owner's.
 
-## 2026-08-07 — Claude — what a question costs on battery
+## 2026-08-07 — what a question costs on battery
 
 - Phase: measurement only, no source changed
 - Occasion: the owner unplugged the Mac and asked for the figure the resource
@@ -2250,7 +2250,7 @@ one is a trap this repository had already documented and then walked into anyway
   limitation, and `docs/PROJECT_STATUS.md` where battery and energy were listed
   among the results that did not exist.
 
-## 2026-08-07 — Claude — the battery measurement, corrected
+## 2026-08-07 — the battery measurement, corrected
 
 - Phase: measurement only, no source changed
 - Occasion: the owner quit the applications that had contaminated the first
@@ -2292,7 +2292,7 @@ one is a trap this repository had already documented and then walked into anyway
   the sampling weakness now stated as a property of the register rather than only
   of `--energy-check`), `README.md`, `docs/PROJECT_STATUS.md`.
 
-## 2026-08-07 — Claude — a licence, CI, and the first release
+## 2026-08-07 — a licence, CI, and the first release
 
 - Commits: licence and CI, the macOS 26 manifest correction, the CI scope
   correction, `REL-001` closed, and two signing-check faults
@@ -2349,7 +2349,7 @@ server is about 780 MB built locally and the model about 13 GB downloaded,
 neither of which can ship in a release. **The repository is still private, so
 nobody but the owner can fetch it.**
 
-## 2026-08-07 — Claude — where the seconds actually go
+## 2026-08-07 — where the seconds actually go
 
 - Occasion: the owner proposed routing everyday questions to a 7B or 9B model
   and keeping Gemma for hard ones. The investigation killed that plan and found
