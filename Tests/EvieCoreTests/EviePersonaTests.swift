@@ -56,8 +56,12 @@ struct EviePersonaTests {
 
   @Test("produces the same prompt for the same capabilities")
   func isDeterministic() {
-    let first = EviePersona.evie.systemPrompt(capabilities: .allEnabled)
-    let second = EviePersona.evie.systemPrompt(capabilities: .allEnabled)
+    // The moment is fixed here: the prompt now carries the current date, so two
+    // calls that straddle a minute boundary differ by design rather than by
+    // accident, and the determinism worth testing is everything else.
+    let moment = Date(timeIntervalSince1970: 1_786_123_920)
+    let first = EviePersona.evie.systemPrompt(capabilities: .allEnabled, now: moment)
+    let second = EviePersona.evie.systemPrompt(capabilities: .allEnabled, now: moment)
 
     #expect(first == second)
   }

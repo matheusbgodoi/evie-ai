@@ -17,6 +17,10 @@ public struct EvieCapabilitySnapshot: Hashable, Sendable {
   public var seesImages: Bool
   public var searchesTheWeb: Bool
   public var hasSemanticMemory: Bool
+  /// Whether the `calculate` tool is declared to the model. Off until the agent
+  /// loop actually offers it: telling her to send every sum to a function that
+  /// was never declared turns an easy question into a rejected request.
+  public var calculates: Bool
 
   public init(
     listensToSpeech: Bool = false,
@@ -25,7 +29,8 @@ public struct EvieCapabilitySnapshot: Hashable, Sendable {
     readsImagesAndDocuments: Bool = false,
     seesImages: Bool = false,
     searchesTheWeb: Bool = false,
-    hasSemanticMemory: Bool = false
+    hasSemanticMemory: Bool = false,
+    calculates: Bool = false
   ) {
     self.listensToSpeech = listensToSpeech
     self.speaksAnswers = speaksAnswers
@@ -34,6 +39,7 @@ public struct EvieCapabilitySnapshot: Hashable, Sendable {
     self.seesImages = seesImages
     self.searchesTheWeb = searchesTheWeb
     self.hasSemanticMemory = hasSemanticMemory
+    self.calculates = calculates
   }
 
   public static let textOnly = EvieCapabilitySnapshot()
@@ -45,7 +51,8 @@ public struct EvieCapabilitySnapshot: Hashable, Sendable {
     readsImagesAndDocuments: true,
     seesImages: true,
     searchesTheWeb: true,
-    hasSemanticMemory: true
+    hasSemanticMemory: true,
+    calculates: true
   )
 }
 
@@ -107,12 +114,24 @@ public struct EviePersona: Hashable, Sendable {
 
   /// The hidden system message. It is never persisted to history and never
   /// mentions which model or server is answering.
-  public func systemPrompt(capabilities: EvieCapabilitySnapshot) -> String {
+  ///
+  /// `now` is a parameter rather than a call to `Date()` buried inside so the
+  /// prompt stays testable, and so the caller is the one deciding how fresh the
+  /// clock is. It defaults to the moment of the call: the prompt has to be
+  /// rebuilt every turn for the date in it to be true, and a prompt built once
+  /// at launch and kept is a prompt that says yesterday after midnight.
+  public func systemPrompt(
+    capabilities: EvieCapabilitySnapshot,
+    now: Date = Date(),
+    timeZone: TimeZone = .current
+  ) -> String {
     (
       [
         identitySection,
+        clockSection(now: now, timeZone: timeZone),
         capabilitySection(capabilities),
         conductSection,
+        arithmeticSection(capabilities),
         // Last, because the end of a prompt is what a model weighs most, and this
         // is the rule it is most likely to skip: a model with tools available
         // will happily answer from memory instead of using them.
@@ -136,6 +155,60 @@ extension EviePersona {
     Você roda inteiramente neste Mac. Nada do que \(creatorPreferredName) diz sai daqui. \
     Responda em português do Brasil, salvo se ele escrever em outro idioma.
     """
+  }
+
+  /// What day it is.
+  ///
+  /// Without this the model has no clock at all, and every answer about "hoje",
+  /// "esta semana", "amanhã" or how long is left until a date is a guess written
+  /// in the voice of a fact. The weekday is spelled out because most of what
+  /// gets asked is which day something falls on, and the timezone is named
+  /// because a deadline without one is only approximately a deadline.
+  fileprivate func clockSection(now: Date, timeZone: TimeZone) -> String {
+    let locale = Locale(identifier: "pt_BR")
+
+    let day = DateFormatter()
+    day.locale = locale
+    day.timeZone = timeZone
+    day.dateFormat = "EEEE, d 'de' MMMM 'de' yyyy"
+
+    let clock = DateFormatter()
+    clock.locale = locale
+    clock.timeZone = timeZone
+    clock.dateFormat = "HH:mm"
+
+    let zone =
+      timeZone.localizedName(for: .generic, locale: locale)
+      ?? timeZone.identifier
+
+    return """
+      Agora é \(day.string(from: now)), \(clock.string(from: now)) (\(zone)). \
+      Essa é a hora desta pergunta, e é de onde saem "hoje", "ontem", "amanhã", \
+      "esta semana", "quanto falta para" e qualquer prazo. Nunca chute a data, \
+      e não use uma data que você lembre de outro lugar.
+      """
+  }
+
+  /// Where a number comes from.
+  ///
+  /// A separate paragraph rather than a line among the conduct rules, because
+  /// this is an instruction to call a function and the file tools' experience
+  /// here is unambiguous: a rule about tool use phrased as a principle, buried
+  /// in a list, gets skipped. It sits immediately before the source-order block
+  /// so the two "use the tool, do not improvise" rules end the prompt together.
+  fileprivate func arithmeticSection(_ capabilities: EvieCapabilitySnapshot) -> String {
+    guard capabilities.calculates else {
+      return ""
+    }
+
+    return """
+      TODA CONTA VAI PARA A FERRAMENTA calculate, sem exceção — inclusive as \
+      fáceis, inclusive quando você tem certeza do resultado. Some, subtraia, \
+      multiplique, divida, tire porcentagem e faça média chamando calculate e \
+      copiando o número que voltar. Vale também para a conta que aparece no meio \
+      de uma resposta sobre outra coisa. Se você escrever um número que não veio \
+      de calculate, de um arquivo ou de uma página, ele é um chute.
+      """
   }
 
   fileprivate func capabilitySection(_ capabilities: EvieCapabilitySnapshot) -> String {
@@ -197,6 +270,17 @@ extension EviePersona {
       available.append("Você pode consultar a web e deve citar de onde veio cada informação.")
     } else {
       unavailable.append("consultar a web")
+    }
+
+    // Only ever announced, never denied. "Você não consegue calcular" would be
+    // false — she can do arithmetic, just unreliably — and the honest version of
+    // that is the rule below about where a number comes from, not a missing
+    // capability.
+    if capabilities.calculates {
+      available.append(
+        "Você tem uma calculadora de verdade, a ferramenta calculate, e é ela que faz "
+          + "as contas — não você."
+      )
     }
 
     if capabilities.hasSemanticMemory {
@@ -268,8 +352,8 @@ extension EviePersona {
       qualquer coisa sobre a vida, os projetos ou as empresas de \
       \(creatorPreferredName). Na dúvida sobre se precisa procurar, procure.
 
-      Não precisa procurar para: conta simples, tradução, reescrever ou resumir um \
-      texto que ele já te deu, e conversa.
+      Não precisa procurar para: conta — essa vai para a calculate —, tradução, \
+      reescrever ou resumir um texto que ele já te deu, e conversa.
 
       Sempre diga de onde veio a resposta: cite o arquivo quando vier das anotações \
       dele, cite o endereço quando vier da web. Nunca cite uma fonte que você não \
