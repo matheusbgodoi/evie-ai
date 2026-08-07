@@ -2291,3 +2291,60 @@ one is a trap this repository had already documented and then walked into anyway
 - Documents corrected: `docs/RESOURCE_BUDGET.md` (the whole battery section, and
   the sampling weakness now stated as a property of the register rather than only
   of `--energy-check`), `README.md`, `docs/PROJECT_STATUS.md`.
+
+## 2026-08-07 — Claude — a licence, CI, and the first release
+
+- Commits: licence and CI, the macOS 26 manifest correction, the CI scope
+  correction, `REL-001` closed, and two signing-check faults
+- Phase: `REL-001`
+
+**Licence.** Personal and domestic use free; commercial use, selling and
+redistribution not; copyright the author's. Written because a repository with no
+licence is all rights reserved by default, which reads as the opposite of what
+publishing suggests. It states what it does not cover — the model, the inference
+server, Apple's frameworks, and the user's own data, which never reaches this
+repository at all.
+
+**CI, and what it found on its first run.** `Package.swift` declared
+`.macOS(.v15)`. `EvieSpeechTranscription` uses `SpeechAnalyzer` and
+`EvieVisionDescriber` uses `Attachment` from FoundationModels, neither of which
+exists before macOS 26 and 27 respectively, so a `macos-15` runner could not find
+the types. `README.md` had said "macOS 26 or newer" all along: the manifest was
+the document that was wrong. Raising the target then surfaced what it had hidden
+— `posix_spawn_file_actions_addchdir_np` is deprecated as of macOS 26, and under
+`-warnings-as-errors` that is a build failure.
+
+**What CI cannot do, stated rather than omitted.** `EvieShell` needs the macOS 27
+SDK and GitHub's newest image is 26.5 with Xcode 26.6. Building `EvieCoreTests`
+alone and running with `--skip-build` was tried: it works on this Mac's Command
+Line Tools, where the bundle is `EvieCoreTests.xctest`, and fails on a runner's
+full Xcode, which looks for a whole-package `EviePackageTests.xctest` that a
+single-target build never produces. So CI builds `EvieCore` and checks two things
+about the documents — every relative Markdown link resolves, and `PROJECT_STATUS`
+may not strike `REL-001` through while `CHANGELOG` has no dated `1.0.0`. The
+absent test step is a comment where the step would be.
+
+**Two signing faults, one of which had never worked.** `Scripts/evie-release`
+checked the signature with `codesign … | grep -q "^Authority="` under
+`set -o pipefail`. `grep -q` exits at the first match, `codesign` dies of SIGPIPE
+writing the rest, and the pipeline takes its 141 — so the check reported "signed
+ad-hoc, with no certificate" for a bundle whose Authority was plainly `Evie Dev`.
+Measured: `rc=141` on a correctly signed application. **It failed on every
+bundle, so no release could ever have been cut through it.** The same shape sat
+in `Scripts/evie-app`'s `signing_identity`, where a SIGPIPE would mean silently
+signing ad-hoc while a valid certificate sat in the keychain; that one has been
+working in practice, so it is a latent fault removed rather than a bug observed.
+This is the second time a signing script in this repository turned out never to
+have worked — `identity` was the first.
+
+`Scripts/evie-release` was also not resumable: it commits the version bump before
+tagging, and the retry after the first failure died on `git commit` with nothing
+staged.
+
+**`REL-001` closed.** `v1.0.0` published, shipping the application — a 3 MB zip
+of a 9.9 MB bundle — because the updater installs only a bundle signed with the
+same key and a source tag cannot offer that. `README.md` now says what the
+download is and is not before somebody finds out the hard way: the inference
+server is about 780 MB built locally and the model about 13 GB downloaded,
+neither of which can ship in a release. **The repository is still private, so
+nobody but the owner can fetch it.**
