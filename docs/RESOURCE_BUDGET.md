@@ -121,7 +121,7 @@ row against the running server with no pause between.
 
 **Conditions**, because they change the numbers: on AC power, battery at 80% and
 not charging. **Other applications were running throughout and were not stopped**
-— Adobe Creative Cloud, Google Chrome, and a Terminal running the tooling. This
+— Adobe Creative Cloud, Google Chrome, and a Terminal running the measurement. This
 is not a clean room, and it is deliberately not one: it is the machine as its
 owner actually uses it. The consequence is that machine-wide figures (GPU, free
 memory) include that other work, and only the per-process figures are Evie's
@@ -274,7 +274,7 @@ Portuguese, capped at 220 completion tokens, non-streaming, one at a time.
 
 **Conditions.** Adobe Creative Cloud, which dominates every AC measurement in this
 document, was **quit** for this run. What remained was Chrome, Obsidian, Terminal
-and the terminal tooling taking the measurement — the last of which was the
+and the terminal process taking the measurement — the last of which was the
 largest single consumer and cannot be removed, since it is the thing doing the
 measuring.
 
@@ -333,7 +333,7 @@ Three things that number is not:
 - **It assumes this shape of question** — about 154 completion tokens. A long
   answer costs proportionally more time and therefore more energy.
 - **It still is not a clean-room figure.** The 5.6 W baseline includes the
-  terminal tooling that took the measurement, and a genuinely idle Mac would be
+  terminal process that took the measurement, and a genuinely idle Mac would be
   lower still.
 
 **A weakness in `--energy-check` that this run exposed.** The command samples GPU

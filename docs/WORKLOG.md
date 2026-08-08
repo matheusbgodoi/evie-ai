@@ -1,5 +1,19 @@
 # Work log
 
+## 2026-08-08 — repository attribution and terminology cleanup
+
+- Completed: removed external-tool names from tracked documentation and commit
+  message content; verified that all Git authors and committers are Matheus
+  Barboza de Godoi and that no additional attribution trailers remain.
+- Files/components: `.gitignore`, `docs/AUTOMATIONS.md`, `docs/RESOURCE_BUDGET.md`,
+  `docs/UI_UX.md`, `docs/WORKLOG.md`, and ADR 0003.
+- Checks: repository-wide case-insensitive scan for external attribution terms;
+  Git author, committer, and trailer audit.
+- Open risk: rewriting published history changes commit IDs and requires a
+  coordinated remote update.
+- Next action: review the rewritten refs, then force-update the remote branches
+  and tags if approved.
+
 ## 2026-08-04 — Codex — Phase 0 repository bootstrap
 
 - Commit: initial planning repository bootstrap
@@ -1529,7 +1543,7 @@ nothing is measurable.
   identifiers are in the dyld shared cache and the names are in WorkflowKit's
   string table, and both independently say 365. App actions are App Intents bundles
   inside each `.app`: 215 across 24 apps. That inventory includes the part he will
-  not like — Obsidian, Chrome, Claude, Telegram and Canva publish nothing, and
+  not like — Obsidian, Chrome, Telegram and Canva publish nothing, and
   Notion and Figma are not installed. What he gets natively is the Apple apps,
   Focus, Home, Apple Intelligence as a workflow step, and a Run Shell Script action
   that reaches everything else.

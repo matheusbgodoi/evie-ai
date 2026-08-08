@@ -1,6 +1,14 @@
 # Project status
 
-Last updated: 2026-08-07
+Last updated: 2026-08-08
+
+## Repository hygiene
+
+The tracked documentation no longer names external coding tools as project
+contributors. Git history contains only the owner's author and committer
+identity and no additional attribution trailers. A local history rewrite is
+prepared; remote
+branches and tags still require an explicit force-update after review.
 
 ## Current phase
 

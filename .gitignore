@@ -75,4 +75,4 @@ benchmarks/results/
 tmp/
 
 # Agent worktrees and local agent config — never part of the project.
-.claude/
+.agent-worktrees/

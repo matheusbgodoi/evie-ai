@@ -32,8 +32,8 @@ Useful interaction patterns:
 Implementation facts that limit direct reuse:
 
 - Clui CC is Electron/React/TypeScript rather than native macOS;
-- its backend launches and resumes Claude Code sessions and consumes Claude-specific
-  NDJSON/hooks;
+- its backend launches and resumes external coding sessions and consumes
+  product-specific NDJSON/hooks;
 - its voice interaction is input/transcription only, without wake word, output TTS,
   or reactive waveform;
 - its named glass surfaces are visually opaque CSS panels rather than native

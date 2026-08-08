@@ -4,7 +4,8 @@ All notable changes to Evie are documented here. Dates use `YYYY-MM-DD`.
 
 ## [Unreleased]
 
-Nothing since the `1.0.2` section below.
+- Repository attribution and terminology cleanup; Git history is being prepared
+  to contain only the owner's author and committer identity.
 
 ## [1.0.2] - 2026-08-07
 

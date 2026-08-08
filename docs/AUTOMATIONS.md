@@ -493,7 +493,7 @@ this machine gives **215 app-provided actions across 24 apps**:
 And the ones he actually lives in, checked directly:
 
 - **Obsidian — no App Intents bundle. No Shortcuts actions at all.**
-- **Google Chrome — none.** Claude, Telegram, Discord, Canva, Safari — none.
+- **Google Chrome — none.** Telegram, Discord, Canva, Safari — none.
 - **Notion and Figma are not installed on this Mac** (`/Applications/Notion.app`,
   `/Applications/Figma.app` do not exist).
 

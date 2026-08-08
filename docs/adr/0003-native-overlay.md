@@ -7,7 +7,8 @@
 
 CLUI CC demonstrates a desirable transparent global overlay, compact command pill,
 task states, and permission cards. Its Electron runtime and backend are tightly
-coupled to Claude Code and do not provide the desired wake-word/TTS interaction.
+coupled to an external coding tool and do not provide the desired wake-word/TTS
+interaction.
 
 ## Decision
 
