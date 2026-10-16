@@ -16,11 +16,12 @@ public protocol LocalBrainStarting {
   /// shown as it is.
   func ensureRunning(_ profile: EvieModelProfile) async throws -> URL
 
-  /// Whether what listens on the profile's port is the configured server: its
-  /// endpoint when it is, nil when nothing listens; throws when another
-  /// process holds the port. Asked before every turn on a brain the readiness
-  /// probe found answering, since the probe cannot tell who answered.
-  func isServing(_ profile: EvieModelProfile) throws -> URL?
+  /// Whether what listens on the profile's port is the configured server,
+  /// holding to the key it was started with: its endpoint when it is, nil
+  /// when nothing listens; throws when another process holds the port. Asked
+  /// before every turn on a brain the readiness probe found answering, since
+  /// the probe cannot tell who answered.
+  func isServing(_ profile: EvieModelProfile) async throws -> URL?
 
   /// A turn is using the brain now: its idle clock starts again.
   func noteUse()

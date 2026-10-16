@@ -339,7 +339,8 @@ extension ModelReadinessProbeTests {
   fileprivate func makeProbe(
     for server: StubServer,
     tokens: [CredentialReference: String],
-    allowedRemoteHosts: [String]? = nil
+    allowedRemoteHosts: [String]? = nil,
+    localBrainKey: LocalBrainKeyFile? = nil
   ) -> (ModelReadinessProbe, RecordingCredentialProvider) {
     let configuration = URLSessionConfiguration.ephemeral
     configuration.protocolClasses = [ReadinessStubURLProtocol.self]
@@ -349,7 +350,10 @@ extension ModelReadinessProbeTests {
       transportPolicy: ModelTransportPolicy(
         allowedRemoteHosts: allowedRemoteHosts ?? [server.host]
       ),
-      session: URLSession(configuration: configuration)
+      session: URLSession(configuration: configuration),
+      // Never the real file beside brain.pid.
+      localBrainKey: localBrainKey ?? LocalBrainKeyFile(
+        url: FileManager.default.temporaryDirectory.appendingPathComponent("\(UUID().uuidString).key"))
     ).makeReadinessProbe(
       deadlines: ModelReadinessProbe.Deadlines(
         health: .milliseconds(200),
@@ -507,6 +511,39 @@ extension ModelReadinessProbeTests {
     #expect(report.readiness.rung == .ready)
     #expect(report.lines.map(\.outcome) == [.passed, .notNeeded, .passed])
     #expect(report.title(of: .reachable, for: profile) == "Servidor do Mac rodando")
+  }
+
+  @Test("a Mac brain's /health carries its per-launch key, and the key step stays the person's")
+  func macBrainHealthCarriesTheKey() async throws {
+    let server = StubServer.loopback()
+    let profile = server.localProfile()
+    server.answer(
+      "/health",
+      with: .json(200, LocalBrainHealthFixtures.health(loadedModel: profile.model))
+    )
+    let keyFile = try LocalBrainKeyTests.temporaryKeyFile()
+    let key = LocalBrainKeyFile.makeKey()
+    try keyFile.write(key)
+    let (probe, _) = makeProbe(for: server, tokens: [:], localBrainKey: keyFile)
+
+    let report = await probe.connectionReport(for: profile)
+
+    #expect(report.readiness.rung == .ready)
+    // Nothing for the person to paste or import: the key is Evie's own.
+    #expect(report.lines.map(\.outcome) == [.passed, .notNeeded, .passed])
+    #expect(server.sent.map(\.authorization) == ["Bearer \(key)"])
+  }
+
+  @Test("a Mac brain that refuses the key is modelCold, which the launcher then checks")
+  func macBrainRefusingTheKey() async throws {
+    let server = StubServer.loopback()
+    server.answer("/health", with: .json(401, #"{"detail":"Invalid API key"}"#))
+    let (probe, _) = makeProbe(
+      for: server, tokens: [:], localBrainKey: try LocalBrainKeyTests.temporaryKeyFile())
+
+    let readiness = await probe.check(server.localProfile())
+
+    #expect(readiness.rung == .modelCold)
   }
 
   @Test("a Mac brain that is not running fails the first step and is still modelCold")
@@ -682,8 +719,14 @@ private final class StubServer: Sendable {
     return profile
   }
 
+  /// The Mac profile with its runtime on this stub's port, so its endpoint is
+  /// the runtime's, as validation requires.
   func localProfile() -> EvieModelProfile {
     var profile = EvieModelProfileSet.builtIn.profile(id: EvieModelProfile.macProfileID)!
+    if case .localOnDemand(var runtime) = profile.runtime, let port {
+      runtime.port = port
+      profile.runtime = .localOnDemand(runtime)
+    }
     profile.endpoint = URL(string: "http://\(authority)/v1")!
     return profile
   }

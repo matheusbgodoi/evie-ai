@@ -121,7 +121,7 @@ struct LocalBrainPolicyTests {
     #expect(pair("--host", in: arguments) == "127.0.0.1")
   }
 
-  @Test("the environment is offline and inherits nothing that could reconfigure the server")
+  @Test("the environment is offline, carries Evie's key, and inherits nothing that could reconfigure the server")
   func environmentIsMinimalAndOffline() {
     let inherited = [
       "HOME": "/Users/someone",
@@ -140,7 +140,9 @@ struct LocalBrainPolicyTests {
       "EVIE_MODEL_PROFILE": "mac-local",
     ]
 
-    let environment = LocalBrainPolicy.makeEnvironment(inheriting: inherited)
+    let key = LocalBrainKeyFile.makeKey()
+
+    let environment = LocalBrainPolicy.makeEnvironment(inheriting: inherited, apiKey: key)
 
     #expect(
       environment == [
@@ -152,13 +154,28 @@ struct LocalBrainPolicyTests {
         "HF_HOME": "/Volumes/Models/hf",
         "PATH": "/usr/bin:/bin:/usr/sbin:/sbin",
         "HF_HUB_OFFLINE": "1",
+        // Evie's own per-launch key, never the one her environment carried.
+        "MLX_VLM_SERVER_API_KEY": key,
       ]
     )
   }
 
+  @Test("the key reaches the server through its environment, never its argv")
+  func keyIsNotInTheArguments() {
+    let key = LocalBrainKeyFile.makeKey()
+
+    let arguments = LocalBrainPolicy.makeArguments(runtime, model: model)
+    let environment = LocalBrainPolicy.makeEnvironment(inheriting: [:], apiKey: key)
+
+    #expect(environment["MLX_VLM_SERVER_API_KEY"] == key)
+    #expect(!arguments.contains(key))
+    #expect(!arguments.contains { $0.hasPrefix("--api") })
+  }
+
   @Test("the environment is offline even when the caller has almost nothing")
   func environmentFromNothing() {
-    let environment = LocalBrainPolicy.makeEnvironment(inheriting: [:])
+    let environment = LocalBrainPolicy.makeEnvironment(
+      inheriting: [:], apiKey: LocalBrainKeyFile.makeKey())
 
     #expect(environment["HF_HUB_OFFLINE"] == "1")
     #expect(environment["PATH"] == "/usr/bin:/bin:/usr/sbin:/sbin")

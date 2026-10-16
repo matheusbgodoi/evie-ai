@@ -5,8 +5,10 @@ import Synchronization
 /// server: the PC gateway over the tailnet, or a server on this Mac's loopback.
 ///
 /// Before a byte leaves the Mac the endpoint must pass `ModelTransportPolicy`,
-/// and the key goes only over https to the host it was saved for. Redirects are
-/// refused outright, so the `Authorization` header cannot follow one anywhere.
+/// and the key goes only over https to the host it was saved for — except the
+/// Mac brain's per-launch key, which goes over http to 127.0.0.1 on that
+/// brain's own port and nowhere else (ADR 0017). Redirects are refused
+/// outright, so the `Authorization` header cannot follow one anywhere.
 ///
 /// The client only performs inference. Tool execution and authorization belong to
 /// Hermes/the Evie supervisor and are intentionally outside this adapter.
@@ -19,6 +21,7 @@ public final class OpenAICompatibleClient: AgentClient, Sendable {
   private let transportPolicy: ModelTransportPolicy
   private let session: URLSession
   private let deadlines: ModelDeadlinePolicy
+  private let localBrainKey: LocalBrainKeyFile
 
   /// The largest body Evie sends. The gateway refuses anything over 64 MB with a
   /// 413; refusing at 60 MiB here means the conversation is never uploaded only
@@ -32,13 +35,15 @@ public final class OpenAICompatibleClient: AgentClient, Sendable {
     credentials: any EvieCredentialProviding,
     transportPolicy: ModelTransportPolicy,
     session: URLSession,
-    deadlines: ModelDeadlinePolicy = .standard
+    deadlines: ModelDeadlinePolicy = .standard,
+    localBrainKey: LocalBrainKeyFile
   ) {
     self.configuration = configuration
     self.credentials = credentials
     self.transportPolicy = transportPolicy
     self.session = session
     self.deadlines = deadlines
+    self.localBrainKey = localBrainKey
   }
 
   public func stream(
@@ -74,7 +79,8 @@ public final class OpenAICompatibleClient: AgentClient, Sendable {
       credentials: credentials,
       transportPolicy: transportPolicy,
       session: session,
-      deadlines: deadlines
+      deadlines: deadlines,
+      localBrainKey: localBrainKey
     )
 
     return AsyncThrowingStream { continuation in
@@ -117,6 +123,7 @@ private struct Turn: Sendable {
   let transportPolicy: ModelTransportPolicy
   let session: URLSession
   let deadlines: ModelDeadlinePolicy
+  let localBrainKey: LocalBrainKeyFile
 
   typealias Continuation = AsyncThrowingStream<EvieInteractionEvent, any Error>.Continuation
 
@@ -130,11 +137,17 @@ private struct Turn: Sendable {
     ) {
       throw ModelClientError.transportRefused(reason)
     }
-    let bearerToken = try await OpenAICompatibleClient.bearerToken(
-      for: url,
-      credential: configuration.credential,
-      from: credentials
-    )
+    let bearerToken =
+      try await OpenAICompatibleClient.bearerToken(
+        for: url,
+        credential: configuration.credential,
+        from: credentials
+      )
+      ?? OpenAICompatibleClient.localBrainToken(
+        for: url,
+        port: configuration.localBrainPort,
+        from: localBrainKey
+      )
     let request = try OpenAICompatibleClient.makeRequest(
       messages: messages,
       tools: tools,
@@ -325,6 +338,33 @@ extension OpenAICompatibleClient {
       )
     }
     return token
+  }
+
+  /// The Mac brain's per-launch key, or nil when it does not apply: the one
+  /// key that goes over plain http, and the narrow exception to the rule
+  /// above (ADR 0017).
+  ///
+  /// It goes only to `http://127.0.0.1:<port>`, the port Evie started that
+  /// brain on and checked the listener of; not to `localhost` or `::1`, which
+  /// another process could hold, not to another loopback port, and never to a
+  /// configuration that is not the brain's (`localBrainPort` nil). What it can
+  /// open is that one server, for that one launch: it is made at the start,
+  /// lives in a 0600 file and the server's environment, and dies with the
+  /// server. A missing or unreadable file sends nothing, and the server
+  /// answers 401.
+  static func localBrainToken(
+    for url: URL,
+    port: Int?,
+    from keyFile: LocalBrainKeyFile
+  ) -> String? {
+    guard let port,
+      url.scheme?.lowercased() == "http",
+      url.host == "127.0.0.1",
+      url.port == port
+    else {
+      return nil
+    }
+    return keyFile.read()
   }
 
   /// The output cap the request asks for: the turn's own, never above the

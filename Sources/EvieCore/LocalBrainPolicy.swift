@@ -78,8 +78,9 @@ public struct LocalBrainPolicy: Sendable, Equatable {
   ///   it; read from the 0.7.8 source and checked live, 2026-10-16.
   /// - `--max-num-seqs 1`: one sequence at a time, so that cap is also the
   ///   memory cap; Evie sends one request at a time anyway.
-  /// - No `--api-key`: nothing but this Mac reaches loopback, and a key would
-  ///   only be one more secret to keep.
+  /// - No `--api-key`: the per-launch key goes in the environment
+  ///   (`makeEnvironment`), because an argv is readable by every process of
+  ///   this user through `ps` (ADR 0017).
   /// - No `--enable-thinking`: the server's default stays off, and Evie sends
   ///   `enable_thinking` on every request regardless.
   public static func makeArguments(_ runtime: LocalRuntime, model: String) -> [String] {
@@ -93,14 +94,32 @@ public struct LocalBrainPolicy: Sendable, Equatable {
   }
 
   /// The server's environment: the account basics and where the model cache
-  /// lives, nothing else inherited, and offline. A stray
+  /// lives, nothing else inherited, offline, and `apiKey` — the key made for
+  /// this launch — as `MLX_VLM_SERVER_API_KEY`, which mlx-vlm 0.7.8 reads on
+  /// every request (`server/app.py`, `_server_api_key`) and then demands as
+  /// `Authorization: Bearer` on every route, `/health` included. A stray
   /// `MLX_VLM_SERVER_API_KEY`, `MAX_KV_SIZE` or `PYTHONPATH` in Evie's
   /// environment would otherwise reconfigure the server behind the argv.
-  public static func makeEnvironment(inheriting environment: [String: String]) -> [String: String] {
+  public static func makeEnvironment(
+    inheriting environment: [String: String],
+    apiKey: String
+  ) -> [String: String] {
     var result = environment.filter { inheritedNames.contains($0.key) }
     result["PATH"] = "/usr/bin:/bin:/usr/sbin:/sbin"
     result["HF_HUB_OFFLINE"] = "1"
+    result[apiKeyVariable] = apiKey
     return result
+  }
+
+  /// The variable mlx-vlm reads its key from.
+  public static let apiKeyVariable = "MLX_VLM_SERVER_API_KEY"
+
+  /// Whether a server holds to the key: it refused `/health` without it (401)
+  /// and answered it with it. A server started by hand without a key answers
+  /// both, and one started with another key refuses both; neither is the
+  /// server Evie (or her script) started this time.
+  public static func enforcesKey(statusWithoutKey: Int?, statusWithKey: Int?) -> Bool {
+    statusWithoutKey == 401 && statusWithKey.map { (200...299).contains($0) } == true
   }
 
   private static let inheritedNames: Set<String> = [
@@ -198,6 +217,9 @@ public enum LocalBrainLaunchError: LocalizedError, Equatable, Sendable {
   case exitedDuringStartup
   /// `/health` answered, but the listener is not the process Evie started.
   case notOurServer(port: Int)
+  /// The server on the port did not hold to the key it was started with: it
+  /// answered without one, or refused the one in `brain.key`.
+  case unverifiedKey(port: Int)
   case couldNotLaunch(String)
 
   public var errorDescription: String? {
@@ -214,6 +236,9 @@ public enum LocalBrainLaunchError: LocalizedError, Equatable, Sendable {
       "O cérebro do Mac fechou enquanto acordava. \(Self.logHint)"
     case .notOurServer(let port):
       "Quem respondeu na porta \(port) não é o cérebro que a Evie iniciou; "
+        + "ela não vai mandar nada para lá."
+    case .unverifiedKey(let port):
+      "O servidor na porta \(port) não confirmou a chave com que a Evie o iniciou; "
         + "ela não vai mandar nada para lá."
     case .couldNotLaunch(let reason):
       "Não consegui acordar o cérebro do Mac: \(reason)"

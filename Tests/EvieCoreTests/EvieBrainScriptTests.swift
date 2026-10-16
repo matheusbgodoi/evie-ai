@@ -16,7 +16,7 @@ import Testing
 /// on, and only while the stand-in is still alive.
 @Suite("Evie brain script")
 struct EvieBrainScriptTests {
-  @Test("start launches the policy's argv with an offline, scrubbed environment")
+  @Test("start launches the policy's argv with an offline, scrubbed environment and a fresh key")
   func startUsesThePolicyCommand() throws {
     let sandbox = try BrainSandbox()
 
@@ -44,11 +44,17 @@ struct EvieBrainScriptTests {
     let environment = try sandbox.recordedEnvironment()
     #expect(environment["HF_HUB_OFFLINE"] == "1")
     #expect(environment["PATH"] == "/usr/bin:/bin:/usr/sbin:/sbin")
-    #expect(environment["MLX_VLM_SERVER_API_KEY"] == nil)
+    // The caller's key never reaches the server; the script's own, made for
+    // this launch, does — through the environment, not the argv.
+    let key = try #require(environment["MLX_VLM_SERVER_API_KEY"])
+    #expect(key != "would-lock-evie-out")
+    #expect(key.count == 64 && key.allSatisfy { $0.isHexDigit && !$0.isUppercase })
+    #expect(try !sandbox.recordedArguments().contains { $0.contains(key) })
     #expect(environment["MAX_KV_SIZE"] == nil)
     #expect(environment["PYTHONPATH"] == nil)
-    // The server is gone, so the record of it is too.
+    // The server is gone, so the record of it and its key are too.
     #expect(!sandbox.exists("Runtime/brain.pid"))
+    #expect(!sandbox.exists("Runtime/brain.key"))
     #expect(sandbox.exists("Runtime/brain.log"))
   }
 
@@ -112,12 +118,15 @@ struct EvieBrainScriptTests {
     defer { server.terminate() }
     try sandbox.write("\(server.processIdentifier)\n", to: "Runtime/brain.pid")
 
+    try sandbox.write(LocalBrainKeyFile.makeKey() + "\n", to: "Runtime/brain.key")
+
     let run = try sandbox.run("stop", executable: sandbox.lingering.path)
     server.waitUntilExit()
 
     #expect(run.status == 0)
     #expect(!server.isRunning)
     #expect(!sandbox.exists("Runtime/brain.pid"))
+    #expect(!sandbox.exists("Runtime/brain.key"))
   }
 }
 

@@ -22,17 +22,22 @@ public struct ModelClientFactory: Sendable {
   public let transportPolicy: ModelTransportPolicy
   public let session: URLSession
   public let deadlines: ModelDeadlinePolicy
+  /// Where the Mac brain's per-launch key is read from, for requests to its
+  /// own loopback port only.
+  public let localBrainKey: LocalBrainKeyFile
 
   public init(
     credentials: any EvieCredentialProviding,
     transportPolicy: ModelTransportPolicy = ModelTransportPolicy(),
     session: URLSession = ModelClientFactory.modelSession,
-    deadlines: ModelDeadlinePolicy = .standard
+    deadlines: ModelDeadlinePolicy = .standard,
+    localBrainKey: LocalBrainKeyFile = .standard
   ) {
     self.credentials = credentials
     self.transportPolicy = transportPolicy
     self.session = session
     self.deadlines = deadlines
+    self.localBrainKey = localBrainKey
   }
 
   public func makeClient(configuration: EvieConfiguration) -> OpenAICompatibleClient {
@@ -41,7 +46,8 @@ public struct ModelClientFactory: Sendable {
       credentials: credentials,
       transportPolicy: transportPolicy,
       session: session,
-      deadlines: deadlines
+      deadlines: deadlines,
+      localBrainKey: localBrainKey
     )
   }
 }

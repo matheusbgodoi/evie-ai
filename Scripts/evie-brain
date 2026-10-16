@@ -6,7 +6,9 @@
 # Evie starts the same server herself when a turn needs the Mac brain and stops
 # it after ten idle minutes or when she quits (ADR 0015). This script is the
 # manual way in, for measuring and for recovery, and it launches exactly what
-# Evie launches: the same executable, argv, environment, pid file and log.
+# Evie launches: the same executable, argv, environment, pid file and log, and
+# a key made for this launch (ADR 0017), kept 0600 in brain.key beside the pid
+# file and handed to the server in its environment, never in an argv.
 #
 # A server this script starts is taken over by Evie when she launches or first
 # uses it: from then on her idle timer and her quit stop it too.
@@ -18,6 +20,7 @@ readonly EVIE_SUPPORT_DIR="${EVIE_SUPPORT_DIR_OVERRIDE:-${HOME}/Library/Applicat
 readonly EVIE_BRAIN_RUNTIME_DIR="${EVIE_SUPPORT_DIR}/Runtime"
 readonly EVIE_BRAIN_PID_FILE="${EVIE_BRAIN_RUNTIME_DIR}/brain.pid"
 readonly EVIE_BRAIN_LOG="${EVIE_BRAIN_RUNTIME_DIR}/brain.log"
+readonly EVIE_BRAIN_KEY_FILE="${EVIE_BRAIN_RUNTIME_DIR}/brain.key"
 
 # The built-in Mac profile's values. Each can be overridden, for a different
 # install or for a test; the executable must stay an absolute path, never one
@@ -43,8 +46,8 @@ function usage() {
 
 # The argv Evie's launcher builds (LocalBrainPolicy.makeArguments): loopback
 # only, the KV cache capped to the client's 32K context, one sequence at a time
-# so that cap is also the memory cap, and no --api-key, since nothing but this
-# Mac can reach 127.0.0.1.
+# so that cap is also the memory cap, and no --api-key: the key goes in the
+# environment, since every process of this user can read an argv.
 function server_arguments() {
   reply=(
     --model "${EVIE_BRAIN_MODEL}"
@@ -59,7 +62,7 @@ function server_arguments() {
 # nothing inherited but the account basics and where the model cache is, so a
 # stray MLX_VLM_SERVER_API_KEY or MAX_KV_SIZE in the caller's shell cannot
 # change the server, and HF_HUB_OFFLINE=1 so a wrong model id fails instead of
-# downloading.
+# downloading. The key is added at launch, read from the key file.
 function server_environment() {
   reply=(
     "HOME=${HOME}"
@@ -97,8 +100,44 @@ function ensure_directories() {
   chmod 700 "${EVIE_SUPPORT_DIR}" "${EVIE_BRAIN_RUNTIME_DIR}"
 }
 
+# 32 bytes from /dev/urandom as 64 lowercase hex digits, the shape
+# LocalBrainKeyFile.makeKey gives and LocalBrainKeyFile.read accepts.
+function make_key() {
+  /usr/bin/od -An -tx1 -N32 /dev/urandom | /usr/bin/tr -d ' \n'
+}
+
+# Writes the key 0600 (the umask is 077 by then) and renames it into place.
+function write_key() {
+  local key="$1"
+  local partial="${EVIE_BRAIN_KEY_FILE}.$$"
+  print -r -- "${key}" > "${partial}"
+  chmod 600 "${partial}"
+  mv -f "${partial}" "${EVIE_BRAIN_KEY_FILE}"
+}
+
+# The pid file and the key that went with it: the key opens nothing once the
+# server is gone.
+function forget_server() {
+  rm -f "${EVIE_BRAIN_PID_FILE}" "${EVIE_BRAIN_KEY_FILE}"
+}
+
+# curl with the key as a header given on stdin, so it is never in curl's argv;
+# without a key file, without the header (and mlx-vlm answers 401).
+function curl_brain() {
+  local key=""
+  if [[ -f "${EVIE_BRAIN_KEY_FILE}" ]]; then
+    key=$(<"${EVIE_BRAIN_KEY_FILE}")
+  fi
+  if [[ -n "${key}" ]]; then
+    print -r -- "header = \"Authorization: Bearer ${key}\"" \
+      | /usr/bin/curl --config - "$@"
+  else
+    /usr/bin/curl "$@"
+  fi
+}
+
 function health_answers() {
-  /usr/bin/curl --fail --silent --max-time 3 "${EVIE_BRAIN_HEALTH_URL}" >/dev/null 2>&1
+  curl_brain --fail --silent --max-time 3 "${EVIE_BRAIN_HEALTH_URL}" >/dev/null 2>&1
 }
 
 function process_is_running() {
@@ -176,7 +215,7 @@ function recorded_pid() {
     print -r -- "${server_pid}"
     return 0
   fi
-  rm -f "${EVIE_BRAIN_PID_FILE}"
+  forget_server
   return 1
 }
 
@@ -220,9 +259,14 @@ function start() {
   chmod 600 "${EVIE_BRAIN_LOG}"
   print -r -- "--- $(date -u +%Y-%m-%dT%H:%M:%SZ) Scripts/evie-brain start" >> "${EVIE_BRAIN_LOG}"
 
+  write_key "$(make_key)"
+
   local started_at=${EPOCHREALTIME}
-  # `env -i` and nohup both exec, so $! is the server's own pid.
-  nohup /usr/bin/env -i "${environment[@]}" "${EVIE_BRAIN_EXECUTABLE}" "${arguments[@]}" \
+  # nohup, `env -i` and sh all exec, so $! is the server's own pid. sh reads
+  # the key from the file into the environment, so it is never in an argv.
+  nohup /usr/bin/env -i "${environment[@]}" /bin/sh -c \
+    'MLX_VLM_SERVER_API_KEY=$(/bin/cat "$1") && export MLX_VLM_SERVER_API_KEY && shift && exec "$@"' \
+    evie-brain "${EVIE_BRAIN_KEY_FILE}" "${EVIE_BRAIN_EXECUTABLE}" "${arguments[@]}" \
     >> "${EVIE_BRAIN_LOG}" 2>&1 </dev/null &
   server_pid=$!
   print -r -- "${server_pid}" > "${EVIE_BRAIN_PID_FILE}"
@@ -232,7 +276,7 @@ function start() {
   local attempt
   for attempt in {1..${EVIE_BRAIN_READY_SECONDS}}; do
     if ! process_is_running "${server_pid}"; then
-      rm -f "${EVIE_BRAIN_PID_FILE}"
+      forget_server
       print -u2 "The Mac brain exited during startup. Last lines of ${EVIE_BRAIN_LOG}:"
       tail -20 "${EVIE_BRAIN_LOG}" >&2
       return 1
@@ -265,7 +309,7 @@ function stop_pid() {
   local attempt
   for attempt in {1..50}; do
     if ! process_is_running "${server_pid}"; then
-      rm -f "${EVIE_BRAIN_PID_FILE}"
+      forget_server
       return 0
     fi
     sleep 0.1
@@ -273,7 +317,7 @@ function stop_pid() {
   kill -KILL "${server_pid}" 2>/dev/null || true
   for attempt in {1..20}; do
     if ! process_is_running "${server_pid}"; then
-      rm -f "${EVIE_BRAIN_PID_FILE}"
+      forget_server
       return 0
     fi
     sleep 0.1
@@ -327,7 +371,7 @@ function status() {
 }
 
 function health() {
-  /usr/bin/curl --fail --silent --show-error --max-time 3 "${EVIE_BRAIN_HEALTH_URL}"
+  curl_brain --fail --silent --show-error --max-time 3 "${EVIE_BRAIN_HEALTH_URL}"
   print
 }
 

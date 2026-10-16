@@ -272,7 +272,7 @@ public final class EvieBrainResolver {
   private func wakeIfNeeded(_ profile: EvieModelProfile, rung: ReadinessRung) async throws
     -> (endpoint: URL, rung: ReadinessRung)
   {
-    if rung == .ready, let endpoint = try localBrain.isServing(profile) {
+    if rung == .ready, let endpoint = try await localBrain.isServing(profile) {
       return (endpoint, .ready)
     }
     onWaking(true)

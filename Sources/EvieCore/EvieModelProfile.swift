@@ -112,7 +112,7 @@ public struct EvieModelProfile: Codable, Sendable, Identifiable, Equatable {
 
   /// The profile in the shape the model client reads.
   public var configuration: EvieConfiguration {
-    EvieConfiguration(
+    var configuration = EvieConfiguration(
       endpoint: endpoint,
       model: model,
       contextWindowTokens: contextTokens,
@@ -125,6 +125,10 @@ public struct EvieModelProfile: Codable, Sendable, Identifiable, Equatable {
       thinkingStyle: thinkingStyle,
       defaultReasoning: defaultReasoning
     )
+    if case .localOnDemand(let runtime) = runtime {
+      configuration.localBrainPort = runtime.port
+    }
+    return configuration
   }
 }
 

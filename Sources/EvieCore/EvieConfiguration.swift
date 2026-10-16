@@ -39,6 +39,11 @@ public struct EvieConfiguration: Codable, Hashable, Sendable {
   /// seconds before the first word, and on the PC its sampler is the one with no
   /// repetition guard.
   public var defaultReasoning: ReasoningLevel
+  /// The loopback port of a brain Evie starts on this Mac, nil for every
+  /// other server. Only a request to `http://127.0.0.1:<this port>` carries the
+  /// key that brain was started with (`LocalBrainKeyFile`, ADR 0017), the one
+  /// exception to "no key over http".
+  public var localBrainPort: Int?
 
   public init(
     endpoint: URL = EvieConfiguration.defaultEndpoint,

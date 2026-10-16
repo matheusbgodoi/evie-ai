@@ -17,6 +17,7 @@ supersede rather than silently rewrite them when the decision changes.
 | [0010](0010-refuse-unseen-mail-recipients.md) | Refuse a recipient the conversation never contained | Accepted for `propose_mail` |
 | [0011](0011-draft-beside-send.md) | A draft button beside the send button | Accepted for `propose_mail` |
 | [0012](0012-fused-local-retrieval.md) | Retrieval by three fused signals over a cached local embedding | Accepted for the shipped retrieval path |
-| [0013](0013-authenticated-tailnet-model-transport.md) | Authenticated tailnet model transport | Accepted for Evie v2 |
+| [0013](0013-authenticated-tailnet-model-transport.md) | Authenticated tailnet model transport | Accepted for Evie v2; superseded in part by 0017 |
 | [0014](0014-model-profiles-per-turn-resolution-failover.md) | Model profiles, per-turn resolution and per-conversation failover | Accepted for Evie v2; superseded in part by 0015 |
-| [0015](0015-on-demand-local-vlm-brain.md) | On-demand local VLM brain | Accepted for Evie v2 |
+| [0015](0015-on-demand-local-vlm-brain.md) | On-demand local VLM brain | Accepted for Evie v2; superseded in part by 0017 |
+| [0017](0017-per-launch-key-for-the-local-brain.md) | A per-launch key for the local brain | Accepted for Evie v2 (0016 is reserved for S5's computer-use authority) |

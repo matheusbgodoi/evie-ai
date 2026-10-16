@@ -1,6 +1,9 @@
 # ADR 0015: on-demand local VLM brain
 
-Status: Accepted for Evie v2 (slice S3 implemented)
+Status: Accepted for Evie v2 (slice S3 implemented); superseded in part by
+[ADR 0017](0017-per-launch-key-for-the-local-brain.md) (no `--api-key` and the
+exact environment: the server now gets a per-launch key in its environment; who
+answers is also checked for loopback-only sockets and the key)
 
 Date: 2026-10-16
 

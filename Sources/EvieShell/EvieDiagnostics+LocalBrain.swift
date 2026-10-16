@@ -45,12 +45,12 @@ extension EvieDiagnostics {
     waitForIdleUnload: Bool
   ) async {
     do {
-      let serving = try launcher.isServing(profile)
+      let serving = try await launcher.isServing(profile)
       print("já no ar antes: \(serving != nil)")
       let start = ContinuousClock.now
       let endpoint = try await launcher.ensureRunning(profile)
       print("no ar em \(start.duration(to: .now)) · \(endpoint.absoluteString)")
-      print("quem escuta é o servidor configurado: \(try launcher.isServing(profile) != nil)")
+      print("quem escuta é o servidor configurado: \(try await launcher.isServing(profile) != nil)")
       if let pid = EvieProcessInspector.listeningPID(onPort: runtime.port) {
         print("PID \(pid) · imagem \(EvieProcessInspector.executablePath(of: pid) ?? "?")")
       }

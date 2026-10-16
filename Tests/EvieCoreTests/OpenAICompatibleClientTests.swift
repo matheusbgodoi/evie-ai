@@ -337,6 +337,62 @@ struct OpenAICompatibleClientTransportTests {
     #expect(sent.first?.authorization == nil)
   }
 
+  @Test("the Mac brain's per-launch key goes over http only to 127.0.0.1 on its own port")
+  func localBrainKeyOnlyToItsPort() async throws {
+    let keyFile = try LocalBrainKeyTests.temporaryKeyFile()
+    let key = LocalBrainKeyFile.makeKey()
+    try keyFile.write(key)
+    let cases: [(endpoint: String, port: Int?, expected: String?)] = [
+      ("http://127.0.0.1:18091", 18_091, "Bearer \(key)"),
+      // Another loopback port is another process, whoever it is.
+      ("http://127.0.0.1:18092", 18_091, nil),
+      ("http://localhost:18091", 18_091, nil),
+      ("http://[::1]:18091", 18_091, nil),
+      // A loopback server Evie did not start never gets it.
+      ("http://127.0.0.1:18091", nil, nil),
+    ]
+
+    for (endpoint, port, expected) in cases {
+      let run = UUID().uuidString
+      let client = makeClient(
+        endpoint: "\(endpoint)/\(run)/ok/v1",
+        credential: nil,
+        tokens: [:],
+        localBrainPort: port,
+        keyFile: keyFile
+      )
+
+      _ = try await collect(client.stream(messages: [ChatMessage(role: .user, content: "Oi")]))
+
+      let sent = TransportStubURLProtocol.requests(containing: run)
+      #expect(sent.count == 1, "\(endpoint) \(String(describing: port))")
+      #expect(sent.first?.authorization == expected, "\(endpoint) \(String(describing: port))")
+    }
+  }
+
+  @Test("without a key file the Mac brain is asked without a key, and refuses")
+  func localBrainWithoutKeyFile() async throws {
+    let run = UUID().uuidString
+    let client = makeClient(
+      endpoint: "http://127.0.0.1:18093/\(run)/ok/v1",
+      credential: nil,
+      tokens: [:],
+      localBrainPort: 18_093,
+      keyFile: try LocalBrainKeyTests.temporaryKeyFile()
+    )
+
+    _ = try await collect(client.stream(messages: [ChatMessage(role: .user, content: "Oi")]))
+
+    #expect(TransportStubURLProtocol.requests(containing: run).first?.authorization == nil)
+  }
+
+  @Test("a Mac profile's configuration names its port, and no other profile's does")
+  func localBrainPortFromTheProfile() {
+    let profiles = EvieModelProfileSet.builtIn
+    #expect(profiles.profile(id: EvieModelProfile.macProfileID)?.configuration.localBrainPort == 38_480)
+    #expect(profiles.profile(id: EvieModelProfile.pcProfileID)?.configuration.localBrainPort == nil)
+  }
+
   @Test("the Bearer header is sent over https to the host the key is bound to")
   func bearerOverHTTPS() async throws {
     let run = UUID().uuidString
@@ -458,22 +514,26 @@ extension OpenAICompatibleClientTransportTests {
   fileprivate func makeClient(
     endpoint: String,
     credential: CredentialReference?,
-    tokens: [CredentialReference: String]
+    tokens: [CredentialReference: String],
+    localBrainPort: Int? = nil,
+    keyFile: LocalBrainKeyFile? = nil
   ) -> OpenAICompatibleClient {
     let configuration = URLSessionConfiguration.ephemeral
     configuration.protocolClasses = [TransportStubURLProtocol.self]
+    var client = EvieConfiguration(
+      endpoint: URL(string: endpoint)!,
+      maxCompletionTokens: 128,
+      requestTimeout: 5,
+      credential: credential
+    )
+    client.localBrainPort = localBrainPort
     return ModelClientFactory(
       credentials: StaticCredentialProvider(tokens: tokens),
       transportPolicy: ModelTransportPolicy(allowedRemoteHosts: [stubHost]),
-      session: URLSession(configuration: configuration)
-    ).makeClient(
-      configuration: EvieConfiguration(
-        endpoint: URL(string: endpoint)!,
-        maxCompletionTokens: 128,
-        requestTimeout: 5,
-        credential: credential
-      )
-    )
+      session: URLSession(configuration: configuration),
+      localBrainKey: keyFile ?? LocalBrainKeyFile(
+        url: FileManager.default.temporaryDirectory.appendingPathComponent("\(UUID().uuidString).key"))
+    ).makeClient(configuration: client)
   }
 
   fileprivate func collect(

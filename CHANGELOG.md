@@ -6,6 +6,16 @@ All notable changes to Evie are documented here. Dates use `YYYY-MM-DD`.
 
 ### Changed
 
+- **Security: the Mac brain answers only with the key it was started with.**
+  Every start — by Evie or by `Scripts/evie-brain` — makes a random key, keeps it
+  in `Application Support/Evie/Runtime/brain.key` (0600, removed when the server
+  stops) and gives it to `mlx_vlm.server` in its environment, so every route,
+  `/health` included, refuses a request without it: another user on this Mac, or
+  a web page reaching 127.0.0.1 through DNS rebinding, gets a 401. Evie sends it
+  only to 127.0.0.1 on that brain's port — the one key that goes over plain
+  `http` — and uses a server only after seeing it refuse a request without the
+  key. A server started by hand without a key, or by an older script, is no
+  longer used. ADR 0017.
 - **Cancelling during "Acordando o cérebro do Mac…" stops the wake.** The start
   used to run on for up to 90 s and load the ~8 GB anyway; now the server, which
   has not answered yet, is stopped (unless another turn is still waiting for

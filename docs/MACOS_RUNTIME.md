@@ -141,7 +141,11 @@ cache. It is not a persistent service: no LaunchAgent, no login item, no
   sample). Unloaded: nothing — no process, no port.
 - **Logs.** `~/Library/Application Support/Evie/Runtime/brain.log` (0600,
   appended, moved to `brain.log.1` past 10 MB at the next start) and `brain.pid`
-  (0600) beside it, shared by the app and the script. The server logs each
+  (0600) beside it, shared by the app and the script, with `brain.key` (0600):
+  the key made for the running server (ADR 0017), removed when it stops. A
+  server whose key file is gone, or one started by hand without a key, is
+  refused ("… não confirmou a chave …"): `Scripts/evie-brain stop`, then let
+  Evie or the script start it again. The server logs each
   request's token counts and timings, never the prompt.
 - **Recovery.** `Scripts/evie-brain status` (pid, RSS, health), `health` (the
   server's `/health`), `stop`. A refused start says why on the status line; the

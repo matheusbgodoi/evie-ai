@@ -1,5 +1,58 @@
 # Work log
 
+## 2026-10-16 — v2 fix: a per-launch key for the Mac brain (ADR 0017)
+
+- Completed: the queued security finding on `LocalBrainPolicy` (pending #4):
+  loopback was reachable by other local users and, through DNS rebinding, by web
+  pages, with no key.
+  - New `Sources/EvieCore/LocalBrainKey.swift`: `LocalBrainKeyFile` (`makeKey`,
+    32 random bytes as 64 hex digits; `write`, 0600 via `open(O_EXCL|O_NOFOLLOW)`
+    and `rename`; `read`, only a regular file of this user with no group/other
+    bits holding one key; `remove`; `.standard` = `Runtime/brain.key`).
+  - `LocalBrainPolicy.makeEnvironment(inheriting:apiKey:)` adds
+    `MLX_VLM_SERVER_API_KEY` (read from mlx-vlm 0.7.8's `server/app.py`: read
+    per request, demanded on every route, `/health` included);
+    `LocalBrainPolicy.enforcesKey`; `LocalBrainLaunchError.unverifiedKey`.
+  - `EvieConfiguration.localBrainPort` (set from a `.localOnDemand` profile);
+    `ModelClientFactory.localBrainKey`; `OpenAICompatibleClient.localBrainToken`
+    (http, exactly `127.0.0.1`, that port only); the readiness probe sends the
+    key on the brain's `/health` (the key step stays "not needed" for the person).
+  - `EvieLocalBrainLauncher`: writes the key before the spawn, passes it in the
+    environment, polls `/health` with it, and uses a server only after
+    `confirmKey` (401 without, 2xx with; cached by pid and start time,
+    `EvieProcessInspector.startTime`); the key file goes with the pid file.
+    `LocalBrainStarting.isServing` is `async`.
+  - `Scripts/evie-brain`: `make_key`, `write_key`, `forget_server`,
+    `curl_brain` (header on stdin); the key is read into the server's
+    environment inside the `exec` chain, so it is in no argv.
+  - ADR 0017 (supersedes 0015 and 0013 in part; both marked, README rows added;
+    0016 stays reserved for S5).
+- Tests: new suite "Local brain key" (8); "Local brain policy": the environment
+  test now expects Evie's key in place of the inherited one (it used to expect
+  no key at all — the contract changed, and the inherited value is still shown
+  to be dropped), plus "the key reaches the server through its environment,
+  never its argv"; "OpenAI-compatible client transport" (3: the key only to its
+  port, no key file, the profile's port); "Model readiness probe" (2); "Evie
+  brain script": start records a fresh 64-hex key that is not the inherited one
+  and in no argv, and the key file is gone after the stand-in exits or a stop
+  (the start test's `MLX_VLM_SERVER_API_KEY == nil` expectation became these).
+- Measured live (M5 24 GB, macOS 27.2, mlx-vlm 0.7.8, LensVLM, 2026-10-16):
+  `Scripts/evie-brain start` ready in 4.3 s; `/health`, `/v1/models` and
+  `/v1/chat/completions` 401 without the key (and `/health` 401 with a wrong
+  one); `/health` 200 and a chat request 200 in 1.13 s with it; the key in no
+  argv; `brain.key` `-rw-------`; listening on `127.0.0.1:38480` only.
+  `evie-shell --brain-check` adopted it, answered "vermelho" in 0.53 s, stopped
+  it in 0.16 s, no `brain.pid`/`brain.key`/process left. From cold: up in
+  3.18 s, "vermelho" in 1.27 s, `/health` 401 without the key meanwhile,
+  stopped in 0.16 s. A server started by hand with `--host 127.0.0.1` and no
+  key: refused with "O servidor na porta 38480 não confirmou a chave …" before
+  anything was sent; stopped by hand afterwards, port free.
+- Checks: `swift build` with no warnings; `Scripts/test --filter` over the 13
+  affected suites: 159 tests passed; full `Scripts/test`: 1074 tests in 102
+  suites passed, 1 known issue (the existing deadline witness), up from 1041 in
+  99 before these four fixes.
+- Next: the remaining second-review findings in their own lanes.
+
 ## 2026-10-16 — v2 fix: cancelling the Mac brain's wake stops it; stops wait off the main actor
 
 - Completed: second v2 review, findings #8 and #9.

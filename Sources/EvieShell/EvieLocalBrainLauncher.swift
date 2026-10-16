@@ -13,9 +13,12 @@ import Foundation
 /// is that it never takes "something answered on the port" for "the brain
 /// answered": the conversation and the screen go there, so before a turn uses
 /// the server, the process listening on the port must be the configured
-/// executable serving that port, and after a start it must be the process this
-/// launcher spawned. A pid from the pid file is never signalled before its
-/// image and argv are checked, because pids get reused.
+/// executable serving that port on loopback alone, and after a start it must
+/// be the process this launcher spawned. Every start gets a key of its own
+/// (`LocalBrainKeyFile`, ADR 0017) in the server's environment, and a server
+/// is used only once it has refused `/health` without that key and answered it
+/// with it. A pid from the pid file is never signalled before its image and
+/// argv are checked, because pids get reused.
 ///
 /// Every rule is `LocalBrainPolicy`'s (EvieCore, tested); this type carries them
 /// out against the real process table.
@@ -48,6 +51,7 @@ final class EvieLocalBrainLauncher: LocalBrainStarting {
 
   private let policy: LocalBrainPolicy
   private let shutdown: LocalBrainShutdown
+  private let keyFile: LocalBrainKeyFile
   private let healthSession: URLSession
   /// The server this launcher spawned. Keeping the `Process` keeps its exit
   /// observable and its pid ours until it is reaped.
@@ -55,6 +59,9 @@ final class EvieLocalBrainLauncher: LocalBrainStarting {
   /// The server Evie manages: her child, or one `Scripts/evie-brain` started
   /// that she has since used. It is the one the idle timer and quit stop.
   private var managed: (pid: pid_t, runtime: LocalRuntime)?
+  /// The server last seen holding to the key, by pid and start time, so a
+  /// turn on it does not ask twice and a reused pid is asked again.
+  private var keyVerified: (pid: pid_t, started: UInt64)?
   private var lastUse: ContinuousClock.Instant?
   /// The start under way, shared by the turns waiting on it and cancelled
   /// when none of them still wants it.
@@ -64,9 +71,14 @@ final class EvieLocalBrainLauncher: LocalBrainStarting {
   private var stopping: Task<Void, Never>?
   private var idleWatch: Task<Void, Never>?
 
-  init(policy: LocalBrainPolicy = .standard, shutdown: LocalBrainShutdown = .standard) {
+  init(
+    policy: LocalBrainPolicy = .standard,
+    shutdown: LocalBrainShutdown = .standard,
+    keyFile: LocalBrainKeyFile = .standard
+  ) {
     self.policy = policy
     self.shutdown = shutdown
+    self.keyFile = keyFile
     let configuration = URLSessionConfiguration.ephemeral
     configuration.timeoutIntervalForRequest = 3
     configuration.urlCache = nil
@@ -86,7 +98,7 @@ final class EvieLocalBrainLauncher: LocalBrainStarting {
     }
   }
 
-  func isServing(_ profile: EvieModelProfile) throws -> URL? {
+  func isServing(_ profile: EvieModelProfile) async throws -> URL? {
     let runtime = try Self.runtime(of: profile)
     // A server being stopped is not serving; the turn's wake waits for the
     // stop and starts another.
@@ -98,6 +110,7 @@ final class EvieLocalBrainLauncher: LocalBrainStarting {
     guard Self.isServer(listener, runtime: runtime) else {
       throw LocalBrainLaunchError.portHeld(port: runtime.port)
     }
+    try await confirmKey(of: listener, runtime: runtime)
     adopt(listener, runtime: runtime)
     return runtime.endpoint
   }
@@ -126,18 +139,19 @@ final class EvieLocalBrainLauncher: LocalBrainStarting {
     managed = nil
     child = nil
     lastUse = nil
+    keyVerified = nil
     guard Self.isServer(pid, runtime: runtime) else {
-      Self.removePIDFile(ifItNames: pid)
+      forgetFiles(ofServer: pid)
       return
     }
     let shutdown = shutdown
-    let task = Task { @MainActor in
+    let task = Task { @MainActor [weak self] in
       _ = await shutdown.stop(
         signal: { kill(pid, $0) },
         isAlive: { EvieProcessInspector.isAlive(pid) },
         waiting: waiting
       )
-      Self.removePIDFile(ifItNames: pid)
+      self?.forgetFiles(ofServer: pid)
     }
     stopping = task
     await task.value
@@ -170,6 +184,7 @@ final class EvieLocalBrainLauncher: LocalBrainStarting {
       EvieProcessInspector.listens(pid, onPort: runtime.port)
     else {
       try? FileManager.default.removeItem(at: Self.pidURL)
+      keyFile.remove()
       return
     }
     adopt(pid, runtime: runtime)
@@ -184,7 +199,12 @@ final class EvieLocalBrainLauncher: LocalBrainStarting {
       guard Self.isServer(listener, runtime: runtime) else {
         throw LocalBrainLaunchError.portHeld(port: runtime.port)
       }
-      try await waitUntilHealthy(profile, runtime: runtime, pid: listener)
+      // Started by the script, or by an earlier Evie: its key is the file's.
+      guard let key = keyFile.read() else {
+        throw LocalBrainLaunchError.unverifiedKey(port: runtime.port)
+      }
+      try await waitUntilHealthy(runtime: runtime, pid: listener, key: key)
+      try await confirmKey(of: listener, runtime: runtime)
       adopt(listener, runtime: runtime)
       return runtime.endpoint
     }
@@ -201,19 +221,21 @@ final class EvieLocalBrainLauncher: LocalBrainStarting {
     // Cancelled while the checks ran: nothing has been spawned yet.
     try Task.checkCancellation()
 
-    let process = try spawn(runtime, model: profile.model)
+    let (process, key) = try spawn(runtime, model: profile.model)
     child = process
     managed = (process.processIdentifier, runtime)
     do {
-      try await waitUntilHealthy(profile, runtime: runtime, pid: process.processIdentifier)
+      try await waitUntilHealthy(runtime: runtime, pid: process.processIdentifier, key: key)
       // `/health` says something answered; the conversation goes only to the
-      // process spawned here.
+      // process spawned here, and only once it holds to its key — which also
+      // catches an mlx-vlm that no longer reads the variable.
       guard
         let listener = EvieProcessInspector.listeningPID(onPort: runtime.port),
         EvieProcessInspector.selfAndDescendants(of: process.processIdentifier).contains(listener)
       else {
         throw LocalBrainLaunchError.notOurServer(port: runtime.port)
       }
+      try await confirmKey(of: listener, runtime: runtime)
     } catch {
       // Also how a cancelled wake ends: the child has not answered yet, and
       // nobody is waiting for it any more.
@@ -227,7 +249,9 @@ final class EvieLocalBrainLauncher: LocalBrainStarting {
     return runtime.endpoint
   }
 
-  private func spawn(_ runtime: LocalRuntime, model: String) throws -> Process {
+  /// Launches the server with a key made for this launch, written 0600 beside
+  /// the pid file first, so a server is never up without its key on disk.
+  private func spawn(_ runtime: LocalRuntime, model: String) throws -> (Process, String) {
     let manager = FileManager.default
     do {
       try manager.createDirectory(
@@ -240,12 +264,18 @@ final class EvieLocalBrainLauncher: LocalBrainStarting {
     }
     let log = try Self.openLog()
     defer { try? log.close() }
+    let key = LocalBrainKeyFile.makeKey()
+    do {
+      try keyFile.write(key)
+    } catch {
+      throw LocalBrainLaunchError.couldNotLaunch("não consegui guardar a chave: \(error.localizedDescription)")
+    }
 
     let process = Process()
     process.executableURL = URL(fileURLWithPath: runtime.executable, isDirectory: false)
     process.arguments = LocalBrainPolicy.makeArguments(runtime, model: model)
     process.environment = LocalBrainPolicy.makeEnvironment(
-      inheriting: ProcessInfo.processInfo.environment)
+      inheriting: ProcessInfo.processInfo.environment, apiKey: key)
     process.standardOutput = log
     process.standardError = log
     // No stdin: the server reads none, and an inherited one would tie an 8 GB
@@ -254,6 +284,7 @@ final class EvieLocalBrainLauncher: LocalBrainStarting {
     do {
       try process.run()
     } catch {
+      keyFile.remove()
       throw LocalBrainLaunchError.couldNotLaunch(error.localizedDescription)
     }
     // The file `Scripts/evie-brain` writes, so `stop` and `status` there see
@@ -261,24 +292,20 @@ final class EvieLocalBrainLauncher: LocalBrainStarting {
     try? String(process.processIdentifier).write(
       to: Self.pidURL, atomically: true, encoding: .utf8)
     try? manager.setAttributes([.posixPermissions: 0o600], ofItemAtPath: Self.pidURL.path)
-    return process
+    return (process, key)
   }
 
-  /// Polls `/health` until it answers, the process dies, or the start takes
-  /// longer than `readyTimeout`.
-  private func waitUntilHealthy(
-    _ profile: EvieModelProfile,
-    runtime: LocalRuntime,
-    pid: pid_t
-  ) async throws {
-    let health = URL(string: "http://127.0.0.1:\(runtime.port)/health")!
+  /// Polls `/health` with the key until it answers, the process dies, or the
+  /// start takes longer than `readyTimeout`.
+  private func waitUntilHealthy(runtime: LocalRuntime, pid: pid_t, key: String) async throws {
+    let health = Self.healthURL(runtime)
     let deadline = ContinuousClock.now + Self.readyTimeout
     while ContinuousClock.now < deadline {
       try Task.checkCancellation()
       guard EvieProcessInspector.isAlive(pid) else {
         throw LocalBrainLaunchError.exitedDuringStartup
       }
-      if await answers(health) {
+      if let status = await status(of: health, key: key), (200...299).contains(status) {
         return
       }
       try await Task.sleep(for: .milliseconds(500))
@@ -286,11 +313,41 @@ final class EvieLocalBrainLauncher: LocalBrainStarting {
     throw LocalBrainLaunchError.neverAnswered(seconds: Int(Self.readyTimeout.components.seconds))
   }
 
-  private func answers(_ health: URL) async -> Bool {
-    guard let (_, response) = try? await healthSession.data(from: health) else {
-      return false
+  /// The listener refuses `/health` without the key in `brain.key` and
+  /// answers it with it (`LocalBrainPolicy.enforcesKey`). Asked once per
+  /// server: a server's key does not change while it runs.
+  private func confirmKey(of pid: pid_t, runtime: LocalRuntime) async throws {
+    let started = EvieProcessInspector.startTime(of: pid)
+    if let started, let keyVerified, keyVerified.pid == pid, keyVerified.started == started {
+      return
     }
-    return ((response as? HTTPURLResponse)?.statusCode).map { (200...299).contains($0) } ?? false
+    let health = Self.healthURL(runtime)
+    let withoutKey = await status(of: health, key: nil)
+    var withKey: Int?
+    if let key = keyFile.read() {
+      withKey = await status(of: health, key: key)
+    }
+    guard let started,
+      LocalBrainPolicy.enforcesKey(statusWithoutKey: withoutKey, statusWithKey: withKey)
+    else {
+      throw LocalBrainLaunchError.unverifiedKey(port: runtime.port)
+    }
+    keyVerified = (pid, started)
+  }
+
+  private func status(of health: URL, key: String?) async -> Int? {
+    var request = URLRequest(url: health)
+    if let key {
+      request.setValue("Bearer \(key)", forHTTPHeaderField: "Authorization")
+    }
+    guard let (_, response) = try? await healthSession.data(for: request) else {
+      return nil
+    }
+    return (response as? HTTPURLResponse)?.statusCode
+  }
+
+  private static func healthURL(_ runtime: LocalRuntime) -> URL {
+    URL(string: "http://127.0.0.1:\(runtime.port)/health")!
   }
 
   // MARK: - Idle
@@ -377,9 +434,12 @@ final class EvieLocalBrainLauncher: LocalBrainStarting {
     return pid_t(text.trimmingCharacters(in: .whitespacesAndNewlines))
   }
 
-  private static func removePIDFile(ifItNames pid: pid_t) {
-    if recordedPID() == pid {
-      try? FileManager.default.removeItem(at: pidURL)
+  /// Removes the pid file and the key that went with it, when the pid file
+  /// names this server: the key opens nothing once the server is gone.
+  private func forgetFiles(ofServer pid: pid_t) {
+    if Self.recordedPID() == pid {
+      try? FileManager.default.removeItem(at: Self.pidURL)
+      keyFile.remove()
     }
   }
 

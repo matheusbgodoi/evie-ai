@@ -581,7 +581,7 @@ final class LauncherDouble: LocalBrainStarting {
     return servedEndpoint ?? profile.endpoint
   }
 
-  func isServing(_ profile: EvieModelProfile) throws -> URL? {
+  func isServing(_ profile: EvieModelProfile) async throws -> URL? {
     verifications += 1
     return try serving.get() ? servedEndpoint ?? profile.endpoint : nil
   }

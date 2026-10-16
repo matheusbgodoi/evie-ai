@@ -48,8 +48,9 @@ public struct ModelReadiness: Sendable, Equatable {
 /// 3. `GET {origin}/running` with the key, only when the entry says nothing
 ///    about loading — llama-swap without the gateway's metadata.
 ///
-/// A brain on this Mac gets only step 1, on loopback: no answer means it is not
-/// running, which is `modelCold` because the launcher can start it.
+/// A brain on this Mac gets only step 1, on loopback, with its per-launch key:
+/// no answer means it is not running, which is `modelCold` because the launcher
+/// can start it.
 ///
 /// Built by `ModelClientFactory`, so it obeys the same transport policy and reads
 /// the same keychain as the client: nothing goes to a host the client could not
@@ -75,17 +76,20 @@ public struct ModelReadinessProbe: Sendable {
   private let transportPolicy: ModelTransportPolicy
   private let session: URLSession
   private let deadlines: Deadlines
+  private let localBrainKey: LocalBrainKeyFile
 
   init(
     credentials: any EvieCredentialProviding,
     transportPolicy: ModelTransportPolicy,
     session: URLSession,
-    deadlines: Deadlines
+    deadlines: Deadlines,
+    localBrainKey: LocalBrainKeyFile
   ) {
     self.credentials = credentials
     self.transportPolicy = transportPolicy
     self.session = session
     self.deadlines = deadlines
+    self.localBrainKey = localBrainKey
   }
 
   public func check(_ profile: EvieModelProfile) async -> ModelReadiness {
@@ -108,8 +112,9 @@ public struct ModelReadinessProbe: Sendable {
       return log.report(.unreachable)
     }
     switch profile.runtime {
-    case .localOnDemand:
-      return await checkLocalBrain(health: urls.health, model: profile.model, log: &log)
+    case .localOnDemand(let runtime):
+      return await checkLocalBrain(
+        health: urls.health, port: runtime.port, model: profile.model, log: &log)
     case .remoteGateway:
       return await checkGateway(profile, urls: urls, log: &log)
     }
@@ -117,12 +122,21 @@ public struct ModelReadinessProbe: Sendable {
 
   private func checkLocalBrain(
     health: URL,
+    port: Int,
     model: String,
     log: inout ConnectionLog
   ) async -> ModelConnectionReport {
-    // Loopback carries no key: nothing to accept or refuse.
+    // The person has no key to give this brain: the one it takes is Evie's
+    // own, made when it started (ADR 0017), and mlx-vlm wants it on `/health`
+    // too. A server that refuses it is not one Evie can use, which the
+    // launcher sorts out; to the probe it is not running.
     log.record(.key, .notNeeded)
-    let (answer, elapsed) = await timedGet(health, within: deadlines.health)
+    let (answer, elapsed) = await timedGet(
+      health,
+      bearerToken: OpenAICompatibleClient.localBrainToken(
+        for: health, port: port, from: localBrainKey),
+      within: deadlines.health
+    )
     guard case .answered(let status, let body) = answer, (200...299).contains(status) else {
       log.record(.reachable, .failed, after: elapsed)
       return log.report(.modelCold)
@@ -311,7 +325,8 @@ extension ModelClientFactory {
       credentials: credentials,
       transportPolicy: transportPolicy,
       session: session,
-      deadlines: deadlines
+      deadlines: deadlines,
+      localBrainKey: localBrainKey
     )
   }
 }

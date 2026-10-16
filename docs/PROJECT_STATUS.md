@@ -25,6 +25,15 @@ sees. `evie-shell --presence-excluded` passed (marker 8 → 0 pixels; a capture
 the running app (Safari plus a PDF, the shortcut, the permission card, the Mac
 profile), which needs the installed app.
 
+**The Mac brain's review fixes are in (2026-10-16):** a turn goes only to
+`http://127.0.0.1:<port>/v1`, the address whose listener was checked; a server is
+adopted only when its last `--host` and every socket are loopback; cancelling
+"Acordando o cérebro do Mac…" stops the wake; stops no longer hold the main
+actor and quit waits at most the 5 s grace; and every start gets a per-launch
+key (ADR 0017) — measured live: 401 without it, 200 with it, a key-less server
+refused. Still open from the second review: findings #1, #2, #5–#7 and #10
+(other lanes) and the pending security findings #3 and #5.
+
 Next for this area: S5
 drives observing, `lookAt`, `willClick`/`didClick` and typing, posts every
 synthetic event inside `postingSyntheticInput { … }` (which releases the Esc

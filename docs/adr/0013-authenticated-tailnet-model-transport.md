@@ -1,6 +1,8 @@
 # ADR 0013: authenticated tailnet model transport
 
-Status: Accepted for Evie v2 (slice S1a implemented)
+Status: Accepted for Evie v2 (slice S1a implemented); superseded in part by
+[ADR 0017](0017-per-launch-key-for-the-local-brain.md) (the Mac brain's
+per-launch key is the one key sent over `http`, to 127.0.0.1 on its own port)
 
 Date: 2026-10-16
 

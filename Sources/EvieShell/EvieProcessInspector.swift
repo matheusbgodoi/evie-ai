@@ -56,6 +56,17 @@ enum EvieProcessInspector {
     return info.pbi_status != UInt32(SZOMB)
   }
 
+  /// When the process started, in microseconds since 1970, which with the
+  /// pid names one process: a pid can be reused, the pair cannot.
+  static func startTime(of pid: pid_t) -> UInt64? {
+    var info = proc_bsdinfo()
+    let size = Int32(MemoryLayout<proc_bsdinfo>.size)
+    guard proc_pidinfo(pid, PROC_PIDTBSDINFO, 0, &info, size) == size else {
+      return nil
+    }
+    return info.pbi_start_tvsec * 1_000_000 + info.pbi_start_tvusec
+  }
+
   /// The pid itself and every process below it.
   static func selfAndDescendants(of pid: pid_t) -> Set<pid_t> {
     var found: Set<pid_t> = [pid]

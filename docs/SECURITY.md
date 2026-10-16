@@ -150,7 +150,9 @@ body and decides where a conversation may go before it sends anything:
   `boundHost` is the request host. The token is attached only over `https` and
   only to that host — never over `http`, loopback included, since any local
   process can bind a loopback port. A key that applies but is not saved stops the
-  turn before a request is made.
+  turn before a request is made. The one exception (ADR 0017) is the Mac brain's
+  per-launch key, sent only to exactly `127.0.0.1` on the port Evie started that
+  brain on, and only to a server already seen refusing requests without it.
 - **Redirect refusal.** Every redirect is refused, so the `Authorization` header
   cannot follow a `Location` anywhere; the 3xx is reported as an error.
 - **Configuration names the key's place, not the key.** Since schema v2 the
@@ -288,7 +290,13 @@ through a proxy, tunnel, wildcard bind, or remote interface.
 The Mac brain (v2 S3, ADR 0015) is such a server, so Evie does not take "it
 answered on 38480" as "it is the brain". `mlx_vlm.server` defaults to
 `0.0.0.0`; Evie and `Scripts/evie-brain` always pass `--host 127.0.0.1`, never an
-`--api-key`, and start it with a scrubbed environment (`HF_HUB_OFFLINE=1`, a
+`--api-key` in the argv, and start it with a scrubbed environment that carries a
+key made for that launch (`MLX_VLM_SERVER_API_KEY`, ADR 0017): every route,
+`/health` included, answers 401 without it. The key lives only in that
+environment and in `Runtime/brain.key` (0600, removed when the server stops),
+never in the keychain, the configuration, an argv or a log, so another local
+user or a web page reaching 127.0.0.1 through DNS rebinding gets nothing. The
+start's environment is otherwise scrubbed (`HF_HUB_OFFLINE=1`, a
 fixed `PATH`, nothing else inherited but the account basics and the model cache
 location), so a variable in Evie's environment cannot reconfigure it and a wrong
 model id cannot trigger a download. Before every turn on it, the process
