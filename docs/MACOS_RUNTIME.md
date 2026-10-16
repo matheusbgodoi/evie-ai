@@ -129,7 +129,14 @@ cache. It is not a persistent service: no LaunchAgent, no login item, no
   `Scripts/evie-brain stop`: SIGTERM, SIGKILL after 5 s, only after the pid's
   image and argv were checked to be this server. A server left by a crash, or
   started by the script, is taken over at Evie's next launch and unloads the
-  same way.
+  same way. Evie waits for the exit by suspending (`LocalBrainShutdown`), so the
+  overlay keeps running while a server ignores SIGTERM; at quit she waits at
+  most the 5 s grace and sends SIGKILL without waiting for it to land.
+- **Cancelling a wake.** Cancelling the turn during "Acordando o cérebro do
+  Mac…" cancels the start when no other turn is waiting for it
+  (`LocalBrainWake`), and a server that has not answered `/health` yet is
+  stopped, so its ~8 GB are not loaded for nobody. The next turn waits for that
+  stop and starts afresh.
 - **Idle cost.** Loaded and idle: footprint 8,243 MB, 0.3% of one core (`top`, 5 s
   sample). Unloaded: nothing — no process, no port.
 - **Logs.** `~/Library/Application Support/Evie/Runtime/brain.log` (0600,

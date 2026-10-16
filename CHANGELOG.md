@@ -6,6 +6,12 @@ All notable changes to Evie are documented here. Dates use `YYYY-MM-DD`.
 
 ### Changed
 
+- **Cancelling during "Acordando o cérebro do Mac…" stops the wake.** The start
+  used to run on for up to 90 s and load the ~8 GB anyway; now the server, which
+  has not answered yet, is stopped (unless another turn is still waiting for
+  it). Stopping the Mac brain — after 10 idle minutes or at quit — no longer
+  freezes the overlay for up to 7 s when the server ignores SIGTERM, and quit
+  waits at most the 5 s grace for it.
 - **Security: a Mac brain server on every interface is no longer adopted.** A
   `mlx_vlm.server` started by hand without `--host` listens on `0.0.0.0` with no
   key, and Evie used to take it for her own because its executable and port

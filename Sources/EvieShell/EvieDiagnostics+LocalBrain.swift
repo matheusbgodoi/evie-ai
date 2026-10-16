@@ -30,11 +30,20 @@ extension EvieDiagnostics {
     print("motor de voz no ar: \(EvieVoiceEngineLauncher.isPortBound())")
 
     let launcher = EvieLocalBrainLauncher()
-    defer {
-      launcher.stop()
-      let left = EvieProcessInspector.listeningPID(onPort: runtime.port)
-      print("depois de parar, porta \(runtime.port): \(left.map { "ocupada pelo PID \($0)" } ?? "livre")")
-    }
+    await answerOnce(with: launcher, profile: profile, runtime: runtime, waitForIdleUnload: waitForIdleUnload)
+    let stopping = ContinuousClock.now
+    await launcher.stop()
+    let left = EvieProcessInspector.listeningPID(onPort: runtime.port)
+    print("parado em \(stopping.duration(to: .now))")
+    print("depois de parar, porta \(runtime.port): \(left.map { "ocupada pelo PID \($0)" } ?? "livre")")
+  }
+
+  private static func answerOnce(
+    with launcher: EvieLocalBrainLauncher,
+    profile: EvieModelProfile,
+    runtime: LocalRuntime,
+    waitForIdleUnload: Bool
+  ) async {
     do {
       let serving = try launcher.isServing(profile)
       print("já no ar antes: \(serving != nil)")

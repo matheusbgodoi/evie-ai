@@ -39,9 +39,6 @@ final class EvieLocalBrainLauncher: LocalBrainStarting {
   /// from disk after a reboot without leaving a turn waiting on a server that
   /// is never coming.
   static let readyTimeout: Duration = .seconds(90)
-  /// The grace between SIGTERM and SIGKILL. Measured: uvicorn exits within
-  /// 0.35 s of SIGTERM.
-  static let stopGrace: Duration = .seconds(5)
   /// How often the idle clock is read. A minute either way on a ten-minute
   /// timeout does not matter; waking up more often would.
   static let idleCheckInterval: Duration = .seconds(30)
@@ -50,6 +47,7 @@ final class EvieLocalBrainLauncher: LocalBrainStarting {
   static let logRotationBytes = 10 << 20
 
   private let policy: LocalBrainPolicy
+  private let shutdown: LocalBrainShutdown
   private let healthSession: URLSession
   /// The server this launcher spawned. Keeping the `Process` keeps its exit
   /// observable and its pid ours until it is reaped.
@@ -58,11 +56,17 @@ final class EvieLocalBrainLauncher: LocalBrainStarting {
   /// that she has since used. It is the one the idle timer and quit stop.
   private var managed: (pid: pid_t, runtime: LocalRuntime)?
   private var lastUse: ContinuousClock.Instant?
-  private var launch: Task<URL, any Error>?
+  /// The start under way, shared by the turns waiting on it and cancelled
+  /// when none of them still wants it.
+  private let wake = LocalBrainWake<URL>()
+  /// A stop under way. A start waits for it, so a new server is never
+  /// launched onto a port the old one still holds.
+  private var stopping: Task<Void, Never>?
   private var idleWatch: Task<Void, Never>?
 
-  init(policy: LocalBrainPolicy = .standard) {
+  init(policy: LocalBrainPolicy = .standard, shutdown: LocalBrainShutdown = .standard) {
     self.policy = policy
+    self.shutdown = shutdown
     let configuration = URLSessionConfiguration.ephemeral
     configuration.timeoutIntervalForRequest = 3
     configuration.urlCache = nil
@@ -71,23 +75,24 @@ final class EvieLocalBrainLauncher: LocalBrainStarting {
 
   // MARK: - LocalBrainStarting
 
+  /// Cancelling the turn that waits here — the last one, when several do —
+  /// cancels the start, and a child that has not answered yet is stopped.
   func ensureRunning(_ profile: EvieModelProfile) async throws -> URL {
-    if let launch {
-      return try await launch.value
-    }
     let runtime = try Self.runtime(of: profile)
-    let task = Task<URL, any Error> { @MainActor [weak self] in
+    await stopping?.value
+    return try await wake.value { [weak self] in
       guard let self else { throw CancellationError() }
       return try await bringUp(profile, runtime: runtime)
     }
-    launch = task
-    defer { launch = nil }
-    return try await task.value
   }
 
   func isServing(_ profile: EvieModelProfile) throws -> URL? {
     let runtime = try Self.runtime(of: profile)
-    guard let listener = EvieProcessInspector.listeningPID(onPort: runtime.port) else {
+    // A server being stopped is not serving; the turn's wake waits for the
+    // stop and starts another.
+    guard stopping == nil,
+      let listener = EvieProcessInspector.listeningPID(onPort: runtime.port)
+    else {
       return nil
     }
     guard Self.isServer(listener, runtime: runtime) else {
@@ -103,9 +108,16 @@ final class EvieLocalBrainLauncher: LocalBrainStarting {
 
   // MARK: - Stopping
 
-  /// Stops the managed server: SIGTERM, then SIGKILL after five seconds. A
-  /// pid that is no longer this server is left alone and only forgotten.
-  func stop() {
+  /// Stops the managed server: SIGTERM, then SIGKILL after five seconds
+  /// (`LocalBrainShutdown`), waiting by suspending, so the main actor — the
+  /// overlay — keeps running. With `.graceOnly`, for quit, it does not wait
+  /// for SIGKILL to land. A pid that is no longer this server is left alone
+  /// and only forgotten.
+  func stop(waiting: LocalBrainShutdown.Wait = .untilGone) async {
+    if let stopping {
+      await stopping.value
+      return
+    }
     idleWatch?.cancel()
     idleWatch = nil
     guard let (pid, runtime) = managed.map({ ($0.pid, $0.runtime) }) else {
@@ -114,14 +126,33 @@ final class EvieLocalBrainLauncher: LocalBrainStarting {
     managed = nil
     child = nil
     lastUse = nil
-    defer { Self.removePIDFile(ifItNames: pid) }
     guard Self.isServer(pid, runtime: runtime) else {
+      Self.removePIDFile(ifItNames: pid)
       return
     }
-    kill(pid, SIGTERM)
-    if !Self.waitForExit(of: pid, within: Self.stopGrace) {
-      kill(pid, SIGKILL)
-      _ = Self.waitForExit(of: pid, within: .seconds(2))
+    let shutdown = shutdown
+    let task = Task { @MainActor in
+      _ = await shutdown.stop(
+        signal: { kill(pid, $0) },
+        isAlive: { EvieProcessInspector.isAlive(pid) },
+        waiting: waiting
+      )
+      Self.removePIDFile(ifItNames: pid)
+    }
+    stopping = task
+    await task.value
+    stopping = nil
+  }
+
+  /// SIGTERM without waiting, for the last moment of quit when
+  /// `prepareForTermination` did not get to `stop(waiting: .graceOnly)`.
+  func stopWithoutWaiting() {
+    guard let (pid, runtime) = managed.map({ ($0.pid, $0.runtime) }) else {
+      return
+    }
+    managed = nil
+    if Self.isServer(pid, runtime: runtime) {
+      kill(pid, SIGTERM)
     }
   }
 
@@ -167,6 +198,8 @@ final class EvieLocalBrainLauncher: LocalBrainStarting {
     if case .refuse(let explanation) = verdict {
       throw LocalBrainLaunchError.lowMemory(explanation)
     }
+    // Cancelled while the checks ran: nothing has been spawned yet.
+    try Task.checkCancellation()
 
     let process = try spawn(runtime, model: profile.model)
     child = process
@@ -182,7 +215,9 @@ final class EvieLocalBrainLauncher: LocalBrainStarting {
         throw LocalBrainLaunchError.notOurServer(port: runtime.port)
       }
     } catch {
-      stop()
+      // Also how a cancelled wake ends: the child has not answered yet, and
+      // nobody is waiting for it any more.
+      await stop()
       throw error
     }
     noteUse()
@@ -239,6 +274,7 @@ final class EvieLocalBrainLauncher: LocalBrainStarting {
     let health = URL(string: "http://127.0.0.1:\(runtime.port)/health")!
     let deadline = ContinuousClock.now + Self.readyTimeout
     while ContinuousClock.now < deadline {
+      try Task.checkCancellation()
       guard EvieProcessInspector.isAlive(pid) else {
         throw LocalBrainLaunchError.exitedDuringStartup
       }
@@ -281,10 +317,10 @@ final class EvieLocalBrainLauncher: LocalBrainStarting {
         try? await Task.sleep(for: Self.idleCheckInterval)
         guard let self, !Task.isCancelled else { return }
         // A start in progress is not idle time.
-        guard launch == nil, let lastUse else { continue }
+        guard !wake.isRunning, let lastUse else { continue }
         if policy.shouldUnload(lastUse: lastUse, now: .now) {
           idleWatch = nil
-          stop()
+          await stop()
           return
         }
       }
@@ -345,19 +381,6 @@ final class EvieLocalBrainLauncher: LocalBrainStarting {
     if recordedPID() == pid {
       try? FileManager.default.removeItem(at: pidURL)
     }
-  }
-
-  /// Polls rather than waits: the server may not be Evie's child, and a child
-  /// is reaped by `Process` itself.
-  private static func waitForExit(of pid: pid_t, within grace: Duration) -> Bool {
-    let deadline = ContinuousClock.now + grace
-    while ContinuousClock.now < deadline {
-      if !EvieProcessInspector.isAlive(pid) {
-        return true
-      }
-      usleep(50_000)
-    }
-    return !EvieProcessInspector.isAlive(pid)
   }
 
   private static func openLog() throws -> FileHandle {

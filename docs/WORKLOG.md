@@ -1,5 +1,34 @@
 # Work log
 
+## 2026-10-16 — v2 fix: cancelling the Mac brain's wake stops it; stops wait off the main actor
+
+- Completed: second v2 review, findings #8 and #9.
+  - New `Sources/EvieCore/LocalBrainLifecycle.swift`: `LocalBrainWake` (one
+    start shared by the waiting turns, cancelled through
+    `withTaskCancellationHandler` when the last one is cancelled; an abandoned
+    start is waited out before a new one) and `LocalBrainShutdown` (SIGTERM,
+    `Task.sleep` polls for the 5 s grace, SIGKILL, 2 s more unless
+    `.graceOnly`; run in an unstructured task so a cancelled caller cannot cut
+    it short).
+  - `EvieLocalBrainLauncher`: the start goes through `LocalBrainWake`;
+    cancellation is checked before the spawn and on each `/health` poll, and a
+    start that throws stops its child; `stop(waiting:)` is `async` over
+    `LocalBrainShutdown`, a start waits for a stop under way and `isServing`
+    returns nil during one; `stopWithoutWaiting()` sends SIGTERM only. The
+    `usleep` loop is gone.
+  - `AppCoordinator.prepareForTermination` awaits `stop(waiting: .graceOnly)`;
+    `stop()` (sync) calls `stopWithoutWaiting()`. `--brain-check` awaits the
+    stop and prints how long it took.
+- Tests: new suites "Local brain wake" (4) and "Local brain shutdown" (6),
+  including "the main actor keeps running while a stop waits for the exit" and
+  "at quit the wait ends with the grace". The launcher itself is in EvieShell,
+  which has no test target; its rules moved into these two EvieCore types.
+- Docs: design S3 note, `docs/MACOS_RUNTIME.md` (shutdown, cancelling a wake),
+  CHANGELOG.
+- Checks: `swift build` with no warnings; `Scripts/test --filter` "Local brain
+  wake", "Local brain shutdown", "Evie brain resolver": all passed.
+- Next: the per-launch key for the Mac brain (pending security finding #4).
+
 ## 2026-10-16 — v2 fix: adopt a Mac brain server only when it serves loopback alone
 
 - Completed: second v2 review, finding #4. `LocalBrainPolicy.argumentsIdentifyServer`

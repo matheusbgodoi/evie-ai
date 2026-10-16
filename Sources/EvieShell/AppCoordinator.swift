@@ -537,7 +537,9 @@ final class AppCoordinator: NSObject {
   func stop() {
     readinessRefresher.stop()
     // Its 8 GB are not left behind for a process nobody will ask again.
-    localBrainLauncher.stop()
+    // `prepareForTermination` has normally stopped it already; this is the
+    // last chance, and quit cannot wait here.
+    localBrainLauncher.stopWithoutWaiting()
     audioCapture.stop()
     speechOutput.stop()
     viewModel.cancelCurrentInteraction()
@@ -556,6 +558,9 @@ final class AppCoordinator: NSObject {
     audioCapture.stop()
     speechOutput.stop()
     viewModel.cancelCurrentInteraction()
+    // At most the five-second grace: SIGKILL, if it comes to that, is sent
+    // and not waited on.
+    await localBrainLauncher.stop(waiting: .graceOnly)
     await viewModel.waitForHistoryPersistence()
   }
 }
