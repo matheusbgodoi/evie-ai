@@ -1,5 +1,49 @@
 # Work log
 
+## 2026-10-16 — v2 S2b: model readiness probe and cache
+
+- Completed: slice S2b of `docs/design/2026-10-16-evie-v2-design.md`.
+  - `Sources/EvieCore/ModelReadiness.swift`: `ModelReadiness` (rung plus the
+    capabilities the server reports), `ModelReadinessProbe` (`check`,
+    `Deadlines.standard` 3 s / 5 s), `ModelClientFactory.makeReadinessProbe`,
+    and `ModelReadinessCache` (30 s, shared in-flight probes, `refresh`).
+    Remote: `GET {origin}/health` without the key, then `GET /v1/models` with
+    it, then `GET /running` only when the entry has no load state. Local:
+    `GET /health` on loopback, where no answer is `modelCold`. Never a POST.
+  - `OpenAICompatibleClient`: `RedirectRefusal` and `bearerToken(for:credential:
+    from:)` are internal instead of private so the probe uses the same rules.
+  - `Sources/EvieShell/EvieReadinessRefresher.swift`: refreshes the active
+    profile at launch, on app activation and on network path changes
+    (`NWPathMonitor`); owned and started by `AppCoordinator`, stopped in `stop`.
+  - Docs: design doc "Implemented" note, `ARCHITECTURE.md`, `SECURITY.md`,
+    CHANGELOG, `PROJECT_STATUS.md`.
+- Verified 2026-10-16 from this Mac (M5, macOS 27.2), read-only against
+  `https://ai-node-3090.tail6146ef.ts.net` with qwen-daily resident: `/health`
+  at the origin, no key, 200 in 37 ms; `/v1/health` 404; `/v1/models` 200 in
+  69 ms and `/running` 200 in 31 ms with the key, both 401 without it or with a
+  wrong one. Load states recorded: qwen-daily and qwen-uncensored `loaded` /
+  `active: true`; ornith-turbo and gemma-write `unloaded` / `active: false`,
+  and absent from `/running`. The bodies are the test fixtures
+  (`GatewayReadinessFixtures.swift`, `cmd` shortened). The key was read into a
+  shell variable and never printed or written.
+- Deviation, recorded in the design doc: `check` returns `ModelReadiness`
+  (rung and observed capabilities) rather than a bare `ReadinessRung`.
+- Tests (written first and seen failing to compile): new suites "Model
+  readiness probe" (21) and "Model readiness cache" (5), against a host-keyed
+  `URLProtocol` stub with no network: `/health` timeout and connection failure
+  give unreachable, no key and no key reference give keyMissing without asking
+  the list, 401 gives keyRejected and invalidates the key, an unknown id gives
+  modelUnknown, unloaded gives modelCold, loaded gives ready, `/running`
+  fallback, 502, allowlist, redirect, local brain states, and no POST in any
+  scenario.
+- Commands: `swift build` (whole package, Shell included) succeeded;
+  `Scripts/test --filter "ModelReadiness"` 26 tests in 2 suites passed; full
+  `Scripts/test` 753 tests in 78 suites passed, 0 failures.
+- Open: nothing consumes the cache on the turn path until S2c; the refresher
+  follows the launch profile only, so a profile edited in Settings is probed on
+  demand rather than kept warm.
+- Next: S2c, the per-turn brain resolver and failover.
+
 ## 2026-10-16 — v2 S2a: config schema v2, profiles, migration, store
 
 - Completed: slice S2a of `docs/design/2026-10-16-evie-v2-design.md`.

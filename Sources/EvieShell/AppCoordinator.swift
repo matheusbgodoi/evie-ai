@@ -18,6 +18,11 @@ final class AppCoordinator: NSObject {
   /// The profiles Evie launched with, which the settings pane repairs a damaged
   /// file from.
   private let startupProfiles: EvieModelProfileSet
+  /// Whether each brain can answer now, kept for 30 s. Nothing reads it on the
+  /// turn path yet; the per-turn resolver (v2 S2c) will. It is kept warm from
+  /// launch so that resolver starts with an answer instead of a probe.
+  private let modelReadiness: ModelReadinessCache
+  private let readinessRefresher: EvieReadinessRefresher
   private var hotKeyController: GlobalHotKeyController?
   private var statusItem: NSStatusItem?
   private var settingsWindowController: SettingsWindowController?
@@ -131,6 +136,14 @@ final class AppCoordinator: NSObject {
     self.chrome = chrome
     startupConfigurationError = loadResult.error
     startupProfiles = loadResult.loaded.profiles
+    let modelReadiness = ModelReadinessCache(
+      probe: ModelClientFactory.live.makeReadinessProbe()
+    )
+    self.modelReadiness = modelReadiness
+    readinessRefresher = EvieReadinessRefresher(
+      cache: modelReadiness,
+      profile: loadResult.loaded.activeProfile
+    )
     panelController = OverlayPanelController(
       viewModel: viewModel,
       chrome: chrome,
@@ -403,6 +416,7 @@ final class AppCoordinator: NSObject {
     // Armed at launch if that is what the preference says, so being able to call
     // her by name does not depend on having opened settings this session.
     updateWakeListening()
+    readinessRefresher.start()
     attachMediaLifecycle()
     buildVaultIndexIfMissing()
 
@@ -438,6 +452,7 @@ final class AppCoordinator: NSObject {
   }
 
   func stop() {
+    readinessRefresher.stop()
     audioCapture.stop()
     speechOutput.stop()
     viewModel.cancelCurrentInteraction()

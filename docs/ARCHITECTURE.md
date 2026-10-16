@@ -110,6 +110,14 @@ the wait for the headers and for the first token (`ModelDeadlinePolicy`); the PC
 holds its headers until prefill ends, measured, so the headers deadline is a
 first-token deadline, not a connection check.
 
+Since v2 S2b `ModelReadinessProbe` measures that readiness without asking the
+model anything: `GET /health` at the gateway's origin with no key, `GET
+/v1/models` with the key (the profile's entry gives `loadState`/`active` and
+the vision and tools the server reports), and `GET /running` only when the list
+has no load state; a Mac brain gets its loopback `/health`. `ModelReadinessCache`
+keeps each answer 30 s, and the shell's `EvieReadinessRefresher` refreshes the
+profile in use at launch, on activation and on `NWPathMonitor` changes.
+
 Three of the original abstinences no longer hold, and they are worth naming rather
 than leaving as an out-of-date boundary:
 
@@ -198,7 +206,7 @@ system frameworks, and every process Evie starts.
 
 | Area | Types |
 |---|---|
-| Transport and loop | `AgentClient`, `OpenAICompatibleClient`, `ModelClientFactory`, `ModelTransportPolicy`, `EvieCredentialProviding` (`KeychainCredentialProvider`, `StaticCredentialProvider`), `TurnOptions`, `ModelDeadlinePolicy`, `ModelClientError`, `InlineThinkingSplitter`, `EvieImagePart`, `EvieAgentLoop`, `EvieToolCallAccumulator`, `EvieTool` |
+| Transport and loop | `AgentClient`, `OpenAICompatibleClient`, `ModelClientFactory`, `ModelTransportPolicy`, `EvieCredentialProviding` (`KeychainCredentialProvider`, `StaticCredentialProvider`), `TurnOptions`, `ModelDeadlinePolicy`, `ModelReadinessProbe`, `ModelReadinessCache`, `ModelClientError`, `InlineThinkingSplitter`, `EvieImagePart`, `EvieAgentLoop`, `EvieToolCallAccumulator`, `EvieTool` |
 | Conversation | `ChatMessage`, `EvieConversation`, `EvieConversationStore`, `EvieConversationExport`, `EvieInteraction`, `EvieArtifact`, `EvieRichText` |
 | Commands | `EvieCommand`, `EvieSearchCommands`, `EviePlan`, `EviePlanPrompts` |
 | Retrieval and grounding | `EvieVaultRetriever`, `EvieVaultPassage`, `EviePassageRanker`, `EvieQueryTerms`, `EvieGrounding`, `EvieAnswerProvenance`, `EvieWebSearch`, `EvieWebPassages` |
@@ -216,7 +224,7 @@ system frameworks, and every process Evie starts.
 
 | Area | Types |
 |---|---|
-| Composition and windows | `EvieShellApp`, `AppCoordinator`, `OverlayPanelController`, `SettingsWindowController`, `ConversationHistoryWindowController`, `GlobalHotKeyController` |
+| Composition and windows | `EvieShellApp`, `AppCoordinator`, `EvieReadinessRefresher`, `OverlayPanelController`, `SettingsWindowController`, `ConversationHistoryWindowController`, `GlobalHotKeyController` |
 | Overlay state | `OverlayViewModel` plus `+Turn`, `+History`, `+Plan`, `+Search`; `OverlayChromeModel` |
 | Other view models | `ConversationHistoryViewModel`, `EviePreferencesViewModel`, `ModelSettingsViewModel`, `EvieRootsViewModel`, `EvieMemoryViewModel`, `EvieSkillsViewModel`, `EvieVoiceLibraryViewModel` |
 | Audio | `EvieAudioCapture`, `EvieLevelMeter`, `EvieSpeechTranscription`, `EvieSpeechOutput`, `EvieOmniVoiceClient`, `EvieVoiceEngineLauncher`, `EvieWakeListener` |

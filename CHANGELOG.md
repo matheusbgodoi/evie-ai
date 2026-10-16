@@ -6,6 +6,14 @@ All notable changes to Evie are documented here. Dates use `YYYY-MM-DD`.
 
 ### Changed
 
+- **Evie checks whether the brain is ready before she needs it.**
+  `ModelReadinessProbe` reports one of unreachable, key missing, key rejected,
+  model unknown, model cold or ready, using only `GET`s that cannot load a model:
+  the PC gateway's `/health` (no key, 3 s), then `/v1/models` with the key (5 s),
+  then `/running` if the list says nothing about loading; for the Mac brain, its
+  loopback `/health`. Results are kept 30 s and refreshed at launch, when Evie
+  comes to the front and when the network changes. Nothing on the turn path
+  uses them yet; the per-turn resolver (v2 S2c) will.
 - **The PC is the default brain, and the configuration lists profiles.**
   `config.json` schema v2 holds model profiles (`EvieModelProfile`), a
   preference order and the Mac-fallback choice. With no file — and whenever the

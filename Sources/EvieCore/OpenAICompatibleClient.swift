@@ -197,8 +197,9 @@ private struct Turn: Sendable {
 /// carry the `Authorization` header to wherever `Location` points. With the
 /// redirect refused, the 3xx itself becomes the response and is reported as an
 /// HTTP error. It is a task delegate rather than a session delegate so it holds
-/// for any session the client is given, `URLSession.shared` included.
-private final class RedirectRefusal: NSObject, URLSessionTaskDelegate, Sendable {
+/// for any session the client is given, `URLSession.shared` included. The
+/// readiness probe uses it too, since its model-list request carries the key.
+final class RedirectRefusal: NSObject, URLSessionTaskDelegate, Sendable {
   func urlSession(
     _ session: URLSession,
     task: URLSessionTask,
@@ -297,8 +298,9 @@ extension OpenAICompatibleClient {
   /// loopback port can be bound by any local process. When a token applies but
   /// nothing is saved, the request is not sent at all: an unauthenticated
   /// request to the PC could only fail, and would do so after the gateway has
-  /// logged it.
-  fileprivate static func bearerToken(
+  /// logged it. The readiness probe asks the same question, so the two cannot
+  /// disagree about where the key may go.
+  static func bearerToken(
     for url: URL,
     credential: CredentialReference?,
     from credentials: any EvieCredentialProviding

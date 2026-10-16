@@ -165,6 +165,14 @@ body and decides where a conversation may go before it sends anything:
 - **Rejected keys.** A 401 drops the cached token, so the next turn reads the
   keychain again, and the turn is not retried: the PC's control plane blocks an
   address after ten bad keys in five minutes.
+- **Readiness probes follow the same rules.** `ModelReadinessProbe` is built by
+  the same factory as the client. It sends only `GET`s, none of which can load a
+  model. `/health` carries no key and goes only to a host the policy allows;
+  `/v1/models` and `/running` carry the key under the client's own binding rule
+  and are not sent at all when no key is saved; redirects are refused. A 401
+  drops the cached key like a turn's, and the probe never retries on its own:
+  it runs at launch, on activation and on network changes, at most once per
+  event.
 - **Images stay out of every record.** `ChatMessage.images` is excluded from the
   message's coding keys, so a picture sent with a turn is never written to a
   conversation file, an export or a log; it exists for the one request. Model

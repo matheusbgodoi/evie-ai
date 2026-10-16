@@ -431,8 +431,11 @@ reference is Evie's own keychain item; that item is created by S2d's import, so
 until then a PC turn stops with "no saved key". Measured in S1b: the PC gateway
 sends its response headers only with the first chunk, so the headers deadline is
 a first-token deadline. Verified in S2a: `qwen-daily` reports a 200704-token
-context window and 32768 max tokens; port 38480 is free. Next: S2b (readiness
-probe).
+context window and 32768 max tokens; port 38480 is free. S2b (readiness probe
+and 30 s cache, refreshed at launch, on activation and on network changes) is
+done; verified in S2b: `/health` sits at the gateway's origin and needs no key,
+and `/v1/models` reports `loadState`/`active` per alias. Next: S2c (per-turn
+brain resolver and failover), the first consumer of the readiness cache.
 
 Two things, in this order, and they are the two things between here and a release.
 
