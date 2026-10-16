@@ -193,6 +193,11 @@ final class OverlayViewModel: ObservableObject {
   /// Picks the brain for each turn, before the turn builds anything. Every turn
   /// asks it; nothing here holds a client of its own.
   let brainResolver: EvieBrainResolver
+  /// Where the current turn's brain runs, which the status line and the error
+  /// card name ("· no seu PC", "O cérebro do Mac não respondeu"). Set when a
+  /// turn resolves its brain and again when it fails over; before the first
+  /// turn, the preferred profile's.
+  var answeringLocation: ModelLocation
   /// The wake question on screen and the turn waiting for its answer.
   var pendingWake: (card: UUID, answer: CheckedContinuation<Bool, Never>)?
   var capabilities: EvieCapabilitySnapshot
@@ -224,6 +229,7 @@ final class OverlayViewModel: ObservableObject {
     capabilities: EvieCapabilitySnapshot = .textOnly
   ) {
     self.brainResolver = brainResolver
+    answeringLocation = brainResolver.configuration.activeProfile.location
     self.conversationStore = conversationStore
     self.capabilities = capabilities
     conversation = [

@@ -43,10 +43,13 @@ final class PermissionGuideViewModel: ObservableObject {
   ///
   /// The one place a row is added.
   static func standardItems(audioCapture: EvieAudioCapture) -> [any PermissionGuideItem] {
-    // TODO(S7-brain-rows): append the "Chave do PC" row (import
-    // `local-ai-3090` / `gateway-api-key` into Evie's own Keychain item) and
-    // the "Cérebro" row (Testar conexão through the readiness probe) here once
-    // model profiles land. See docs/MACOS_RUNTIME.md, "First-run guide".
+    // TODO(S7-brain-rows): append the "Chave do PC" row and the "Cérebro" row
+    // here. Both exist as EvieCore calls since v2 S2d: the import is
+    // `EvieModelKeys.live.importPCConfigurationKey(into:)` (with the
+    // explanation of the macOS prompt shown before the button, as in
+    // Configurações › Cérebro), and Testar conexão is
+    // `ModelReadinessProbe.connectionReport(for:)`. See docs/MACOS_RUNTIME.md,
+    // "First-run guide".
     EviePermission.allCases.map { permission in
       SystemPermissionItem(permission: permission, audioCapture: audioCapture)
     }

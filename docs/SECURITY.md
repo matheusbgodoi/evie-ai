@@ -162,6 +162,42 @@ body and decides where a conversation may go before it sends anything:
   passwords and cached in memory per process. They are never written to the
   configuration, logs, diagnostics or error messages; a keychain failure reports
   only its status code.
+- **Evie keeps her own copy of the PC key (v2 S2d).** The item is
+  `com.matheusbgodoi.evie.model` / `pc-3090` in the legacy login keychain,
+  labelled "Evie — chave do modelo (ai-node-3090.tail6146ef.ts.net)". It is
+  written from Configurações › Cérebro in one of two ways, and from nowhere
+  else:
+  - **Colar chave.** A `SecureField` that is never filled from the keychain; the
+    pane shows only "chave salva ✓" or "sem chave", read from the item's
+    attributes, which never prompts. The field is cleared before the write, and
+    a paste that is not one printable token (a `Bearer` prefix, a second line, a
+    control character) is refused without the message repeating it.
+  - **Importar da configuração do PC.** One read of `local-ai-3090` /
+    `gateway-api-key`, the item the PC stack's setup wrote on this Mac. It
+    belongs to another program, so macOS asks first and may ask for the Mac
+    login password; the pane says so *before* the button is pressed, and that
+    "Permitir" (not "Permitir sempre") is enough, because it is read once. A
+    refused or closed prompt saves nothing.
+  The item Evie creates lists Evie, by its code signature, as the program
+  allowed to read it, which is why she does not read the PC configuration's
+  item on every turn: each read would be a prompt, and "Permitir sempre" there
+  would let her read an item that is not hers. Replacing the key invalidates the
+  process's key cache. **[VERIFY]** that a rebuilt Evie still reads her own item
+  without a prompt: the bundle is self-signed with no team identifier, and how
+  the legacy keychain's partition list treats such a signer is not documented.
+- **`Scripts/evie-app import-pc-key`** makes the same copy from a terminal.
+  The key never appears in an argument list, where any process could read it
+  while the command runs: it is read with `security find-generic-password -w`
+  into a shell variable, checked to be one line of printable characters, and
+  piped into `security add-generic-password -U … -T ~/Applications/Evie.app -w`,
+  which reads it from stdin when `-w` is last. It is never printed. `-T` names
+  only the installed bundle — not `security`, and not the copy in `.build` — so
+  no other program reads the item without asking. The script refuses when Evie
+  is not installed. Its test runs it against a stand-in `security` that records
+  arguments and stdin apart; no test touches the real keychain except one
+  read-only lookup of an item that cannot exist. **[VERIFY]** whether Evie then
+  reads that item without macOS asking for the login password: an item created
+  by `security` may carry `security`'s partition, not Evie's.
 - **Rejected keys.** A 401 drops the cached token, so the next turn reads the
   keychain again, and the turn is not retried: the PC's control plane blocks an
   address after ten bad keys in five minutes.

@@ -146,12 +146,14 @@ from. It shows up in the smallest places:
   always-on processor no third-party app can reach, "so while Evie is armed, the
   dot is on. That is the true statement, and the settings pane says it."
 
-**Nothing leaves the Mac unless you sent it.** The inference client refuses
-any endpoint that is not this Mac's loopback, save one reserved for Evie v2: your
-own PC, over https, on an exact allowlist, with a key saved for that host
-([ADR 0013](docs/adr/0013-authenticated-tailnet-model-transport.md)); no shipped
-configuration points there yet. Beyond the model there are two exceptions and no
-others: web search, which
+**Nothing leaves the Mac unless you sent it, or it goes to your own PC.** The
+inference client refuses any endpoint that is not this Mac's loopback, save one:
+your own PC, over https, on an exact allowlist, with a key saved for that host
+([ADR 0013](docs/adr/0013-authenticated-tailnet-model-transport.md)). Since Evie
+v2 that PC is the default brain; its key lives in Evie's own keychain item,
+pasted or imported in Configurações › Cérebro (or `Scripts/evie-app
+import-pc-key`), and never in a file. Beyond the model there are two exceptions
+and no others: web search, which
 is off by default and says so where you turn it on, and an e-mail you approved by
 pressing the button on a card that showed you every recipient and the whole text.
 
@@ -457,6 +459,15 @@ the certificate for code signing.
 On first launch a checklist, "Primeiros passos com a Evie", asks for each
 permission with its own button; it stays in Settings › Avançado › Permissões.
 
+The PC brain needs its gateway key once. Configurações › Cérebro takes it pasted,
+or imports it from the PC configuration's keychain item (`local-ai-3090`), and
+"Testar conexão" then shows the PC, the key and the model, each with a time. From
+a terminal, after `install`:
+
+```bash
+Scripts/evie-app import-pc-key # copy the PC key into Evie's own keychain item
+```
+
 This is not a Developer ID. It keeps permissions across rebuilds on this Mac and
 nowhere else, and it does not pass Gatekeeper on another machine.
 
@@ -569,13 +580,14 @@ like something already asked (`Sources/EvieShell/QuickTextEntryView.swift`).
 **History.** `⌥⇧H` opens the conversations kept on this Mac. `⌥⇧N` starts a new
 one without deleting the old.
 
-**Settings.** Five tabs — Atalhos, Voz, O que ela sabe, Aparência, Avançado —
-and not more, for a measured reason: macOS gives a tab bar a fixed amount of room
+**Settings.** Six tabs — Atalhos, Voz, O que ela sabe, Cérebro, Aparência,
+Avançado — and not more, for a measured reason: macOS gives a tab bar a fixed amount of room
 and folds whatever does not fit into an overflow menu, so growing the window one
 tab at a time silently replaced the bar with a chevron
 (`Sources/EvieShell/Views/SettingsView.swift`). New things go inside a tab
 instead: "O que ela sabe" now holds five panes — Pastas, Memória, Habilidades,
-Mail e agenda, Agendamentos.
+Mail e agenda, Agendamentos. Cérebro is the one tab added since, moved out of
+Avançado because the PC key is the first thing a fresh install needs.
 
 ---
 

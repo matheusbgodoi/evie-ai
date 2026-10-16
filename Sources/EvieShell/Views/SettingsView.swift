@@ -3,11 +3,16 @@ import SwiftUI
 
 /// The settings window.
 ///
-/// Five tabs, not eight. macOS gives a tab bar a fixed amount of room and folds
+/// Six tabs, not eight. macOS gives a tab bar a fixed amount of room and folds
 /// whatever does not fit into an overflow menu, so growing the window one tab at
 /// a time silently replaced the bar with a chevron and a list — every pane one
 /// click further away than it had been. Panes that answer the same question now
 /// share a tab and are separated inside it.
+///
+/// "Cérebro" is the sixth, moved out of Avançado: with the PC as the default
+/// brain, its key is the first thing a fresh install needs, and every "O PC não
+/// respondeu" points there. Not verified on screen that six fit at the minimum
+/// width without the overflow chevron; the labels are short for that reason.
 struct SettingsView: View {
   @ObservedObject var modelViewModel: ModelSettingsViewModel
   @ObservedObject var preferencesViewModel: EviePreferencesViewModel
@@ -42,6 +47,9 @@ struct SettingsView: View {
         skillsViewModel: skillsViewModel
       )
       .tabItem { Label("O que ela sabe", systemImage: "books.vertical") }
+
+      ModelSettingsView(viewModel: modelViewModel)
+        .tabItem { Label("Cérebro", systemImage: "brain") }
 
       AppearanceSettingsView(viewModel: preferencesViewModel)
         .tabItem { Label("Aparência", systemImage: "macwindow") }
@@ -158,21 +166,17 @@ private struct AdvancedTabView: View {
   var body: some View {
     VStack(spacing: 0) {
       PaneSelector(
-        titles: ["Modelo", "Diagnóstico", "Atualizar", "Permissões"],
+        titles: ["Diagnóstico", "Atualizar", "Permissões"],
         selection: $modelViewModel.advancedPane
       )
       switch modelViewModel.advancedPane {
-      case 0:
-        ModelSettingsView(viewModel: modelViewModel)
-      case 2:
+      case 1:
         UpdateSettingsView(updater: updater)
-      case 3:
+      case 2:
         PermissionGuideView(viewModel: permissionGuide)
       default:
         DiagnosticsSettingsView(
-          modelName: modelViewModel.model,
-          endpoint: modelViewModel.endpoint,
-          contextWindowTokens: modelViewModel.contextWindowTokens,
+          profile: modelViewModel.activeProfile,
           preferencesPath: preferencesPath,
           configurationPath: configurationPath
         )

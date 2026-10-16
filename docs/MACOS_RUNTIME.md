@@ -254,6 +254,12 @@ recreating it.
   macOS 27.2 with a throwaway background bundle: an app opened by `open` sees the
   variables of the shell that ran `open` (and `open --env` adds more), so the
   choice reaches the installed Evie.
+- `Scripts/evie-app import-pc-key` (v2 S2d) copies the PC gateway's key from
+  `local-ai-3090` / `gateway-api-key` into Evie's own item,
+  `com.matheusbgodoi.evie.model` / `pc-3090`, with `-T` naming the installed
+  copy only, so it refuses before `install`. The key goes through a pipe, never
+  an argument, and is never printed; see `docs/SECURITY.md`. The same copy is
+  the "Importar da configuração do PC" button in Configurações › Cérebro.
 
 ### Recovery
 
@@ -301,8 +307,10 @@ got at launch), Acessibilidade, and Controlar o teclado e o mouse (Post Events).
 `gateway-api-key`, copied into Evie's own Keychain item, with the explanation of
 the macOS prompt shown before the button) and the "Cérebro" row (Testar conexão:
 PC reachable → key valid → model loaded) depend on model profiles and the
-readiness probe (v2 S2a–S2d; S2a and S2b are on `v2` since the merge, the key
-import is S2d's). They go in
+readiness probe (v2 S2a–S2d). Since S2d both exist in EvieCore —
+`EvieModelKeys.importPCConfigurationKey(into:)` and
+`ModelReadinessProbe.connectionReport(for:)`, used by Configurações › Cérebro —
+so the rows only have to call them. They go in
 `PermissionGuideViewModel.standardItems`, marked `TODO(S7-brain-rows)`, as two
 more `PermissionGuideItem` conformances; the view and the view model need no
 other change. A row whose button is neither a system prompt nor a Settings pane

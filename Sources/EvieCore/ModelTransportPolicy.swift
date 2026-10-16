@@ -40,33 +40,91 @@ public struct ModelTransportPolicy: Sendable, Equatable {
   /// - Parameter credentialHost: the host the endpoint's credential was saved
   ///   for, or `nil` when the endpoint has none.
   public func evaluate(_ url: URL, credentialHost: String?) -> Verdict {
+    refusal(of: url, credentialHost: credentialHost).map { .refused($0.reason) } ?? .allowed
+  }
+
+  /// Why `url` is refused, or `nil` when it is allowed: the same rules as
+  /// `evaluate`, as a value, so Settings can say it in Portuguese while the
+  /// client's error and the logs keep the sentence they always had.
+  public func refusal(of url: URL, credentialHost: String?) -> Refusal? {
     guard let scheme = url.scheme?.lowercased(), scheme == "http" || scheme == "https"
     else {
-      return .refused("Model endpoints must use http or https.")
+      return .unsupportedScheme
     }
     guard let host = url.host?.lowercased(), !host.isEmpty else {
-      return .refused("The model endpoint has no host.")
+      return .missingHost
     }
     guard url.user == nil, url.password == nil else {
-      return .refused("The model endpoint must not carry a user or password in its URL.")
+      return .userOrPasswordInURL
     }
 
     if Self.isLoopback(host) {
-      return .allowed
+      return nil
     }
     guard scheme == "https" else {
-      return .refused("Plain http is only allowed to this Mac; \(host) needs https.")
+      return .plainHTTPOffLoopback(host: host)
     }
     guard allows(host) else {
-      return .refused("\(host) is not on the list of model hosts Evie may use.")
+      return .hostNotAllowed(host: host)
     }
     guard let credentialHost else {
-      return .refused("\(host) needs a saved key before Evie sends it anything.")
+      return .noCredential(host: host)
     }
     guard credentialHost.lowercased() == host else {
-      return .refused("The saved key belongs to another host, not \(host).")
+      return .credentialForAnotherHost(host: host)
     }
-    return .allowed
+    return nil
+  }
+
+  /// The rule an endpoint broke, in the order they are checked.
+  public enum Refusal: Sendable, Equatable {
+    case unsupportedScheme
+    case missingHost
+    case userOrPasswordInURL
+    case plainHTTPOffLoopback(host: String)
+    case hostNotAllowed(host: String)
+    case noCredential(host: String)
+    case credentialForAnotherHost(host: String)
+
+    /// The sentence the client's `transportRefused` error carries.
+    public var reason: String {
+      switch self {
+      case .unsupportedScheme:
+        "Model endpoints must use http or https."
+      case .missingHost:
+        "The model endpoint has no host."
+      case .userOrPasswordInURL:
+        "The model endpoint must not carry a user or password in its URL."
+      case .plainHTTPOffLoopback(let host):
+        "Plain http is only allowed to this Mac; \(host) needs https."
+      case .hostNotAllowed(let host):
+        "\(host) is not on the list of model hosts Evie may use."
+      case .noCredential(let host):
+        "\(host) needs a saved key before Evie sends it anything."
+      case .credentialForAnotherHost(let host):
+        "The saved key belongs to another host, not \(host)."
+      }
+    }
+
+    /// The same rule as Settings says it, under the endpoint field.
+    public var explanation: String {
+      switch self {
+      case .unsupportedScheme:
+        "O endereço precisa começar com http:// ou https://."
+      case .missingHost:
+        "O endereço não tem um servidor."
+      case .userOrPasswordInURL:
+        "O endereço não pode levar usuário ou senha."
+      case .plainHTTPOffLoopback(let host):
+        "\(host) precisa de https: http só vale para este Mac."
+      case .hostNotAllowed(let host):
+        "\(host) não está na lista de servidores que a Evie pode usar."
+      case .noCredential(let host):
+        "\(host) precisa de uma chave antes de a Evie mandar qualquer coisa."
+      case .credentialForAnotherHost(let host):
+        "A chave salva é de outro servidor, não de \(host)."
+      }
+    }
   }
 
   /// Loopback by name or literal. `URL.host` drops the brackets of an IPv6

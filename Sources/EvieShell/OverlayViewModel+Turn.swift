@@ -208,7 +208,7 @@ extension OverlayViewModel {
       onLayoutInvalidated?()
 
     case .usage(let usage):
-      secondaryText = "\(usage.totalTokens) tokens · somente local"
+      secondaryText = "\(usage.totalTokens) tokens · \(answeringLocation.statusTag)"
 
     case .completed(let message, _):
       guard let userMessage else {
@@ -235,7 +235,7 @@ extension OverlayViewModel {
       visualState = .completed
       primaryText = "Resposta concluída"
       if let usage = interactionState.usage {
-        secondaryText = "\(usage.totalTokens) tokens · somente local"
+        secondaryText = "\(usage.totalTokens) tokens · \(answeringLocation.statusTag)"
       } else {
         secondaryText = "Processado localmente"
       }
@@ -658,8 +658,8 @@ extension OverlayViewModel {
     primaryText = "Resposta concluída"
     secondaryText =
       outcome.toolCallCount == 1
-      ? "Olhei em 1 lugar · somente local"
-      : "Olhei em \(outcome.toolCallCount) lugares · somente local"
+      ? "Olhei em 1 lugar · \(answeringLocation.statusTag)"
+      : "Olhei em \(outcome.toolCallCount) lugares · \(answeringLocation.statusTag)"
     activeRequestID = nil
     activeArtifactID = nil
     streamedResponse = ""
@@ -690,8 +690,7 @@ extension OverlayViewModel {
     let failure = EvieFailure(
       kind: .backend,
       message: error.localizedDescription,
-      recoverySuggestion:
-        "O modelo local não respondeu. Abra Configurações › Diagnóstico para conferir o motor."
+      recoverySuggestion: answeringLocation.failureRecovery
     )
     finishFailure(failure, requestID: requestID)
   }
@@ -969,6 +968,7 @@ extension OverlayViewModel {
     guard activeRequestID == requestID, !Task.isCancelled else {
       return
     }
+    answeringLocation = brain.profile.location
     showBrainNotice(brain.notice)
     do {
       try await EvieBrainTurn.run(
@@ -976,6 +976,7 @@ extension OverlayViewModel {
         on: brain,
         resolver: brainResolver,
         onSwitch: { next in
+          answeringLocation = next.profile.location
           showBrainNotice(next.notice)
         },
         attempt: attempt

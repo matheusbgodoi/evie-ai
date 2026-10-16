@@ -25,10 +25,11 @@ public struct EviePreferences: Codable, Hashable, Sendable {
   public var autoApproveChanges: Bool
   /// Whether Evie may search the web.
   ///
-  /// Off by default, and it is the one switch in this application that changes
-  /// what leaves the machine. Everything else about Evie is local by
-  /// construction — the inference client refuses a non-loopback address — so
-  /// this is stated plainly in the interface rather than made convenient.
+  /// Off by default, and it is the one switch in this application that sends
+  /// her questions to strangers' servers. Everything else stays on machines the
+  /// owner holds — this Mac, or his PC over his tailnet, which the inference
+  /// client's transport policy is the only other place it allows — so this is
+  /// stated plainly in the interface rather than made convenient.
   public var webSearchEnabled: Bool
   /// Whether Evie may read the Mail and Calendar apps.
   ///

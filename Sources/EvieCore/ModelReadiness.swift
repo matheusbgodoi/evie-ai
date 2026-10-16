@@ -89,6 +89,14 @@ public struct ModelReadinessProbe: Sendable {
   }
 
   public func check(_ profile: EvieModelProfile) async -> ModelReadiness {
+    await connectionReport(for: profile).readiness
+  }
+
+  /// The same probe, with what each step found and how long its request took:
+  /// what Settings shows as "Testar conexão". `check` is this report's
+  /// readiness, so the two can never disagree.
+  public func connectionReport(for profile: EvieModelProfile) async -> ModelConnectionReport {
+    var log = ConnectionLog()
     // `/health` carries neither the conversation nor the key, so only the
     // host-and-scheme half of the policy applies to it. A host the client could
     // never reach is not contacted at all.
@@ -96,38 +104,53 @@ public struct ModelReadinessProbe: Sendable {
       let urls = ReadinessURLs(endpoint: profile.endpoint),
       transportPolicy.evaluate(urls.health, credentialHost: urls.health.host) == .allowed
     else {
-      return ModelReadiness(rung: .unreachable)
+      log.record(.reachable, .failed)
+      return log.report(.unreachable)
     }
     switch profile.runtime {
     case .localOnDemand:
-      return await checkLocalBrain(health: urls.health, model: profile.model)
+      return await checkLocalBrain(health: urls.health, model: profile.model, log: &log)
     case .remoteGateway:
-      return await checkGateway(profile, urls: urls)
+      return await checkGateway(profile, urls: urls, log: &log)
     }
   }
 
-  private func checkLocalBrain(health: URL, model: String) async -> ModelReadiness {
-    guard case .answered(let status, let body) = await get(health, within: deadlines.health),
-      (200...299).contains(status)
-    else {
-      return ModelReadiness(rung: .modelCold)
+  private func checkLocalBrain(
+    health: URL,
+    model: String,
+    log: inout ConnectionLog
+  ) async -> ModelConnectionReport {
+    // Loopback carries no key: nothing to accept or refuse.
+    log.record(.key, .notNeeded)
+    let (answer, elapsed) = await timedGet(health, within: deadlines.health)
+    guard case .answered(let status, let body) = answer, (200...299).contains(status) else {
+      log.record(.reachable, .failed, after: elapsed)
+      return log.report(.modelCold)
     }
+    log.record(.reachable, .passed, after: elapsed)
     // mlx-vlm names the model it holds; another one, or none yet, means the
     // first request loads it. A server that does not say is taken at its word.
     switch LocalBrainHealth.loadedModel(in: body) {
     case .some(let loaded) where loaded != model:
-      return ModelReadiness(rung: .modelCold)
+      log.record(.model, .failed, after: elapsed)
+      return log.report(.modelCold)
     default:
-      return ModelReadiness(rung: .ready)
+      log.record(.model, .passed, after: elapsed)
+      return log.report(.ready)
     }
   }
 
-  private func checkGateway(_ profile: EvieModelProfile, urls: ReadinessURLs) async -> ModelReadiness {
-    guard case .answered(let status, _) = await get(urls.health, within: deadlines.health),
-      (200...299).contains(status)
-    else {
-      return ModelReadiness(rung: .unreachable)
+  private func checkGateway(
+    _ profile: EvieModelProfile,
+    urls: ReadinessURLs,
+    log: inout ConnectionLog
+  ) async -> ModelConnectionReport {
+    let (health, healthElapsed) = await timedGet(urls.health, within: deadlines.health)
+    guard case .answered(let status, _) = health, (200...299).contains(status) else {
+      log.record(.reachable, .failed, after: healthElapsed)
+      return log.report(.unreachable)
     }
+    log.record(.reachable, .passed, after: healthElapsed)
 
     // `/health` already passed the host-and-scheme half, so a refusal here is
     // the key half: no reference, or one saved for another host.
@@ -135,7 +158,8 @@ public struct ModelReadinessProbe: Sendable {
       transportPolicy.evaluate(urls.models, credentialHost: profile.credential?.boundHost)
         == .allowed
     else {
-      return ModelReadiness(rung: .keyMissing)
+      log.record(.key, .failed)
+      return log.report(.keyMissing)
     }
     let bearerToken: String?
     do {
@@ -145,17 +169,18 @@ public struct ModelReadinessProbe: Sendable {
         from: credentials
       )
     } catch {
-      return ModelReadiness(rung: .keyMissing)
+      log.record(.key, .failed)
+      return log.report(.keyMissing)
     }
 
-    guard
-      case .answered(let status, let body) = await get(
-        urls.models,
-        bearerToken: bearerToken,
-        within: deadlines.catalog
-      )
-    else {
-      return ModelReadiness(rung: .unreachable)
+    let (list, listElapsed) = await timedGet(
+      urls.models,
+      bearerToken: bearerToken,
+      within: deadlines.catalog
+    )
+    guard case .answered(let status, let body) = list else {
+      log.record(.key, .failed, after: listElapsed)
+      return log.report(.unreachable)
     }
     if status == 401 || status == 403 {
       if bearerToken != nil, let credential = profile.credential {
@@ -163,24 +188,39 @@ public struct ModelReadinessProbe: Sendable {
         // may have been replaced.
         await credentials.invalidate(credential)
       }
-      return ModelReadiness(rung: .keyRejected)
+      log.record(.key, .failed, after: listElapsed)
+      return log.report(.keyRejected)
     }
     guard (200...299).contains(status) else {
-      return ModelReadiness(rung: .unreachable)
+      log.record(.key, .failed, after: listElapsed)
+      return log.report(.unreachable)
     }
+    // No token at this point means none applies — a loopback server with no
+    // key reference — and its list answered without one.
+    log.record(.key, bearerToken == nil ? .notNeeded : .passed, after: listElapsed)
+    log.availableModels = GatewayModelEntry.ids(in: body)
     guard let entry = GatewayModelEntry.find(profile.model, in: body) else {
-      return ModelReadiness(rung: .modelUnknown)
+      log.record(.model, .failed, after: listElapsed)
+      return log.report(.modelUnknown)
     }
 
     let isLoaded: Bool
+    let loadElapsed: Duration
     if let stated = entry.isLoaded {
-      isLoaded = stated
+      (isLoaded, loadElapsed) = (stated, listElapsed)
     } else {
-      isLoaded = await isResident(entry, running: urls.running, bearerToken: bearerToken)
+      (isLoaded, loadElapsed) = await isResident(
+        entry,
+        running: urls.running,
+        bearerToken: bearerToken
+      )
     }
-    return ModelReadiness(
-      rung: isLoaded ? .ready : .modelCold,
-      observedCapabilities: entry.capabilities
+    log.record(.model, isLoaded ? .passed : .failed, after: loadElapsed)
+    return log.report(
+      ModelReadiness(
+        rung: isLoaded ? .ready : .modelCold,
+        observedCapabilities: entry.capabilities
+      )
     )
   }
 
@@ -190,25 +230,38 @@ public struct ModelReadinessProbe: Sendable {
     _ entry: GatewayModelEntry,
     running: URL,
     bearerToken: String?
-  ) async -> Bool {
+  ) async -> (Bool, Duration) {
+    let (answer, elapsed) = await timedGet(
+      running,
+      bearerToken: bearerToken,
+      within: deadlines.catalog
+    )
     guard
-      case .answered(let status, let body) = await get(
-        running,
-        bearerToken: bearerToken,
-        within: deadlines.catalog
-      ),
+      case .answered(let status, let body) = answer,
       (200...299).contains(status),
       let states = RunningModels.states(in: body)
     else {
-      return true
+      return (true, elapsed)
     }
     let names = [entry.id, entry.physicalModelID].compactMap { $0 }
-    return names.contains { states[$0] == "ready" }
+    return (names.contains { states[$0] == "ready" }, elapsed)
   }
 
   private enum Answer {
     case answered(status: Int, body: Data)
     case noAnswer
+  }
+
+  /// `get`, and how long it took to answer or be given up on.
+  private func timedGet(
+    _ url: URL,
+    bearerToken: String? = nil,
+    within deadline: Duration
+  ) async -> (Answer, Duration) {
+    let clock = ContinuousClock()
+    let started = clock.now
+    let answer = await get(url, bearerToken: bearerToken, within: deadline)
+    return (answer, clock.now - started)
   }
 
   /// One `GET`, given up on at `deadline`. The idle timeout alone would not do:
@@ -418,6 +471,18 @@ struct GatewayModelEntry: Equatable {
   var capabilities: EvieModelProfile.Capabilities? {
     guard let vision, let tools else { return nil }
     return EvieModelProfile.Capabilities(vision: vision, tools: tools)
+  }
+
+  /// Every model id the list names, in its order; empty when the body is not
+  /// a model list. Settings offers these as the profile's model.
+  static func ids(in body: Data) -> [String] {
+    guard
+      let object = try? JSONSerialization.jsonObject(with: body) as? [String: Any],
+      let data = object["data"] as? [[String: Any]]
+    else {
+      return []
+    }
+    return data.compactMap { $0["id"] as? String }
   }
 
   /// The entry whose `id` is `model`, or `nil` when the body lists no such

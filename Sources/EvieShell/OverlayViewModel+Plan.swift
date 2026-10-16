@@ -192,7 +192,7 @@ extension OverlayViewModel {
       conversation.append(userMessage)
       conversation.append(ChatMessage(role: .assistant, content: written))
       persistConversation()
-      settle(summary: "Respondido direto · somente local")
+      settle(summary: "Respondido direto · \(answeringLocation.statusTag)")
     } catch is CancellationError {
       finishCancellation(requestID: requestID)
     } catch {
@@ -221,8 +221,8 @@ extension OverlayViewModel {
     persistConversation()
     settle(
       summary: plan.findings.count == plan.steps.count
-        ? "\(plan.steps.count) etapas · somente local"
-        : "\(plan.findings.count) de \(plan.steps.count) etapas · somente local"
+        ? "\(plan.steps.count) etapas · \(answeringLocation.statusTag)"
+        : "\(plan.findings.count) de \(plan.steps.count) etapas · \(answeringLocation.statusTag)"
     )
   }
 

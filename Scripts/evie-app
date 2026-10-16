@@ -32,9 +32,17 @@ readonly EVIE_BUILD_DIR="${EVIE_REPOSITORY_DIR}/.build/release"
 readonly EVIE_APP_DIR="${EVIE_BUILD_DIR}/${EVIE_APP_NAME}.app"
 readonly EVIE_INSTALL_DIR="${EVIE_INSTALL_DIR_OVERRIDE:-${HOME}/Applications}"
 readonly EVIE_INSTALLED_APP="${EVIE_INSTALL_DIR}/${EVIE_APP_NAME}.app"
+# Evie's own keychain item for the PC gateway's key, and the one the PC stack's
+# setup wrote on this Mac. Must match `EvieModelProfile.builtInPC.credential`
+# and `EvieModelKeys.pcConfigurationItem`.
+readonly EVIE_MODEL_KEY_SERVICE="com.matheusbgodoi.evie.model"
+readonly EVIE_MODEL_KEY_ACCOUNT="pc-3090"
+readonly EVIE_MODEL_KEY_HOST="ai-node-3090.tail6146ef.ts.net"
+readonly PC_CONFIGURATION_KEY_SERVICE="local-ai-3090"
+readonly PC_CONFIGURATION_KEY_ACCOUNT="gateway-api-key"
 
 function usage() {
-  print "Usage: Scripts/evie-app <build|identity|install|run|status|uninstall>"
+  print "Usage: Scripts/evie-app <build|identity|install|run|status|uninstall|import-pc-key>"
   print ""
   print "  build      Compile release, assemble ${EVIE_APP_NAME}.app in .build/release, and"
   print "             sign it with the pinned '${EVIE_SIGNING_IDENTITY_NAME}' certificate"
@@ -44,6 +52,9 @@ function usage() {
   print "  run        Launch the installed bundle the way TCC requires"
   print "  status     Report bundle, signature, and permission state"
   print "  uninstall  Remove the installed bundle"
+  print "  import-pc-key"
+  print "             Copy the PC gateway key from ${PC_CONFIGURATION_KEY_SERVICE} into Evie's own"
+  print "             keychain item, readable by the installed bundle only"
 }
 
 # The SHA-1 of every valid code-signing identity whose name is exactly
@@ -444,6 +455,54 @@ function uninstall_app() {
   print "'tccutil reset All ${EVIE_BUNDLE_ID}', if you want a clean slate."
 }
 
+# Copies the PC gateway's key from the PC configuration's keychain item into
+# Evie's own, the same copy Configurações › Cérebro › "Importar da configuração
+# do PC" makes, for a Mac set up from a terminal.
+#
+# The key never appears in an argument list, where any process could read it
+# for as long as the command runs (`ps -o args`). It is read into a variable,
+# checked, and written to `security add-generic-password` through a pipe: `-w`
+# given last with no value makes `security` read the password from stdin, once
+# and then again to confirm it (verified 2026-10-16 on macOS 27.2 with a
+# throwaway item). `print` and `printf` are shell builtins, so nothing is exec'd
+# with the key either. It is never printed.
+#
+# `-T` names the installed bundle as the one program allowed to read the item
+# without asking — not `security`, not this script, and not the copy in .build,
+# which is rebuilt and deleted constantly.
+function import_pc_key() {
+  if [[ ! -d "${EVIE_INSTALLED_APP}" ]]; then
+    print -u2 "Evie is not installed at ${EVIE_INSTALLED_APP}, and the key is tied to that copy."
+    print -u2 "Run 'Scripts/evie-app build' and 'Scripts/evie-app install' first."
+    return 1
+  fi
+
+  local key
+  # One read. macOS may ask before handing another program's item to
+  # `security`; "Permitir" is enough, since it is read only this once.
+  if ! key=$(security find-generic-password \
+    -s "${PC_CONFIGURATION_KEY_SERVICE}" -a "${PC_CONFIGURATION_KEY_ACCOUNT}" -w 2>/dev/null); then
+    print -u2 "No ${PC_CONFIGURATION_KEY_SERVICE} / ${PC_CONFIGURATION_KEY_ACCOUNT} item in the keychain,"
+    print -u2 "or macOS did not allow reading it. Paste the key in Configurações › Cérebro instead."
+    return 1
+  fi
+  # Like the app's own check: one printable token, no spaces, one line.
+  if [[ -z "${key}" || "${key}" == *[^[:graph:]]* ]]; then
+    key=""
+    print -u2 "The ${PC_CONFIGURATION_KEY_SERVICE} item does not hold a single-line key; nothing was saved."
+    return 1
+  fi
+
+  printf '%s\n%s\n' "${key}" "${key}" | security add-generic-password -U \
+    -s "${EVIE_MODEL_KEY_SERVICE}" -a "${EVIE_MODEL_KEY_ACCOUNT}" \
+    -l "Evie — chave do modelo (${EVIE_MODEL_KEY_HOST})" \
+    -T "${EVIE_INSTALLED_APP}" -w >/dev/null
+  key=""
+
+  print "Saved the PC key as ${EVIE_MODEL_KEY_SERVICE} / ${EVIE_MODEL_KEY_ACCOUNT}, readable by"
+  print "${EVIE_INSTALLED_APP}. If Evie is open, the next question uses it."
+}
+
 case "${1:-}" in
   build) build ;;
   identity) identity ;;
@@ -451,5 +510,6 @@ case "${1:-}" in
   run) run_app ;;
   status) status ;;
   uninstall) uninstall_app ;;
+  import-pc-key) import_pc_key ;;
   *) usage; exit 1 ;;
 esac

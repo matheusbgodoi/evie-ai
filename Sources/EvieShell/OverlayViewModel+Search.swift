@@ -55,6 +55,8 @@ extension OverlayViewModel {
     // his own notes, quoted; handing them to the next turn as something Evie
     // said would strip the fence that keeps note text data rather than
     // instruction, and reading six passages out loud is unbearable.
+    // "Somente local" stays here, alone among the status lines: a note search
+    // reads this Mac's index and asks no brain anything.
     settle(
       summary: found.isEmpty
         ? "Nada nas anotações · somente local"

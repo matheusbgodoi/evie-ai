@@ -464,15 +464,23 @@ blocks on it. The loader does not read credentials or print configuration. A
 profile holds a `CredentialReference` (keychain service, account, bound host),
 never a key.
 
-The model settings window saves through
-`EvieConfigurationStore.saveActiveProfile`, which re-reads the file, changes only
-the profile in use, never writes an environment override, and writes schema v2
+The "Cérebro" settings tab (v2 S2d) edits the preferred profile (the head of the
+preference order), the Mac-fallback choice and each profile's endpoint, model,
+context cap, output cap, default reasoning and sampling, through
+`EvieProfileDraft`; the endpoint is checked live against `ModelTransportPolicy`
+with the profile's own credential. It saves through
+`EvieConfigurationStore.saveProfiles`, which re-reads the file, applies only the
+drafts that changed, never writes an environment override, and writes schema v2
 with atomic replacement and mode `0600`; the resolver then takes the reloaded
 profiles, so the next turn uses them. A damaged file is repaired from the profiles Evie
 launched with, after its bytes are kept as `config.json.damaged.bak` (`0600`); a
 file from a newer schema, or one that cannot be read and so cannot be backed up,
-is left alone and the save fails with the reason. Endpoint, model identity, and context remain
-visible but read-only until the profile pane (S2d).
+is left alone and the save fails with the reason. "Testar conexão" runs
+`ModelReadinessProbe.connectionReport(for:)` on the profile as edited: the
+probe's steps (reachable, key accepted, model loaded) with the time each request
+took, and the server's model list for the model field. The tab also saves the PC
+key into Evie's own keychain item, pasted or copied once from the PC
+configuration's item (`EvieModelKeys`); see `docs/SECURITY.md`.
 
 [ADR 0007](adr/0007-local-development-runtime.md) accepts this development-only
 layout:

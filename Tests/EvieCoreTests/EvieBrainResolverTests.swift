@@ -35,7 +35,7 @@ struct EvieBrainResolverTests {
     #expect(brain.rung == .ready)
     #expect(
       brain.notice
-        == "Sem a chave do PC — usando o Mac. Importe a chave em Ajustes › Cérebro."
+        == "Sem a chave do PC — usando o Mac. Importe a chave em Configurações › Cérebro."
     )
     try brain.profile.configuration.validate()
     // The PC's key was never looked for on the network: the probe was not asked.

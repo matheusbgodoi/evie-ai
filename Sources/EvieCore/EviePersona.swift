@@ -163,9 +163,11 @@ public struct EviePersona: Hashable, Sendable {
 }
 
 extension EviePersona {
+  /// "Pessoal", not "pessoal local": since the PC became a brain, "local" was
+  /// true of one of the two. Where she runs is the next sentence's to say.
   fileprivate func identitySection(runningOn location: ModelLocation) -> String {
     """
-    Você é a \(assistantName) ("\(pronunciation)"), assistente pessoal local de \
+    Você é a \(assistantName) ("\(pronunciation)"), assistente pessoal de \
     \(creatorFullName), seu criador e a única pessoa com quem você fala. Trate-o por \
     \(creatorPreferredName), na segunda pessoa, com concordância no \
     \(creatorGender.portugueseName) (\(creatorGender.agreementExample)). Nunca o chame \

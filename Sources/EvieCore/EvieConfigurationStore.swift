@@ -34,12 +34,31 @@ public struct EvieConfigurationStore: Sendable {
     try writeUserOnly(Self.encode(profiles), to: fileURL)
   }
 
+  /// The settings pane's save of the profile in use alone.
+  ///
+  /// `saveProfiles` with an edit to that one profile; see it for how the file
+  /// is re-read, repaired or refused.
+  public func saveActiveProfile(
+    reading loader: EvieConfigurationLoader,
+    environment: [String: String],
+    otherwise baseline: EvieModelProfileSet,
+    _ edit: (inout EvieModelProfile) -> Void
+  ) throws -> EvieModelProfileSet {
+    try saveProfiles(reading: loader, environment: environment, otherwise: baseline) {
+      profiles, activeID in
+      try profiles.updateProfile(id: activeID, edit)
+    }
+  }
+
   /// The settings pane's save.
   ///
   /// It re-reads the file rather than trusting what the pane was opened with,
-  /// so an edit made by hand while the window was open survives, changes only
-  /// the profile in use, and writes v2. Before schema v2 this was a reload and a
-  /// v1 write, which would have turned a v2 file back into v1.
+  /// so an edit made by hand while the window was open survives in every field
+  /// the pane did not change, and writes v2. Before schema v2 this was a reload
+  /// and a v1 write, which would have turned a v2 file back into v1. `edit` gets
+  /// the set as the file has it — no `EVIE_MODEL_*` override in it — and the id
+  /// of the profile in use (`EVIE_MODEL_PROFILE`'s, or the preferred one), the
+  /// one those overrides apply to.
   ///
   /// A damaged file is repaired from `baseline` instead of refusing the save:
   /// saving from Settings is how a person fixes it. Its bytes are kept first as
@@ -47,11 +66,11 @@ public struct EvieConfigurationStore: Sendable {
   /// profiles the baseline does not have. Two cases are refused instead, with the
   /// file untouched: one written by a newer schema, whose fields this build would
   /// drop, and one that cannot be read, which therefore cannot be backed up.
-  public func saveActiveProfile(
+  public func saveProfiles(
     reading loader: EvieConfigurationLoader,
     environment: [String: String],
     otherwise baseline: EvieModelProfileSet,
-    _ edit: (inout EvieModelProfile) -> Void
+    _ edit: (inout EvieModelProfileSet, _ activeID: String) throws -> Void
   ) throws -> EvieModelProfileSet {
     let selection = environment.filter { Self.selectionVariables.contains($0.key) }
     let current: EvieLoadedConfiguration?
@@ -72,7 +91,7 @@ public struct EvieConfigurationStore: Sendable {
       current?.activeProfile.id
       ?? selection["EVIE_MODEL_PROFILE"].flatMap { $0.isEmpty ? nil : $0 }
       ?? baseline.preferredProfile.id
-    try profiles.updateProfile(id: activeID, edit)
+    try edit(&profiles, activeID)
     try save(profiles)
     return profiles
   }

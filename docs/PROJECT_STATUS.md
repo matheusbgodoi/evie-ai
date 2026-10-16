@@ -464,8 +464,18 @@ and 30 s cache, refreshed at launch, on activation and on network changes) is
 done; verified in S2b: `/health` sits at the gateway's origin and needs no key,
 and `/v1/models` reports `loadState`/`active` per alias. Findings #1 (the
 interim above), #5, #6, #7 and #8 of the 2026-10-16 adversarial review are fixed
-(see the WORKLOG). Next: S2d (Settings UI with the profile pane, key import,
-per-profile copy), then S3 (the Mac launcher behind `LocalBrainStarting`).
+(see the WORKLOG). S2d is done (2026-10-16): Configurações › Cérebro picks the
+preferred brain and the Mac fallback, edits each profile with the endpoint
+checked live, runs "Testar conexão" (three steps with times), and saves the PC
+key into Evie's own keychain item, pasted or imported once from
+`local-ai-3090`; `Scripts/evie-app import-pc-key` does the import from a
+terminal; the status line and error card name the brain that answered. Still
+owed for S2d: its manual QA (fresh install → "sem chave", import, three green
+steps; PC off with `.automatic` and `.ask`), which needs `Scripts/evie-app
+install`, and two [VERIFY]s on whether macOS prompts when Evie reads her item
+after a rebuild or after the script created it (`docs/SECURITY.md`). Next: S3
+(the Mac launcher behind `LocalBrainStarting`); the first-run guide's key and
+brain rows (S7) can now call the S2d functions.
 
 **Evie v2, S7 (packaging, install, permissions) — partly done on `v2-packaging`,
 2026-10-16, merged into `v2` the same day.** Signing is pinned to the "Evie Dev"
@@ -473,8 +483,9 @@ certificate's SHA-1 with the designated requirement asserted; `install` opens
 `~/Applications/Evie.app`, `run` opens only that copy and `evie-runtime launch`
 hands over to it, starting no model (the loopback Gemma for the `custom`
 profile is `evie-runtime launch-custom`); the first-run permission checklist
-has its five system rows. The v2 config seeding came with S2a on `v2`. Open: the PC key and Brain rows,
-which wait on S2d (hook `TODO(S7-brain-rows)`), and the manual QA in
+has its five system rows. The v2 config seeding came with S2a on `v2`. Open: the PC key and Brain rows
+(hook `TODO(S7-brain-rows)`; S2d's `EvieModelKeys` and
+`ModelReadinessProbe.connectionReport` are what they call), and the manual QA in
 `docs/MACOS_RUNTIME.md`, which needs the owner to run `Scripts/evie-app install`
 — nothing is installed in `~/Applications` on this Mac today.
 

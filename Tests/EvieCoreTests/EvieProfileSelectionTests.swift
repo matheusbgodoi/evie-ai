@@ -39,7 +39,7 @@ struct EvieProfileSelectionTests {
     #expect(choice.passedOver == .init(profileID: EvieModelProfile.pcProfileID, rung: .keyMissing))
     #expect(
       choice.notice
-        == "Sem a chave do PC — usando o Mac. Importe a chave em Ajustes › Cérebro."
+        == "Sem a chave do PC — usando o Mac. Importe a chave em Configurações › Cérebro."
     )
     #expect(choice.environment == ["EVIE_MODEL_PROFILE": EvieModelProfile.macProfileID])
   }

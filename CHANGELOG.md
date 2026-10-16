@@ -6,6 +6,34 @@ All notable changes to Evie are documented here. Dates use `YYYY-MM-DD`.
 
 ### Changed
 
+- **Settings has a "Cérebro" tab, and the PC key can be saved from it.** The tab
+  picks the brain Evie asks first (PC RTX 3090 / Mac local) and what happens when
+  the PC is out (Não usar o Mac / Perguntar / Usar o Mac automaticamente), and
+  edits each profile's address (checked as it is typed against the transport
+  policy), model (typed, or picked from the server's list), context cap — shown
+  as "servidor: 200 704 · Evie usa: 135 168" —, longest answer, default reasoning
+  (Desligado / Baixo / Médio / Máximo) and sampling. "Testar conexão" shows ✓/✗
+  and a time for each step: PC reachable, key accepted, model loaded. The key is
+  pasted into a field that never shows it back ("chave salva ✓" / "sem chave"), or
+  imported once from the PC configuration's keychain item (`local-ai-3090`), with
+  a note before the button that macOS will ask and may ask for the Mac password.
+  Either way it goes into Evie's own keychain item,
+  `com.matheusbgodoi.evie.model` / `pc-3090`, and the next turn uses it. The
+  sampling pane under Avançado › Modelo moved here; Avançado keeps Diagnóstico,
+  Atualizar and Permissões, and Diagnóstico now shows the profile in use instead
+  of a fixed 127.0.0.1:38433.
+- **`Scripts/evie-app import-pc-key`** makes the same copy from a terminal, tied
+  to the installed `~/Applications/Evie.app`. The key travels through a pipe,
+  never as an argument, and is never printed.
+- **The status line and the error card name the brain that answered.** "· somente
+  local" is now "· no seu PC" or "· somente neste Mac", and a failed turn suggests
+  "O PC não respondeu. Abra Configurações › Cérebro e use Testar conexão." (or
+  "O cérebro do Mac não respondeu…") instead of "O modelo local não respondeu…".
+  A note search still says "somente local", which it is. The missing-key notice
+  and a refused key now point to Configurações › Cérebro, the app's own settings,
+  rather than "Ajustes". The persona calls Evie "assistente pessoal", no longer
+  "assistente pessoal local", since only one of her two brains is local.
+
 - **Each conversation picks its brain before the turn is built, and moves to the
   Mac when the PC fails before answering.** `EvieBrainResolver` keeps the PC
   unless its key is missing or the readiness probe finds it unreachable, its key

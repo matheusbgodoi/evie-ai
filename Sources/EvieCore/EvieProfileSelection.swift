@@ -33,7 +33,7 @@ public struct EvieProfileChoice: Sendable, Equatable {
   ) -> String {
     switch (skipped.location, chosen.location) {
     case (.yourPC, .thisMac):
-      "Sem a chave do PC — usando o Mac. Importe a chave em Ajustes › Cérebro."
+      "Sem a chave do PC — usando o Mac. Importe a chave em Configurações › Cérebro."
     default:
       "Sem a chave de \(skipped.displayName) — usando \(chosen.displayName)."
     }

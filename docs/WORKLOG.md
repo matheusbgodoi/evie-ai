@@ -1,5 +1,72 @@
 # Work log
 
+## 2026-10-16 — v2 S2d: the Cérebro settings tab, the PC key import, per-brain copy
+
+- Completed: slice S2d. No new ADR (ADR 0014 exists; the keychain copy is
+  recorded in `docs/SECURITY.md`).
+  - New in `Sources/EvieCore/`: `EvieBrainSettings.swift` (per-location copy,
+    the context line, reasoning and fallback names, `preferring(_:)`,
+    `EvieManagedField`, `EvieProfileDraft`), `EvieModelKeys.swift`
+    (`EvieKeychainItems`/`LoginKeychainItems`, `EvieModelKeys` paste and
+    one-read import, `EvieModelKeyStatus`, `EvieModelKeyError`),
+    `ModelConnectionReport.swift` (steps, outcomes, times, model list, copy).
+  - `ModelReadinessProbe.connectionReport(for:)`; `check` now returns its
+    readiness. `ModelTransportPolicy.refusal(of:credentialHost:)` with English
+    `reason` (unchanged in `evaluate`) and Portuguese `explanation`.
+    `EvieConfigurationStore.saveProfiles` (whole set; `saveActiveProfile` calls it).
+  - Shell: `ModelSettingsViewModel` rewritten (still `ObservableObject`) and
+    `ModelSettingsView` is the "Cérebro" tab; Avançado lost its "Modelo" pane;
+    `DiagnosticsSettingsView` shows the profile in use, not 127.0.0.1:38433;
+    `OverlayViewModel.answeringLocation` drives "· no seu PC" / "· somente neste
+    Mac" and the per-brain error suggestion; `AppCoordinator` keeps the readiness
+    cache and refreshes it after a key save.
+  - `Scripts/evie-app import-pc-key`: refuses without the installed app, one
+    `security find-generic-password -w`, one-line check, then a pipe into
+    `security add-generic-password -U … -T ~/Applications/Evie.app -w`.
+  - Copy: "Importe a chave em Configurações › Cérebro" (was "Ajustes › Cérebro";
+    "Ajustes" names System Settings), the 401 message points there, the persona
+    says "assistente pessoal" (no "local").
+  - Verified 2026-10-16 (macOS 27.2): with `-w` last, `security
+    add-generic-password` reads the password and its confirmation from stdin,
+    and `-U` replaces it — with a throwaway item, deleted after. An earlier
+    attempt with a keychain path after `-w` wrote a dummy item (password = the
+    path) to the login keychain; it was deleted at once and nothing else was
+    touched. `local-ai-3090` / `gateway-api-key` exists on this Mac (attributes
+    only); Evie's own item does not yet; nothing is installed in
+    `~/Applications`.
+  - Docs: design doc (S2d "Implemented" note), `docs/SECURITY.md`,
+    `docs/ARCHITECTURE.md`, `docs/MACOS_RUNTIME.md`, README, CHANGELOG,
+    `docs/PROJECT_STATUS.md`.
+- Tests (new suites "Evie model keys", 11; "Brain settings", 13; "Evie app PC
+  key import", 4; 12 new cases in "Model readiness probe"; no network, and the
+  only real keychain call is a read-only lookup of an item that cannot exist):
+  paste saved trimmed with its label and the cache invalidated; empty, `Bearer`,
+  two-line and control-character pastes refused, unechoed; import reads the
+  source exactly once, `sourceMissing`, `accessDenied` for -128/-25293/-25308;
+  status never reads a secret. Copy per location, the context line with no-break
+  spaces, choice names, draft round trip and edits, Portuguese refusals,
+  managed fields kept, every policy rule explained, the policy's English
+  unchanged, `preferring`, the whole-set save as v2 with no override written.
+  Connection report: all steps with times and the model list; no key (the list
+  never asked); refused key; unknown and cold models; a silent PC; a host off
+  the allowlist (nothing sent); a loopback gateway (key not needed, no header);
+  the Mac running and stopped; titles; times. Script: stdin carries the key
+  twice, argv and output never do, `-T` is the installed app; refusals without
+  the app, without the item and with a two-line item. Two existing expectations
+  changed with the copy (the missing-key notice in `EvieProfileSelectionTests`
+  and `EvieBrainResolverTests`), still exact matches.
+- Commands: `swift build` (whole package) with no warnings; `Scripts/evie-app
+  build` (release, `-warnings-as-errors`, signed and verified) succeeded;
+  `Scripts/test --filter` on the new and touched suites; full `Scripts/test`
+  954 tests in 92 suites passed, 1 known issue (the deliberate one in the
+  osascript deadline test), as before.
+- Open: the S2d manual QA needs an installed app (not launched here). [VERIFY]
+  that a rebuilt, self-signed Evie reads her own item without a prompt, and that
+  she reads an item the script created with `-T` without the login-password
+  prompt. The first-run guide rows (S7) are not added. The six tabs' fit at the
+  minimum window width was not seen on screen.
+- Next: S3 (the Mac launcher behind `LocalBrainStarting`).
+
 ## 2026-10-16 — v2 S2c: per-turn brain resolver and failover
 
 - Completed: slice S2c and ADR 0014 (the spec placed the ADR in S2d; it is this

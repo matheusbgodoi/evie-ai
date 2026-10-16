@@ -360,6 +360,195 @@ extension ModelReadinessProbeTests {
   }
 }
 
+// MARK: - Connection test
+
+/// "Testar conexão": the same probe, step by step, with a time for each step.
+extension ModelReadinessProbeTests {
+  @Test("a ready PC passes all three steps, each with a time, and lists its models")
+  func connectionTestOnAReadyGateway() async {
+    let server = StubServer.remote()
+    server.answerLikeTheGateway()
+    let (probe, _) = makeProbe(for: server, tokens: [server.credential: token])
+    let profile = server.profile(model: "qwen-daily")
+
+    let report = await probe.connectionReport(for: profile)
+
+    #expect(report.readiness == (await probe.check(profile)))
+    #expect(report.lines.map(\.step) == [.reachable, .key, .model])
+    #expect(report.lines.map(\.outcome) == [.passed, .passed, .passed])
+    #expect(report.lines.allSatisfy { $0.elapsed != nil })
+    #expect(
+      report.availableModels == ["gemma-write", "ornith-turbo", "qwen-daily", "qwen-uncensored"]
+    )
+    #expect(report.summary(for: profile) == "Tudo certo: qwen-daily está carregado.")
+  }
+
+  @Test("with no saved key the key step fails, nothing carries the key, and the list is never asked")
+  func connectionTestWithoutKey() async {
+    let server = StubServer.remote()
+    server.answerLikeTheGateway()
+    let (probe, _) = makeProbe(for: server, tokens: [:])
+    let profile = server.profile(model: "qwen-daily")
+
+    let report = await probe.connectionReport(for: profile)
+
+    #expect(report.readiness.rung == .keyMissing)
+    #expect(report.lines.map(\.outcome) == [.passed, .failed, .notRun])
+    #expect(report.line(.key).elapsed == nil)
+    #expect(server.sent.map(\.path) == ["/health"])
+    #expect(report.availableModels.isEmpty)
+  }
+
+  @Test("a refused key fails the key step after the list answered")
+  func connectionTestWithRefusedKey() async {
+    let server = StubServer.remote()
+    server.answer("/health", with: .json(200, GatewayReadinessFixtures.health))
+    server.answer("/v1/models", with: .json(401, GatewayReadinessFixtures.unauthorizedBody))
+    let (probe, _) = makeProbe(for: server, tokens: [server.credential: token])
+    let profile = server.profile(model: "qwen-daily")
+
+    let report = await probe.connectionReport(for: profile)
+
+    #expect(report.readiness.rung == .keyRejected)
+    #expect(report.lines.map(\.outcome) == [.passed, .failed, .notRun])
+    #expect(report.line(.key).elapsed != nil)
+    #expect(report.summary(for: profile) == "O PC recusou a chave salva. Cole ou importe a chave de novo.")
+  }
+
+  @Test("a model the PC does not list fails the model step, and the list is still offered")
+  func connectionTestWithUnknownModel() async {
+    let server = StubServer.remote()
+    server.answerLikeTheGateway()
+    let (probe, _) = makeProbe(for: server, tokens: [server.credential: token])
+    let profile = server.profile(model: "qwen-turbo")
+
+    let report = await probe.connectionReport(for: profile)
+
+    #expect(report.readiness.rung == .modelUnknown)
+    #expect(report.lines.map(\.outcome) == [.passed, .passed, .failed])
+    #expect(report.availableModels.contains("qwen-daily"))
+    #expect(report.summary(for: profile) == "O PC não tem o modelo qwen-turbo. Escolha um da lista.")
+  }
+
+  @Test("an unloaded model fails only the model step: the first question waits for the load")
+  func connectionTestWithColdModel() async {
+    let server = StubServer.remote()
+    server.answerLikeTheGateway()
+    let (probe, _) = makeProbe(for: server, tokens: [server.credential: token])
+    let profile = server.profile(model: "ornith-turbo")
+
+    let report = await probe.connectionReport(for: profile)
+
+    #expect(report.readiness.rung == .modelCold)
+    #expect(report.lines.map(\.outcome) == [.passed, .passed, .failed])
+  }
+
+  @Test("a PC that does not answer fails the first step and runs no other")
+  func connectionTestOnASilentPC() async {
+    let server = StubServer.remote()
+    server.answer("/health", with: .hang)
+    let (probe, _) = makeProbe(for: server, tokens: [server.credential: token])
+    let profile = server.profile(model: "qwen-daily")
+
+    let report = await probe.connectionReport(for: profile)
+
+    #expect(report.readiness.rung == .unreachable)
+    #expect(report.lines.map(\.outcome) == [.failed, .notRun, .notRun])
+    #expect(report.line(.reachable).elapsed != nil)
+    #expect(report.summary(for: profile) == "O PC não respondeu. Ele está ligado e no Tailscale?")
+  }
+
+  @Test("a host off the allowlist fails the first step without being contacted")
+  func connectionTestOffTheAllowlist() async {
+    let server = StubServer.remote()
+    server.answerLikeTheGateway()
+    let (probe, _) = makeProbe(
+      for: server,
+      tokens: [server.credential: token],
+      allowedRemoteHosts: ["someone.else.test"]
+    )
+
+    let report = await probe.connectionReport(for: server.profile(model: "qwen-daily"))
+
+    #expect(report.lines.map(\.outcome) == [.failed, .notRun, .notRun])
+    #expect(report.line(.reachable).elapsed == nil)
+    #expect(server.sent.isEmpty)
+  }
+
+  @Test("a loopback server with no key reference shows the key step as not needed")
+  func connectionTestOnALoopbackGateway() async {
+    let server = StubServer.loopback()
+    server.answer("/health", with: .json(200, GatewayReadinessFixtures.health))
+    server.answer("/v1/models", with: .json(200, GatewayReadinessFixtures.modelsWithoutLoadState))
+    server.answer("/running", with: .json(200, GatewayReadinessFixtures.running))
+    let (probe, _) = makeProbe(for: server, tokens: [:])
+    var profile = server.profile(model: "qwen-daily", referencesKey: false)
+    profile.endpoint = URL(string: "http://\(server.authority)/v1")!
+
+    let report = await probe.connectionReport(for: profile)
+
+    #expect(report.readiness.rung == .ready)
+    #expect(report.lines.map(\.outcome) == [.passed, .notNeeded, .passed])
+    #expect(server.sent.allSatisfy { $0.authorization == nil })
+  }
+
+  @Test("a running Mac brain needs no key and passes with its model")
+  func connectionTestOnARunningMacBrain() async {
+    let server = StubServer.loopback()
+    let profile = server.localProfile()
+    server.answer(
+      "/health",
+      with: .json(200, LocalBrainHealthFixtures.health(loadedModel: profile.model))
+    )
+    let (probe, _) = makeProbe(for: server, tokens: [:])
+
+    let report = await probe.connectionReport(for: profile)
+
+    #expect(report.readiness.rung == .ready)
+    #expect(report.lines.map(\.outcome) == [.passed, .notNeeded, .passed])
+    #expect(report.title(of: .reachable, for: profile) == "Servidor do Mac rodando")
+  }
+
+  @Test("a Mac brain that is not running fails the first step and is still modelCold")
+  func connectionTestOnAStoppedMacBrain() async {
+    let server = StubServer.loopback()
+    server.answer("/health", with: .fail(.cannotConnectToHost))
+    let (probe, _) = makeProbe(for: server, tokens: [:])
+    let profile = server.localProfile()
+
+    let report = await probe.connectionReport(for: profile)
+
+    #expect(report.readiness.rung == .modelCold)
+    #expect(report.lines.map(\.outcome) == [.failed, .notNeeded, .notRun])
+    #expect(
+      report.summary(for: profile)
+        == "O cérebro do Mac não está rodando."
+    )
+  }
+
+  @Test("step titles name the PC's steps in order")
+  func connectionTestTitles() {
+    let pc = EvieModelProfileSet.builtIn.preferredProfile
+    let report = ModelConnectionReport(
+      readiness: ModelReadiness(rung: .ready),
+      lines: [],
+      availableModels: []
+    )
+
+    #expect(
+      ModelConnectionReport.Step.allCases.map { report.title(of: $0, for: pc) }
+        == ["PC alcançável", "Chave aceita", "Modelo carregado"]
+    )
+  }
+
+  @Test("times read in milliseconds under a second and in seconds above")
+  func connectionTestTimes() {
+    #expect(ModelConnectionReport.formatted(.milliseconds(37)) == "37 ms")
+    #expect(ModelConnectionReport.formatted(.milliseconds(1_240)) == "1,2 s")
+    #expect(ModelConnectionReport.formatted(.microseconds(400)) == "<1 ms")
+  }
+}
+
 // MARK: - Cache
 
 @Suite("Model readiness cache")

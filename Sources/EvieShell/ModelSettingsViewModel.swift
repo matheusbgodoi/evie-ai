@@ -1,128 +1,328 @@
 import EvieCore
 import Foundation
 
+/// The "Cérebro" tab: which brain Evie prefers, what she does when the PC is
+/// out, each profile's fields, its key and its connection test.
+///
+/// The rules — how a typed value becomes a profile, which fields the
+/// environment holds, what each brain is called, what the endpoint check says —
+/// live in EvieCore (`EvieProfileDraft`, `EvieManagedField`, `EvieModelKeys`,
+/// `ModelConnectionReport`), where they are tested. This model only holds what
+/// the pane is showing and runs the pane's buttons.
 @MainActor
 final class ModelSettingsViewModel: ObservableObject {
   /// Which pane of the Avançado tab is showing.
   @Published var advancedPane = 0
-  @Published var temperature: Double
-  @Published var topP: Double
-  @Published var usesDefaultTemperature: Bool
-  @Published var usesDefaultTopP: Bool
-  @Published var maxCompletionTokens: Int
-  @Published var requestTimeout: Double
+  /// The brain asked first: the head of the preference order.
+  @Published var preferredProfileID: String
+  @Published var macFallback: MacFallback
+  /// The profile whose fields are on screen.
+  @Published var editingProfileID: String
+  /// One per profile, in the file's order.
+  @Published var drafts: [EvieProfileDraft]
+  /// Typed or pasted into the key field. Cleared once saved, and never filled
+  /// from the keychain: the field does not echo a saved key back.
+  @Published var pastedKey = ""
+  @Published private(set) var keyStatus: [String: EvieModelKeyStatus] = [:]
+  @Published private(set) var keyFeedback: Feedback?
+  @Published private(set) var isImportingKey = false
+  @Published private(set) var reports: [String: ModelConnectionReport] = [:]
+  @Published private(set) var testingProfileID: String?
   @Published private(set) var feedback: Feedback?
 
-  let endpoint: String
-  let model: String
-  let contextWindowTokens: Int
+  /// The profiles as the file has them, which is what a save edits.
+  private(set) var profiles: EvieModelProfileSet
+  /// The profile in use, with the environment's overrides.
+  private(set) var activeProfile: EvieModelProfile
+  /// The drafts as they were when the pane last loaded, so a save writes only
+  /// the profiles that were edited and leaves the others as the file has them.
+  private var loadedDrafts: [EvieProfileDraft]
 
   private let store: EvieConfigurationStore
   private let loader: EvieConfigurationLoader
   private let environment: [String: String]
+  private let keys: EvieModelKeys
+  private let probe: ModelReadinessProbe
+  private let transportPolicy: ModelTransportPolicy
   private let onSave: @MainActor (EvieLoadedConfiguration) -> Void
+  private let onKeySaved: @MainActor (EvieModelProfile) -> Void
   /// The profiles a damaged file is repaired from: those Evie launched with,
   /// then the last ones saved.
   private var repairBaseline: EvieModelProfileSet
 
   init(
-    configuration: EvieConfiguration,
-    profiles: EvieModelProfileSet,
+    loaded: EvieLoadedConfiguration,
+    repairBaseline: EvieModelProfileSet,
     store: EvieConfigurationStore = EvieConfigurationStore(),
     loader: EvieConfigurationLoader = EvieConfigurationLoader(),
     environment: [String: String] = [:],
-    onSave: @escaping @MainActor (EvieLoadedConfiguration) -> Void
+    factory: ModelClientFactory = .live,
+    keys: EvieModelKeys = .live,
+    onSave: @escaping @MainActor (EvieLoadedConfiguration) -> Void,
+    onKeySaved: @escaping @MainActor (EvieModelProfile) -> Void
   ) {
     self.store = store
     self.loader = loader
     self.environment = environment
+    self.keys = keys
+    probe = factory.makeReadinessProbe()
+    transportPolicy = factory.transportPolicy
     self.onSave = onSave
-    repairBaseline = profiles
-    temperature = configuration.temperature ?? 0.2
-    topP = configuration.topP ?? 0.95
-    usesDefaultTemperature = configuration.temperature == nil
-    usesDefaultTopP = configuration.topP == nil
-    maxCompletionTokens = configuration.maxCompletionTokens
-    requestTimeout = configuration.requestTimeout
-    endpoint = configuration.endpoint.absoluteString
-    model = configuration.model
-    contextWindowTokens = configuration.contextWindowTokens
+    self.onKeySaved = onKeySaved
+    self.repairBaseline = repairBaseline
+    profiles = loaded.profiles
+    activeProfile = loaded.activeProfile
+    preferredProfileID = loaded.profiles.preferredProfile.id
+    macFallback = loaded.profiles.macFallback
+    editingProfileID = loaded.activeProfile.id
+    let drafts = Self.drafts(for: loaded)
+    self.drafts = drafts
+    loadedDrafts = drafts
+    refreshKeyStatus()
+  }
+
+  // MARK: What the pane shows
+
+  var editingIndex: Int {
+    drafts.firstIndex { $0.profileID == editingProfileID } ?? 0
+  }
+
+  var editingProfile: EvieModelProfile {
+    profile(id: editingProfileID) ?? activeProfile
+  }
+
+  /// The fields of the editing profile an `EVIE_MODEL_*` variable holds for
+  /// this run. Only the profile in use takes those overrides.
+  var managedFields: Set<EvieManagedField> {
+    editingProfileID == activeProfile.id ? EvieManagedField.managed(by: environment) : []
+  }
+
+  /// The profile the environment chose by name, if any: the preferred-brain
+  /// picker still saves, but this run keeps using that one.
+  var profileChosenByEnvironment: String? {
+    environment["EVIE_MODEL_PROFILE"].flatMap { $0.isEmpty ? nil : $0 }
+  }
+
+  var endpointProblem: String? {
+    drafts[editingIndex].endpointProblem(
+      credential: editingProfile.credential,
+      policy: transportPolicy
+    )
+  }
+
+  /// Why the editing profile cannot be saved as it is, or nil.
+  var draftProblem: String? {
+    do {
+      _ = try edited(drafts[editingIndex])
+      return nil
+    } catch {
+      return (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
+    }
+  }
+
+  var canSave: Bool {
+    drafts.allSatisfy { (try? edited($0)) != nil }
+  }
+
+  var editingKeyStatus: EvieModelKeyStatus? {
+    editingProfile.credential.map { _ in keyStatus[editingProfileID] ?? .missing }
+  }
+
+  /// The import copies the PC configuration's key, so it is offered only on
+  /// a profile that runs on the PC and takes a key.
+  var offersKeyImport: Bool {
+    editingProfile.location == .yourPC && editingProfile.credential != nil
+  }
+
+  var editingReport: ModelConnectionReport? {
+    reports[editingProfileID]
+  }
+
+  var availableModels: [String] {
+    reports[editingProfileID]?.availableModels ?? []
   }
 
   var completionTokenRange: ClosedRange<Int> {
-    1...contextWindowTokens
+    256...max(256, drafts[editingIndex].contextTokens)
+  }
+
+  var contextTokenRange: ClosedRange<Int> {
+    1_024...max(1_024, editingProfile.serverContextTokens ?? 1_048_576)
   }
 
   var timeoutRange: ClosedRange<Double> {
-    min(0.1, requestTimeout)...max(3_600, requestTimeout)
+    let timeout = drafts[editingIndex].requestTimeout
+    return min(1, timeout)...max(3_600, timeout)
   }
 
   var topPRange: ClosedRange<Double> {
-    min(0.001, topP)...1
+    min(0.001, drafts[editingIndex].topP)...1
   }
 
-  var temperatureIsManaged: Bool {
-    environment["EVIE_MODEL_TEMPERATURE"] != nil
+  /// The editing profile's context line, with the cap as it is being typed.
+  var contextLine: String {
+    var shown = editingProfile
+    shown.contextTokens = drafts[editingIndex].contextTokens
+    return shown.contextLine
   }
 
-  var topPIsManaged: Bool {
-    environment["EVIE_MODEL_TOP_P"] != nil
+  func profile(id: String) -> EvieModelProfile? {
+    id == activeProfile.id ? activeProfile : profiles.profile(id: id)
   }
 
-  var completionLimitIsManaged: Bool {
-    environment["EVIE_MODEL_MAX_COMPLETION"] != nil
-  }
-
-  var timeoutIsManaged: Bool {
-    environment["EVIE_MODEL_TIMEOUT_SECONDS"] != nil
-  }
-
-  var hasManagedValues: Bool {
-    temperatureIsManaged || topPIsManaged || completionLimitIsManaged || timeoutIsManaged
-  }
+  // MARK: Buttons
 
   func save() {
+    let changed = drafts.filter { !loadedDrafts.contains($0) }
+    let preferred = preferredProfileID
+    let fallback = macFallback
+    let managed = EvieManagedField.managed(by: environment)
     do {
-      // The store re-reads the file, edits only the profile in use and writes
-      // schema v2; the environment's overrides are never written into it.
-      let saved = try store.saveActiveProfile(
+      let saved = try store.saveProfiles(
         reading: loader,
         environment: environment,
         otherwise: repairBaseline
-      ) { profile in
-        if !temperatureIsManaged {
-          profile.temperature = usesDefaultTemperature ? nil : temperature
+      ) { set, activeID in
+        for draft in changed {
+          // A profile removed by hand while the pane was open stays removed.
+          guard let base = set.profile(id: draft.profileID) else { continue }
+          let edited = try draft.applied(
+            to: base,
+            keeping: draft.profileID == activeID ? managed : []
+          )
+          try set.updateProfile(id: draft.profileID) { $0 = edited }
         }
-        if !topPIsManaged {
-          profile.topP = usesDefaultTopP ? nil : topP
+        if set.profile(id: preferred) != nil {
+          set = set.preferring(preferred)
         }
-        if !completionLimitIsManaged {
-          profile.maxCompletionTokens = maxCompletionTokens
-        }
-        if !timeoutIsManaged {
-          profile.requestTimeout = requestTimeout
-        }
+        set.macFallback = fallback
       }
       let effective = try loader.loadProfiles(environment: environment)
       repairBaseline = saved
+      adopt(effective)
       onSave(effective)
       feedback = Feedback(
-        message: hasManagedValues
-          ? "Arquivo salvo. Valores gerenciados pelo ambiente continuam prevalecendo."
-          : "Salvo. A próxima pergunta já usa estes ajustes.",
+        message: managed.isEmpty && profileChosenByEnvironment == nil
+          ? "Salvo. A próxima pergunta já usa estes ajustes; a troca de cérebro vale "
+            + "para conversas novas."
+          : "Arquivo salvo. Valores gerenciados pelo ambiente continuam prevalecendo.",
         isError: false
       )
     } catch {
-      feedback = Feedback(message: error.localizedDescription, isError: true)
+      feedback = Feedback(
+        message: (error as? LocalizedError)?.errorDescription ?? error.localizedDescription,
+        isError: true
+      )
     }
   }
 
   func restoreRecommendedSampling() {
-    temperature = 0.2
-    topP = 0.95
-    usesDefaultTemperature = false
-    usesDefaultTopP = false
+    let index = editingIndex
+    drafts[index].temperature = EvieProfileDraft.recommendedTemperature
+    drafts[index].topP = EvieProfileDraft.recommendedTopP
+    drafts[index].usesServerTemperature = false
+    drafts[index].usesServerTopP = false
     feedback = nil
+  }
+
+  func saveKey() async {
+    guard let reference = editingProfile.credential else { return }
+    let profile = editingProfile
+    let pasted = pastedKey
+    // Cleared before the write, so the field never holds the key any longer
+    // than the paste itself, whatever the outcome.
+    pastedKey = ""
+    do {
+      try await keys.save(pasted: pasted, for: reference)
+      keyFeedback = Feedback(message: "Chave salva no Keychain deste Mac.", isError: false)
+      keySaved(for: profile)
+    } catch {
+      keyFeedback = Feedback(message: Self.message(for: error), isError: true)
+    }
+  }
+
+  func importKey() async {
+    guard let reference = editingProfile.credential else { return }
+    let profile = editingProfile
+    isImportingKey = true
+    defer { isImportingKey = false }
+    do {
+      try await keys.importPCConfigurationKey(into: reference)
+      keyFeedback = Feedback(message: "Chave importada da configuração do PC.", isError: false)
+      keySaved(for: profile)
+    } catch {
+      keyFeedback = Feedback(message: Self.message(for: error), isError: true)
+    }
+  }
+
+  /// Runs the probe on the profile as it is being edited, saved or not, so an
+  /// endpoint or model can be tried before it is kept.
+  func testConnection() async {
+    let id = editingProfileID
+    let profile: EvieModelProfile
+    do {
+      profile = try edited(drafts[editingIndex])
+    } catch {
+      feedback = Feedback(message: Self.message(for: error), isError: true)
+      return
+    }
+    testingProfileID = id
+    defer { testingProfileID = nil }
+    reports[id] = await probe.connectionReport(for: profile)
+  }
+
+  func refreshKeyStatus() {
+    var status: [String: EvieModelKeyStatus] = [:]
+    for profile in profiles.profiles {
+      if let reference = profile.credential {
+        status[profile.id] = keys.status(of: reference)
+      }
+    }
+    keyStatus = status
+  }
+
+  // MARK: Helpers
+
+  /// The draft as a profile on top of the one it edits: the profile in use
+  /// keeps the environment's overrides, so a test runs what a turn would.
+  private func edited(_ draft: EvieProfileDraft) throws -> EvieModelProfile {
+    guard let base = profile(id: draft.profileID) else {
+      throw EvieModelProfileSet.ValidationError.unknownProfile(draft.profileID)
+    }
+    let managed =
+      draft.profileID == activeProfile.id ? EvieManagedField.managed(by: environment) : []
+    return try draft.applied(to: base, keeping: managed)
+  }
+
+  private func keySaved(for profile: EvieModelProfile) {
+    refreshKeyStatus()
+    reports[profile.id] = nil
+    onKeySaved(profile)
+  }
+
+  private func adopt(_ loaded: EvieLoadedConfiguration) {
+    profiles = loaded.profiles
+    activeProfile = loaded.activeProfile
+    preferredProfileID = loaded.profiles.preferredProfile.id
+    macFallback = loaded.profiles.macFallback
+    let drafts = Self.drafts(for: loaded)
+    self.drafts = drafts
+    loadedDrafts = drafts
+    if !drafts.contains(where: { $0.profileID == editingProfileID }) {
+      editingProfileID = loaded.activeProfile.id
+    }
+    refreshKeyStatus()
+  }
+
+  /// Every profile's draft; the one in use shows what this run uses.
+  private static func drafts(for loaded: EvieLoadedConfiguration) -> [EvieProfileDraft] {
+    loaded.profiles.profiles.map { profile in
+      EvieProfileDraft(profile.id == loaded.activeProfile.id ? loaded.activeProfile : profile)
+    }
+  }
+
+  private static func message(for error: any Error) -> String {
+    (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
   }
 }
 

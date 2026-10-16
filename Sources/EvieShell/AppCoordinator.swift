@@ -26,6 +26,9 @@ final class AppCoordinator: NSObject {
   /// Kept warm from launch, so the first turn's resolver reads an answer
   /// instead of waiting on a probe.
   private let readinessRefresher: EvieReadinessRefresher
+  /// The resolver's readiness cache, refreshed when a key is saved in Settings
+  /// so the next turn does not wait 30 s to learn the PC now accepts it.
+  private let modelReadiness: ModelReadinessCache
   private var hotKeyController: GlobalHotKeyController?
   private var statusItem: NSStatusItem?
   private var settingsWindowController: SettingsWindowController?
@@ -165,6 +168,7 @@ final class AppCoordinator: NSObject {
     startupConfigurationError = loadResult.error
     startupConfiguration = loadResult.loaded
     self.brainResolver = brainResolver
+    self.modelReadiness = modelReadiness
     readinessRefresher = EvieReadinessRefresher(
       cache: modelReadiness,
       profile: loadResult.loaded.activeProfile
@@ -715,15 +719,19 @@ extension AppCoordinator {
   @objc fileprivate func openSettings() {
     if settingsWindowController == nil {
       let modelViewModel = ModelSettingsViewModel(
-        configuration: viewModel.configuration,
-        profiles: startupConfiguration.profiles,
+        loaded: brainResolver.configuration,
+        repairBaseline: startupConfiguration.profiles,
         store: configurationStore,
         loader: configurationLoader,
-        environment: configurationEnvironment
-      ) { [weak self] loaded in
-        guard let self else { return }
-        viewModel.applyConfiguration(loaded, environment: configurationEnvironment)
-      }
+        environment: configurationEnvironment,
+        onSave: { [weak self] loaded in
+          guard let self else { return }
+          viewModel.applyConfiguration(loaded, environment: configurationEnvironment)
+        },
+        onKeySaved: { [modelReadiness] profile in
+          Task { await modelReadiness.refresh(profile) }
+        }
+      )
       let preferencesViewModel = EviePreferencesViewModel(
         preferences: preferences,
         store: preferencesStore,

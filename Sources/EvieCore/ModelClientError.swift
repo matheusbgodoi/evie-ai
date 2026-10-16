@@ -54,7 +54,7 @@ extension ModelClientError: LocalizedError {
     case .unreachable(let detail):
       "O modelo não respondeu (\(detail))."
     case .unauthorized:
-      "O modelo recusou a chave salva. Confira a chave em Configurações."
+      "O servidor recusou a chave salva. Cole ou importe a chave de novo em Configurações › Cérebro."
     case .modelNotFound(let model):
       "O servidor não conhece o modelo \(model)."
     case .server(let status, let message):
