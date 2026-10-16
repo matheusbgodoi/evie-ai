@@ -87,7 +87,9 @@ public struct ComputerUseBudget: Sendable, Equatable {
   /// of setbacks.
   public mutating func record(_ outcome: ActionResult.Outcome) {
     switch outcome {
-    case .changed:
+    // The loop settles `carriedOut` against the next observation before it
+    // counts it; one that arrives here unsettled did not fail.
+    case .changed, .carriedOut:
       consecutiveSetbacks = 0
     case .noChange, .failed:
       consecutiveSetbacks += 1

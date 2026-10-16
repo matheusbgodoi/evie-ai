@@ -220,6 +220,15 @@ public enum AccessibilitySnapshotBuilder {
     return frame.normalizedBox(forGlobalCG: global)
   }
 
+  /// Whether `node` is the element an observation listed as `element`: the
+  /// same role (a password field by its subrole too) and the same label. The
+  /// executor asks this of whatever lies under an element's centre when it
+  /// acts, so a list that moved under it presses nothing.
+  public static func describes(_ node: AccessibilityNode, as element: AXElementSummary) -> Bool {
+    let role = node.isSecure ? secureRole : node.role ?? ""
+    return role == element.role && label(of: node) == element.title
+  }
+
   /// What the element is called: its title, else its description, else its
   /// placeholder, else its text value. A password field's value is never a
   /// label — it is the password.

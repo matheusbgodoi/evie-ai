@@ -20,5 +20,6 @@ supersede rather than silently rewrite them when the decision changes.
 | [0013](0013-authenticated-tailnet-model-transport.md) | Authenticated tailnet model transport | Accepted for Evie v2; superseded in part by 0017 |
 | [0014](0014-model-profiles-per-turn-resolution-failover.md) | Model profiles, per-turn resolution and per-conversation failover | Accepted for Evie v2; superseded in part by 0015 |
 | [0015](0015-on-demand-local-vlm-brain.md) | On-demand local VLM brain | Accepted for Evie v2; superseded in part by 0017 |
-| [0016](0016-in-process-computer-use-executor-under-agent-mode-grant.md) | An in-process computer-use executor under an agent-mode grant | Accepted for Evie v2 (S5a implemented) |
+| [0016](0016-in-process-computer-use-executor-under-agent-mode-grant.md) | An in-process computer-use executor under an agent-mode grant | Accepted for Evie v2 (S5a–S5c implemented) |
 | [0017](0017-per-launch-key-for-the-local-brain.md) | A per-launch key for the local brain | Accepted for Evie v2 |
+| [0018](0018-agent-mode-switch-on-by-default.md) | Agent mode behind a Settings switch, on by default | Accepted for Evie v2 |

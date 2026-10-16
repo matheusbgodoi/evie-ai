@@ -406,6 +406,53 @@ struct EviePreferencesStoreTests {
     #expect(relaunched.preferences == preferences)
   }
 
+  @Test("the agent-mode switch starts on, and off survives a relaunch")
+  func computerUseSwitchPersists() throws {
+    #expect(EviePreferences().computerUseEnabled)
+    let fileURL = temporaryFileURL()
+    var preferences = EviePreferences()
+    preferences.computerUseEnabled = false
+
+    try EviePreferencesStore(fileURL: fileURL).save(preferences)
+    let relaunched = EviePreferencesStore(fileURL: fileURL).loadWithDiagnostics()
+
+    #expect(relaunched.failure == nil)
+    #expect(!relaunched.preferences.computerUseEnabled)
+    #expect(relaunched.preferences == preferences)
+  }
+
+  @Test("a file written before the agent-mode switch existed reads it as on")
+  func computerUseSwitchDefaultsOnInOlderFiles() throws {
+    let fileURL = temporaryFileURL()
+    try FileManager.default.createDirectory(
+      at: fileURL.deletingLastPathComponent(), withIntermediateDirectories: true)
+    try Data(#"{"schema_version": 1, "web_search_enabled": true}"#.utf8).write(to: fileURL)
+
+    let loaded = EviePreferencesStore(fileURL: fileURL).loadWithDiagnostics()
+
+    #expect(loaded.failure == nil)
+    #expect(loaded.preferences.webSearchEnabled)
+    #expect(loaded.preferences.computerUseEnabled)
+  }
+
+  @Test("EVIE_COMPUTER_USE=0 turns agent mode off whatever the switch says; nothing turns it on")
+  func computerUseEnvironmentOverride() {
+    var on = EviePreferences()
+    on.computerUseEnabled = true
+    var off = EviePreferences()
+    off.computerUseEnabled = false
+
+    #expect(ComputerUseSwitch.isEnabled(preferences: on, environment: [:]))
+    #expect(!ComputerUseSwitch.isEnabled(preferences: off, environment: [:]))
+    for value in ["0", "false", "off", " 0 "] {
+      #expect(!ComputerUseSwitch.isEnabled(preferences: on, environment: ["EVIE_COMPUTER_USE": value]))
+    }
+    #expect(ComputerUseSwitch.isEnabled(preferences: on, environment: ["EVIE_COMPUTER_USE": "1"]))
+    #expect(!ComputerUseSwitch.isEnabled(preferences: off, environment: ["EVIE_COMPUTER_USE": "1"]))
+    #expect(ComputerUseSwitch.forcedOff(environment: ["EVIE_COMPUTER_USE": "0"]))
+    #expect(!ComputerUseSwitch.forcedOff(environment: [:]))
+  }
+
   @Test("a missing file resolves to defaults instead of failing")
   func missingFileUsesDefaults() throws {
     let loaded = EviePreferencesStore(fileURL: temporaryFileURL()).load()

@@ -390,6 +390,17 @@ enum EvieDiagnosticRegistry {
       )
     },
 
+    // The input executor end to end on a TextEdit it opens itself: three
+    // typing routes, the read-back, close without saving, focus and
+    // clipboard given back. Refuses while TextEdit is open, captures no
+    // pixels and asks for no permission.
+    EvieDiagnostic.terminating(
+      flag: "--cu-selftest",
+      summary: "abre o TextEdit, digita um texto de teste pela Evie, confere e fecha sem salvar"
+    ) { _ in
+      await ComputerSelfTest.run()
+    },
+
     // Acted on by the coordinator once the application is up, not here — the
     // window it opens needs the running app. Listed so `--help` is the whole
     // truth about what the shell answers to.

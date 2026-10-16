@@ -192,6 +192,50 @@ struct ComputerUseLoopTests {
     #expect(after.filter { !($0.images ?? []).isEmpty }.count == 1)
   }
 
+  @Test("an action the executor only posted, after which nothing changed, is told nada mudou")
+  func carriedOutWithoutChange() async throws {
+    let rig = Rig()
+    rig.computer.result = ActionResult(outcome: .carriedOut, detail: "Cliquei.")
+    let click: (Int) -> ComputerScriptedClient.Turn = { n in
+      .tools([Self.call("computer", #"{"action":"left_click","element":3,"observation_id":"obs-\#(n)"}"#, id: "c\(n)")])
+    }
+    let client = ComputerScriptedClient(turns: [click(1), click(2), click(3), .tools([Self.finish])])
+
+    let outcome = try await EvieAgentLoop().runComputerUse(
+      messages: Self.goal, client: client, session: rig.session(), emit: { _ in })
+
+    let second = try #require(await client.sent.dropFirst().first)
+    let result = try #require(second.last { $0.role == .tool })
+    #expect(result.content.contains("Cliquei. Nada mudou na tela depois disso."))
+    // Three of them in a row are the run of setbacks that hands over.
+    #expect(outcome.ending == .needsUser)
+    #expect(outcome.summary == ComputerUseBudget.Exhaustion.setbacks.message)
+  }
+
+  @Test("an action the executor only posted, after which the list changed, counts as a change")
+  func carriedOutWithChange() async throws {
+    let rig = Rig()
+    rig.computer.result = ActionResult(outcome: .carriedOut, detail: "Cliquei.")
+    rig.computer.screens = [
+      Fixture.observation(focused: 1), Fixture.observation(focused: 3),
+      Fixture.observation(focused: 1), Fixture.observation(focused: 3),
+      Fixture.observation(focused: 1), Fixture.observation(focused: 3),
+    ]
+    let click: (Int) -> ComputerScriptedClient.Turn = { n in
+      .tools([Self.call("computer", #"{"action":"left_click","element":3,"observation_id":"obs-\#(n)"}"#, id: "c\(n)")])
+    }
+    let client = ComputerScriptedClient(turns: [click(1), click(2), click(3), .tools([Self.finish])])
+
+    let outcome = try await EvieAgentLoop().runComputerUse(
+      messages: Self.goal, client: client, session: rig.session(), emit: { _ in })
+
+    #expect(outcome.ending == .finished(.success))
+    #expect(rig.computer.performed.count == 3)
+    let second = try #require(await client.sent.dropFirst().first)
+    let result = try #require(second.last { $0.role == .tool })
+    #expect(!result.content.contains("Nada mudou"))
+  }
+
   @Test("without an executor an action is answered, never carried out")
   func observeOnly() async throws {
     let rig = Rig()

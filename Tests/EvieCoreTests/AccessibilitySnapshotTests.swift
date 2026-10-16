@@ -13,6 +13,27 @@ struct AccessibilitySnapshotTests {
     imageSize: CGSize(width: 1_000, height: 500)
   )
 
+  @Test("an element is the one listed only with the same role and label")
+  func describesListedElement() {
+    let listed = AXElementSummary(
+      index: 4, role: "AXButton", title: "Apagar", box0to1000: .zero, isSecure: false)
+
+    #expect(AccessibilitySnapshotBuilder.describes(
+      AccessibilityNode(role: "AXButton", title: "Apagar"), as: listed))
+    #expect(AccessibilitySnapshotBuilder.describes(
+      AccessibilityNode(role: "AXButton", detail: "Apagar"), as: listed))
+    #expect(!AccessibilitySnapshotBuilder.describes(
+      AccessibilityNode(role: "AXButton", title: "Salvar"), as: listed))
+    #expect(!AccessibilitySnapshotBuilder.describes(
+      AccessibilityNode(role: "AXSheet", detail: "Apagar"), as: listed))
+
+    let password = AXElementSummary(
+      index: 0, role: "AXSecureTextField", title: "Senha", box0to1000: .zero, isSecure: true)
+    #expect(AccessibilitySnapshotBuilder.describes(
+      AccessibilityNode(role: "AXTextField", subrole: "AXSecureTextField", title: "Senha"),
+      as: password))
+  }
+
   @Test("lists the interactive elements breadth first, numbered in that order")
   func breadthFirstOrder() {
     let tree = TestTree()

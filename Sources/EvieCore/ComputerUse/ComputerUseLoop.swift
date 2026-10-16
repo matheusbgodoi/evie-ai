@@ -44,6 +44,23 @@ public struct ComputerUseSession {
   }
 }
 
+extension ComputerUseSession {
+  /// A session whose executor also observes, as `ComputerExecutor` must: it
+  /// acts only on the observation it returned last.
+  public init(
+    broker: EvieAgentModeBroker,
+    grant: EvieAgentModeGrant,
+    computer: any EvieComputerActing,
+    convention: CoordinateConvention,
+    imageLongEdge: Int,
+    confirm: ((ComputerConfirmation) async -> Bool)? = nil
+  ) {
+    self.init(
+      broker: broker, grant: grant, observer: computer, executor: computer,
+      convention: convention, imageLongEdge: imageLongEdge, confirm: confirm)
+  }
+}
+
 /// How a computer-use session ended.
 public struct ComputerUseOutcome: Sendable, Equatable {
   public enum Ending: Sendable, Equatable {
@@ -298,14 +315,15 @@ private struct ComputerUseRun {
       result = ActionResult(outcome: .failed, detail: error.localizedDescription)
     }
     actions += 1
-    broker.record(result, grant: grant)
 
     // What the action did, read from the list first; a picture only when the
     // list says the screen changed meaningfully.
     let listed = try await observe(withImage: false)
     let diff = ComputerObservationDiff(from: observation, to: listed)
+    let settled = Self.settle(result, by: diff)
+    broker.record(settled, grant: grant)
     var newest = listed
-    var lead = result.detail + "\n"
+    var lead = settled.detail + "\n"
     if diff.needsPixels {
       newest = try await observe(withImage: true)
     } else {
@@ -321,6 +339,21 @@ private struct ComputerUseRun {
       return outcome(.sessionEnded, ComputerUseError.sessionEnded.localizedDescription)
     }
     return nil
+  }
+
+  /// What an action the executor could only post (`carriedOut`) did, read
+  /// from the list after it: the same list, the same focus and the same
+  /// window is "nada mudou", which counts toward the run of setbacks that
+  /// hands the session to the person.
+  static func settle(_ result: ActionResult, by diff: ComputerObservationDiff) -> ActionResult {
+    guard result.outcome == .carriedOut else {
+      return result
+    }
+    guard diff.isEmpty else {
+      return ActionResult(outcome: .changed, detail: result.detail)
+    }
+    return ActionResult(
+      outcome: .noChange, detail: result.detail + " Nada mudou na tela depois disso.")
   }
 
   private mutating func observe(withImage: Bool) async throws -> ComputerObservation {

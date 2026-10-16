@@ -57,6 +57,7 @@ struct SettingsView: View {
       AdvancedTabView(
         updater: updater,
         modelViewModel: modelViewModel,
+        preferencesViewModel: preferencesViewModel,
         permissionGuide: permissionGuide,
         preferencesPath: preferencesPath,
         configurationPath: configurationPath
@@ -155,10 +156,13 @@ private struct KnowledgeTabView: View {
 ///
 /// "Permissões" is here rather than in a tab of its own: after the first-run
 /// window has been closed, the checklist is something you come back to when a
-/// feature stops working, which is what this tab is for.
+/// feature stops working, which is what this tab is for. "Controle do Mac"
+/// sits beside it: the agent-mode switch comes on, so this is where it is
+/// turned off, next to the Accessibility grant it depends on.
 private struct AdvancedTabView: View {
   @ObservedObject var updater: EvieUpdater
   @ObservedObject var modelViewModel: ModelSettingsViewModel
+  @ObservedObject var preferencesViewModel: EviePreferencesViewModel
   @ObservedObject var permissionGuide: PermissionGuideViewModel
   var preferencesPath: String
   var configurationPath: String
@@ -166,7 +170,7 @@ private struct AdvancedTabView: View {
   var body: some View {
     VStack(spacing: 0) {
       PaneSelector(
-        titles: ["Diagnóstico", "Atualizar", "Permissões"],
+        titles: ["Diagnóstico", "Atualizar", "Permissões", "Controle do Mac"],
         selection: $modelViewModel.advancedPane
       )
       switch modelViewModel.advancedPane {
@@ -174,6 +178,11 @@ private struct AdvancedTabView: View {
         UpdateSettingsView(updater: updater)
       case 2:
         PermissionGuideView(viewModel: permissionGuide)
+      case 3:
+        ComputerUseSettingsView(
+          viewModel: preferencesViewModel,
+          setEnabled: preferencesViewModel.setComputerUseEnabled
+        )
       default:
         DiagnosticsSettingsView(
           profile: modelViewModel.activeProfile,

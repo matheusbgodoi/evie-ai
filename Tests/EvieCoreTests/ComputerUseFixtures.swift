@@ -71,7 +71,8 @@ enum ComputerUseFixture {
     elements: [AXElementSummary] = defaultElements,
     focused: Int? = 1,
     windowTitle: String? = "Nova mensagem",
-    capturedAt: Date = start
+    capturedAt: Date = start,
+    windowFrame: CGRect? = nil
   ) -> ComputerObservation {
     ComputerObservation(
       id: id,
@@ -82,7 +83,8 @@ enum ComputerUseFixture {
       windowTitle: windowTitle,
       elements: elements,
       focusedElementIndex: focused,
-      evieWindowFrames: [evieWindow]
+      evieWindowFrames: [evieWindow],
+      windowFrame: windowFrame
     )
   }
 
@@ -206,6 +208,7 @@ final class StubComputer: EvieComputerActing {
       elements: screen.elements,
       focusedElementIndex: screen.focusedElementIndex,
       evieWindowFrames: screen.evieWindowFrames,
+      windowFrame: screen.windowFrame,
       image: request.withImage ? ComputerUseFixture.picture() : nil
     )
     last = observation

@@ -41,9 +41,31 @@ final class ComputerScreenLocator: ComputerScreenLocating {
     }?.bounds
   }
 
+  /// Evie's windows a click can land on: the overlay, the pill, Settings.
+  ///
+  /// Not the presence panels: they cover each display edge to edge and
+  /// ignore the mouse, so a click passes through them to the app below.
+  /// Listing them (as the window server's list did until S5c's live check
+  /// on 2026-10-16) put every point of the screen inside "a window of
+  /// Evie's" and refused every click.
   func evieWindowFrames() -> [CGRect] {
+    guard let layout = ScreenCaptureService.currentLayout() else {
+      return []
+    }
+    return NSApp.windows
+      .filter { $0.isVisible && !$0.ignoresMouseEvents }
+      .map { layout.globalCGRect(fromAppKit: $0.frame) }
+  }
+
+  /// The window server's front-to-back list, Evie's own windows (the
+  /// click-through presence panels among them) and invisible ones passed
+  /// over: the first window holding the point is the one a click there
+  /// reaches.
+  func windowOwner(at point: CGPoint) -> Int32? {
     let own = ProcessInfo.processInfo.processIdentifier
-    return Self.onScreenWindows().filter { $0.owner == own }.map(\.bounds)
+    return Self.onScreenWindows().first { window in
+      window.owner != own && window.alpha > 0 && window.bounds.contains(point)
+    }?.owner
   }
 
   func secureInputEnabled() -> Bool {

@@ -62,6 +62,40 @@ struct EvieAgentModeBrokerTests {
 
   // MARK: - Beginning a session
 
+  @Test("a validated commit stands until a revoke or a newer observation")
+  func stillAuthorizes() throws {
+    let grant = try begin()
+    let observation = observe(grant: grant)
+    let issued = try #require(commit(authorize(clickSubject, grant, on: observation)))
+    try broker.validate(issued, for: clickSubject)
+
+    #expect(broker.stillAuthorizes(issued))
+    _ = observe(F.observation(id: "obs-2"), grant: grant)
+    #expect(!broker.stillAuthorizes(issued))
+
+    let regrant = try begin()
+    let fresh = observe(F.observation(id: "obs-9"), grant: regrant)
+    clock.advance(1)
+    let action = ComputerAction.click(
+      .element(observationID: "obs-9", index: 1), button: .left, count: 1)
+    let second = try #require(commit(authorize(action, regrant, on: fresh)))
+    try broker.validate(second, for: action)
+    broker.revoke()
+    #expect(!broker.stillAuthorizes(second))
+  }
+
+  @Test("a validated commit stops standing when the grant expires")
+  func stillAuthorizesExpiry() throws {
+    let grant = try begin()
+    let observation = observe(grant: grant)
+    let issued = try #require(commit(authorize(clickSubject, grant, on: observation)))
+    try broker.validate(issued, for: clickSubject)
+
+    clock.advance(EvieAgentModeBroker.grantLifetime + 1)
+
+    #expect(!broker.stillAuthorizes(issued))
+  }
+
   @Test("the wake word cannot begin a session; push-to-talk and the button can")
   func wakeWordCannotBegin() {
     #expect(broker.begin(goal: "abre o Notas", gesture: .wakeWord) == nil)

@@ -39,6 +39,16 @@ public struct EviePreferences: Codable, Hashable, Sendable {
   /// stranger can write into, and it is the most personal thing Evie can be
   /// pointed at. Turning it on is a decision, not a default.
   public var mailAndCalendarEnabled: Bool
+  /// Whether Evie may control the Mac in agent mode (clicks, typing, opening
+  /// apps), as "Deixar a Evie controlar o Mac (modo agente)".
+  ///
+  /// On by default, unlike the switches above, because the owner asked for
+  /// it. The switch is not the permission: every session still begins only
+  /// with push-to-talk or a click and a confirm on the session card, under a
+  /// grant of at most 15 minutes, with the code policy, the confirmations and
+  /// the kill switches of ADR 0016. Off means no session can begin at all.
+  /// `EVIE_COMPUTER_USE=0` forces it off (`ComputerUseSwitch`).
+  public var computerUseEnabled: Bool
 
   public init(
     appearance: EvieAppearancePreferences = EvieAppearancePreferences(),
@@ -47,7 +57,8 @@ public struct EviePreferences: Codable, Hashable, Sendable {
     fileChangesEnabled: Bool = false,
     autoApproveChanges: Bool = false,
     webSearchEnabled: Bool = false,
-    mailAndCalendarEnabled: Bool = false
+    mailAndCalendarEnabled: Bool = false,
+    computerUseEnabled: Bool = true
   ) {
     self.appearance = appearance
     self.shortcuts = shortcuts
@@ -56,6 +67,7 @@ public struct EviePreferences: Codable, Hashable, Sendable {
     self.autoApproveChanges = autoApproveChanges
     self.webSearchEnabled = webSearchEnabled
     self.mailAndCalendarEnabled = mailAndCalendarEnabled
+    self.computerUseEnabled = computerUseEnabled
   }
 
   /// Written out by hand rather than left to `convertFromSnakeCase`, for the
@@ -70,6 +82,7 @@ public struct EviePreferences: Codable, Hashable, Sendable {
     case autoApproveChanges = "auto_approve_changes"
     case webSearchEnabled = "web_search_enabled"
     case mailAndCalendarEnabled = "mail_and_calendar_enabled"
+    case computerUseEnabled = "computer_use_enabled"
   }
 
   /// Every field optional, for the same reason as the sections below: a missing
@@ -93,6 +106,8 @@ public struct EviePreferences: Codable, Hashable, Sendable {
       try container.decodeIfPresent(Bool.self, forKey: .webSearchEnabled) ?? false
     mailAndCalendarEnabled =
       try container.decodeIfPresent(Bool.self, forKey: .mailAndCalendarEnabled) ?? false
+    computerUseEnabled =
+      try container.decodeIfPresent(Bool.self, forKey: .computerUseEnabled) ?? true
   }
 
   /// Turning changes off must also clear the bypass, or the file keeps a switch

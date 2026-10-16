@@ -6,6 +6,11 @@ All notable changes to Evie are documented here. Dates use `YYYY-MM-DD`.
 
 ### Changed
 
+- **Computer use no longer takes the whole screen for Evie's own window.** The
+  observation listed Evie's full-display, click-through glow panels among her
+  windows, so every click of a session would have been refused as "uma janela
+  da própria Evie". Only her windows that take the mouse count now (found by
+  the S5c live check, before anything shipped).
 - **Security: the PC key is never saved into a keychain item Evie did not
   create.** Saving over an existing item kept that item's access list, so an
   item another program had made first under Evie's name could have read the
@@ -278,6 +283,27 @@ All notable changes to Evie are documented here. Dates use `YYYY-MM-DD`.
 
 ### Added
 
+- **Computer use can act on the Mac** (v2 S5c, ADR 0016). The executor clicks,
+  types, presses keys, scrolls, drags, opens apps and uses the clipboard for a
+  session's committed actions — still nothing in the app starts a session (the
+  confirmation card is S5d). Each action is checked with the broker first and
+  again before every event; input goes only to the observed app once it is in
+  front, never to a window that moved or to another app's window under the
+  point; a listed button is pressed through Accessibility after being found
+  again under its centre; text goes into the field's own value when it takes
+  one and is read back, otherwise by paste (the clipboard is saved, marked
+  transient, and put back 400 ms later unless someone copied meanwhile) or by
+  key events in pieces that never split a character. After an action that
+  changed nothing on the list, the model is told "Nada mudou". `evie-shell
+  --cu-selftest` runs it end to end on a TextEdit it opens: measured
+  2026-10-16, "Teste de pesquisa — ação ✓" typed by all three routes and read
+  back exactly, the document closed without saving, the front app and the
+  clipboard given back.
+- **Settings: "Deixar a Evie controlar o Mac (modo agente)"** in Configurações ›
+  Avançado › Controle do Mac (ADR 0018). On by default, as the owner asked; it
+  never starts a session by itself, and `EVIE_COMPUTER_USE=0` turns it off for
+  a launch. Off, no session can act; looking at the screen when asked is
+  unchanged.
 - **Computer use can observe the Mac** (v2 S5b). The session loop now looks
   before it is asked anything — the observing glow first, then the screen when
   a picture is needed and the front app's buttons, fields and links read

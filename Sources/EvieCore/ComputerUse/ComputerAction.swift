@@ -293,6 +293,11 @@ public struct ComputerObservation: Sendable, Equatable {
   /// capture, so the model never sees them, but a point it names can still
   /// land on one.
   public let evieWindowFrames: [CGRect]
+  /// The front app's window, in global points, where the window server had
+  /// it at observation time. The executor reads it again before acting on a
+  /// point and refuses when it moved: every box and point of this observation
+  /// was measured against it.
+  public let windowFrame: CGRect?
   /// The capture, when this step needed pixels; an AX-only observation has none.
   public let image: EvieImagePart?
 
@@ -306,6 +311,7 @@ public struct ComputerObservation: Sendable, Equatable {
     elements: [AXElementSummary] = [],
     focusedElementIndex: Int? = nil,
     evieWindowFrames: [CGRect] = [],
+    windowFrame: CGRect? = nil,
     image: EvieImagePart? = nil
   ) {
     self.id = id
@@ -317,6 +323,7 @@ public struct ComputerObservation: Sendable, Equatable {
     self.elements = elements
     self.focusedElementIndex = focusedElementIndex
     self.evieWindowFrames = evieWindowFrames
+    self.windowFrame = windowFrame
     self.image = image
   }
 
@@ -369,7 +376,12 @@ public struct ComputerLiveState: Sendable, Equatable {
 /// What carrying out an action did, as the executor saw it afterwards.
 public struct ActionResult: Sendable, Equatable {
   public enum Outcome: Sendable, Equatable {
+    /// The executor saw the action take effect (a value read back, an app
+    /// in front, the clipboard written).
     case changed
+    /// The executor posted the action but cannot tell what it did; the loop
+    /// decides from the next observation, as `changed` or `noChange`.
+    case carriedOut
     /// The screen looked the same afterwards ("nada mudou").
     case noChange
     case failed

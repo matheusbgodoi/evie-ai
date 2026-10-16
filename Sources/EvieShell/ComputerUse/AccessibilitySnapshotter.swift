@@ -80,7 +80,7 @@ struct AccessibilitySnapshotter: AccessibilityReading {
   }
 
   /// An app built on Electron ships its framework inside the bundle.
-  private static func isElectron(_ processID: Int32) -> Bool {
+  static func isElectron(_ processID: Int32) -> Bool {
     guard let bundle = NSRunningApplication(processIdentifier: processID)?.bundleURL else {
       return false
     }

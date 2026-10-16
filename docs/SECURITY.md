@@ -295,8 +295,15 @@ dropped), but those two copies exist on disk.
 
 ### Computer use (v2 S5, ADR 0016)
 
-The rules exist in `EvieCore` since S5a (2026-10-16), and the observer since
-S5b; nothing acts yet — the executor and the cards are S5c–S5d.
+The rules exist in `EvieCore` since S5a (2026-10-16), the observer since S5b
+and the executor since S5c; nothing in the app starts a session until S5d's
+card, and `evie-shell --cu-selftest` is the only thing that acts today.
+
+- **Available behind a switch that comes on** (ADR 0018): "Deixar a Evie
+  controlar o Mac (modo agente)" in Configurações › Avançado › Controle do Mac,
+  on by default at the owner's request; `EVIE_COMPUTER_USE=0` forces it off for
+  a launch, and nothing in the environment forces it on. The switch never
+  starts a session — the rules below do the protecting, not an opt-in.
 
 - **A session only from a hand.** `EvieAgentModeBroker.begin` makes a grant
   (at most 15 minutes) for push-to-talk or a click, never for the wake word,
@@ -336,10 +343,42 @@ S5b; nothing acts yet — the executor and the cards are S5c–S5d.
   result; older observations become fenced one-line log entries. For Electron
   apps Evie sets `AXManualAccessibility`, which only makes the app publish its
   accessibility tree; Chrome's undocumented toggle is not touched.
+- **Acting (S5c).** The executor checks the commit with the broker before
+  anything else — focus, glow, cursor — and asks again (`stillAuthorizes`)
+  right before every event, so Parar, Esc, expiry or a newer observation stops
+  even the rest of a text being typed. Input goes only to the app observed, and
+  only once it is frontmost by the window server's account; secure input is
+  read again before keystrokes; a target is refused when its window moved, and
+  a grid point when the window under it belongs to another app (the Dock, a
+  banner, a floating panel). A listed element is pressed through Accessibility
+  after being found again under its centre with the same role and label, so a
+  list that changed presses nothing; a press the app did not confirm is never
+  repeated as a click. Every event carries `eventSourceUserData = 0xE71E` and
+  is posted inside `postingSyntheticInput`. Text goes into a field's own value
+  when it takes one (never in a browser or Electron app, whose page would not
+  see it), read back; otherwise by paste or key events.
+- **The clipboard is the person's.** A paste saves every item and type, puts
+  the text on marked transient and concealed (clipboard managers skip it), and
+  puts everything back 400 ms after ⌘V, only if nobody copied in between; the
+  wait is not cut short by a stop, so the app cannot paste the person's own
+  clipboard instead. `clipboard_read` asks first and hands the model the text
+  fenced with a nonce, cut at 4,000 characters; `clipboard_write` is plain text
+  that stays, with the "copiado" notice.
+- **Posting needs Accessibility** (`CGPreflightPostEventAccess`, never
+  prompting); the prompt (`CGRequestPostEventAccess`) is for the session's
+  start in S5d. A binary run from a terminal acts with the terminal's grant —
+  which is why `--cu-selftest` checks `AXIsProcessTrusted` and stops without
+  it, refuses to start while TextEdit is open (it touches only a TextEdit it
+  opened and a document it made), captures no pixels, and discards its document
+  without saving. It approves its own two confirmations (⌘W and the discard
+  button): running it is the gesture for exactly those steps.
 - **What remains.** Injection can still waste a session inside allowed apps, and
-  the accessibility tree covers the front app only (the Dock and menu-bar
-  extras are coordinate clicks). This is mitigation, not proof; the one-time
-  consent sheet (S5d) says so.
+  the accessibility tree covers the front app only (a grid point on the Dock or
+  a menu-bar extra is now refused rather than judged by the front app's rules).
+  The policy findings queued from the S5a review — chords that open a launcher
+  other than ⌘Space, Return in messaging apps, opening files from the Finder —
+  are for the Fix phase. This is mitigation, not proof; the one-time consent
+  sheet (S5d) says so.
 
 ### Conversation history
 

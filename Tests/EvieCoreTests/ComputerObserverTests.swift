@@ -227,6 +227,7 @@ struct ComputerObserverTests {
 
     func frontWindowFrame(ofProcess processID: Int32) -> CGRect? { window }
     func evieWindowFrames() -> [CGRect] { [CGRect(x: 10, y: 10, width: 300, height: 200)] }
+    func windowOwner(at point: CGPoint) -> Int32? { app?.processID }
     func secureInputEnabled() -> Bool { secureInput }
   }
 

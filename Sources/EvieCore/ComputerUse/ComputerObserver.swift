@@ -60,8 +60,12 @@ public protocol ComputerScreenLocating: AnyObject {
   func display(containing point: CGPoint) -> CGDirectDisplayID?
   /// The frontmost normal window of that process, in global points.
   func frontWindowFrame(ofProcess processID: Int32) -> CGRect?
-  /// Every window of Evie's on screen, in global points.
+  /// Every window of Evie's on screen that a click can land on, in global
+  /// points.
   func evieWindowFrames() -> [CGRect]
+  /// The process owning the frontmost window under `point` (Evie's own
+  /// windows passed over), or `nil` when no window is there.
+  func windowOwner(at point: CGPoint) -> Int32?
   /// `IsSecureEventInputEnabled()`.
   func secureInputEnabled() -> Bool
 }
@@ -153,7 +157,8 @@ public final class ComputerObserver: EvieComputerObserving {
     guard let app = locator.frontApp() else {
       throw ComputerObservationError.noFrontApp
     }
-    let (display, region) = try place(of: request.target, app: app)
+    let windowFrame = locator.frontWindowFrame(ofProcess: app.processID)
+    let (display, region) = try place(of: request.target, window: windowFrame)
 
     await indicator.showObserving(on: display, step: request.step)
     try Task.checkCancellation()
@@ -197,6 +202,7 @@ public final class ComputerObserver: EvieComputerObserving {
       elements: snapshot.elements,
       focusedElementIndex: snapshot.focusedElementIndex,
       evieWindowFrames: locator.evieWindowFrames(),
+      windowFrame: windowFrame,
       image: image
     )
   }
@@ -229,9 +235,8 @@ public final class ComputerObserver: EvieComputerObserving {
   /// the capture cuts it.
   private func place(
     of target: ComputerToolRequest.LookTarget,
-    app: ComputerAppIdentity
+    window: CGRect?
   ) throws -> (CGDirectDisplayID, CGRect) {
-    let window = locator.frontWindowFrame(ofProcess: app.processID)
     let holder = window.flatMap { locator.display(containing: CGPoint(x: $0.midX, y: $0.midY)) }
     switch target {
     case .screen:

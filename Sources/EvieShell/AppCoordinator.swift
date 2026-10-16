@@ -96,6 +96,9 @@ final class AppCoordinator: NSObject {
   private lazy var screenPresence = ScreenPresence()
   private lazy var screenCapture = ScreenCaptureService()
   private lazy var screenPermission = ScreenPermission(guide: permissionGuide)
+  /// The app the person was in when the overlay opened, which an agent
+  /// session (S5d) acts in and hands the front back to when it ends.
+  private let focusCoordinator = FocusCoordinator()
   /// The Cérebro tab's model while the settings window exists, so a key
   /// imported from the guide shows as saved there too.
   private weak var modelSettings: ModelSettingsViewModel?
@@ -216,6 +219,7 @@ final class AppCoordinator: NSObject {
     // A server a crash left behind, or one the script started, is taken over
     // so it unloads like any other; a stale pid file is removed.
     localBrainLauncher.reconcilePIDFile(for: loadResult.loaded.profiles)
+    panelController.onPresent = { [focusCoordinator] in focusCoordinator.recordFrontmost() }
     viewModel.grantedRoots = { [rootsViewModel] in rootsViewModel.roots }
     viewModel.memories = { [memoryViewModel] in memoryViewModel.entries }
     viewModel.installedSkills = { [skillsViewModel] in skillsViewModel.skills }

@@ -63,7 +63,8 @@ public struct EviePreferencesStore: Sendable {
       fileChangesEnabled: document.fileChangesEnabled ?? false,
       autoApproveChanges: document.autoApproveChanges ?? false,
       webSearchEnabled: document.webSearchEnabled ?? false,
-      mailAndCalendarEnabled: document.mailAndCalendarEnabled ?? false
+      mailAndCalendarEnabled: document.mailAndCalendarEnabled ?? false,
+      computerUseEnabled: document.computerUseEnabled ?? true
     )
 
     do {
@@ -96,7 +97,8 @@ public struct EviePreferencesStore: Sendable {
       fileChangesEnabled: preferences.fileChangesEnabled,
       autoApproveChanges: preferences.autoApproveChanges,
       webSearchEnabled: preferences.webSearchEnabled,
-      mailAndCalendarEnabled: preferences.mailAndCalendarEnabled
+      mailAndCalendarEnabled: preferences.mailAndCalendarEnabled,
+      computerUseEnabled: preferences.computerUseEnabled
     )
     let encoder = JSONEncoder()
     encoder.outputFormatting = [.prettyPrinted, .sortedKeys, .withoutEscapingSlashes]
@@ -164,6 +166,7 @@ extension EviePreferencesStore {
       case autoApproveChanges = "auto_approve_changes"
       case webSearchEnabled = "web_search_enabled"
       case mailAndCalendarEnabled = "mail_and_calendar_enabled"
+      case computerUseEnabled = "computer_use_enabled"
     }
 
     let schemaVersion: Int
@@ -177,5 +180,8 @@ extension EviePreferencesStore {
     /// declared on `EviePreferences` but never named here, so it was dropped on
     /// save and read back as off on every launch.
     let mailAndCalendarEnabled: Bool?
+    /// Absent in every file written before S5c (2026-10-16): read as on, the
+    /// switch's default.
+    let computerUseEnabled: Bool?
   }
 }

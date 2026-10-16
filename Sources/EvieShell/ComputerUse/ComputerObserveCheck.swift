@@ -85,9 +85,10 @@ enum ComputerObserveCheck {
   }
 }
 
-/// Screen Recording as this check holds it: never granted, never asked.
+/// Screen Recording as the command-line checks hold it: never granted, never
+/// asked, so they read the accessibility list and never capture pixels.
 @MainActor
-private final class NoScreenRecording: ScreenCapturePermission {
+final class NoScreenRecording: ScreenCapturePermission {
   var isGranted: Bool { false }
   var wasRequested: Bool { true }
 

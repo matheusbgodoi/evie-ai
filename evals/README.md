@@ -77,6 +77,15 @@ in Git; private fixtures remain local and are represented only by stable IDs.
     "senha" and never its value, nothing captured. Measured 2026-10-16 on a
     Terminal window: 13 elements, the walk 3 ms, 76–86 ms with the glow. Open:
     Notas, Safari, an Electron app.
+21. `computer-executor-textedit-001` (v2 S5c, command line):
+    `evie-shell --cu-selftest` with TextEdit closed, from a process trusted for
+    Accessibility. Passes when the three typing routes (key events, paste, the
+    field's value) leave "Teste de pesquisa — ação ✓" in a new document, read
+    back exactly through Accessibility, ⌘W and the sheet's discard button close
+    it unsaved, TextEdit quits, the front goes back to the app that had it and
+    the clipboard is identical. Passed 2026-10-16 (M5 24 GB, macOS 27.2) on the
+    fifth run, after two executor fixes it found (design doc, "S5c as
+    implemented").
 
 ## Model metrics
 

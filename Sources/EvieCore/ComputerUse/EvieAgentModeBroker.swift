@@ -347,6 +347,18 @@ public final class EvieAgentModeBroker {
     )
   }
 
+  /// Whether a commit `validate` already accepted still stands: the same
+  /// session, unexpired, and no newer observation since. The executor asks
+  /// again right before each event it posts, because a dwell, a focus change
+  /// or a long text lies between `validate` and the last keystroke, and a
+  /// stop in that time must stop what is left.
+  public func stillAuthorizes(_ commit: CapabilityCommit) -> Bool {
+    guard let current = liveSession(), commit.proposal.planID == current.grant.id else {
+      return false
+    }
+    return current.latestObservationID == commit.proposal.revision.value
+  }
+
   // MARK: - Building blocks
 
   /// The proposal for `action`: bound to the session by its plan id and to

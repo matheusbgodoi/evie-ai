@@ -68,8 +68,26 @@ tests. `evie-shell --cu-observe` prints the list without capturing (13 elements
 in 3 ms on a Terminal window). Grounding measured on the PC: qwen-daily answers
 on the 0–1000 grid at 1024 and 1280 (within 5 steps of the target) and names the
 right element when given the list, so pc-3090 keeps `.normalized1000`. Nothing
-starts a session yet. Next: S5c (the input executor behind
-`EVIE_COMPUTER_USE=1`).
+starts a session yet.
+
+**S5c is done (2026-10-16, ADR 0018):** the input executor. `ComputerExecutor`
+(EvieCore) validates each commit with the broker before anything and again
+before every event, acts only in the observed app once it is frontmost, refuses
+a moved window and a grid point over another app's window, presses listed
+elements through `AXPress` after finding them again by position, types through
+the field's value (read back), paste (clipboard saved, transient, restored after
+400 ms only if unchanged) or unicode key events (≤ 20 UTF-16 units, no split
+surrogate), settles 300 ms inside `postingSyntheticInput`, and the loop tells
+the model "Nada mudou" when the list did not change. The shell supplies
+`SyntheticInput` (tag 0xE71E), `AccessibilityActions`, `FocusCoordinator`
+(recorded when the overlay opens), `AppLauncher`/`InstalledApps`,
+`SystemPasteboard`; `MacComputerActor` wires it. Agent mode is a Settings switch,
+on by default (Avançado › Controle do Mac; `EVIE_COMPUTER_USE=0` forces it off).
+`evie-shell --cu-selftest` passed live on TextEdit (all three typing routes,
+exact read-back, closed without saving, focus and clipboard restored) after
+fixing two defects it found: Evie's click-through glow panels counted as her
+windows (every click refused), and a sheet answering the hit test for its
+buttons. 57 new tests. Next: S5d (the session card, takeover, kill switches).
 
 Next for this area after S5b: S5
 drives observing, `lookAt`, `willClick`/`didClick` and typing, posts every
@@ -542,7 +560,8 @@ conversation itself. Still owed for S3: the in-app status line and ask card
 LensVLM tool-call eval (tools stay off). The first-run guide's key and brain
 rows (S7) are done (2026-10-16). S4 (screen perception) is done (2026-10-16; see
 "Evie v2" above). S5a (the pure computer-use core in `EvieCore`, ADR 0016) and
-S5b (observe-only) are done (2026-10-16). Next: S5c (the input executor).
+S5b (observe-only) and S5c (the input executor, ADR 0018) are done
+(2026-10-16). Next: S5d (the confirmation card, takeover, kill switches).
 
 **Evie v2, S7 (packaging, install, permissions) — partly done on `v2-packaging`,
 2026-10-16, merged into `v2` the same day.** Signing is pinned to the "Evie Dev"

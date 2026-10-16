@@ -1,5 +1,72 @@
 # Work log
 
+## 2026-10-16 — v2 S5c: the input executor (ADR 0018)
+
+- Completed: slice S5c of the v2 spec. Nothing in the app starts a session yet
+  (S5d's card); `evie-shell --cu-selftest` drives the executor end to end.
+  - `Sources/EvieCore/ComputerUse/`: `ComputerExecutor.swift` (the executor and
+    its protocols `SyntheticInputPosting`, `AccessibilityActing`,
+    `ComputerFocusing`, `ComputerAppLaunching`, `ComputerActingIndicator`),
+    `ComputerTyping.swift` (routes, chunking, `ComputerKeyCodes`),
+    `ClipboardSession.swift` (`EviePasteboard`, snapshots, the 400 ms
+    restore), `ComputerAppCatalog.swift`, `ComputerUseSwitch.swift`. Changed:
+    `ComputerObservation.windowFrame` (read by the observer once per
+    observation), `ActionResult.Outcome.carriedOut` (settled by the loop into
+    `changed` or "Nada mudou" `noChange` from the list diff, then recorded),
+    `EvieAgentModeBroker.stillAuthorizes`, `AccessibilitySnapshotBuilder
+    .describes`, `ComputerScreenLocating.windowOwner(at:)`,
+    `ComputerUseSession(broker:grant:computer:…)`.
+  - `EviePreferences.computerUseEnabled` (`computer_use_enabled`, default on)
+    and its store field; `Views/ComputerUseSettingsView.swift`, the fourth pane
+    of Avançado ("Controle do Mac"); `EviePreferencesViewModel
+    .setComputerUseEnabled`.
+  - `Sources/EvieShell/ComputerUse/`: `SyntheticInput` (CGEvent, tag 0xE71E on
+    source and event, `.cghidEventTap`, layout-aware key codes via
+    `UCKeyTranslate`), `AccessibilityActions` (find-again by position, ancestors
+    and descendants; `AXPress`; value/selected-text insertion with read-back),
+    `FocusCoordinator`, `AppLauncher` + `InstalledApps`, `SystemPasteboard`,
+    `MacComputerActor` (+ `ScreenPresence: ComputerActingIndicator`),
+    `ComputerSelfTest` (`--cu-selftest`, registered). `OverlayPanelController
+    .onPresent` → `FocusCoordinator.recordFrontmost` in `AppCoordinator`.
+  - Fixed (S5b latent): `ComputerScreenLocator.evieWindowFrames` listed the
+    click-through presence panels, so every click would be refused; now only
+    Evie's visible windows that take the mouse.
+- Measured 2026-10-16 (M5 24 GB, macOS 27.2), `--cu-selftest` from a terminal
+  already trusted for Accessibility (`AXIsProcessTrusted` and
+  `CGPreflightPostEventAccess` true, checked without prompting; TextEdit not
+  running): open TextEdit 418–500 ms, ⌘N ≈355 ms, key events ≈335 ms, paste
+  ≈450 ms, field value ≈335 ms, read-back exact, ⌘W ≈350 ms, the sheet's
+  "Apagar" by `AXPress` ≈1.2 s; TextEdit quit, front app and clipboard back.
+  Five runs: (1) every click refused — Evie's panels; (2) the sheet still
+  sliding in, refused as a moved window (correct; the diagnostic now waits);
+  (3–4, the fourth with a temporary trace, removed) `AXUIElementCopyElementAtPosition`
+  answers with the `AXSheet` for its buttons, so the listed button was not
+  found — descendants holding the point are now searched; (5) passed. After
+  run 1 the leftover document was discarded by a one-off scratch script
+  pressing "Apagar" in the test's own TextEdit; the diagnostic now does this
+  itself on failure. No other app was acted on; no pixels were captured.
+- Tests (57 new, Swift Testing, no network): "Computer executor" (27),
+  "Computer typing" (7), "Computer key codes" (4), "Clipboard session" (7),
+  "Computer app catalog" (4), "Computer use loop" (+2), "Evie agent mode
+  broker" (+2), "Accessibility snapshot" (+1), "Evie preferences" (+3). One
+  fixture assertion of mine was wrong (a family emoji is 19 UTF-16 units, not
+  more than 20) and was replaced by a character that is.
+- Docs: design doc "S5c as implemented", ADR 0018 (+ index row; ADR 0016's
+  status line), `docs/SECURITY.md` § Computer use, `docs/ARCHITECTURE.md`,
+  `evals/README.md` (case 21, passed), CHANGELOG, PROJECT_STATUS.
+- Checks: `swift build` with no warnings; `Scripts/test --filter` over the
+  computer-use, preferences and snapshot suites (187, then 35) passed; full
+  `Scripts/test`: 1283 tests in 117 suites passed, 1 known issue, up from 1226
+  in 112.
+- Open: [VERIFY] the scroll direction with natural scrolling on and off, and
+  that the 300 ms settle covers delivery in every app; the typing indicator is
+  not awaited before the first keystroke; queued policy findings #9, #10 and
+  #11's Finder half (Fix phase); the AX-value route for Electron is off by
+  design.
+- Next: S5d (the session card with its consent and the `CGRequestPostEventAccess`
+  / Accessibility prompts, the takeover monitor, the kill switches), building
+  the session with `MacComputerActor.make` and `MacComputerActor.policy()`.
+
 ## 2026-10-16 — v2 S5b: computer use observes (observe-only)
 
 - Completed: slice S5b of the v2 spec. Nothing starts a session yet (the card
