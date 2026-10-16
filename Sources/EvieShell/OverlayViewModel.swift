@@ -278,6 +278,14 @@ final class OverlayViewModel: ObservableObject {
     onLayoutInvalidated?()
   }
 
+  /// Starts on another profile than the preferred one, saying why: launch found
+  /// the preferred one unusable before anything was sent.
+  func adoptStartingProfile(_ configuration: EvieConfiguration, notice: String) {
+    agentClient = ModelClientFactory.live.makeClient(configuration: configuration)
+    secondaryText = notice
+    onLayoutInvalidated?()
+  }
+
   func startNewConversation() {
     if hasActiveRequest {
       cancelCurrentInteraction()

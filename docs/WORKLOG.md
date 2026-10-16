@@ -1,5 +1,56 @@
 # Work log
 
+## 2026-10-16 — v2: with no PC key, start on the Mac instead of refusing
+
+- Completed: review finding #1, interim until S2c. The preferred profile is
+  the PC, whose key reference is Evie's own keychain item; on this Mac the item
+  does not exist (`security find-generic-password -s com.matheusbgodoi.evie.model
+  -a pc-3090` → 44, checked again 2026-10-16), so every question stopped with
+  "no saved key".
+  - New `Sources/EvieCore/EvieProfileSelection.swift`: `EvieProfileSelector`
+    (`ModelClientFactory.makeProfileSelector()`) with `offlineRung(for:)`
+    (policy refusal → `.unreachable`; key half of the policy, nothing saved or
+    a keychain error → `.keyMissing`, by the client's own `bearerToken` rule)
+    and `choose(_:environment:)`, which passes over a `.keyMissing` preferred
+    profile to the next in `preferenceOrder` that validates and has no offline
+    rung. Kept as is when `EVIE_MODEL_PROFILE` or any `EVIE_MODEL_*` override
+    is set, when `macFallback == .off`, or when nothing qualifies.
+    `EvieProfileChoice` carries the set with the new active profile,
+    `passedOver`, the environment with `EVIE_MODEL_PROFILE` pinned, and the
+    notice "Sem a chave do PC — usando o Mac. Importe a chave em Ajustes ›
+    Cérebro."
+  - `AppCoordinator.adoptAnswerableProfile()` runs it once after launch; on a
+    move, `OverlayViewModel.adoptStartingProfile(_:notice:)` swaps the client and
+    puts the notice in the status line, and the pinned environment goes to
+    Settings, so a save edits the Mac profile in use and not the PC (which
+    would otherwise have received the Mac's values). `startupProfiles` became
+    `startupConfiguration` to keep the launch's active profile.
+  - Coordination with S2c, recorded in the design doc: the resolver starts
+    from `offlineRung` and this walk, adds the cached probe and `macFallback`,
+    and puts this move behind the `.ask` question once S3 can wake the Mac.
+  - Files: the two above, `AppCoordinator.swift`, `OverlayViewModel.swift`;
+    docs: design doc (S2c interim note, S2a pointer), `docs/ARCHITECTURE.md`,
+    CHANGELOG (Changed), `docs/PROJECT_STATUS.md`.
+- Tests (written first; with the move disabled, 4 of the 8 fail): new suite
+  "Evie profile selection" — "with no keychain item the active profile is one
+  that can answer" (from a load with no file: Mac chosen, no offline rung,
+  validates, passes the policy, notice and pin exact), a saved key keeps the
+  PC, an unreadable keychain counts as missing, an environment choice is kept,
+  `.off` keeps the PC, the next profile must pass the policy (an off-list host
+  is skipped; with nothing left the PC stays), a settings save after the move
+  edits the Mac profile, and the generic notice. No keychain, no network.
+- Commands: `swift build` (whole package) succeeded with no warnings;
+  `Scripts/test --filter EvieProfileSelectionTests` 8 passed; full
+  `Scripts/test` 886 tests in 87 suites passed, 0 failures, 0 skipped, 1 known
+  issue (the deliberate one in the deadline test of finding #7).
+- Open: the Mac brain answers only if `mlx_vlm.server` already serves on 38480
+  (no launcher until S3); a Mac turn still declares tools when folders, the
+  web or Mail are on (S2c's tool-less path), and LensVLM returns tool calls as
+  malformed text, so those turns will read poorly; the schedule runner and
+  diagnostics still use the preferred profile; the readiness refresher still
+  probes the launch profile; the "Ajustes › Cérebro" tab is S2d's.
+- Next: S2c, building on `EvieProfileSelector`.
+
 ## 2026-10-16 — v2: `evie-app identity` cleans up its key on failure
 
 - Completed: review finding #8. `identity` wrote `dev.key` (unencrypted,

@@ -434,6 +434,12 @@ The native shell resolves model configuration in this order:
    for the run.
 
 The profile in use is flattened into the `EvieConfiguration` the client reads.
+At launch, `EvieProfileSelector` moves past a preferred profile whose key is not
+saved (or cannot be read) to the next one in the preference order that the
+transport policy allows and that needs no missing key, and the overlay says so;
+it never moves when the environment chose the profile or the Mac fallback is
+off. It reads only the policy and the keychain, never the network. This is the
+first step of the per-turn resolver planned in v2 S2c.
 A schema v1 file (one endpoint) is migrated in place: its endpoint becomes the
 profile `custom`, kept after the built-ins and outside the preference order, and
 the original bytes are kept as `config.json.v1.bak`. A file or environment that

@@ -6,6 +6,15 @@ All notable changes to Evie are documented here. Dates use `YYYY-MM-DD`.
 
 ### Changed
 
+- **With no saved key for the PC, Evie starts on the Mac profile instead of
+  refusing every question.** At launch, a preferred profile whose key is
+  missing or unreadable is passed over for the next profile in the preference
+  order that the transport policy allows, and the overlay says "Sem a chave do
+  PC — usando o Mac. Importe a chave em Ajustes › Cérebro." Settings then edit
+  the profile in use. Not when `EVIE_MODEL_PROFILE` or an `EVIE_MODEL_*`
+  override chose the profile, nor with the Mac fallback off. Until the Mac
+  launcher (v2 S3) exists, the Mac profile answers only if its server is already
+  running on port 38480.
 - **`Scripts/evie-runtime launch` no longer starts the local Gemma.** The default
   brain is the PC, which never uses it, and the server holds about 15 GB; `launch`
   now only opens the installed Evie. The new `Scripts/evie-runtime launch-custom`

@@ -10,14 +10,17 @@ final class AppCoordinator: NSObject {
   private let preferencesStore: EviePreferencesStore
   private var preferences: EviePreferences
   private let preferencesLoadFailure: EviePreferencesStore.LoadFailure?
-  private let configurationEnvironment: [String: String]
+  /// The `EVIE_*` variables Evie launched with, plus `EVIE_MODEL_PROFILE` once
+  /// launch moves past a profile it cannot use, so Settings edits and reloads
+  /// the profile actually in use.
+  private var configurationEnvironment: [String: String]
   private let viewModel: OverlayViewModel
   private let chrome: OverlayChromeModel
   private let panelController: OverlayPanelController
   private let startupConfigurationError: (any Error)?
-  /// The profiles Evie launched with, which the settings pane repairs a damaged
-  /// file from.
-  private let startupProfiles: EvieModelProfileSet
+  /// What Evie launched with. Its profiles are what the settings pane repairs a
+  /// damaged file from.
+  private let startupConfiguration: EvieLoadedConfiguration
   /// Whether each brain can answer now, kept for 30 s. Nothing reads it on the
   /// turn path yet; the per-turn resolver (v2 S2c) will. It is kept warm from
   /// launch so that resolver starts with an answer instead of a probe.
@@ -148,7 +151,7 @@ final class AppCoordinator: NSObject {
     self.viewModel = viewModel
     self.chrome = chrome
     startupConfigurationError = loadResult.error
-    startupProfiles = loadResult.loaded.profiles
+    startupConfiguration = loadResult.loaded
     let modelReadiness = ModelReadinessCache(
       probe: ModelClientFactory.live.makeReadinessProbe()
     )
@@ -430,6 +433,7 @@ final class AppCoordinator: NSObject {
     // her by name does not depend on having opened settings this session.
     updateWakeListening()
     readinessRefresher.start()
+    adoptAnswerableProfile()
     attachMediaLifecycle()
     buildVaultIndexIfMissing()
 
@@ -454,6 +458,25 @@ final class AppCoordinator: NSObject {
     // launch rather than something the overlay covers.
     if permissionGuide.opensAtLaunch {
       openPermissionGuide()
+    }
+  }
+
+  /// Moves off the preferred profile when it needs a key that is not saved, so a
+  /// fresh install answers instead of refusing every question.
+  ///
+  /// Interim until the per-turn resolver (v2 S2c), which builds on the same
+  /// `EvieProfileSelector`. Decided once, right after launch: it costs a keychain
+  /// read and no request. The readiness refresher keeps probing the launch
+  /// profile; nothing on the turn path reads it yet.
+  private func adoptAnswerableProfile() {
+    let launched = startupConfiguration
+    let environment = configurationEnvironment
+    Task { [weak self] in
+      let choice = await ModelClientFactory.live.makeProfileSelector()
+        .choose(launched, environment: environment)
+      guard let self, let notice = choice.notice else { return }
+      configurationEnvironment = choice.environment
+      viewModel.adoptStartingProfile(choice.loaded.configuration, notice: notice)
     }
   }
 
@@ -701,7 +724,7 @@ extension AppCoordinator {
     if settingsWindowController == nil {
       let modelViewModel = ModelSettingsViewModel(
         configuration: viewModel.configuration,
-        profiles: startupProfiles,
+        profiles: startupConfiguration.profiles,
         store: configurationStore,
         loader: configurationLoader,
         environment: configurationEnvironment
