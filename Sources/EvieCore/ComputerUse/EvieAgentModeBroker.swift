@@ -216,13 +216,18 @@ public final class EvieAgentModeBroker {
 
   /// Whether the budget is spent, so the loop should finish with `need_user`.
   public func needsUser(_ grant: EvieAgentModeGrant) -> Bool {
+    exhaustion(of: grant) != nil
+  }
+
+  /// Which limit of the budget is spent, if one is.
+  public func exhaustion(of grant: EvieAgentModeGrant) -> ComputerUseBudget.Exhaustion? {
     guard let current = liveSession(for: grant) else {
-      return false
+      return nil
     }
-    if case .exhausted = current.budget.verdict(at: now()) {
-      return true
+    if case .exhausted(let reason) = current.budget.verdict(at: now()) {
+      return reason
     }
-    return false
+    return nil
   }
 
   /// When the next action may be committed, so the loop can wait for it.

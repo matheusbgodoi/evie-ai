@@ -398,7 +398,10 @@ extension EvieModelProfile {
     runtime: .remoteGateway,
     location: .yourPC,
     family: .qwen,
-    // Unverified for qwen-daily; the grounding probe in S5 settles it.
+    // Measured 2026-10-16 (S5b grounding probe, `docs/design/2026-10-16-evie-v2-design.md`):
+    // asked to click "Salvar" centred at (960, 600) of a synthetic 1280×800
+    // screen, qwen-daily answered (745–755, 745–750) whether it was sent the
+    // picture at 1024×640 or at 1280×800 — the grid, never pixels.
     coordinateConvention: .normalized1000
   )
 

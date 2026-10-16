@@ -376,6 +376,20 @@ enum EvieDiagnosticRegistry {
       await PresenceExclusionCheck.run(timing: arguments.contains("--timing"))
     },
 
+    // Reads the front app's accessibility list the way a computer-use step
+    // does, and prints it as the model would read it. Captures no pixels,
+    // posts no event and asks for no permission.
+    EvieDiagnostic.terminating(
+      flag: "--cu-observe",
+      usage: "--cu-observe [segundos] [--tela]",
+      summary: "lista os elementos do app da frente como a Evie os vê, sem capturar a tela"
+    ) { arguments in
+      await ComputerObserveCheck.run(
+        delay: arguments.number() ?? 0,
+        wholeScreen: arguments.contains("--tela")
+      )
+    },
+
     // Acted on by the coordinator once the application is up, not here — the
     // window it opens needs the running app. Listed so `--help` is the whole
     // truth about what the shell answers to.

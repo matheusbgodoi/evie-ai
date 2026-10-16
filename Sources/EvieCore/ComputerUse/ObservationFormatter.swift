@@ -60,6 +60,7 @@ public enum ComputerScreenText {
 public enum ObservationFormatter {
   public static let maximumElements = 150
   public static let maximumTitleCharacters = 120
+  public static let maximumChangeCharacters = 600
 
   /// 128 random bits as hex, new for each observation.
   public static func makeNonce() -> String {
@@ -80,11 +81,14 @@ public enum ObservationFormatter {
   }
 
   /// The tool result for a look. `step` is the action count shown on the pill.
+  /// `changes` is `ComputerObservationDiff.line`: it names elements, which is
+  /// screen text, so it goes inside the fence with them.
   public static func format(
     _ observation: ComputerObservation,
     step: Int?,
     convention: CoordinateConvention,
-    nonce: String = makeNonce()
+    nonce: String = makeNonce(),
+    changes: String? = nil
   ) -> String {
     let space =
       switch convention {
@@ -101,6 +105,9 @@ public enum ObservationFormatter {
     ]
     if let title = observation.windowTitle {
       lines.append("janela: \(ComputerScreenText.sanitized(title, limit: maximumTitleCharacters))")
+    }
+    if let changes {
+      lines.append(ComputerScreenText.sanitized(changes, limit: maximumChangeCharacters))
     }
     let listed = observation.elements.prefix(maximumElements)
     for element in listed {
@@ -152,5 +159,24 @@ public enum ObservationFormatter {
       grid.maxX * size.width / extent, grid.maxY * size.height / extent,
     ]
     return "(" + values.map { String(Int($0.rounded())) }.joined(separator: ",") + ")"
+  }
+}
+
+extension ObservationFormatter {
+  /// What an observation becomes in the session's log once a newer picture
+  /// exists: its app, window and element count, still under its own fence,
+  /// since the app's name and the window's title are screen text.
+  public static func logLine(_ observation: ComputerObservation, nonce: String) -> String {
+    var lines = [
+      "Observação \(observation.id), já substituída por uma mais nova; não use os números dela.",
+      openingTag(nonce: nonce),
+      "app: \(ComputerScreenText.sanitized(observation.frontApp.name, limit: 60))",
+    ]
+    if let title = observation.windowTitle {
+      lines.append("janela: \(ComputerScreenText.sanitized(title, limit: maximumTitleCharacters))")
+    }
+    lines.append("(\(observation.elements.count) elementos)")
+    lines.append(closingTag(nonce: nonce))
+    return lines.joined(separator: "\n")
   }
 }

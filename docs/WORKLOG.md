@@ -1,5 +1,65 @@
 # Work log
 
+## 2026-10-16 — v2 S5b: computer use observes (observe-only)
+
+- Completed: slice S5b of the v2 spec. Nothing starts a session yet (the card
+  is S5d) and nothing acts (S5c); the loop runs in tests, the shell's observer
+  in `--cu-observe`.
+  - `Sources/EvieCore/ComputerUse/`: `AccessibilitySnapshot.swift` (the
+    breadth-first walk and its limits: depth 25, 150 elements, 4,000 read, 3
+    unanswered reads; boxes on the observed frame's grid; password fields
+    flagged, their values never a label), `ComputerObservationDiff.swift`
+    (multiset by role and title, `needsPixels`, one fenced line),
+    `ComputerObserver.swift` (glow → capture only for a picture → list, `obs-N`
+    ids; refuses when paused, untrusted, or a picture without Screen Recording,
+    never prompting), `AccessibilityTrust.swift` (polling),
+    `ComputerUseTranscript.swift` (one picture, the newest, as a trailing user
+    message; older steps a fenced text log, rewritten only when a new picture
+    arrives), `ComputerUseLoop.swift` (`EvieAgentLoop.runComputerUse`,
+    `ComputerUseSession`, `ComputerUseOutcome`, `ComputerUsePrompt`).
+    `ObservationFormatter` gained `changes:` and `logLine`; the broker
+    `exhaustion(of:)`; `EvieComputerActing` now extends the new
+    `EvieComputerObserving` (deviation recorded in the design doc).
+  - `Sources/EvieShell/ComputerUse/`: `AccessibilitySnapshotter` (`AXTree`,
+    0.5 s messaging timeout per element, a 2 s walk on a detached task,
+    `AXManualAccessibility` for Electron), `AccessibilityPermission`,
+    `ComputerScreenLocator` (+ `ScreenPresence` as the observing indicator),
+    `ComputerObserveCheck` (`evie-shell --cu-observe [segundos] [--tela]`,
+    registered in `EvieDiagnosticRegistry`).
+  - `EvieModelProfile.swift`: the pc-3090 convention comment now cites the
+    measurement; the value stays `.normalized1000`.
+- Measured 2026-10-16 (M5 24 GB, macOS 27.2):
+  - `--cu-observe` on a Terminal window: 13 elements of 27 read, the walk 3 ms,
+    the observation with the glow 76–86 ms. No pixels captured, no event posted.
+  - Grounding, qwen-daily on the PC, a synthetic 1280×800 dialog in the loop's
+    exact first-step body, "Clique no botão Salvar." (target grid centre 750,
+    750; pixels would be 768,480 or 960,600): without the list, points (748,746),
+    (749,750) thinking off and (745,745), (755,747) low at 1024×640, (750,748),
+    (748,750) at 1280×800; with the list, `element 1` ("Salvar") in all four
+    runs. Uncached first token 24.4–30.5 s at 1024 and 53.9 s at 1280 (one low
+    run 90.2 s with a 25.1 s prompt, unexplained), cached 0.61–1.47 s. So
+    `.normalized1000` holds; the element list is the more accurate.
+  - Not verified: whether the gateway accepts a picture in `role:tool` — the
+    loop never sends one there.
+- Tests (53 new, Swift Testing, no network): "Accessibility snapshot" (12),
+  "Accessibility trust" (4), "Computer observation diff" (8), "Computer
+  observer" (11), "Computer use loop" (18); `StubComputer` now scripts screens.
+  Two mutations (no log compaction; `needsPixels` ignoring app, window and
+  frame) each failed tests, then were reverted.
+- Docs: the design doc's "S5b as implemented" note (and the S5d grounding item
+  pointing at it), `docs/SECURITY.md` § Computer use, `docs/ARCHITECTURE.md`,
+  `evals/README.md` (case 19 passed, case 20 new), CHANGELOG, PROJECT_STATUS.
+- Checks: `swift build` with no warnings; `Scripts/test --filter` over the
+  computer-use, profile, agent-loop and file-toolbox suites: 210 passed; full
+  `Scripts/test`: 1226 tests in 112 suites passed, 1 known issue (the existing
+  deadline witness), up from 1173 in 107.
+- Open: `--cu-observe` on Notas, Safari and an Electron app (eval 20); the
+  `meaningfulChangeShare` of a third is an estimate for S5d's evals; the
+  accessibility list is the front app's focused window only (ADR 0016's known
+  gap).
+- Next: S5c (the input executor behind `EVIE_COMPUTER_USE=1`), plugging into
+  `ComputerUseSession.executor`.
+
 ## 2026-10-16 — v2 S5a: the computer-use core in EvieCore (ADR 0016)
 
 - Completed: slice S5a of the v2 spec, the pure part of computer use. Nothing

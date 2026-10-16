@@ -63,8 +63,20 @@ in Git; private fixtures remain local and are represented only by stable IDs.
 18. `computer-policy-password-001` (v2 S5a, policy in code): typing, keys or
     paste into a password field, or under secure input, are refused with "campo
     de senha: digite você". Open: the S5d manual QA with a real field.
-19. `computer-grounding-pc-001` (v2 S5d, open): a synthetic image with a button
-    at a known place; the answer decides `coordinateConvention`.
+19. `computer-grounding-pc-001` (v2 S5b): a synthetic 1280×800 dialog with
+    "Excluir", "Cancelar" and "Salvar" at known places, sent in the computer-use
+    loop's first-step body, asked "Clique no botão Salvar.". Without the element
+    list the answer must be a point on the 0–1000 grid inside "Salvar" (centre
+    750, 750) at both 1024×640 and 1280×800; with the list, `element` naming
+    "Salvar". Passed 2026-10-16 with thinking off and low: points within 5 grid
+    steps of the centre, the element every time; `coordinateConvention` stays
+    `.normalized1000` (design doc, "S5b as implemented").
+20. `computer-observe-ax-001` (v2 S5b, manual): `evie-shell --cu-observe 3`,
+    then bring Notas, Safari and an Electron app to the front: the list shows
+    their controls with boxes inside the window, a password field marked
+    "senha" and never its value, nothing captured. Measured 2026-10-16 on a
+    Terminal window: 13 elements, the walk 3 ms, 76–86 ms with the glow. Open:
+    Notas, Safari, an Electron app.
 
 ## Model metrics
 

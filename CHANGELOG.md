@@ -278,6 +278,19 @@ All notable changes to Evie are documented here. Dates use `YYYY-MM-DD`.
 
 ### Added
 
+- **Computer use can observe the Mac** (v2 S5b). The session loop now looks
+  before it is asked anything — the observing glow first, then the screen when
+  a picture is needed and the front app's buttons, fields and links read
+  through Accessibility (at most 150, password fields marked and never their
+  contents) — and sends the model one picture at a time, the newest. After an
+  action it reads the list again and takes a new picture only when the screen
+  changed meaningfully, which on the PC saves about 26 s a step. Nothing starts
+  a session yet (the confirmation card is S5d) and nothing acts (S5c).
+  Accessibility is never asked for at launch. `evie-shell --cu-observe
+  [segundos] [--tela]` prints the front app's list as the model would read it,
+  without capturing the screen or posting any event. Measured: the PC's model
+  answers points on the 0–1000 grid, and names the right element when given
+  the list.
 - **Architecture and security: the rules for controlling the Mac, before any
   of it acts** (v2 S5a, ADR 0016, amending ADR 0009). A computer-use session
   will start only from push-to-talk or a click, never from the wake word, and

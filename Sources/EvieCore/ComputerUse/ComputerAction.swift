@@ -385,13 +385,13 @@ public struct ActionResult: Sendable, Equatable {
   }
 }
 
-/// The Mac side of computer use: observing and acting.
+/// The Mac side of computer use: observing (`EvieComputerObserving`) and
+/// acting.
 ///
 /// `perform` acts only on a commit `EvieAgentModeBroker.validate(_:for:)`
 /// still accepts, checked immediately before the first event is posted, so a
 /// revoked session, an expired grant or a newer observation stops an action
 /// that was already cleared.
-public protocol EvieComputerActing: Sendable {
-  func observe(_ plan: ScreenCapturePlan, withImage: Bool) async throws -> ComputerObservation
+public protocol EvieComputerActing: EvieComputerObserving {
   func perform(_ action: ComputerAction, commit: CapabilityCommit) async throws -> ActionResult
 }

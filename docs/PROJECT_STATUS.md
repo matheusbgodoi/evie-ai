@@ -54,7 +54,22 @@ windows, front-app change, confirmations from accessibility data), the budget
 and the nonce-fenced observation text. 75 new tests. Measured: qwen-daily, given
 the six tools and a text observation with an injected line, made the right
 `computer` call (1.87 s warm, 16.6 s uncached). Nothing is wired to the overlay
-yet. Next: S5b (the accessibility snapshotter and `look_screen` in the loop).
+yet.
+
+**S5b is done (2026-10-16):** observe-only. The accessibility snapshotter (BFS,
+0.5 s per message, depth 25, 150 elements, Electron's `AXManualAccessibility`,
+boxes on the observed frame's grid, password fields flagged), the
+Accessibility permission (polled, never prompted at launch), the observer
+(glow → capture when needed → list, new `obs-N` id) and the session loop
+`EvieAgentLoop.runComputerUse` (one picture, the newest, as a trailing user
+message; a list-only re-observation with a diff after an action, and a new
+picture only for a meaningful change; older steps become a text log). 53 new
+tests. `evie-shell --cu-observe` prints the list without capturing (13 elements
+in 3 ms on a Terminal window). Grounding measured on the PC: qwen-daily answers
+on the 0–1000 grid at 1024 and 1280 (within 5 steps of the target) and names the
+right element when given the list, so pc-3090 keeps `.normalized1000`. Nothing
+starts a session yet. Next: S5c (the input executor behind
+`EVIE_COMPUTER_USE=1`).
 
 Next for this area after S5b: S5
 drives observing, `lookAt`, `willClick`/`didClick` and typing, posts every
@@ -526,8 +541,8 @@ conversation itself. Still owed for S3: the in-app status line and ask card
 (UI not launched), a start with the weights not in the page cache, and the
 LensVLM tool-call eval (tools stay off). The first-run guide's key and brain
 rows (S7) are done (2026-10-16). S4 (screen perception) is done (2026-10-16; see
-"Evie v2" above). S5a (the pure computer-use core in `EvieCore`, ADR 0016) is
-done (2026-10-16). Next: S5b (observe-only).
+"Evie v2" above). S5a (the pure computer-use core in `EvieCore`, ADR 0016) and
+S5b (observe-only) are done (2026-10-16). Next: S5c (the input executor).
 
 **Evie v2, S7 (packaging, install, permissions) — partly done on `v2-packaging`,
 2026-10-16, merged into `v2` the same day.** Signing is pinned to the "Evie Dev"

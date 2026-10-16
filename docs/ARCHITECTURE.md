@@ -218,7 +218,7 @@ system frameworks, and every process Evie starts.
 | Arithmetic | `EvieCalculator`, `EvieCalculatorTool` |
 | Schedules | `EvieSchedule`, `EvieScheduleTrigger`, `EvieScheduleAgent`, `EviePropertyList` |
 | Knowledge and identity | `EvieMemory`, `EvieSkill`, `EviePersona`, `EvieCapabilityContracts` |
-| Computer use (`ComputerUse/`, ADR 0016) | `EvieAgentModeBroker` (grant, proposals, commits), `ComputerActionPolicy`, `ComputerUseBudget`, `ComputerAction`, `ComputerToolDefinitions`, `ObservationFormatter` |
+| Computer use (`ComputerUse/`, ADR 0016) | `EvieAgentModeBroker` (grant, proposals, commits), `ComputerActionPolicy`, `ComputerUseBudget`, `ComputerAction`, `ComputerToolDefinitions`, `ObservationFormatter`; observing (S5b): `ComputerObserver` and its protocols, `AccessibilitySnapshotBuilder`, `ComputerObservationDiff`, `AccessibilityTrust`; the loop: `EvieAgentLoop.runComputerUse`, `ComputerUseSession`, `ComputerUseTranscript` |
 | Voice | `EvieTTS`, `OmniVoiceBatchTTSAdapter`, `EvieSpeechGate`, `EvieSilenceTrim`, `EvieWakePhrase`, `EvieWakeGate` |
 | Settings and release | `EvieConfiguration`, `EvieConfigurationLoader`, `EvieConfigurationStore`, `EviePreferences`, `EviePreferencesStore`, `EvieShortcut`, `EvieRelease` |
 | Presentation-adjacent | `EvieOverlayGeometry`, `EvieThinkingWave` |
@@ -233,6 +233,7 @@ system frameworks, and every process Evie starts.
 | Other view models | `ConversationHistoryViewModel`, `EviePreferencesViewModel`, `ModelSettingsViewModel`, `EvieRootsViewModel`, `EvieMemoryViewModel`, `EvieSkillsViewModel`, `EvieVoiceLibraryViewModel` |
 | Audio | `EvieAudioCapture`, `EvieLevelMeter`, `EvieSpeechTranscription`, `EvieSpeechOutput`, `EvieOmniVoiceClient`, `EvieVoiceEngineLauncher`, `EvieWakeListener` |
 | Reading the world | `EvieVaultIndex`, `EvieVisionDescriber`, `EvieDocumentAttachment`, `EvieMediaStore`, `EvieWebClient`, `EvieSkillStore`, `EvieMailCalendarClient` |
+| Computer use (`ComputerUse/`) | `AccessibilitySnapshotter` (`AXTree`), `AccessibilityPermission`, `ComputerScreenLocator` (and `ScreenPresence` as the observing indicator), `ComputerObserveCheck` (`--cu-observe`) |
 | Schedules | `EvieLaunchAgents`, `EvieScheduleStore`, `EvieScheduleRunner`, `EvieScheduleLock`, `EvieScheduleNotifier`, `EvieSchedulesViewModel` |
 | Diagnostics | `EvieDiagnostic`, `EvieDiagnosticRegistry`, `EvieDiagnostics` plus its five subject files |
 | Updating | `EvieUpdater`, `EvieBundleSignature` |

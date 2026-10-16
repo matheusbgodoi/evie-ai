@@ -126,6 +126,16 @@ enum ComputerUseFixture {
   }
 
   static let policy = ComputerActionPolicy(resolver: StubAppResolver())
+
+  /// A stand-in capture: the bytes are never decoded, only counted and sent.
+  static func picture() -> EvieImagePart {
+    EvieImagePart(
+      mimeType: "image/jpeg",
+      data: Data([0xFF, 0xD8, 0xFF, 0xD9]),
+      pixelSize: frame.imageSize,
+      origin: .screenshot
+    )
+  }
 }
 
 /// Resolves the few names the tests use, the way the shell's resolver would:
@@ -160,19 +170,61 @@ struct StubAppResolver: ComputerAppResolving {
 }
 
 /// The executor's side of the contract, in the `ScriptedClient` style: it
-/// acts only on a commit the broker still accepts, and records what it did.
+/// observes from a script of screens, acts only on a commit the broker still
+/// accepts, and records what it did.
 @MainActor
 final class StubComputer: EvieComputerActing {
   let broker: EvieAgentModeBroker
+  /// The screens observations show, in order; the last one keeps being shown.
+  var screens: [ComputerObservation] = [ComputerUseFixture.observation()]
+  /// What the next action reports.
+  var result = ActionResult(outcome: .changed, detail: "Feito.")
+  /// Runs as each action is carried out, before it returns.
+  var onPerform: (ComputerAction) -> Void = { _ in }
+  private(set) var requests: [ComputerObservationRequest] = []
   private(set) var performed: [ComputerAction] = []
   private(set) var refusals: [String] = []
+  private(set) var endedSucceeded: Bool?
+  var live: ((ComputerObservation?) -> ComputerLiveState)?
+  private var last: ComputerObservation?
 
   init(broker: EvieAgentModeBroker) {
     self.broker = broker
   }
 
-  func observe(_ plan: ScreenCapturePlan, withImage: Bool) async throws -> ComputerObservation {
-    ComputerUseFixture.observation()
+  /// Each observation gets a new id, `obs-<n>`, and a picture when asked.
+  func observe(_ request: ComputerObservationRequest) async throws -> ComputerObservation {
+    requests.append(request)
+    let screen = screens.count > 1 ? screens.removeFirst() : screens[0]
+    let observation = ComputerObservation(
+      id: "obs-\(requests.count)",
+      capturedAt: screen.capturedAt,
+      displayID: screen.displayID,
+      frame: screen.frame,
+      frontApp: screen.frontApp,
+      windowTitle: screen.windowTitle,
+      elements: screen.elements,
+      focusedElementIndex: screen.focusedElementIndex,
+      evieWindowFrames: screen.evieWindowFrames,
+      image: request.withImage ? ComputerUseFixture.picture() : nil
+    )
+    last = observation
+    return observation
+  }
+
+  func liveState() async -> ComputerLiveState {
+    if let live {
+      return live(last)
+    }
+    return ComputerLiveState(
+      frontApp: last?.frontApp,
+      secureInputEnabled: false,
+      focusedFieldIsSecure: false
+    )
+  }
+
+  func endObserving(succeeded: Bool) async {
+    endedSucceeded = succeeded
   }
 
   func perform(_ action: ComputerAction, commit: CapabilityCommit) async throws -> ActionResult {
@@ -183,7 +235,8 @@ final class StubComputer: EvieComputerActing {
       throw error
     }
     performed.append(action)
-    return ActionResult(outcome: .changed, detail: "ok")
+    onPerform(action)
+    return result
   }
 }
 

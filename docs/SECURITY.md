@@ -295,8 +295,8 @@ dropped), but those two copies exist on disk.
 
 ### Computer use (v2 S5, ADR 0016)
 
-The rules exist in `EvieCore` since S5a (2026-10-16); nothing acts yet — the
-observer, the executor and the cards are S5b–S5d.
+The rules exist in `EvieCore` since S5a (2026-10-16), and the observer since
+S5b; nothing acts yet — the executor and the cards are S5c–S5d.
 
 - **A session only from a hand.** `EvieAgentModeBroker.begin` makes a grant
   (at most 15 minutes) for push-to-talk or a click, never for the wake word,
@@ -323,6 +323,19 @@ observer, the executor and the cards are S5b–S5d.
   accessibility title and the system's app name, never from the model's words.
 - **On-screen text is fenced** with a nonce made for each observation, after the
   screen was read, and cleaned so it cannot close the fence or start a line.
+- **Observing (S5b).** No observation without the observing glow composited on
+  the display about to be read — the accessibility list counts as the screen's
+  content, so it is never read unannounced either — and none while a session is
+  paused. Without Accessibility nothing is observed at all, since a password
+  field could not be recognised. Neither permission is prompted at launch or
+  mid-session: the session's start asks (S5d), and `evie-shell --cu-observe`
+  never asks and never captures pixels. A password field is listed as "senha"
+  with its title or placeholder, never its value. Evie's own windows are left
+  out of the capture and never listed. One picture, the newest, is sent per
+  request, as a user message after the fenced text, never inside a tool
+  result; older observations become fenced one-line log entries. For Electron
+  apps Evie sets `AXManualAccessibility`, which only makes the app publish its
+  accessibility tree; Chrome's undocumented toggle is not touched.
 - **What remains.** Injection can still waste a session inside allowed apps, and
   the accessibility tree covers the front app only (the Dock and menu-bar
   extras are coordinate clicks). This is mitigation, not proof; the one-time
