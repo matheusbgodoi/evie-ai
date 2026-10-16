@@ -6,6 +6,33 @@ All notable changes to Evie are documented here. Dates use `YYYY-MM-DD`.
 
 ### Changed
 
+- **The Mac brain now wakes by itself.** When a turn moves to the Mac (after
+  "Acordar o cérebro do Mac?" when the fallback is "Perguntar"), Evie starts
+  LensVLM under `mlx_vlm.server` on 127.0.0.1:38480, shows "Acordando o cérebro
+  do Mac…" while it loads (about 6 s measured), and stops it after 10 minutes
+  without a turn or when she quits, releasing its ~8 GB. It is refused, with the
+  reason on screen, when port 38480 is held by another process ("A porta 38480
+  está ocupada por outro processo."), when `mlx_vlm.server` is not installed, or
+  when less than 8 GiB is free (2.4 GiB more while the voice engine runs). Before
+  "O cérebro do Mac ainda não está instalado nesta versão da Evie." ended every
+  such turn. ADR 0015.
+- **Security: whatever answers on the Mac brain's port is checked before it gets
+  a turn.** The listener must be the configured executable serving that port
+  (its argv and its executable image, through libproc); after a start it must be
+  the process Evie spawned; a pid is signalled only after the same check. The
+  server is started with `--host 127.0.0.1`, no API key, and a scrubbed, offline
+  environment (`HF_HUB_OFFLINE=1`).
+- **Requests to the Mac brain send `context_management: []`.** mlx-vlm 0.7.8
+  otherwise compacts on its own under `--max-kv-size`: it trims the answer's
+  token cap and, for a prompt that does not fit, summarizes the older messages
+  with the model. An oversized request now fails with a 400 instead.
+- **`Scripts/evie-brain start|stop|status|health`** starts the same server by
+  hand, with the same argv, environment, pid file and log
+  (`~/Library/Application Support/Evie/Runtime/brain.{pid,log}`); Evie takes such
+  a server over at launch or first use. `evie-shell --brain-check [--idle]` runs
+  the real launcher, one question with a picture, and the stop (or waits for the
+  idle unload).
+
 - **Settings has a "Cérebro" tab, and the PC key can be saved from it.** The tab
   picks the brain Evie asks first (PC RTX 3090 / Mac local) and what happens when
   the PC is out (Não usar o Mac / Perguntar / Usar o Mac automaticamente), and

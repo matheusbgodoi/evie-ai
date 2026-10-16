@@ -240,7 +240,8 @@ struct EvieBrainResolverTests {
       keys: .saved,
       rungs: [pc: .unreachable, mac: .modelCold],
       fallback: .automatic,
-      launcher: LauncherDouble(failure: EvieLocalBrainNotInstalled.Failure())
+      launcher: LauncherDouble(
+        failure: LocalBrainLaunchError.notInstalled(executable: "/x/mlx_vlm.server"))
     )
     let conversation = UUID()
 
@@ -251,19 +252,129 @@ struct EvieBrainResolverTests {
     let failure = await streamFailure(brain.client)
     #expect(
       failure
-        == "O PC está fora. O cérebro do Mac ainda não está instalado nesta versão da Evie."
+        == "O PC está fora. O cérebro do Mac não está instalado: falta /x/mlx_vlm.server."
     )
   }
 
-  @Test("until S3 the Mac launcher says plainly that the brain is not installed")
-  func stubLauncher() async {
-    await #expect(throws: EvieLocalBrainNotInstalled.Failure.self) {
-      _ = try await EvieLocalBrainNotInstalled().ensureRunning()
-    }
-    #expect(
-      EvieLocalBrainNotInstalled.Failure().errorDescription
-        == "O cérebro do Mac ainda não está instalado nesta versão da Evie."
+  @Test("the overlay is told the Mac brain is waking, and when it is done")
+  func wakingIsAnnounced() async {
+    let harness = ResolverHarness(
+      keys: .saved, rungs: [pc: .unreachable, mac: .modelCold], fallback: .automatic)
+    var states: [Bool] = []
+    harness.resolver.onWaking = { states.append($0) }
+
+    _ = await harness.resolver.resolve(conversation: UUID())
+
+    #expect(states == [true, false])
+    #expect(EvieBrainResolver.wakingStatus == "Acordando o cérebro do Mac…")
+  }
+
+  @Test("a failed wake still ends the waking state")
+  func failedWakeEndsWaking() async {
+    let harness = ResolverHarness(
+      keys: .saved,
+      rungs: [pc: .unreachable, mac: .modelCold],
+      fallback: .automatic,
+      launcher: LauncherDouble(failure: LocalBrainLaunchError.exitedDuringStartup)
     )
+    var states: [Bool] = []
+    harness.resolver.onWaking = { states.append($0) }
+
+    _ = await harness.resolver.resolve(conversation: UUID())
+
+    #expect(states == [true, false])
+  }
+
+  @Test("a Mac brain the probe found answering is checked before use, and not started")
+  func readyMacIsVerified() async {
+    let harness = ResolverHarness(
+      keys: .saved, rungs: [pc: .unreachable, mac: .ready], fallback: .automatic)
+    var states: [Bool] = []
+    harness.resolver.onWaking = { states.append($0) }
+
+    let brain = await harness.resolver.resolve(conversation: UUID())
+
+    #expect(brain.profile.id == mac)
+    #expect(brain.rung == .ready)
+    #expect(harness.launcher.verifications == 1)
+    #expect(harness.launcher.starts == 0)
+    #expect(states.isEmpty)
+  }
+
+  @Test("another process on the Mac brain's port is never sent the turn")
+  func foreignListenerIsRefused() async {
+    let launcher = LauncherDouble()
+    launcher.serving = .failure(LocalBrainLaunchError.portHeld(port: 38_480))
+    let harness = ResolverHarness(
+      keys: .saved,
+      rungs: [pc: .unreachable, mac: .ready],
+      fallback: .automatic,
+      launcher: launcher
+    )
+    let conversation = UUID()
+
+    let brain = await harness.resolver.resolve(conversation: conversation)
+
+    #expect(harness.resolver.pinnedProfileID(for: conversation) == nil)
+    #expect(launcher.starts == 0)
+    #expect(
+      await streamFailure(brain.client)
+        == "O PC está fora. A porta 38480 está ocupada por outro processo."
+    )
+  }
+
+  @Test("a Mac brain that stopped since the probe saw it is woken again")
+  func stoppedMacIsWoken() async {
+    let launcher = LauncherDouble()
+    launcher.serving = .success(false)
+    let harness = ResolverHarness(
+      keys: .saved,
+      rungs: [pc: .unreachable, mac: .ready],
+      fallback: .automatic,
+      launcher: launcher
+    )
+
+    let brain = await harness.resolver.resolve(conversation: UUID())
+
+    #expect(launcher.starts == 1)
+    #expect(brain.profile.id == mac)
+  }
+
+  @Test("after a wake the rung is the probe's: ready once the model is loaded")
+  func rungAfterWakeFollowsTheProbe() async {
+    let harness = ResolverHarness(
+      keys: .saved, rungs: [pc: .unreachable, mac: .modelCold], fallback: .automatic)
+    let rungs = harness.rungs
+    harness.launcher.onStart = { rungs.set(EvieModelProfile.macProfileID, .ready) }
+
+    let brain = await harness.resolver.resolve(conversation: UUID())
+
+    #expect(brain.rung == .ready)
+  }
+
+  @Test("every turn on the Mac brain restarts its idle clock, at the start and at the end")
+  func turnsRestartTheIdleClock() async {
+    let harness = ResolverHarness(
+      keys: .saved, rungs: [pc: .unreachable, mac: .ready], fallback: .automatic)
+    let onMac = UUID()
+
+    _ = await harness.resolver.resolve(conversation: onMac)
+    harness.resolver.turnEnded(conversation: onMac)
+
+    #expect(harness.launcher.uses == 2)
+  }
+
+  @Test("a turn on the PC leaves the Mac brain's idle clock alone")
+  func pcTurnsDoNotTouchTheMac() async {
+    let harness = ResolverHarness(keys: .saved, rungs: [pc: .ready, mac: .ready])
+    let onPC = UUID()
+
+    _ = await harness.resolver.resolve(conversation: onPC)
+    harness.resolver.turnEnded(conversation: onPC)
+    harness.resolver.turnEnded(conversation: UUID())
+
+    #expect(harness.launcher.uses == 0)
+    #expect(harness.launcher.verifications == 0)
   }
 
   @Test("a settings save is picked up on the next turn, and the pin survives it")
@@ -406,21 +517,38 @@ final class RungTable: Sendable {
   }
 }
 
-/// A Mac launcher that counts its starts and succeeds unless told otherwise.
+/// A Mac launcher that counts its starts, checks and uses, and succeeds unless
+/// told otherwise.
 @MainActor
 final class LauncherDouble: LocalBrainStarting {
   private let failure: (any Error)?
   private(set) var starts = 0
+  private(set) var verifications = 0
+  private(set) var uses = 0
+  /// What `isServing` answers: by default the configured server is serving.
+  var serving: Result<Bool, any Error> = .success(true)
+  /// Run on each start, before it returns.
+  var onStart: () -> Void = {}
 
   nonisolated init(failure: (any Error)? = nil) {
     self.failure = failure
   }
 
-  func ensureRunning() async throws -> URL {
+  func ensureRunning(_ profile: EvieModelProfile) async throws -> URL {
     starts += 1
     if let failure {
       throw failure
     }
-    return URL(string: "http://127.0.0.1:38480/v1")!
+    onStart()
+    return profile.endpoint
+  }
+
+  func isServing(_ profile: EvieModelProfile) throws -> Bool {
+    verifications += 1
+    return try serving.get()
+  }
+
+  func noteUse() {
+    uses += 1
   }
 }

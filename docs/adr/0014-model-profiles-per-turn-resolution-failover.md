@@ -1,7 +1,9 @@
 # ADR 0014: model profiles, per-turn resolution and per-conversation failover
 
 Status: Accepted for Evie v2 (slice S2c implemented; S2a's profiles and S2b's
-readiness probe are its inputs)
+readiness probe are its inputs); superseded in part by
+[ADR 0015](0015-on-demand-local-vlm-brain.md) (the paragraph "Waking goes
+through a protocol")
 
 Date: 2026-10-16
 

@@ -68,6 +68,13 @@ public final class EvieBrainResolver {
   public private(set) var configuration: EvieLoadedConfiguration
   /// Asked before waking the Mac brain; nobody to ask is a no.
   public var askToWake: @MainActor (EvieBrainWakeQuestion) async -> Bool = { _ in false }
+  /// Told `true` when the Mac brain starts waking for a turn and `false` once
+  /// it answers or failed to, so the overlay can say "Acordando o cérebro do
+  /// Mac…" through a start that takes seconds.
+  public var onWaking: @MainActor (Bool) -> Void = { _ in }
+
+  /// What the overlay shows while the Mac brain wakes.
+  public static let wakingStatus = "Acordando o cérebro do Mac…"
 
   private var environmentChoseProfile: Bool
   private let selector: EvieProfileSelector
@@ -120,6 +127,16 @@ public final class EvieBrainResolver {
   /// The profile a conversation is pinned to, if any.
   public func pinnedProfileID(for conversation: UUID) -> String? {
     pins[conversation]
+  }
+
+  /// A turn on the conversation ended. When it ran on the Mac brain, the
+  /// brain's idle clock starts from now rather than from the turn's start, so
+  /// a long answer does not count as idle time.
+  public func turnEnded(conversation: UUID) {
+    guard let pinned = pins[conversation].flatMap(profile(id:)), pinned.startsOnDemand else {
+      return
+    }
+    localBrain.noteUse()
   }
 
   /// The brain for the conversation's next turn.
@@ -190,10 +207,11 @@ public final class EvieBrainResolver {
       && rung != .ready
   }
 
-  /// Starts a Mac brain that is not answering yet, then pins the conversation.
-  /// A brain that cannot start is returned with a client that fails with the
-  /// reason, and nothing is pinned to it: a conversation that has no pin yet is
-  /// resolved from the top again on its next turn.
+  /// Makes sure a Mac brain is the configured server and is serving — starting
+  /// it when it is not — then pins the conversation. A brain that cannot be
+  /// used is returned with a client that fails with the reason, and nothing is
+  /// pinned to it: a conversation that has no pin yet is resolved from the top
+  /// again on its next turn.
   private func prepare(
     _ profile: EvieModelProfile,
     rung: ReadinessRung,
@@ -201,14 +219,10 @@ public final class EvieBrainResolver {
     passingOver skipped: (profile: EvieModelProfile, reason: ReadinessRung)? = nil
   ) async -> ResolvedBrain {
     var rung = rung
-    if profile.startsOnDemand, rung != .ready {
+    if profile.startsOnDemand {
       do {
-        // The profile already names the endpoint; the launcher starts exactly
-        // that runtime, so the address it returns is the profile's own.
-        _ = try await localBrain.ensureRunning()
-        // Running, but mlx-vlm loads the model on its first request.
-        rung = .modelCold
-        await readiness.refresh(profile)
+        rung = try await wakeIfNeeded(profile, rung: rung)
+        localBrain.noteUse()
       } catch {
         let reason = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
         let message =
@@ -235,6 +249,28 @@ public final class EvieBrainResolver {
         EvieBrainCopy.notice(passingOver: $0.profile, because: $0.reason, for: profile)
       }
     )
+  }
+
+  /// The rung a Mac brain has once it is known to be the configured server
+  /// and serving. The probe's "ready" only says that something answered
+  /// `/health` on the port, so who answered is checked first; a brain that
+  /// stopped since the probe (its idle timer, a crash) is woken again.
+  private func wakeIfNeeded(_ profile: EvieModelProfile, rung: ReadinessRung) async throws
+    -> ReadinessRung
+  {
+    if rung == .ready, try localBrain.isServing(profile) {
+      return .ready
+    }
+    onWaking(true)
+    defer { onWaking(false) }
+    // The profile already names the endpoint; the launcher starts exactly
+    // that runtime, so the address it returns is the profile's own.
+    _ = try await localBrain.ensureRunning(profile)
+    await readiness.refresh(profile)
+    // The launcher names the model on the command line, so it is loaded once
+    // `/health` answers; a probe that says otherwise leaves the cold
+    // deadlines in place for the first request.
+    return await readiness.readiness(of: profile).rung == .ready ? .ready : .modelCold
   }
 
   /// The key store first, since it needs no network and a missing key makes
@@ -284,8 +320,10 @@ extension EvieModelProfile {
 enum EvieBrainCopy {
   /// Measured 2026-10-16 on this Mac (M5, 24 GB, macOS 27.2): LensVLM under
   /// `mlx_vlm.server` 0.7.8 holds 8,164 MB (10 GB at peak) and gave its first
-  /// text answer 6.69 s after the request. The spec's "~90 s" was an estimate
-  /// for a launcher that did not exist yet.
+  /// text answer 6.69 s after the request. Started by `Scripts/evie-brain`
+  /// with the model in the page cache, `/health` answered 5.4 s after launch
+  /// and a tiny-image answer took 2.2 s more. The spec's "~90 s" was an
+  /// estimate for a launcher that did not exist yet.
   static let macWakeCost = "(~10 s, ~8 GB de memória)"
 
   static func wakeQuestion(

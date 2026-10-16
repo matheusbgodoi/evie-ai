@@ -29,6 +29,14 @@ in Git; private fixtures remain local and are represented only by stable IDs.
 9. Analyze a screenshot through the vision worker, then answer through the main
    model without allowing OCR text to alter policy.
 10. Maintain task intent after context compression.
+11. `vision-mac-look-001` (v2 S3): on the Mac brain (LensVLM under
+    `mlx_vlm.server`, `enable_thinking:false`, no `tools` key), a synthetic image
+    with a red circle, a blue rectangle and the text "ZEBRA 4817" is described
+    with all three, and a 32×32 red square is answered "vermelho". Passed by hand
+    2026-10-16; `evie-shell --brain-check` reruns the second half.
+12. `tools-mac-lensvlm-001` (v2 S3, open): the same tool-call cases the PC passes,
+    against LensVLM. Measured 2026-10-16: calls come back as malformed XML in the
+    content, so the Mac profile declares no tools until this passes.
 
 ## Model metrics
 

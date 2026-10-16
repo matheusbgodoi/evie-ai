@@ -377,7 +377,15 @@ extension OpenAICompatibleClient {
       parallelToolCalls: tools.isEmpty ? nil : false,
       chatTemplateKwargs: thinking.templateKwargs,
       enableThinking: thinking.topLevelEnable,
-      thinkingBudgetTokens: thinking.budget
+      thinkingBudgetTokens: thinking.budget,
+      // mlx-vlm 0.7.8 (the `.topLevel` server) compacts on its own whenever a
+      // prompt would not fit under its --max-kv-size: it asks the model to
+      // summarize the older messages and answers from the summary. Evie's
+      // character budget already keeps the prompt inside the context, so that
+      // would only ever rewrite a conversation behind her back; an empty list
+      // turns it off, and an oversized request then fails with a 400 instead.
+      // Read from the installed source and checked live, 2026-10-16.
+      contextManagement: configuration.thinkingStyle == .topLevel ? [] : nil
     )
 
     let encoded: Data
@@ -715,6 +723,8 @@ private struct ChatCompletionRequest: Encodable {
   let chatTemplateKwargs: ChatTemplateKwargs?
   let enableThinking: Bool?
   let thinkingBudgetTokens: Int?
+  /// Always empty when sent: no compaction rule at all.
+  let contextManagement: [String]?
 
   enum CodingKeys: String, CodingKey {
     case model
@@ -729,6 +739,7 @@ private struct ChatCompletionRequest: Encodable {
     case chatTemplateKwargs = "chat_template_kwargs"
     case enableThinking = "enable_thinking"
     case thinkingBudgetTokens = "thinking_budget_tokens"
+    case contextManagement = "context_management"
   }
 }
 

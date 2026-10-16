@@ -26,6 +26,8 @@ final class AppCoordinator: NSObject {
   /// Kept warm from launch, so the first turn's resolver reads an answer
   /// instead of waiting on a probe.
   private let readinessRefresher: EvieReadinessRefresher
+  /// The Mac brain's process: held here so quitting stops it.
+  private let localBrainLauncher: EvieLocalBrainLauncher
   /// The resolver's readiness cache, refreshed when a key is saved in Settings
   /// so the next turn does not wait 30 s to learn the PC now accepts it.
   private let modelReadiness: ModelReadinessCache
@@ -135,14 +137,15 @@ final class AppCoordinator: NSObject {
     let modelReadiness = ModelReadinessCache(
       probe: ModelClientFactory.live.makeReadinessProbe()
     )
-    // Until S3 there is no launcher: a Mac brain answers only if its server was
-    // started by hand, and otherwise the turn says it is not installed.
+    // Starts LensVLM on this Mac when a turn needs it, and stops it after ten
+    // idle minutes or when Evie quits.
+    let localBrainLauncher = EvieLocalBrainLauncher()
     let brainResolver = EvieBrainResolver(
       configuration: loadResult.loaded,
       environment: configurationEnvironment,
       factory: .live,
       readiness: modelReadiness,
-      localBrain: EvieLocalBrainNotInstalled()
+      localBrain: localBrainLauncher
     )
     let viewModel = OverlayViewModel(
       brainResolver: brainResolver,
@@ -168,6 +171,7 @@ final class AppCoordinator: NSObject {
     startupConfigurationError = loadResult.error
     startupConfiguration = loadResult.loaded
     self.brainResolver = brainResolver
+    self.localBrainLauncher = localBrainLauncher
     self.modelReadiness = modelReadiness
     readinessRefresher = EvieReadinessRefresher(
       cache: modelReadiness,
@@ -184,6 +188,12 @@ final class AppCoordinator: NSObject {
     brainResolver.askToWake = { [weak viewModel] question in
       await viewModel?.askToWake(question) ?? false
     }
+    brainResolver.onWaking = { [weak viewModel] waking in
+      viewModel?.showLocalBrainWaking(waking)
+    }
+    // A server a crash left behind, or one the script started, is taken over
+    // so it unloads like any other; a stale pid file is removed.
+    localBrainLauncher.reconcilePIDFile(for: loadResult.loaded.profiles)
     viewModel.grantedRoots = { [rootsViewModel] in rootsViewModel.roots }
     viewModel.memories = { [memoryViewModel] in memoryViewModel.entries }
     viewModel.installedSkills = { [skillsViewModel] in skillsViewModel.skills }
@@ -491,6 +501,8 @@ final class AppCoordinator: NSObject {
 
   func stop() {
     readinessRefresher.stop()
+    // Its 8 GB are not left behind for a process nobody will ask again.
+    localBrainLauncher.stop()
     audioCapture.stop()
     speechOutput.stop()
     viewModel.cancelCurrentInteraction()

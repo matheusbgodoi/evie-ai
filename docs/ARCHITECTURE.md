@@ -100,7 +100,8 @@ tools:options:)`): the reasoning level, the output cap (voice 1024, chat 2048, a
 computer-use step 1024), and the model's readiness, which picks the deadlines.
 The configuration's `ThinkingParameterStyle` says how the server is told to
 think — `chat_template_kwargs` for the PC gateway, a top-level `enable_thinking`
-for mlx-vlm, nothing for the loopback Gemma. The first system message goes out
+for mlx-vlm (with `context_management: []`, so that server never compacts the
+conversation itself), nothing for the loopback Gemma. The first system message goes out
 byte for byte; any later system or developer message (skill guidance) is sent as
 a `<system-context>` block on the next user message, so the cached prefix does
 not move when a skill comes or goes. Reasoning is decoded apart from the answer
@@ -449,8 +450,13 @@ the conversation is re-pinned. Every move follows the Mac-fallback choice: off
 never moves, automatic moves, ask asks before waking the Mac brain ("O PC está
 fora. Acordar o cérebro do Mac? (~10 s, ~8 GB de memória)") and a yes holds for
 the session. A profile chosen by the environment is never moved. Waking a
-`.localOnDemand` profile goes through `LocalBrainStarting`; until v2 S3 the
-stand-in says the Mac brain is not installed. `EvieTurnPlan` derives the turn
+`.localOnDemand` profile goes through `LocalBrainStarting`, implemented by
+`EvieLocalBrainLauncher` since v2 S3 (ADR 0015): it starts `mlx_vlm.server` on
+127.0.0.1:38480 with `LocalBrainPolicy`'s argv and offline environment, refuses a
+port held by anything but that server and a start with under 8 GiB free, checks
+before every turn that the listener is the configured executable, and stops it
+after 10 idle minutes or when Evie quits. `Scripts/evie-brain` is the manual
+path to the same server. `EvieTurnPlan` derives the turn
 from the profile: the character budget, the persona's location sentence, tools
 only for a profile that has them (otherwise the folders and the web are searched
 first and the model is asked once with no `tools` key), pictures only with

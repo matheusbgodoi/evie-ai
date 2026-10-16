@@ -96,6 +96,19 @@ struct ModelRequestBodyTests {
     #expect(body["thinking_budget_tokens"] == nil)
   }
 
+  @Test("topLevel turns off the Mac server's automatic context compaction; other styles send nothing")
+  func topLevelOptsOutOfCompaction() throws {
+    var mac = gateway
+    mac.thinkingStyle = .topLevel
+    let macBody = try json(request([question], configuration: mac, options: .chat(mac)))
+    let gatewayBody = try json(request([question], options: .chat(gateway)))
+
+    // mlx-vlm 0.7.8 otherwise summarizes older messages itself, with the model,
+    // whenever a prompt would not fit under --max-kv-size.
+    #expect((macBody["context_management"] as? [Any])?.isEmpty == true)
+    #expect(gatewayBody["context_management"] == nil)
+  }
+
   @Test("style none sends no thinking parameter at all")
   func noThinkingStyle() throws {
     var plain = gateway

@@ -1,5 +1,76 @@
 # Work log
 
+## 2026-10-16 — v2 S3: the Mac brain wakes on demand (LensVLM under mlx_vlm.server)
+
+- Completed: slice S3, ADR 0015 (supersedes ADR 0014's "Waking goes through a
+  protocol" paragraph).
+  - Pre-check (the lead's, confirmed here): `mlx_vlm.server` 0.7.8 serves
+    LensVLM's images, so it is the launcher; `LocalRuntime.Launcher` keeps only
+    `.mlxVLM`.
+  - New `Sources/EvieCore/LocalBrainPolicy.swift`: idle unload (10 min), the
+    memory verdict (8 GiB floor, 2.4 GiB voice-engine deduction, Portuguese
+    refusal with the numbers), `makeArguments` (`--model`, `--host 127.0.0.1`,
+    `--port`, `--max-kv-size`, `--max-num-seqs 1`), `makeEnvironment` (account
+    basics and HF cache only, fixed `PATH`, `HF_HUB_OFFLINE=1`),
+    `argumentsIdentifyServer`, `interpreterPath(fromScriptHead:)`, and
+    `LocalBrainLaunchError` (Portuguese copy).
+  - `LocalBrainStarting` is now `ensureRunning(_:)`, `isServing(_:)`, `noteUse()`;
+    `EvieLocalBrainNotInstalled` is removed. `EvieBrainResolver` verifies a
+    probe-ready Mac brain before every turn, wakes it when nothing listens,
+    reports `onWaking` ("Acordando o cérebro do Mac…"), takes the rung from the
+    probe after a wake, and has `turnEnded(conversation:)`.
+  - `OpenAICompatibleClient`: `.topLevel` requests send `context_management: []`.
+  - Shell: `EvieLocalBrainLauncher` (spawn, 90 s health wait, listener-is-child
+    check, held-port refusal, memory check via `host_statistics64`, idle watch,
+    SIGTERM then SIGKILL after 5 s behind a `proc_pidpath`/argv check, pid file
+    reconcile at launch, log rotation at 10 MB), `EvieProcessInspector`
+    (libproc/sysctl), `--brain-check [--idle]` diagnostic; `AppCoordinator`
+    wires the launcher and stops it in `stop()`; the overlay shows the waking
+    status and notes the end of each turn.
+  - `Scripts/evie-brain start|stop|status|health` (same argv, env, pid file and
+    log as the launcher; refuses a held port; stop checks the command line).
+  - Docs: ADR 0015 (+ README row, ADR 0014 marked), design doc S3 "Implemented"
+    note, `docs/MACOS_RUNTIME.md` § "The Mac brain" (startup, shutdown, idle
+    cost, logs, recovery, measurements), `docs/SECURITY.md`,
+    `docs/ARCHITECTURE.md`, `evals/README.md` (cases 11 and 12), CHANGELOG,
+    PROJECT_STATUS.
+- Verified in the installed mlx-vlm 0.7.8 source and live (M5 24 GB, macOS 27.2):
+  `--max-kv-size` reaches `/health` as `configured_context_limit: 32768` and is
+  enforced — with `context_management: []` a 13 + 40,000-token request is a 400
+  naming `MAX_KV_SIZE is 32768`; without it the server's automatic compaction
+  clamped `max_tokens` and answered (and would summarize an oversized prompt).
+  Top-level `enable_thinking:true` gave a `reasoning_content` trace, `false`
+  none; absent, the server passes its own default (off), same 25-token prompt
+  as `false`. `HF_HUB_OFFLINE=1` stopped the Hub request the earlier run logged.
+- Measured (weights in the page cache; details in `docs/MACOS_RUNTIME.md`):
+  script start 5.4 s / 6.5 s to `/health`; launcher 6.35 s / 5.74 s; footprint
+  8,148–8,243 MB, RSS 443 MB–2.7 GB; 32×32 red PNG → "vermelho" in 2.18 s
+  (curl) and 2.04–2.27 s through Evie's client; idle 0.3% CPU; script stop
+  0.34 s, no process left; `nc` on 38480 refused by both script and launcher and
+  left running; a script-started server was adopted and stopped by the
+  launcher; with the real 10-minute policy the launcher unloaded it on its own,
+  the port free 605 s after the last answer and no server process left.
+- Tests: new suites "Local brain policy" (14) and "Evie brain script" (3: argv
+  and env equal the policy's, poisoned variables dropped; relative executable
+  refused; a reused pid in the pid file left alone); "Evie brain resolver"
+  gained 8 (waking announced and ended on failure, a ready brain verified and
+  not started, a foreign listener refused and not pinned, a stopped brain woken,
+  rung from the probe after a wake, idle clock at start and end, PC turns leave
+  it alone); "Model request body" gained 1. Changed, not weakened:
+  "a Mac brain that cannot wake…" now uses `LocalBrainLaunchError.notInstalled`
+  (same exact-match shape); "until S3 the Mac launcher says plainly that the
+  brain is not installed" was removed with the stand-in it tested, its copy check
+  replaced by "each launch failure says what happened in Portuguese".
+- Commands: `swift build` (whole package, no warnings); `Scripts/test --filter
+  "LocalBrainPolicyTests|EvieBrainScriptTests|EvieBrainResolverTests|ModelRequestBodyTests"`
+  (58 passed); full `Scripts/test`: 979 tests in 94 suites passed, 1 known issue
+  (the existing deadline witness), up from 954 in 92; `Scripts/evie-app build`
+  (release, signed) succeeded. The app UI was not launched.
+- Open: the status line and ask card in the running app; a start with the
+  weights not in the page cache; LensVLM's tool-call eval (tools stay off);
+  `com.crias.omlx` (port 8477, deleted venv) is unrelated and left to the owner.
+- Next: S4 (screen perception); S6-core is already done.
+
 ## 2026-10-16 — v2 S2d: the Cérebro settings tab, the PC key import, per-brain copy
 
 - Completed: slice S2d. No new ADR (ADR 0014 exists; the keychain copy is

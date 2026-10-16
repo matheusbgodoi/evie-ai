@@ -234,7 +234,21 @@ recoverable Trash operation and must never expose a model-callable permanent
 delete primitive.
 
 A loopback model server has no authentication or TLS and must never be exposed
-through a proxy, tunnel, wildcard bind, or remote interface. Future tools cannot be
+through a proxy, tunnel, wildcard bind, or remote interface.
+
+The Mac brain (v2 S3, ADR 0015) is such a server, so Evie does not take "it
+answered on 38480" as "it is the brain". `mlx_vlm.server` defaults to
+`0.0.0.0`; Evie and `Scripts/evie-brain` always pass `--host 127.0.0.1`, never an
+`--api-key`, and start it with a scrubbed environment (`HF_HUB_OFFLINE=1`, a
+fixed `PATH`, nothing else inherited but the account basics and the model cache
+location), so a variable in Evie's environment cannot reconfigure it and a wrong
+model id cannot trigger a download. Before every turn on it, the process
+listening on the port must be the configured executable serving that port (argv,
+and the `proc_pidpath` image or its `#!` interpreter); otherwise the turn — and,
+from S4, the screen — is not sent, with "A porta 38480 está ocupada por outro
+processo.". After a start the listener must be the process Evie spawned. A pid
+from `brain.pid` is signalled only after the same check, because pids are
+reused. At its INFO level the log records token counts and timings, not prompts (a malformed tool call is logged with its text, which cannot happen while the profile declares no tools). Future tools cannot be
 added to the direct UI adapter; they require the supervisor/policy boundary and
 separate read/propose/commit capabilities.
 

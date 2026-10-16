@@ -39,7 +39,9 @@ public enum ThinkingParameterStyle: String, Codable, Sendable {
   /// preserve_thinking: false}` plus `thinking_budget_tokens` — the PC gateway.
   case templateKwargs
   /// A top-level `"enable_thinking": Bool` — mlx-vlm 0.7.8, which has no
-  /// `chat_template_kwargs`.
+  /// `chat_template_kwargs`. Requests in this style also send
+  /// `context_management: []`, which only that server reads (see
+  /// `OpenAICompatibleClient.makeRequest`).
   case topLevel
   /// Nothing is sent. The loopback Gemma server accepts every thinking parameter
   /// and ignores all of them (`docs/MODEL_STRATEGY.md`).

@@ -964,6 +964,9 @@ extension OverlayViewModel {
     attempt: (ResolvedBrain) async throws -> Void
   ) async {
     let brain = await brainResolver.resolve(conversation: conversation)
+    // Whatever happens next, the Mac brain's idle clock counts from the end
+    // of this turn.
+    defer { brainResolver.turnEnded(conversation: conversation) }
     // Cancelled while the probe or the wake question was pending.
     guard activeRequestID == requestID, !Task.isCancelled else {
       return
@@ -1041,6 +1044,17 @@ extension OverlayViewModel {
         autoApproveChanges: turn.autoApprovesChanges
       )
     }
+  }
+
+  /// "Acordando o cérebro do Mac…" on the status line while the Mac brain
+  /// starts, cleared when it is up unless something else was said meanwhile.
+  func showLocalBrainWaking(_ waking: Bool) {
+    if waking {
+      secondaryText = EvieBrainResolver.wakingStatus
+    } else if secondaryText == EvieBrainResolver.wakingStatus {
+      secondaryText = nil
+    }
+    onLayoutInvalidated?()
   }
 
   /// Says that the turn runs somewhere other than the preferred brain, and why.

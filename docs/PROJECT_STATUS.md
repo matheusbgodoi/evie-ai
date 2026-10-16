@@ -454,9 +454,7 @@ or a PC the probe finds out moves a new conversation to the Mac profile, and a
 turn that fails before its first delta is rebuilt for the next brain and retried
 once, all under the Mac-fallback choice (`.ask` asks "O PC está fora. Acordar o
 cérebro do Mac? (~10 s, ~8 GB de memória)"). This replaces the launch-time move
-of review finding #1. The Mac brain answers only if `mlx_vlm.server` is already
-serving on 38480, because the S3 launcher does not exist yet; until then a turn
-sent there says the Mac brain is not installed. Measured in S1b: the PC gateway
+of review finding #1. Measured in S1b: the PC gateway
 sends its response headers only with the first chunk, so the headers deadline is
 a first-token deadline. Verified in S2a: `qwen-daily` reports a 200704-token
 context window and 32768 max tokens; port 38480 is free. S2b (readiness probe
@@ -473,9 +471,20 @@ terminal; the status line and error card name the brain that answered. Still
 owed for S2d: its manual QA (fresh install → "sem chave", import, three green
 steps; PC off with `.automatic` and `.ask`), which needs `Scripts/evie-app
 install`, and two [VERIFY]s on whether macOS prompts when Evie reads her item
-after a rebuild or after the script created it (`docs/SECURITY.md`). Next: S3
-(the Mac launcher behind `LocalBrainStarting`); the first-run guide's key and
-brain rows (S7) can now call the S2d functions.
+after a rebuild or after the script created it (`docs/SECURITY.md`). S3 is done (2026-10-16, ADR 0015): `mlx_vlm.server` 0.7.8 serves
+LensVLM's images (the pre-check's option 1), and `EvieLocalBrainLauncher` starts
+it on demand on 127.0.0.1:38480 ("Acordando o cérebro do Mac…", ready in about
+6 s with the weights cached), checks that the listener is the configured server
+before every turn, refuses a held port or under 8 GiB free, and stops it after
+10 idle minutes or at quit; `Scripts/evie-brain` is the manual path and
+`evie-shell --brain-check [--idle]` the command-line QA. Measured: footprint
+8,148–8,243 MB, 0.3% CPU idle, a tiny-image answer in about 2.1 s. Requests to
+it send `context_management: []`, since 0.7.8 otherwise compacts the
+conversation itself. Still owed for S3: the in-app status line and ask card
+(UI not launched), a start with the weights not in the page cache, and the
+LensVLM tool-call eval (tools stay off). Next: S6-core is done, so S4 (screen
+perception); the first-run guide's key and brain rows (S7) can now call the S2d
+functions.
 
 **Evie v2, S7 (packaging, install, permissions) — partly done on `v2-packaging`,
 2026-10-16, merged into `v2` the same day.** Signing is pinned to the "Evie Dev"

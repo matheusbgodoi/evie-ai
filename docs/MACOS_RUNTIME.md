@@ -107,6 +107,78 @@ completed at a declared 64K. After those small requests, the server's measured
 physical footprint was 3,215 MB and the native shell's was 18 MB; this is first-test
 evidence, not the full Phase 1 resource/energy benchmark.
 
+## The Mac brain: LensVLM on demand (v2 S3, ADR 0015)
+
+The `mac-local` profile's server is `mlx_vlm.server` (mlx-vlm 0.7.8, a uv tool;
+the executable `~/.local/bin/mlx_vlm.server` is a script whose `#!` names the
+tool's Python) serving `mlx-community/LensVLM-9B-OptiQ-4bit` from the Hugging Face
+cache. It is not a persistent service: no LaunchAgent, no login item, no
+`KeepAlive`.
+
+- **Startup.** Only when a turn resolves to the Mac brain (after "Acordar o
+  cérebro do Mac?" when the Mac fallback is "Perguntar"), with "Acordando o
+  cérebro do Mac…" on the status line. `EvieLocalBrainLauncher` refuses when the
+  port is held by anything but the configured server, when the executable is
+  missing, or when free memory is under 8 GiB (2.4 GiB more while the voice
+  engine runs); otherwise it starts `mlx_vlm.server --model <id> --host 127.0.0.1
+  --port 38480 --max-kv-size 32768 --max-num-seqs 1` with a scrubbed environment
+  and `HF_HUB_OFFLINE=1`, waits up to 90 s for `/health`, and checks that the
+  listener is the process it spawned. `Scripts/evie-brain start` does the same by
+  hand.
+- **Shutdown.** After 10 minutes without a turn, when Evie quits, or
+  `Scripts/evie-brain stop`: SIGTERM, SIGKILL after 5 s, only after the pid's
+  image and argv were checked to be this server. A server left by a crash, or
+  started by the script, is taken over at Evie's next launch and unloads the
+  same way.
+- **Idle cost.** Loaded and idle: footprint 8,243 MB, 0.3% of one core (`top`, 5 s
+  sample). Unloaded: nothing — no process, no port.
+- **Logs.** `~/Library/Application Support/Evie/Runtime/brain.log` (0600,
+  appended, moved to `brain.log.1` past 10 MB at the next start) and `brain.pid`
+  (0600) beside it, shared by the app and the script. The server logs each
+  request's token counts and timings, never the prompt.
+- **Recovery.** `Scripts/evie-brain status` (pid, RSS, health), `health` (the
+  server's `/health`), `stop`. A refused start says why on the status line; the
+  log has the server's own error. "A porta 38480 está ocupada por outro processo."
+  means something else listens there: `lsof -nP -iTCP:38480 -sTCP:LISTEN`.
+- **Checks without the overlay.** `evie-shell --brain-check` runs the real
+  launcher, one question with a 32×32 red PNG through the real client, and the
+  stop; `--brain-check --idle` waits for the idle unload instead of stopping.
+
+### Measured 2026-10-16
+
+Apple M5 (Mac17,2), 24 GB, macOS 27.2, mlx-vlm 0.7.8, LensVLM-9B-OptiQ-4bit, the
+weights already in the page cache from earlier runs that day (a cold read from
+disk after a reboot was not measured).
+
+| What | Result |
+|---|---|
+| `Scripts/evie-brain start` until `/health` answers | 5.4 s and 6.5 s |
+| `EvieLocalBrainLauncher.ensureRunning` until `/health` answers | 6.35 s and 5.74 s |
+| Footprint once loaded (`footprint -p`) | 8,148–8,243 MB |
+| RSS (`ps`) | 443 MB just after the start, 2.7 GB later; Metal buffers are not in RSS |
+| Free + inactive + purgeable before and after a start (`vm_stat`) | 8.27 → 3.85 GiB; swap used 1,928 → 3,654 MB |
+| 32×32 red PNG, `enable_thinking:false`, non-streaming, total | 2.18 s, "vermelho", no reasoning |
+| The same through Evie's client (streaming) | 2.27 s, 2.09 s, 2.04 s, "vermelho" |
+| Idle CPU, loaded | 0.3% of one core |
+| `Scripts/evie-brain stop` | 0.34 s; no process left (`pgrep -fl mlx_vlm` empty), port free |
+| Port 38480 held by `nc -l` | script: "Port 38480 is held by another process"; launcher: "A porta 38480 está ocupada por outro processo."; `nc` untouched |
+| Idle unload with the real 10-minute policy (`--brain-check --idle`) | port free 605 s after the last answer (idle clock from the start, checked every 30 s); no `mlx_vlm.server` process left |
+
+From the lead's pre-check the same day: first text answer 6.69 s, a 1280 px
+screenshot described in 14.11 s, peak 10 GB; tool calls come back as malformed
+XML in the content, so the profile offers no tools.
+
+Verified in the installed 0.7.8 source and live: `--max-kv-size 32768` shows as
+`configured_context_limit: 32768` in `/health`, and a request needing more than
+that (13 prompt + 40,000 `max_tokens`) is refused with 400 "Request needs 40013
+context tokens … but MAX_KV_SIZE is 32768" — when `context_management: []` is
+sent. Without it the server compacts automatically: it served that request by
+clamping `max_tokens`, and for a prompt that does not fit it would summarize the
+older messages with the model. Evie's requests to this server always send the
+empty list. A top-level `enable_thinking:true` produced a `reasoning_content`
+trace and `false` none; absent, the server passes its own default (off) to the
+template, so the prompt was the same 25 tokens as with `false`.
+
 ## Wake-word candidates
 
 ### LiveKit WakeWord

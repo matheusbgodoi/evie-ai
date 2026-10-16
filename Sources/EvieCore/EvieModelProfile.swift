@@ -128,13 +128,15 @@ public struct EvieModelProfile: Codable, Sendable, Identifiable, Equatable {
   }
 }
 
-/// How a local server is launched. S3 picks the launcher that actually serves
-/// LensVLM's images; until then the built-in names the installed mlx-vlm.
+/// How a local server is launched (ADR 0015).
 public struct LocalRuntime: Codable, Sendable, Equatable {
+  /// Which server program the executable is, which decides its argv
+  /// (`LocalBrainPolicy.makeArguments`). Only mlx-vlm's: checked 2026-10-16,
+  /// `mlx_vlm.server` 0.7.8 serves LensVLM's images, since the vision tower is
+  /// in the main safetensors, so the alternatives the design listed
+  /// (`optiq serve`, a wrapper of Evie's own) were never needed.
   public enum Launcher: String, Codable, Sendable {
     case mlxVLM
-    case optiqServe
-    case evieWrapper
   }
 
   public var launcher: Launcher
@@ -358,12 +360,14 @@ extension EvieModelProfile {
     coordinateConvention: .normalized1000
   )
 
-  /// LensVLM on this Mac, started on demand. Port 38480 had no listener on
-  /// 2026-10-16. Its 262144-token nominal context is capped at 32768 on both
-  /// sides for memory. It looks but is offered no tools: its tool calling is
-  /// unmeasured, and its template thinks unless told `enable_thinking: false`,
-  /// which `.topLevel` always sends while reasoning is off. Vision is pending the
-  /// S3 check that a launcher actually loads the vision sidecar.
+  /// LensVLM on this Mac, started on demand by `EvieLocalBrainLauncher`. Port
+  /// 38480 had no listener on 2026-10-16. Its 262144-token nominal context is
+  /// capped at 32768 on both sides for memory. It looks but is offered no
+  /// tools: measured 2026-10-16, its tool calls come back as malformed XML in
+  /// the content. `.topLevel` sends `enable_thinking` on every request. It
+  /// sees: under `mlx_vlm.server` 0.7.8 it described a synthetic test image
+  /// exactly (shapes, colours and the text "ZEBRA 4817"), and a 32×32 red
+  /// square came back "vermelho".
   static let builtInMac = EvieModelProfile(
     id: macProfileID,
     displayName: "Mac local",

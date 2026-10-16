@@ -97,6 +97,18 @@ enum EvieDiagnosticRegistry {
       await EvieDiagnostics.voiceEngineCheck()
     },
 
+    // Wakes the Mac brain the way a turn does, asks it about a red square
+    // through the real client, and stops it again, so the launcher's checks,
+    // the request body and the shutdown are exercised without the overlay.
+    EvieDiagnostic.terminating(
+      flag: "--brain-check",
+      usage: "--brain-check [--idle]",
+      summary: "acorda o cérebro do Mac como a Evie acorda, pergunta uma vez e desliga"
+        + " (--idle: espera o desligamento por ociosidade, ~10 min)"
+    ) { arguments in
+      await EvieDiagnostics.brainCheck(waitForIdleUnload: arguments.contains("--idle"))
+    },
+
     // Speaks one sentence out loud through the whole path — synthesis, playback,
     // and metering — and reports what happened. You hear it; the file says
     // whether the level was real.
