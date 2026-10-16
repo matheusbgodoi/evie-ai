@@ -927,6 +927,7 @@ Each row shows live status and a "Pedir"/"Abrir Ajustes" button. The guide runs 
    - Capture stderr and classify -1743 or "Not authorized" as an unmet precondition.
    - Record in WORKLOG that these are opt-in integration tests.
    - [VERIFY the stderr text and which expectations fail by running the suite.]
+   - **Verified 2026-10-16 (implemented):** the two `exit != 0` tests never depended on the grant. Every coercion is the script's first statement, before the `is running` check, so no Apple Event is sent; both exit 1 with "Não é possível transformar … em tipo integer. (-1700)" in every environment. They stay unconditional and now also require `-1700` in stderr, so a refusal (-1743) cannot pass for the coercion. Only the three `exit == 0` scenarios are gated, each split into an always-run witness test and a gated "runs to the end" test. The probe and runner live in `Tests/EvieCoreTests/AppleEventsTestSupport.swift`. Which expectations produced the 4 earlier failures could not be re-observed: by the time of this slice Mail was authorized (probe 0) and the suite passed in under 2 s.
 2. **Model family:** `ModelFamily` comes from the profile. `EvieBrevityPreamble` and `EvieNearestTerm` apply only to `.gemma`. Skill guidance takes the `<system-context>` path for every family (S1b). Tests check each family's prompt shape.
 3. **Copy:** per-profile messages, as listed in S2d.
 4. **Empty answer on `length` with thinking on:** covered by `truncated` (S1b). Thinking is off by default for voice.

@@ -1,5 +1,44 @@
 # Work log
 
+## 2026-10-16 — v2 S8b item 1: the osascript tests are opt-in integration tests
+
+- Completed: the end-to-end `osascript` tests in "Evie mail and calendar scripts"
+  are now **opt-in integration tests** for their exit-code half. The witness-file
+  assertion (no payload ever executes) still runs unconditionally in every
+  environment.
+  - New `Tests/EvieCoreTests/AppleEventsTestSupport.swift`: `AppleEventsProbe`
+    (`AEDeterminePermissionToAutomateTarget` with `askUserIfNeeded: false`, so it
+    never shows the prompt), `LiveAppleEvents` (the gate: the grant is present, or
+    `EVIE_LIVE_APPLE_EVENTS=1`), and `OsascriptRun` (a 10 s deadline, then SIGTERM,
+    then SIGKILL; stderr kept; -1743 classified as an unmet precondition through
+    the product's own `EvieMailCalendar.classify`). Suite "Apple Events test
+    gating" covers the probe, the deadline and the classification (4 tests, written
+    first and seen failing to compile before the support existed).
+  - The hostile search, event-title and message scenarios each split into an
+    always-run "is data, not code" test and a gated "runs to the end" test. A run
+    that hits the deadline stops the loop, so a pending consent prompt costs at
+    most 10 s per test instead of a block per payload.
+  - Deviation from the spec: the hostile date and time tests are **not** gated.
+    Measured: each coercion is the script's first statement, before the running
+    check, so they exit 1 with -1700 whether or not the grant exists. They now
+    also require `-1700` in stderr. The spec note claiming they pass vacuously
+    was corrected in the design document.
+- Measured on this Mac (M5, macOS 27.2, Xcode 27.1, Swift 6.4), 2026-10-16: the
+  earlier full run had failed this suite with 4 issues after 350.3 s; by this
+  slice the probe returned 0 for `com.apple.mail` (authorized) and -600 for
+  `com.apple.iCal` (Calendar not running), and the suite passed before and after
+  the change in under 2 s. With the gate, "a hostile event title runs to the end"
+  is reported skipped while Calendar is closed; with `EVIE_LIVE_APPLE_EVENTS=1` it
+  runs and passes (closed-app marker, exit 0). Which four expectations failed
+  earlier could not be re-observed, because the grant state had changed.
+- Checks: `swift build` OK; `Scripts/test --filter
+  "EvieMailCalendarScriptTests|AppleEventsTestGatingTests"` 16 tests, 15 passed,
+  1 skipped; the same with `EVIE_LIVE_APPLE_EVENTS=1` passed; full `Scripts/test`
+  636 tests in 66 suites, 0 failures, 1 skipped, in 1.97 s of test time (11.6 s
+  wall including the build), against 628 tests with 4 failures in 350.3 s before
+  v2 began.
+- Next action: S1a (transport rename, policy, credentials).
+
 ## 2026-10-16 — v2 S8a: toolchain note and three small fixes
 
 - Completed: slice S8a of `docs/design/2026-10-16-evie-v2-design.md`.
