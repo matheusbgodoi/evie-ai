@@ -168,6 +168,11 @@ All notable changes to Evie are documented here. Dates use `YYYY-MM-DD`.
 
 ### Fixed
 
+- **Saving from Settings no longer destroys a configuration it cannot use.** A
+  `config.json` written by a newer schema is left untouched and the save shows
+  why; a damaged one is copied to `config.json.damaged.bak` (mode `0600`) before
+  it is repaired; one that cannot be read, and so cannot be copied, is left
+  alone. Before, all three were silently replaced by the built-in profiles.
 - **An answer that mentions `<think>` is no longer hidden.** The inline-reasoning
   splitter matched the tag anywhere in the content, on every server, so an
   answer quoting it ("o Qwen usa a tag `<think>`…") lost everything after the

@@ -23,6 +23,11 @@ public struct EvieConfigurationStore: Sendable {
     fileURL.appendingPathExtension("v1.bak")
   }
 
+  /// Where a damaged file's bytes are kept before a settings save replaces it.
+  public var damagedBackupURL: URL {
+    fileURL.appendingPathExtension("damaged.bak")
+  }
+
   public func save(_ profiles: EvieModelProfileSet) throws {
     try profiles.validate()
     try prepareDirectory()
@@ -36,8 +41,12 @@ public struct EvieConfigurationStore: Sendable {
   /// the profile in use, and writes v2. Before schema v2 this was a reload and a
   /// v1 write, which would have turned a v2 file back into v1.
   ///
-  /// A file that cannot be read is repaired from `baseline` instead of refusing
-  /// the save: saving from Settings is how a person fixes it.
+  /// A damaged file is repaired from `baseline` instead of refusing the save:
+  /// saving from Settings is how a person fixes it. Its bytes are kept first as
+  /// `config.json.damaged.bak`, since a typo in a hand-edited file can hold
+  /// profiles the baseline does not have. Two cases are refused instead, with the
+  /// file untouched: one written by a newer schema, whose fields this build would
+  /// drop, and one that cannot be read, which therefore cannot be backed up.
   public func saveActiveProfile(
     reading loader: EvieConfigurationLoader,
     environment: [String: String],
@@ -45,7 +54,19 @@ public struct EvieConfigurationStore: Sendable {
     _ edit: (inout EvieModelProfile) -> Void
   ) throws -> EvieModelProfileSet {
     let selection = environment.filter { Self.selectionVariables.contains($0.key) }
-    let current = try? loader.loadProfiles(environment: selection)
+    let current: EvieLoadedConfiguration?
+    do {
+      current = try loader.loadProfiles(environment: selection)
+    } catch EvieConfigurationLoader.LoaderError.unsupportedSchemaVersion(let version)
+      where version > EvieConfigurationLoader.supportedSchemaVersion
+    {
+      throw SaveError.newerSchema(version)
+    } catch let error as EvieConfigurationLoader.LoaderError where !error.isAboutTheFile {
+      throw error
+    } catch {
+      try keepDamagedFile()
+      current = nil
+    }
     var profiles = current?.profiles ?? baseline
     let activeID =
       current?.activeProfile.id
@@ -66,6 +87,20 @@ public struct EvieConfigurationStore: Sendable {
     try writeUserOnly(Self.encode(profiles), to: fileURL)
   }
 
+  /// Copies the file about to be repaired to `damagedBackupURL`, user-only. A
+  /// backup from an earlier repair is replaced: these bytes are the newer state.
+  private func keepDamagedFile() throws {
+    guard FileManager.default.fileExists(atPath: fileURL.path) else { return }
+    let bytes: Data
+    do {
+      bytes = try Data(contentsOf: fileURL)
+    } catch {
+      throw SaveError.unreadableFile(path: fileURL.path)
+    }
+    try prepareDirectory()
+    try writeUserOnly(bytes, to: damagedBackupURL)
+  }
+
   /// The file's bytes for a set, with no validation. Internal so a test can
   /// write a file the store itself would refuse.
   static func encode(_ profiles: EvieModelProfileSet) throws -> Data {
@@ -79,6 +114,40 @@ public struct EvieConfigurationStore: Sendable {
     )
     data.append(0x0A)
     return data
+  }
+}
+
+extension EvieConfigurationStore {
+  /// Why a settings save left the file as it was. The messages are in Portuguese
+  /// because the settings pane shows them as they are.
+  public enum SaveError: Error, Equatable, Sendable {
+    case newerSchema(Int)
+    case unreadableFile(path: String)
+  }
+}
+
+extension EvieConfigurationStore.SaveError: LocalizedError {
+  public var errorDescription: String? {
+    switch self {
+    case .newerSchema(let version):
+      "O config.json foi gravado por uma versão mais nova da Evie (esquema \(version)). "
+        + "Nada foi salvo, para não apagar o que essa versão guardou."
+    case .unreadableFile(let path):
+      "Não consegui ler \(path) para guardar uma cópia antes de consertá-lo. Nada foi salvo."
+    }
+  }
+}
+
+extension EvieConfigurationLoader.LoaderError {
+  /// Whether the error is about the file's contents, which a settings save may
+  /// repair, rather than about the environment that chose the file or profile.
+  fileprivate var isAboutTheFile: Bool {
+    switch self {
+    case .configurationPathMustBeAbsolute, .invalidEnvironmentVariable:
+      false
+    case .unreadableFile, .invalidFile, .unsupportedSchemaVersion, .migrationFailed:
+      true
+    }
   }
 }
 

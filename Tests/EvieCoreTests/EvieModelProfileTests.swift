@@ -358,6 +358,70 @@ struct EvieConfigurationSchemaV2Tests {
     #expect(try EvieConfigurationLoader(fileURL: fileURL).loadProfiles(environment: [:]).profiles == saved)
   }
 
+  @Test("the settings save keeps a damaged file as config.json.damaged.bak before repairing it")
+  func settingsSaveBacksUpDamagedFile() throws {
+    let damaged = #"{"schema_version": 2, "profiles": [{"id": "pc-3090", "endpoint": "#
+    let fileURL = try configurationFile(damaged)
+    let store = EvieConfigurationStore(fileURL: fileURL)
+
+    _ = try store.saveActiveProfile(
+      reading: EvieConfigurationLoader(fileURL: fileURL),
+      environment: [:],
+      otherwise: .builtIn
+    ) { profile in
+      profile.topP = 0.8
+    }
+
+    #expect(store.damagedBackupURL.lastPathComponent == "config.json.damaged.bak")
+    #expect(try String(contentsOf: store.damagedBackupURL, encoding: .utf8) == damaged)
+    #expect(try permissions(of: store.damagedBackupURL) == 0o600)
+    #expect(try EvieConfigurationLoader(fileURL: fileURL).loadProfiles(environment: [:]).activeProfile.topP == 0.8)
+  }
+
+  @Test("the settings save refuses to replace a file written by a newer schema")
+  func settingsSaveRefusesNewerSchema() throws {
+    let newer = #"{"schema_version": 3, "profiles": [], "brains": {"future": true}}"#
+    let fileURL = try configurationFile(newer)
+    let store = EvieConfigurationStore(fileURL: fileURL)
+
+    #expect(throws: EvieConfigurationStore.SaveError.newerSchema(3)) {
+      try store.saveActiveProfile(
+        reading: EvieConfigurationLoader(fileURL: fileURL),
+        environment: [:],
+        otherwise: .builtIn
+      ) { profile in
+        profile.topP = 0.8
+      }
+    }
+    #expect(try String(contentsOf: fileURL, encoding: .utf8) == newer)
+    #expect(!FileManager.default.fileExists(atPath: store.damagedBackupURL.path))
+    #expect(EvieConfigurationStore.SaveError.newerSchema(3).localizedDescription.contains("mais nova"))
+  }
+
+  @Test("the settings save leaves a file it cannot read, and so cannot back up, in place")
+  func settingsSaveKeepsUnreadableFile() throws {
+    let original = #"{"schema_version": 2, "#
+    let fileURL = try configurationFile(original)
+    try FileManager.default.setAttributes([.posixPermissions: 0o000], ofItemAtPath: fileURL.path)
+    defer {
+      try? FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: fileURL.path)
+    }
+    let store = EvieConfigurationStore(fileURL: fileURL)
+
+    #expect(throws: EvieConfigurationStore.SaveError.self) {
+      try store.saveActiveProfile(
+        reading: EvieConfigurationLoader(fileURL: fileURL),
+        environment: [:],
+        otherwise: .builtIn
+      ) { profile in
+        profile.topP = 0.8
+      }
+    }
+    try FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: fileURL.path)
+    #expect(try String(contentsOf: fileURL, encoding: .utf8) == original)
+    #expect(!FileManager.default.fileExists(atPath: store.damagedBackupURL.path))
+  }
+
   @Test("EVIE_MODEL_PROFILE selects a profile and EVIE_MODEL_* override only that one")
   func environmentSelection() throws {
     let fileURL = missingFileURL()

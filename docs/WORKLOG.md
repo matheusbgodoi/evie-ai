@@ -1,5 +1,33 @@
 # Work log
 
+## 2026-10-16 — v2: a settings save keeps what it cannot read
+
+- Completed: review finding #6. `EvieConfigurationStore.saveActiveProfile`
+  wrapped the load in `try?`, so any unusable file — a newer schema, a typo in a
+  hand edit, an unreadable file — was replaced by the baseline with no copy.
+  - A file whose `schema_version` is above 2 is refused:
+    `SaveError.newerSchema(version)`, nothing written.
+  - A damaged file (invalid JSON or profiles, an unknown version at or below 0,
+    a failed v1 rewrite) is copied byte for byte to `config.json.damaged.bak`,
+    mode 0600, then repaired from the baseline as before.
+  - A file that cannot be read cannot be copied, so the save is refused with
+    `SaveError.unreadableFile` instead of replacing it.
+  - Environment errors (`EVIE_CONFIG_FILE` relative, unknown
+    `EVIE_MODEL_PROFILE`) are thrown as they are; before, the second also ended
+    in a refusal, through `updateProfile`.
+  - Files: `Sources/EvieCore/EvieConfigurationStore.swift`; docs: design doc
+    (S2a note), `docs/ARCHITECTURE.md`, CHANGELOG (Fixed).
+- Tests (written first; all three failed against the old save): in "Evie
+  configuration schema v2", the damaged-file backup (bytes, name, 0600, then
+  repaired), the newer-schema refusal (file unchanged, no backup, Portuguese
+  message), and a 0000-mode file left in place. The existing repair test
+  ("repairs a damaged file from the baseline it was given") passes unchanged.
+- Commands: `swift build` (whole package) succeeded with no warnings;
+  `Scripts/test --filter "EvieConfigurationSchemaV2Tests|
+  EvieConfigurationStoreTests|EvieConfigurationLoaderTests"` 25 tests in 3
+  suites passed.
+- Next: review findings #7, #8 and the #1 interim.
+
 ## 2026-10-16 — v2: the `<think>` splitter takes only an opening trace
 
 - Completed: review finding #5 of the 2026-10-16 adversarial review.

@@ -447,7 +447,10 @@ The model settings window saves through
 `EvieConfigurationStore.saveActiveProfile`, which re-reads the file, changes only
 the profile in use, never writes an environment override, and writes schema v2
 with atomic replacement and mode `0600`; the direct client then swaps its
-settings for the next request. Endpoint, model identity, and context remain
+settings for the next request. A damaged file is repaired from the profiles Evie
+launched with, after its bytes are kept as `config.json.damaged.bak` (`0600`); a
+file from a newer schema, or one that cannot be read and so cannot be backed up,
+is left alone and the save fails with the reason. Endpoint, model identity, and context remain
 visible but read-only until the profile pane (S2d).
 
 [ADR 0007](adr/0007-local-development-runtime.md) accepts this development-only
