@@ -44,6 +44,13 @@ public struct EvieConfigurationLoader: Sendable {
     var active = try activeProfile(in: profiles, environment: environment)
     try apply(environment: environment, to: &active)
     try active.configuration.validate()
+    do {
+      try active.validateLocalEndpoint()
+    } catch {
+      // The file's endpoint passed `profiles.validate()`, so the override
+      // moved it.
+      throw LoaderError.invalidEnvironmentVariable("EVIE_MODEL_ENDPOINT")
+    }
     return EvieLoadedConfiguration(profiles: profiles, activeProfile: active)
   }
 

@@ -1,5 +1,30 @@
 # Work log
 
+## 2026-10-16 — v2 fix: the Mac brain's turn goes only where its listener was checked
+
+- Completed: second v2 review, finding #3. `LocalRuntime.endpoint`
+  (`http://127.0.0.1:<port>/v1`) is the only address of a `.localOnDemand`
+  profile: `EvieModelProfileSet.validate` refuses another one
+  (`ValidationError.localEndpointMismatch`), the loader refuses an
+  `EVIE_MODEL_ENDPOINT` that moves it, `EvieProfileDraft.applied` never applies
+  an edit to it and the Cérebro tab locks the field
+  (`EvieModelProfile.fixedEndpointExplanation`), and the resolver builds the Mac
+  client from the launcher's address. `LocalBrainStarting.isServing` returns
+  `URL?` instead of `Bool`; `EvieLocalBrainLauncher` returns the runtime's
+  endpoint from both calls; `--brain-check` sends to the address `ensureRunning`
+  returned.
+- Files: `EvieModelProfile.swift`, `EvieConfigurationLoader.swift`,
+  `EvieBrainSettings.swift`, `LocalBrainStarting.swift`, `EvieBrainResolver.swift`,
+  `EvieLocalBrainLauncher.swift`, `EvieDiagnostics+LocalBrain.swift`,
+  `Views/ModelSettingsView.swift`; tests in `EvieModelProfileTests`,
+  `EvieBrainSettingsTests`, `EvieBrainResolverTests` (the launcher double now
+  answers an address); docs: design S3 note, `docs/SECURITY.md`, CHANGELOG.
+- Checks: `swift build` with no warnings; `Scripts/test --filter` over the
+  profile, schema, settings, resolver, turn, readiness and selection suites:
+  122 tests passed.
+- Next: the other brain findings (#4 loopback-only adoption, #8 wake
+  cancellation, #9 stop off the main actor, the per-launch key).
+
 ## 2026-10-16 — v2 S4: screen perception ("olha a tela")
 
 - Completed: slice S4 of `docs/design/2026-10-16-evie-v2-design.md` (its "S4 as

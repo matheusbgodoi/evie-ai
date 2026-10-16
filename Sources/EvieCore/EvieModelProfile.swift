@@ -161,6 +161,25 @@ public struct LocalRuntime: Codable, Sendable, Equatable {
     self.port = port
     self.maxKVSize = maxKVSize
   }
+
+  /// The only address this server answers on: the launcher binds it to
+  /// 127.0.0.1 on `port`, and mlx-vlm serves the API under `/v1`. A profile's
+  /// endpoint must be this (`EvieModelProfileSet.validate`), because who
+  /// listens is checked on `port` alone: an endpoint elsewhere would send the
+  /// conversation to a process nobody checked.
+  public var endpoint: URL {
+    URL(string: "http://127.0.0.1:\(port)/v1")!
+  }
+
+  /// Whether `url` is `endpoint`, allowing the trailing slash a person may
+  /// type.
+  func isEndpoint(_ url: URL) -> Bool {
+    var text = url.absoluteString
+    if text.hasSuffix("/") {
+      text.removeLast()
+    }
+    return text == endpoint.absoluteString
+  }
 }
 
 /// Where the model runs, which decides what Evie may say about where a
@@ -274,6 +293,7 @@ public struct EvieModelProfileSet: Codable, Sendable, Equatable {
         else {
           throw ValidationError.invalidLocalRuntime(id: profile.id)
         }
+        try profile.validateLocalEndpoint()
       }
     }
     if let unknown = preferenceOrder.first(where: { !seen.contains($0) }) {
@@ -289,6 +309,22 @@ public struct EvieModelProfileSet: Codable, Sendable, Equatable {
     case unknownProfileInOrder(String)
     case invalidProfile(id: String, reason: EvieConfiguration.ValidationError)
     case invalidLocalRuntime(id: String)
+    /// A brain Evie starts on this Mac with an endpoint other than the one she
+    /// starts it on.
+    case localEndpointMismatch(id: String, expected: String)
+  }
+}
+
+extension EvieModelProfile {
+  /// For a brain Evie starts on this Mac: its endpoint is its runtime's
+  /// (`LocalRuntime.endpoint`). Checked for the file's profiles and again
+  /// after the `EVIE_MODEL_*` overrides.
+  func validateLocalEndpoint() throws {
+    guard case .localOnDemand(let runtime) = runtime, !runtime.isEndpoint(endpoint) else {
+      return
+    }
+    throw EvieModelProfileSet.ValidationError.localEndpointMismatch(
+      id: id, expected: runtime.endpoint.absoluteString)
   }
 }
 
@@ -309,6 +345,8 @@ extension EvieModelProfileSet.ValidationError: LocalizedError {
       "Model profile \(id): \(reason.localizedDescription)"
     case .invalidLocalRuntime(let id):
       "Model profile \(id) needs an absolute executable path, a valid port and a positive KV cache size."
+    case .localEndpointMismatch(let id, let expected):
+      "Model profile \(id) is started by Evie on this Mac, so its endpoint must be \(expected)."
     }
   }
 }

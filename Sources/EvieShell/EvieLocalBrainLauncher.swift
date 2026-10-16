@@ -85,16 +85,16 @@ final class EvieLocalBrainLauncher: LocalBrainStarting {
     return try await task.value
   }
 
-  func isServing(_ profile: EvieModelProfile) throws -> Bool {
+  func isServing(_ profile: EvieModelProfile) throws -> URL? {
     let runtime = try Self.runtime(of: profile)
     guard let listener = EvieProcessInspector.listeningPID(onPort: runtime.port) else {
-      return false
+      return nil
     }
     guard Self.isServer(listener, runtime: runtime) else {
       throw LocalBrainLaunchError.portHeld(port: runtime.port)
     }
     adopt(listener, runtime: runtime)
-    return true
+    return runtime.endpoint
   }
 
   func noteUse() {
@@ -155,7 +155,7 @@ final class EvieLocalBrainLauncher: LocalBrainStarting {
       }
       try await waitUntilHealthy(profile, runtime: runtime, pid: listener)
       adopt(listener, runtime: runtime)
-      return profile.endpoint
+      return runtime.endpoint
     }
     guard FileManager.default.isExecutableFile(atPath: runtime.executable) else {
       throw LocalBrainLaunchError.notInstalled(executable: runtime.executable)
@@ -187,7 +187,9 @@ final class EvieLocalBrainLauncher: LocalBrainStarting {
     }
     noteUse()
     watchIdleTime()
-    return profile.endpoint
+    // Where the server was just bound and checked, not the profile's own
+    // address: the turn goes only where who listens was checked.
+    return runtime.endpoint
   }
 
   private func spawn(_ runtime: LocalRuntime, model: String) throws -> Process {

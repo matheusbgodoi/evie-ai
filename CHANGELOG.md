@@ -6,6 +6,15 @@ All notable changes to Evie are documented here. Dates use `YYYY-MM-DD`.
 
 ### Changed
 
+- **Security: a turn on the Mac brain goes only to the address Evie starts it
+  on.** The check of who listens covered port 38480, but the conversation went
+  to the profile's address, which Configurações › Cérebro, `config.json` or
+  `EVIE_MODEL_ENDPOINT` could move to another loopback port. A Mac profile whose
+  address is not `http://127.0.0.1:<its port>/v1` is now refused as invalid
+  (and an `EVIE_MODEL_ENDPOINT` that moves it fails the load, so the built-ins
+  are used), the address field is locked for it in the tab, and the client is
+  built from the address the launcher returns.
+
 - **The first-run guide sets up the brain too.** After the five permissions it
   has "Chave do PC" — "Salva" or "Sem chave", read from the item's attributes
   so it never prompts, and "Importar", which copies the PC configuration's key

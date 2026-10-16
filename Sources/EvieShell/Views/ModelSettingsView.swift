@@ -108,10 +108,13 @@ struct ModelSettingsView: View {
       LabeledContent("Onde roda", value: viewModel.editingProfile.location.placeDescription)
 
       VStack(alignment: .leading, spacing: 4) {
+        let fixedEndpoint = viewModel.editingProfile.fixedEndpointExplanation
         TextField("Endereço", text: $viewModel.drafts[index].endpoint)
           .font(.system(.body, design: .monospaced))
-          .disabled(managed.contains(.endpoint))
-          .help(managedHelp(managed, .endpoint) ?? "O endereço da API do servidor, terminado em /v1")
+          .disabled(managed.contains(.endpoint) || fixedEndpoint != nil)
+          .help(
+            fixedEndpoint ?? managedHelp(managed, .endpoint)
+              ?? "O endereço da API do servidor, terminado em /v1")
         if let problem = viewModel.endpointProblem {
           problemLabel(problem)
         }

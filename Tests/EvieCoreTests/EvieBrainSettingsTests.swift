@@ -126,6 +126,21 @@ struct EvieBrainSettingsTests {
     )
   }
 
+  @Test("the Mac brain's address is fixed: the field is locked and an edit is not applied")
+  func macEndpointIsFixed() throws {
+    var draft = EvieProfileDraft(mac)
+    draft.endpoint = "http://127.0.0.1:9999/v1"
+
+    let edited = try draft.applied(to: mac)
+
+    #expect(edited.endpoint == mac.endpoint)
+    #expect(
+      mac.fixedEndpointExplanation
+        == "A Evie inicia o cérebro do Mac só neste endereço, 127.0.0.1 na porta 38480."
+    )
+    #expect(pc.fixedEndpointExplanation == nil)
+  }
+
   @Test("fields an EVIE_MODEL_* variable set are left as the file has them")
   func managedFieldsAreKept() throws {
     let managed = EvieManagedField.managed(by: [

@@ -37,19 +37,21 @@ extension EvieDiagnostics {
     }
     do {
       let serving = try launcher.isServing(profile)
-      print("já no ar antes: \(serving)")
+      print("já no ar antes: \(serving != nil)")
       let start = ContinuousClock.now
       let endpoint = try await launcher.ensureRunning(profile)
       print("no ar em \(start.duration(to: .now)) · \(endpoint.absoluteString)")
-      print("quem escuta é o servidor configurado: \(try launcher.isServing(profile))")
+      print("quem escuta é o servidor configurado: \(try launcher.isServing(profile) != nil)")
       if let pid = EvieProcessInspector.listeningPID(onPort: runtime.port) {
         print("PID \(pid) · imagem \(EvieProcessInspector.executablePath(of: pid) ?? "?")")
       }
 
       var question = ChatMessage(role: .user, content: "Qual é a cor desta imagem? Responda com uma palavra.")
       question.images = [redSquare()]
-      let client = ModelClientFactory.live.makeClient(configuration: profile.configuration)
-      var options = TurnOptions.chat(profile.configuration)
+      var served = profile.configuration
+      served.endpoint = endpoint
+      let client = ModelClientFactory.live.makeClient(configuration: served)
+      var options = TurnOptions.chat(served)
       options.readiness = .ready
       let asked = ContinuousClock.now
       var answer = ""

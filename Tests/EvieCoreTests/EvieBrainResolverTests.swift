@@ -335,6 +335,30 @@ struct EvieBrainResolverTests {
     )
   }
 
+  @Test(
+    "a Mac turn goes to the address the launcher answers on, not to the profile's own",
+    arguments: [ReadinessRung.ready, .modelCold])
+  func macClientUsesTheLaunchersAddress(rung: ReadinessRung) async {
+    let launched = URL(string: "http://127.0.0.1:38480/v1")!
+    var moved = EvieModelProfileSet.builtIn.profile(id: EvieModelProfile.macProfileID)!
+    moved.endpoint = URL(string: "http://127.0.0.1:9999/v1")!
+    let launcher = LauncherDouble()
+    launcher.servedEndpoint = launched
+    let harness = ResolverHarness(
+      keys: .saved,
+      rungs: [pc: .unreachable, mac: rung],
+      fallback: .automatic,
+      launcher: launcher,
+      profiles: [moved]
+    )
+
+    let brain = await harness.resolver.resolve(conversation: UUID())
+
+    #expect(brain.profile.id == mac)
+    #expect(brain.profile.endpoint == launched)
+    #expect(brain.client.configuration.endpoint == launched)
+  }
+
   @Test("a Mac brain that stopped since the probe saw it is woken again")
   func stoppedMacIsWoken() async {
     let launcher = LauncherDouble()
@@ -539,6 +563,8 @@ final class LauncherDouble: LocalBrainStarting {
   private(set) var uses = 0
   /// What `isServing` answers: by default the configured server is serving.
   var serving: Result<Bool, any Error> = .success(true)
+  /// The address the launcher answers on; the profile's own when nil.
+  var servedEndpoint: URL?
   /// Run on each start, before it returns.
   var onStart: () -> Void = {}
 
@@ -552,12 +578,12 @@ final class LauncherDouble: LocalBrainStarting {
       throw failure
     }
     onStart()
-    return profile.endpoint
+    return servedEndpoint ?? profile.endpoint
   }
 
-  func isServing(_ profile: EvieModelProfile) throws -> Bool {
+  func isServing(_ profile: EvieModelProfile) throws -> URL? {
     verifications += 1
-    return try serving.get()
+    return try serving.get() ? servedEndpoint ?? profile.endpoint : nil
   }
 
   func noteUse() {

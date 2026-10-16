@@ -120,6 +120,20 @@ public enum EvieManagedField: String, Sendable, CaseIterable {
   }
 }
 
+// MARK: - Fixed fields
+
+extension EvieModelProfile {
+  /// Why the tab does not let the address be edited, or nil when it can be. A
+  /// brain Evie starts on this Mac answers only where she starts it, and who
+  /// listens there is what she checks before sending it anything.
+  public var fixedEndpointExplanation: String? {
+    guard case .localOnDemand(let runtime) = runtime else {
+      return nil
+    }
+    return "A Evie inicia o cérebro do Mac só neste endereço, 127.0.0.1 na porta \(runtime.port)."
+  }
+}
+
 // MARK: - Drafts
 
 /// One profile's fields as the tab edits them: text where a person types, the
@@ -128,7 +142,8 @@ public enum EvieManagedField: String, Sendable, CaseIterable {
 ///
 /// Only what the tab shows is here. The key reference, capabilities, runtime and
 /// location are not editable: the reference names where the key is kept and the
-/// host it is bound to, and the rest describe what the server is.
+/// host it is bound to, and the rest describe what the server is. Nor is the
+/// address of a brain Evie starts on this Mac (`fixedEndpointExplanation`).
 public struct EvieProfileDraft: Sendable, Equatable {
   public let profileID: String
   public var endpoint: String
@@ -168,7 +183,7 @@ public struct EvieProfileDraft: Sendable, Equatable {
     keeping managed: Set<EvieManagedField> = []
   ) throws -> EvieModelProfile {
     var edited = profile
-    if !managed.contains(.endpoint) {
+    if !managed.contains(.endpoint), profile.fixedEndpointExplanation == nil {
       guard let url = parsedEndpoint else {
         throw Problem.invalidEndpoint
       }

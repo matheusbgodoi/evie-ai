@@ -295,7 +295,11 @@ model id cannot trigger a download. Before every turn on it, the process
 listening on the port must be the configured executable serving that port (argv,
 and the `proc_pidpath` image or its `#!` interpreter); otherwise the turn — and
 the screen — is not sent, with "A porta 38480 está ocupada por outro
-processo.". After a start the listener must be the process Evie spawned. A pid
+processo.". After a start the listener must be the process Evie spawned. The turn goes
+only to `http://127.0.0.1:<port>/v1`, the address that check covers: a Mac
+profile with any other endpoint is refused by validation, an
+`EVIE_MODEL_ENDPOINT` that moves it fails the load, the settings tab locks the
+field, and the client is built from the address the launcher returns. A pid
 from `brain.pid` is signalled only after the same check, because pids are
 reused. At its INFO level the log records token counts and timings, not prompts (a malformed tool call is logged with its text, which cannot happen while the profile declares no tools). Future tools cannot be
 added to the direct UI adapter; they require the supervisor/policy boundary and

@@ -127,6 +127,44 @@ struct EvieModelProfileTests {
     }
   }
 
+  @Test("a Mac brain's address is the one Evie starts it on: 127.0.0.1, its own port, /v1")
+  func localEndpointIsTheRuntimes() throws {
+    let mac = try #require(EvieModelProfileSet.builtIn.profile(id: "mac-local"))
+    guard case .localOnDemand(let runtime) = mac.runtime else {
+      Issue.record("the Mac profile must be started on demand")
+      return
+    }
+    #expect(runtime.endpoint == mac.endpoint)
+
+    let elsewhere = [
+      "http://127.0.0.1:9999/v1",
+      "http://localhost:38480/v1",
+      "http://[::1]:38480/v1",
+      "https://127.0.0.1:38480/v1",
+      "http://127.0.0.1/v1",
+      "http://127.0.0.1:38480/v2",
+      "http://127.0.0.1:38480/v1/chat/completions",
+      "http://evie@127.0.0.1:38480/v1",
+    ]
+    for address in elsewhere {
+      var set = EvieModelProfileSet.builtIn
+      try set.updateProfile(id: "mac-local") { $0.endpoint = URL(string: address)! }
+      #expect(
+        throws: EvieModelProfileSet.ValidationError.localEndpointMismatch(
+          id: "mac-local", expected: "http://127.0.0.1:38480/v1"),
+        "\(address)"
+      ) {
+        try set.validate()
+      }
+    }
+
+    var trailingSlash = EvieModelProfileSet.builtIn
+    try trailingSlash.updateProfile(id: "mac-local") {
+      $0.endpoint = URL(string: "http://127.0.0.1:38480/v1/")!
+    }
+    try trailingSlash.validate()
+  }
+
   @Test("the preferred profile is the first one in the order that exists")
   func preferredProfile() throws {
     var set = EvieModelProfileSet.builtIn
@@ -447,6 +485,32 @@ struct EvieConfigurationSchemaV2Tests {
     ) {
       try loader.loadProfiles(environment: ["EVIE_MODEL_PROFILE": "nowhere"])
     }
+  }
+
+  @Test("EVIE_MODEL_ENDPOINT cannot point the Mac brain anywhere but where Evie starts it")
+  func environmentCannotMoveTheMacBrain() throws {
+    let fileURL = missingFileURL()
+    try EvieConfigurationStore(fileURL: fileURL).save(.builtIn)
+    let loader = EvieConfigurationLoader(fileURL: fileURL)
+
+    #expect(
+      throws: EvieConfigurationLoader.LoaderError.invalidEnvironmentVariable("EVIE_MODEL_ENDPOINT")
+    ) {
+      try loader.loadProfiles(
+        environment: [
+          "EVIE_MODEL_PROFILE": "mac-local",
+          "EVIE_MODEL_ENDPOINT": "http://127.0.0.1:9999/v1",
+        ]
+      )
+    }
+    let (fallback, failure) = loader.loadWithDiagnostics(
+      environment: [
+        "EVIE_MODEL_PROFILE": "mac-local",
+        "EVIE_MODEL_ENDPOINT": "http://127.0.0.1:9999/v1",
+      ]
+    )
+    #expect(fallback == .builtIn)
+    #expect(failure != nil)
   }
 
   @Test("a v2 file with an invalid profile is refused and the built-ins are used")

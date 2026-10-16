@@ -226,10 +226,15 @@ public final class EvieBrainResolver {
     for conversation: UUID,
     passingOver skipped: (profile: EvieModelProfile, reason: ReadinessRung)? = nil
   ) async -> ResolvedBrain {
+    var profile = profile
     var rung = rung
     if profile.startsOnDemand {
       do {
-        rung = try await wakeIfNeeded(profile, rung: rung)
+        let served = try await wakeIfNeeded(profile, rung: rung)
+        // The turn goes where the launcher checked who listens, whatever the
+        // profile says; the two agree for every profile that validates.
+        profile.endpoint = served.endpoint
+        rung = served.rung
         localBrain.noteUse()
       } catch {
         let reason = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
@@ -259,26 +264,26 @@ public final class EvieBrainResolver {
     )
   }
 
-  /// The rung a Mac brain has once it is known to be the configured server
-  /// and serving. The probe's "ready" only says that something answered
-  /// `/health` on the port, so who answered is checked first; a brain that
-  /// stopped since the probe (its idle timer, a crash) is woken again.
+  /// Where a Mac brain answers and its rung, once it is known to be the
+  /// configured server and serving. The probe's "ready" only says that
+  /// something answered `/health` on the port, so who answered is checked
+  /// first; a brain that stopped since the probe (its idle timer, a crash) is
+  /// woken again.
   private func wakeIfNeeded(_ profile: EvieModelProfile, rung: ReadinessRung) async throws
-    -> ReadinessRung
+    -> (endpoint: URL, rung: ReadinessRung)
   {
-    if rung == .ready, try localBrain.isServing(profile) {
-      return .ready
+    if rung == .ready, let endpoint = try localBrain.isServing(profile) {
+      return (endpoint, .ready)
     }
     onWaking(true)
     defer { onWaking(false) }
-    // The profile already names the endpoint; the launcher starts exactly
-    // that runtime, so the address it returns is the profile's own.
-    _ = try await localBrain.ensureRunning(profile)
+    let endpoint = try await localBrain.ensureRunning(profile)
     await readiness.refresh(profile)
     // The launcher names the model on the command line, so it is loaded once
     // `/health` answers; a probe that says otherwise leaves the cold
     // deadlines in place for the first request.
-    return await readiness.readiness(of: profile).rung == .ready ? .ready : .modelCold
+    let probed = await readiness.readiness(of: profile).rung
+    return (endpoint, probed == .ready ? .ready : .modelCold)
   }
 
   /// The key store first, since it needs no network and a missing key makes
