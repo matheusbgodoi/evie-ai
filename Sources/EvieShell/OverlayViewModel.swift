@@ -190,7 +190,11 @@ final class OverlayViewModel: ObservableObject {
   /// question, not on the next launch.
   var grantedRoots: @MainActor () -> [EvieFileRoot] = { [] }
 
-  var agentClient: any AgentClient
+  /// Picks the brain for each turn, before the turn builds anything. Every turn
+  /// asks it; nothing here holds a client of its own.
+  let brainResolver: EvieBrainResolver
+  /// The wake question on screen and the turn waiting for its answer.
+  var pendingWake: (card: UUID, answer: CheckedContinuation<Bool, Never>)?
   var capabilities: EvieCapabilitySnapshot
   let conversationStore: EvieConversationStore
   var conversation: [ChatMessage]
@@ -215,11 +219,11 @@ final class OverlayViewModel: ObservableObject {
   static let attachmentCharacterLimit = 20_000
 
   init(
-    agentClient: any AgentClient,
+    brainResolver: EvieBrainResolver,
     conversationStore: EvieConversationStore = EvieConversationStore(),
     capabilities: EvieCapabilitySnapshot = .textOnly
   ) {
-    self.agentClient = agentClient
+    self.brainResolver = brainResolver
     self.conversationStore = conversationStore
     self.capabilities = capabilities
     conversation = [
@@ -262,27 +266,21 @@ final class OverlayViewModel: ObservableObject {
   /// invites confusion. The raw endpoint stays available for the diagnostics
   /// section of Settings.
   var diagnosticEndpointDescription: String {
-    let configuration = agentClient.configuration
+    let configuration = configuration
     let defaultPort = configuration.endpoint.scheme?.lowercased() == "https" ? 443 : 80
     return
       "\(configuration.endpoint.host ?? "127.0.0.1"):\(configuration.endpoint.port ?? defaultPort)"
   }
 
+  /// The preferred profile's configuration — the one Settings edits. A turn
+  /// may run on another, which its brain decides.
   var configuration: EvieConfiguration {
-    agentClient.configuration
+    brainResolver.configuration.configuration
   }
 
-  func applyConfiguration(_ configuration: EvieConfiguration) {
-    agentClient = ModelClientFactory.live.makeClient(configuration: configuration)
+  func applyConfiguration(_ loaded: EvieLoadedConfiguration, environment: [String: String]) {
+    brainResolver.adopt(loaded, environment: environment)
     secondaryText = "Novos ajustes serão usados na próxima pergunta"
-    onLayoutInvalidated?()
-  }
-
-  /// Starts on another profile than the preferred one, saying why: launch found
-  /// the preferred one unusable before anything was sent.
-  func adoptStartingProfile(_ configuration: EvieConfiguration, notice: String) {
-    agentClient = ModelClientFactory.live.makeClient(configuration: configuration)
-    secondaryText = notice
     onLayoutInvalidated?()
   }
 
@@ -819,11 +817,9 @@ final class OverlayViewModel: ObservableObject {
     // What the person attached is the subject of the question. Looking anything
     // up is slower and answers a different question.
     let carriesAttachment = evidence != nil
-    let requestMessages = conversationPrefix(
-      adding: userMessage,
-      evidence: evidence
-    )
-    let client = agentClient
+    // The prompt is built later, once the turn knows which brain it runs on:
+    // the budget, the persona, the tools and the pictures all depend on it.
+    let conversationID = activeConversationID
     let spoken = lastPromptWasSpoken
 
     activeRequestID = requestID
@@ -911,77 +907,58 @@ final class OverlayViewModel: ObservableObject {
         return
       }
       requestTask = Task { @MainActor [weak self] in
-        await self?.runWebOnlyTurn(
-          question: asked,
-          requestID: requestID,
-          userMessage: userMessage,
-          roots: roots,
-          web: web,
-          client: client
-        )
+        await self?.runTurn(
+          conversation: conversationID,
+          requestID: requestID
+        ) { [weak self] brain in
+          try await self?.runWebOnlyTurn(
+            question: asked,
+            requestID: requestID,
+            userMessage: userMessage,
+            roots: roots,
+            web: web,
+            on: brain
+          )
+        }
       }
       return
     }
 
     if let asked = EviePlanCommand.question(in: prompt) {
       requestTask = Task { @MainActor [weak self] in
-        await self?.runPlan(
-          question: asked,
-          requestID: requestID,
-          userMessage: userMessage,
-          roots: roots,
-          web: web,
-          client: client
-        )
+        await self?.runTurn(
+          conversation: conversationID,
+          requestID: requestID
+        ) { [weak self] brain in
+          await self?.runPlan(
+            question: asked,
+            requestID: requestID,
+            userMessage: userMessage,
+            roots: roots,
+            web: web,
+            plan: EvieTurnPlan(brain),
+            client: brain.client
+          )
+        }
       }
       return
     }
 
+    let turn = PreparedTurn(
+      requestID: requestID,
+      userMessage: userMessage,
+      evidence: evidence,
+      carriesAttachment: carriesAttachment,
+      spoken: spoken,
+      roots: roots,
+      web: web,
+      apps: apps,
+      offersChanges: changePolicy.offers,
+      autoApprovesChanges: changePolicy.autoApproves && heAskedForAChange
+    )
     requestTask = Task { @MainActor [weak self] in
-      do {
-        guard !roots.isEmpty || web != nil || apps != nil else {
-          // Pinned at submit time, like the rest of the turn: a spoken question
-          // gets a spoken-length answer.
-          let options: TurnOptions =
-            spoken ? .voice(client.configuration) : .chat(client.configuration)
-          for try await event in client.stream(
-            messages: requestMessages,
-            tools: [],
-            options: options
-          ) {
-            try Task.checkCancellation()
-            self?.receive(event, requestID: requestID, userMessage: userMessage)
-          }
-          return
-        }
-
-        // Captured again, weakly, rather than reaching for the enclosing `self`:
-        // the loop's callback is `@Sendable` and runs off this actor, so it may
-        // not close over the outer closure's mutable binding.
-        let outcome = try await EvieAgentLoop(
-          web: web,
-          mailAndCalendar: apps,
-          vault: self?.retrieveFromVault,
-          offersChanges: changePolicy.offers
-        ).run(
-          messages: requestMessages,
-          roots: roots,
-          client: client,
-          carriesAttachment: carriesAttachment
-        ) { [weak self] event in
-          await self?.receiveDuringLoop(event, requestID: requestID)
-        }
-        try Task.checkCancellation()
-        self?.finishLoop(
-          outcome,
-          requestID: requestID,
-          userMessage: userMessage,
-          autoApproveChanges: changePolicy.autoApproves && heAskedForAChange
-        )
-      } catch is CancellationError {
-        self?.finishCancellation(requestID: requestID)
-      } catch {
-        self?.finishFailure(error, requestID: requestID)
+      await self?.runTurn(conversation: conversationID, requestID: requestID) { [weak self] brain in
+        try await self?.answer(turn, on: brain)
       }
     }
   }
@@ -1035,12 +1012,20 @@ final class OverlayViewModel: ObservableObject {
   }
 
   func dismissArtifact(_ id: UUID) {
+    // Closing the wake question is a no; leaving the turn waiting on a card
+    // that is gone would hang it.
+    settleWake(id, accepted: false)
     artifacts.removeAll { $0.id == id }
     onLayoutInvalidated?()
   }
 
   func performArtifactAction(_ id: UUID, action: ArtifactActionModel) {
     guard let artifact = artifacts.first(where: { $0.id == id }) else {
+      return
+    }
+
+    if action.id.hasPrefix("brain-wake:") || action.id.hasPrefix("brain-stay:") {
+      settleWake(id, accepted: action.id.hasPrefix("brain-wake:"))
       return
     }
 

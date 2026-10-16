@@ -6,6 +6,34 @@ All notable changes to Evie are documented here. Dates use `YYYY-MM-DD`.
 
 ### Changed
 
+- **Each conversation picks its brain before the turn is built, and moves to the
+  Mac when the PC fails before answering.** `EvieBrainResolver` keeps the PC
+  unless its key is missing or the readiness probe finds it unreachable, its key
+  refused or its model unknown; then it takes the next profile in the preference
+  order that can answer. The conversation stays on that brain for the app
+  session. A turn that fails before its first word (server unreachable, a 502, no
+  response headers in time, a refused or missing key) is rebuilt for the next
+  brain — budget, persona, tools, pictures — and tried once more, with "PC
+  indisponível, usando o Mac" on the status line; after the first word an error
+  is shown as before. With "Perguntar" (the default), Evie asks "O PC está fora.
+  Acordar o cérebro do Mac? (~10 s, ~8 GB de memória)" before waking it, and a
+  yes holds until she quits; with "Não usar o Mac" she never moves; a profile set
+  by `EVIE_MODEL_PROFILE` is never moved. This replaces the launch-time move to
+  the Mac when the PC key is missing, which also means Settings now edits the
+  preferred profile again. The Mac brain has no launcher yet (v2 S3): unless
+  `mlx_vlm.server` is already serving on port 38480, a turn sent there says "O
+  cérebro do Mac ainda não está instalado nesta versão da Evie."
+- **On a brain without tools, Evie no longer declares any.** For the Mac
+  profile, folders and the web are searched before the question and the model
+  is asked once with no `tools` key; the persona describes that evidence instead
+  of naming functions, and Mail and Calendar are announced as unavailable there.
+  The persona now says where the answering brain runs: on the PC, "Você roda no
+  PC dele, que este Mac alcança pela rede Tailscale dele, criptografada".
+- **The readiness deadlines are live.** Every turn carries the brain's readiness,
+  so a ready model gets 60 s (120 s with an image) to start answering and a cold
+  one up to 600 s while it loads, instead of the configured request timeout at
+  every stage.
+
 - **With no saved key for the PC, Evie starts on the Mac profile instead of
   refusing every question.** At launch, a preferred profile whose key is
   missing or unreadable is passed over for the next profile in the preference

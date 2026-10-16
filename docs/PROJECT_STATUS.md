@@ -448,10 +448,15 @@ S2a (config schema v2 with model profiles, v1 migration with a `.v1.bak`, a v2
 store and settings save, `evie-runtime configure` seeding v2). The default and
 every fallback is now the built-in PC profile (`qwen-daily`), whose key
 reference is Evie's own keychain item; that item is created by S2d's import.
-Until then, launch passes over the PC when its key is missing and starts on the
-Mac profile with a notice (review finding #1, interim, 2026-10-16); the Mac
-brain answers only if `mlx_vlm.server` is already serving on 38480, because the
-S3 launcher does not exist yet. Measured in S1b: the PC gateway
+S2c (per-turn brain resolver and failover, ADR 0014) is done: each conversation
+is resolved before its turn is built and pinned to its brain, a missing PC key
+or a PC the probe finds out moves a new conversation to the Mac profile, and a
+turn that fails before its first delta is rebuilt for the next brain and retried
+once, all under the Mac-fallback choice (`.ask` asks "O PC está fora. Acordar o
+cérebro do Mac? (~10 s, ~8 GB de memória)"). This replaces the launch-time move
+of review finding #1. The Mac brain answers only if `mlx_vlm.server` is already
+serving on 38480, because the S3 launcher does not exist yet; until then a turn
+sent there says the Mac brain is not installed. Measured in S1b: the PC gateway
 sends its response headers only with the first chunk, so the headers deadline is
 a first-token deadline. Verified in S2a: `qwen-daily` reports a 200704-token
 context window and 32768 max tokens; port 38480 is free. S2b (readiness probe
@@ -459,8 +464,8 @@ and 30 s cache, refreshed at launch, on activation and on network changes) is
 done; verified in S2b: `/health` sits at the gateway's origin and needs no key,
 and `/v1/models` reports `loadState`/`active` per alias. Findings #1 (the
 interim above), #5, #6, #7 and #8 of the 2026-10-16 adversarial review are fixed
-(see the WORKLOG). Next: S2c (per-turn brain resolver and failover), the first
-consumer of the readiness cache, building on `EvieProfileSelector`.
+(see the WORKLOG). Next: S2d (Settings UI with the profile pane, key import,
+per-profile copy), then S3 (the Mac launcher behind `LocalBrainStarting`).
 
 **Evie v2, S7 (packaging, install, permissions) — partly done on `v2-packaging`,
 2026-10-16, merged into `v2` the same day.** Signing is pinned to the "Evie Dev"

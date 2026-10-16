@@ -824,27 +824,30 @@ extension OverlayViewModel {
     return formatter.string(from: now)
   }
 
+  /// Everything this turn adds after the history, built for `plan`'s brain:
+  /// the persona says where that brain runs and names only tools it has, the
+  /// history is trimmed to its budget, and pictures go only if it takes them.
   func conversationPrefix(
     adding userMessage: ChatMessage,
-    evidence: ChatMessage? = nil
+    evidence: ChatMessage? = nil,
+    plan: EvieTurnPlan
   ) -> [ChatMessage] {
-    // The day may have turned over since this conversation started. Rebuilding
-    // costs a string comparison — `refreshSystemPrompt` returns early when the
-    // text is unchanged — and the prompt now carries only the date, so it is
-    // unchanged for a whole day and the cached prefix survives.
-    refreshSystemPrompt()
-    var prefix = conversation
-    let characterBudget = max(
-      8_000,
-      (agentClient.configuration.contextWindowTokens
-        - agentClient.configuration.maxCompletionTokens) * 2
+    // Rebuilt every turn, which costs a string: the date in it may have turned
+    // over, and the brain may differ from the last turn's. Within a
+    // conversation both stay put, so the first bytes — and the server's cached
+    // prefix — do too.
+    var history = conversation
+    let persona = ChatMessage(
+      role: .system,
+      content: Self.systemPrompt(
+        for: plan.capabilities(from: capabilities),
+        remembering: memories()
+      )
     )
-    let tailLength = userMessage.content.count + (evidence?.content.count ?? 0)
-
-    while prefix.count > 1,
-      prefix.reduce(0, { $0 + $1.content.count }) + tailLength > characterBudget
-    {
-      removeOldestTurn(from: &prefix)
+    if history.first?.role == .system {
+      history[0] = persona
+    } else {
+      history.insert(persona, at: 0)
     }
     // Skills are instructions, so they stay a system message here — and they go
     // just before the question, after every earlier turn. The client sends any
@@ -869,7 +872,7 @@ extension OverlayViewModel {
 
     // Evidence goes immediately before the question so the model reads the
     // document, then what is being asked about it.
-    return prefix + [guidance, evidence, asked].compactMap { $0 }
+    return plan.prefix(history, then: [guidance, evidence, asked].compactMap { $0 })
   }
 
   /// Consumes the pending attachments into one message, bounded so a long
@@ -933,15 +936,174 @@ extension OverlayViewModel {
     }
     return ChatMessage(role: .user, content: evidence)
   }
+}
 
-  func removeOldestTurn(from messages: inout [ChatMessage]) {
-    guard messages.count > 1 else {
+// MARK: - The brain a turn runs on
+
+/// What a typed or spoken question carries into its turn, fixed when it is
+/// sent, before the brain is known.
+struct PreparedTurn {
+  let requestID: UUID
+  let userMessage: ChatMessage
+  let evidence: ChatMessage?
+  let carriesAttachment: Bool
+  let spoken: Bool
+  let roots: [EvieFileRoot]
+  let web: (any EvieWebSearching)?
+  let apps: (any EvieMailCalendarReading)?
+  let offersChanges: Bool
+  let autoApprovesChanges: Bool
+}
+
+extension OverlayViewModel {
+  /// Resolves the conversation's brain, runs `attempt` on it — and once more
+  /// on the next brain if it failed before the model said anything — and ends
+  /// the turn when `attempt` throws.
+  func runTurn(
+    conversation: UUID,
+    requestID: UUID,
+    attempt: (ResolvedBrain) async throws -> Void
+  ) async {
+    let brain = await brainResolver.resolve(conversation: conversation)
+    // Cancelled while the probe or the wake question was pending.
+    guard activeRequestID == requestID, !Task.isCancelled else {
       return
     }
-
-    messages.remove(at: 1)
-    if messages.count > 1, messages[1].role == .assistant {
-      messages.remove(at: 1)
+    showBrainNotice(brain.notice)
+    do {
+      try await EvieBrainTurn.run(
+        conversation: conversation,
+        on: brain,
+        resolver: brainResolver,
+        onSwitch: { next in
+          showBrainNotice(next.notice)
+        },
+        attempt: attempt
+      )
+    } catch is CancellationError {
+      finishCancellation(requestID: requestID)
+    } catch {
+      finishFailure(error, requestID: requestID)
     }
+  }
+
+  /// An ordinary question on `brain`, built from scratch for it.
+  func answer(_ turn: PreparedTurn, on brain: ResolvedBrain) async throws {
+    let plan = EvieTurnPlan(brain)
+    let requestMessages = conversationPrefix(
+      adding: turn.userMessage,
+      evidence: turn.evidence,
+      plan: plan
+    )
+    let requestID = turn.requestID
+
+    switch plan.route(
+      hasRoots: !turn.roots.isEmpty,
+      searchesTheWeb: turn.web != nil,
+      readsMailAndCalendar: turn.apps != nil
+    ) {
+    case .directStream:
+      // Pinned at submit time, like the rest of the turn: a spoken question
+      // gets a spoken-length answer.
+      for try await event in brain.client.stream(
+        messages: requestMessages,
+        tools: [],
+        options: plan.options(spoken: turn.spoken)
+      ) {
+        try Task.checkCancellation()
+        receive(event, requestID: requestID, userMessage: turn.userMessage)
+      }
+
+    case .agentLoop(let offersTools):
+      // Captured weakly: the loop's callback is `@Sendable` and runs off this
+      // actor.
+      let outcome = try await EvieAgentLoop(
+        web: turn.web,
+        mailAndCalendar: offersTools ? turn.apps : nil,
+        vault: retrieveFromVault,
+        offersChanges: turn.offersChanges,
+        offersTools: offersTools,
+        readiness: plan.readiness
+      ).run(
+        messages: requestMessages,
+        roots: turn.roots,
+        client: brain.client,
+        carriesAttachment: turn.carriesAttachment
+      ) { [weak self] event in
+        await self?.receiveDuringLoop(event, requestID: requestID)
+      }
+      try Task.checkCancellation()
+      finishLoop(
+        outcome,
+        requestID: requestID,
+        userMessage: turn.userMessage,
+        autoApproveChanges: turn.autoApprovesChanges
+      )
+    }
+  }
+
+  /// Says that the turn runs somewhere other than the preferred brain, and why.
+  func showBrainNotice(_ notice: String?) {
+    guard let notice else {
+      return
+    }
+    secondaryText = notice
+    onLayoutInvalidated?()
+  }
+
+  /// Puts the wake question on screen and waits for the answer. Cancelling the
+  /// turn, or closing the card, is a no.
+  func askToWake(_ question: EvieBrainWakeQuestion) async -> Bool {
+    // One turn runs at a time, so an earlier question still waiting has lost
+    // its turn.
+    if let earlier = pendingWake {
+      settleWake(earlier.card, accepted: false)
+    }
+    let card = UUID()
+    artifacts.append(
+      ArtifactCardModel(
+        id: card,
+        kind: .approval,
+        title: question.text,
+        summary: "Enquanto estiver acordado, ele ocupa essa memória deste Mac. "
+          + "A conversa continua nele até você começar outra.",
+        isExpanded: true,
+        actions: [
+          ArtifactActionModel(
+            id: "brain-wake:\(card.uuidString)",
+            title: "Acordar o Mac",
+            systemImage: "power",
+            role: .primary
+          ),
+          ArtifactActionModel(
+            id: "brain-stay:\(card.uuidString)",
+            title: "Agora não",
+            systemImage: "xmark",
+            role: .secondary
+          ),
+        ]
+      )
+    )
+    onLayoutInvalidated?()
+    return await withTaskCancellationHandler {
+      await withCheckedContinuation { continuation in
+        pendingWake = (card, continuation)
+      }
+    } onCancel: {
+      Task { @MainActor [weak self] in
+        self?.settleWake(card, accepted: false)
+      }
+    }
+  }
+
+  /// Answers the wake question on `card`, if it is the one waiting.
+  func settleWake(_ card: UUID, accepted: Bool) {
+    guard let pending = pendingWake, pending.card == card else {
+      return
+    }
+    pendingWake = nil
+    artifacts.removeAll { $0.id == card }
+    onLayoutInvalidated?()
+    pending.answer.resume(returning: accepted)
   }
 }

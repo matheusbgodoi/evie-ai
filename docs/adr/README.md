@@ -18,3 +18,4 @@ supersede rather than silently rewrite them when the decision changes.
 | [0011](0011-draft-beside-send.md) | A draft button beside the send button | Accepted for `propose_mail` |
 | [0012](0012-fused-local-retrieval.md) | Retrieval by three fused signals over a cached local embedding | Accepted for the shipped retrieval path |
 | [0013](0013-authenticated-tailnet-model-transport.md) | Authenticated tailnet model transport | Accepted for Evie v2 |
+| [0014](0014-model-profiles-per-turn-resolution-failover.md) | Model profiles, per-turn resolution and per-conversation failover | Accepted for Evie v2 |

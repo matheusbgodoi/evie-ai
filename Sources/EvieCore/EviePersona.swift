@@ -25,6 +25,14 @@ public struct EvieCapabilitySnapshot: Hashable, Sendable {
   /// on, and the persona has to be told, or she holds three tools she has never
   /// heard of — which is how a switch turns on a capability nobody uses.
   public var readsMailAndCalendar: Bool
+  /// Where the model answering this turn runs, which is what she may say about
+  /// where a conversation goes. This Mac unless the turn's brain says otherwise.
+  public var whereItRuns: ModelLocation
+  /// Whether the model is offered tools at all. Without them what the folders
+  /// and the web hold is gathered before the question and arrives with it, so
+  /// the prompt must describe that and name no function: a model told to call
+  /// `search_content` that was declared nothing writes the call out as text.
+  public var usesTools: Bool
 
   public init(
     listensToSpeech: Bool = false,
@@ -35,7 +43,9 @@ public struct EvieCapabilitySnapshot: Hashable, Sendable {
     searchesTheWeb: Bool = false,
     hasSemanticMemory: Bool = false,
     calculates: Bool = false,
-    readsMailAndCalendar: Bool = false
+    readsMailAndCalendar: Bool = false,
+    whereItRuns: ModelLocation = .thisMac,
+    usesTools: Bool = true
   ) {
     self.listensToSpeech = listensToSpeech
     self.speaksAnswers = speaksAnswers
@@ -46,6 +56,8 @@ public struct EvieCapabilitySnapshot: Hashable, Sendable {
     self.hasSemanticMemory = hasSemanticMemory
     self.calculates = calculates
     self.readsMailAndCalendar = readsMailAndCalendar
+    self.whereItRuns = whereItRuns
+    self.usesTools = usesTools
   }
 
   public static let textOnly = EvieCapabilitySnapshot()
@@ -134,7 +146,7 @@ public struct EviePersona: Hashable, Sendable {
   ) -> String {
     (
       [
-        identitySection,
+        identitySection(runningOn: capabilities.whereItRuns),
         clockSection(now: now, timeZone: timeZone),
         capabilitySection(capabilities),
         conductSection,
@@ -151,7 +163,7 @@ public struct EviePersona: Hashable, Sendable {
 }
 
 extension EviePersona {
-  fileprivate var identitySection: String {
+  fileprivate func identitySection(runningOn location: ModelLocation) -> String {
     """
     Você é a \(assistantName) ("\(pronunciation)"), assistente pessoal local de \
     \(creatorFullName), seu criador e a única pessoa com quem você fala. Trate-o por \
@@ -159,9 +171,21 @@ extension EviePersona {
     \(creatorGender.portugueseName) (\(creatorGender.agreementExample)). Nunca o chame \
     de usuário.
 
-    Você roda inteiramente neste Mac; nada do que ele diz sai daqui. Responda em \
-    português do Brasil, salvo se ele escrever em outro idioma.
+    \(whereSentence(location)) Responda em português do Brasil, salvo se ele \
+    escrever em outro idioma.
     """
+  }
+
+  /// Said per brain, because it is a claim about where his words go and only
+  /// one of the two is true on any given turn.
+  fileprivate func whereSentence(_ location: ModelLocation) -> String {
+    switch location {
+    case .thisMac:
+      "Você roda inteiramente neste Mac; nada do que ele diz sai daqui."
+    case .yourPC:
+      "Você roda no PC dele, que este Mac alcança pela rede Tailscale dele, "
+        + "criptografada; o que ele diz vai só deste Mac até esse PC."
+    }
   }
 
   /// What day it is.
@@ -246,7 +270,13 @@ extension EviePersona {
       unavailable.append("responder falando")
     }
 
-    if capabilities.readsLocalFiles {
+    if capabilities.readsLocalFiles, !capabilities.usesTools {
+      available.append(
+        "Quando a pergunta pede, o que há nas pastas e anotações que \(creatorPreferredName) "
+          + "autorizou chega junto da pergunta, já procurado; você não abre arquivos por conta "
+          + "própria. Se o que ele procura não veio, diga isso em vez de supor o conteúdo."
+      )
+    } else if capabilities.readsLocalFiles {
       available.append(
         "Você pode ler arquivos das pastas que \(creatorPreferredName) autorizou explicitamente. "
           + "Você nunca vai mover nem apagar nada sem que ele confirme a ação exata na tela. "
@@ -281,7 +311,12 @@ extension EviePersona {
       unavailable.append("descrever o que uma foto ou um gráfico mostra")
     }
 
-    if capabilities.searchesTheWeb {
+    if capabilities.searchesTheWeb, !capabilities.usesTools {
+      available.append(
+        "Quando a pergunta pede e as anotações não respondem, trechos da web chegam junto "
+          + "da pergunta, já procurados; cite de onde veio cada informação."
+      )
+    } else if capabilities.searchesTheWeb {
       available.append("Você pode consultar a web e deve citar de onde veio cada informação.")
     } else {
       unavailable.append("consultar a web")
@@ -382,7 +417,10 @@ extension EviePersona {
   /// HTTP/3 with the web switched on, she answered from memory and called no
   /// tool at all.
   fileprivate func sourceOrderSection(_ capabilities: EvieCapabilitySnapshot) -> String {
-    guard capabilities.readsLocalFiles || capabilities.searchesTheWeb else {
+    // Every step below is a tool call. Without tools the order is kept by the
+    // code that searches before asking, and what it found says to cite it.
+    guard capabilities.usesTools, capabilities.readsLocalFiles || capabilities.searchesTheWeb
+    else {
       return ""
     }
 

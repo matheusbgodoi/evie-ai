@@ -23,6 +23,7 @@ extension OverlayViewModel {
     userMessage: ChatMessage,
     roots: [EvieFileRoot],
     web: (any EvieWebSearching)?,
+    plan turnPlan: EvieTurnPlan,
     client: any AgentClient
   ) async {
     guard !question.isEmpty else {
@@ -37,6 +38,7 @@ extension OverlayViewModel {
         to: EviePlanPrompts.planning(for: question),
         roots: [],
         web: nil,
+        plan: turnPlan,
         client: client
       )
       try Task.checkCancellation()
@@ -54,6 +56,7 @@ extension OverlayViewModel {
         userMessage: userMessage,
         roots: roots,
         web: web,
+        plan: turnPlan,
         client: client,
         note: error.errorDescription
       )
@@ -84,6 +87,7 @@ extension OverlayViewModel {
           to: EviePlanPrompts.step(index, of: plan),
           roots: roots,
           web: web,
+          plan: turnPlan,
           client: client
         )
         try Task.checkCancellation()
@@ -116,6 +120,7 @@ extension OverlayViewModel {
         to: EviePlanPrompts.synthesis(for: plan),
         roots: [],
         web: nil,
+        plan: turnPlan,
         client: client
       )
       finishPlan(plan, answer: written, requestID: requestID, userMessage: userMessage)
@@ -139,12 +144,15 @@ extension OverlayViewModel {
     to prompt: String,
     roots: [EvieFileRoot],
     web: (any EvieWebSearching)?,
+    plan: EvieTurnPlan,
     client: any AgentClient
   ) async throws -> String {
     let outcome = try await EvieAgentLoop(
       web: web,
       vault: roots.isEmpty ? nil : retrieveFromVault,
-      offersChanges: false
+      offersChanges: false,
+      offersTools: plan.profile.capabilities.tools,
+      readiness: plan.readiness
     ).run(
       messages: [ChatMessage(role: .user, content: prompt)],
       roots: roots,
@@ -164,11 +172,18 @@ extension OverlayViewModel {
     userMessage: ChatMessage,
     roots: [EvieFileRoot],
     web: (any EvieWebSearching)?,
+    plan: EvieTurnPlan,
     client: any AgentClient,
     note: String?
   ) async {
     do {
-      let written = try await answer(to: question, roots: roots, web: web, client: client)
+      let written = try await answer(
+        to: question,
+        roots: roots,
+        web: web,
+        plan: plan,
+        client: client
+      )
       guard activeRequestID == requestID else {
         return
       }

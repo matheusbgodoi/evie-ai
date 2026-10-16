@@ -116,7 +116,9 @@ model anything: `GET /health` at the gateway's origin with no key, `GET
 the vision and tools the server reports), and `GET /running` only when the list
 has no load state; a Mac brain gets its loopback `/health`. `ModelReadinessCache`
 keeps each answer 30 s, and the shell's `EvieReadinessRefresher` refreshes the
-profile in use at launch, on activation and on `NWPathMonitor` changes.
+launch profile at launch, on activation and on `NWPathMonitor` changes. The
+per-turn resolver reads the cache, and every turn carries the rung, so the
+readiness deadlines apply.
 
 Three of the original abstinences no longer hold, and they are worth naming rather
 than leaving as an out-of-date boundary:
@@ -433,13 +435,26 @@ The native shell resolves model configuration in this order:
    profile in use, and the other `EVIE_MODEL_*` variables override that profile
    for the run.
 
-The profile in use is flattened into the `EvieConfiguration` the client reads.
-At launch, `EvieProfileSelector` moves past a preferred profile whose key is not
-saved (or cannot be read) to the next one in the preference order that the
-transport policy allows and that needs no missing key, and the overlay says so;
-it never moves when the environment chose the profile or the Mac fallback is
-off. It reads only the policy and the keychain, never the network. This is the
-first step of the per-turn resolver planned in v2 S2c.
+The profile is flattened into the `EvieConfiguration` the client reads. Which
+profile a turn runs on is decided per conversation, before the turn is built
+(v2 S2c, [ADR 0014](adr/0014-model-profiles-per-turn-resolution-failover.md)):
+`EvieBrainResolver` keeps the preferred profile unless it cannot answer — a key
+not saved, known from the keychain alone (`EvieProfileSelector.offlineRung`), or
+the cached probe finding it unreachable, its key refused or its model unknown —
+and then walks the preference order for one that can. The conversation is
+pinned to that profile for the app session. A turn that fails before its first
+delta with an unreachable server, a headers timeout, a refused or missing key,
+or a 502 is rebuilt for the next profile and retried once (`EvieBrainTurn`), and
+the conversation is re-pinned. Every move follows the Mac-fallback choice: off
+never moves, automatic moves, ask asks before waking the Mac brain ("O PC está
+fora. Acordar o cérebro do Mac? (~10 s, ~8 GB de memória)") and a yes holds for
+the session. A profile chosen by the environment is never moved. Waking a
+`.localOnDemand` profile goes through `LocalBrainStarting`; until v2 S3 the
+stand-in says the Mac brain is not installed. `EvieTurnPlan` derives the turn
+from the profile: the character budget, the persona's location sentence, tools
+only for a profile that has them (otherwise the folders and the web are searched
+first and the model is asked once with no `tools` key), pictures only with
+vision, and the readiness rung in `TurnOptions`.
 A schema v1 file (one endpoint) is migrated in place: its endpoint becomes the
 profile `custom`, kept after the built-ins and outside the preference order, and
 the original bytes are kept as `config.json.v1.bak`. A file or environment that
@@ -452,8 +467,8 @@ never a key.
 The model settings window saves through
 `EvieConfigurationStore.saveActiveProfile`, which re-reads the file, changes only
 the profile in use, never writes an environment override, and writes schema v2
-with atomic replacement and mode `0600`; the direct client then swaps its
-settings for the next request. A damaged file is repaired from the profiles Evie
+with atomic replacement and mode `0600`; the resolver then takes the reloaded
+profiles, so the next turn uses them. A damaged file is repaired from the profiles Evie
 launched with, after its bytes are kept as `config.json.damaged.bak` (`0600`); a
 file from a newer schema, or one that cannot be read and so cannot be backed up,
 is left alone and the save fails with the reason. Endpoint, model identity, and context remain

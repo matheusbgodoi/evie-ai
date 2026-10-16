@@ -72,28 +72,33 @@ extension OverlayViewModel {
     userMessage: ChatMessage,
     roots: [EvieFileRoot],
     web: any EvieWebSearching,
-    client: any AgentClient
-  ) async {
-    let messages = conversationPrefix(adding: ChatMessage(role: .user, content: question))
-    do {
-      // No vault, because the whole point is not to consult it. Passing it and
-      // ignoring the result would still pay for the retrieval.
-      let outcome = try await EvieAgentLoop(web: web, vault: nil, offersChanges: false)
-        .run(
-          messages: messages,
-          roots: roots,
-          client: client,
-          skipsNotes: true
-        ) { [weak self] event in
-          await self?.receiveDuringLoop(event, requestID: requestID)
-        }
-      try Task.checkCancellation()
-      finishLoop(outcome, requestID: requestID, userMessage: userMessage)
-    } catch is CancellationError {
-      finishCancellation(requestID: requestID)
-    } catch {
-      finishFailure(error, requestID: requestID)
+    on brain: ResolvedBrain
+  ) async throws {
+    let plan = EvieTurnPlan(brain)
+    let messages = conversationPrefix(
+      adding: ChatMessage(role: .user, content: question),
+      plan: plan
+    )
+    // No vault, because the whole point is not to consult it. Passing it and
+    // ignoring the result would still pay for the retrieval.
+    let offersTools = plan.profile.capabilities.tools
+    let outcome = try await EvieAgentLoop(
+      web: web,
+      vault: nil,
+      offersChanges: false,
+      offersTools: offersTools,
+      readiness: plan.readiness
+    )
+    .run(
+      messages: messages,
+      roots: roots,
+      client: brain.client,
+      skipsNotes: true
+    ) { [weak self] event in
+      await self?.receiveDuringLoop(event, requestID: requestID)
     }
+    try Task.checkCancellation()
+    finishLoop(outcome, requestID: requestID, userMessage: userMessage)
   }
 
   enum SearchCommandFailure: LocalizedError {

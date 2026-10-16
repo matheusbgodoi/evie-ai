@@ -20,7 +20,7 @@ final class ModelSettingsViewModel: ObservableObject {
   private let store: EvieConfigurationStore
   private let loader: EvieConfigurationLoader
   private let environment: [String: String]
-  private let onSave: @MainActor (EvieConfiguration) -> Void
+  private let onSave: @MainActor (EvieLoadedConfiguration) -> Void
   /// The profiles a damaged file is repaired from: those Evie launched with,
   /// then the last ones saved.
   private var repairBaseline: EvieModelProfileSet
@@ -31,7 +31,7 @@ final class ModelSettingsViewModel: ObservableObject {
     store: EvieConfigurationStore = EvieConfigurationStore(),
     loader: EvieConfigurationLoader = EvieConfigurationLoader(),
     environment: [String: String] = [:],
-    onSave: @escaping @MainActor (EvieConfiguration) -> Void
+    onSave: @escaping @MainActor (EvieLoadedConfiguration) -> Void
   ) {
     self.store = store
     self.loader = loader
@@ -103,7 +103,7 @@ final class ModelSettingsViewModel: ObservableObject {
           profile.requestTimeout = requestTimeout
         }
       }
-      let effective = try loader.load(environment: environment)
+      let effective = try loader.loadProfiles(environment: environment)
       repairBaseline = saved
       onSave(effective)
       feedback = Feedback(

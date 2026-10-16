@@ -1,5 +1,71 @@
 # Work log
 
+## 2026-10-16 — v2 S2c: per-turn brain resolver and failover
+
+- Completed: slice S2c and ADR 0014 (the spec placed the ADR in S2d; it is this
+  slice's decision).
+  - New in `Sources/EvieCore/`: `EvieBrainResolver.swift` (`ResolvedBrain` with
+    a `notice`, `EvieBrainResolver.resolve/failover/adopt`, the per-conversation
+    pin, `EvieBrainWakeQuestion`, the copy), `EvieTurnPlan.swift` (character
+    budget, route, persona capabilities, options with the rung, prefix trimming
+    and image dropping), `EvieBrainTurn.swift` (run, and retry once on the next
+    brain when nothing was produced; the output-watching client),
+    `LocalBrainStarting.swift` (the protocol and `EvieLocalBrainNotInstalled`).
+  - `ModelClientError.allowsFailover`: unreachable, headers timeout,
+    unauthorized, credential unavailable, 502.
+  - `EvieAgentLoop` gained `offersTools` (false: ground, then one request with
+    no tools) and `readiness` (in every step's options).
+  - `EvieCapabilitySnapshot` gained `whereItRuns` and `usesTools`; the persona's
+    location sentence and the tool-less wording follow them. Defaults keep the
+    old prompt byte for byte.
+  - Shell: `OverlayViewModel` holds the resolver, not a client; every turn
+    (`/web` and `/plano` too) goes through `runTurn`, and the prompt is built
+    after the brain is known. The wake question is an approval card ("Acordar o
+    Mac" / "Agora não"); cancelling or closing it is a no. `AppCoordinator`
+    builds the resolver with the readiness cache and the stand-in launcher;
+    `adoptAnswerableProfile` and the launch-time `EVIE_MODEL_PROFILE` pin are
+    gone. `ModelSettingsViewModel.onSave` now hands over the reloaded
+    `EvieLoadedConfiguration`.
+  - Measured inputs (by the lead on this Mac, M5 24 GB, macOS 27.2,
+    2026-10-16), used for the wake card's cost: LensVLM under `mlx_vlm.server`
+    0.7.8 holds 8,164 MB (peak 10 GB), first text answer 6.69 s. Hence
+    "(~10 s, ~8 GB de memória)" instead of the spec's ~90 s.
+  - Docs: ADR 0014 plus its row in `docs/adr/README.md`, design doc (S2c
+    "Implemented" note, S2d docs line), `docs/ARCHITECTURE.md`, CHANGELOG,
+    `docs/PROJECT_STATUS.md`. `EvieProfileSelector`'s comments now say the app
+    no longer calls `choose`.
+- Tests (new suites "Evie brain resolver", 16, and "Evie brain turn", 12; no
+  network, no keychain): ready PC kept; no key moves to the Mac with the interim
+  notice and no probe of the PC; the pin persists across turns and survives a
+  bad probe; `.automatic` moves and wakes; `.off` keeps the PC and failover is
+  nil; `.ask` asks with the measured cost, a no keeps the PC, a yes re-pins and
+  holds for the session, a ready Mac is not asked about; the question names the
+  reason; only pre-byte errors fail over; failover refreshes the failed brain;
+  an environment choice is never moved; a launch failure answers with the reason
+  and is not pinned; the stand-in's message; a settings save is picked up with
+  pins kept. Plan: budgets 237,568/61,440, routes, rung in the options, persona
+  per location, no tool named without tools, prefix trimming and image dropping.
+  Failover: a pre-delta failure rebuilds for the Mac under 61,440 characters with
+  no tools and no images, and the Mac body has no `tools` key and a top-level
+  `enable_thinking: false`; a failure after a delta or after a completed tool
+  step is final with no duplicated text; the retry happens once; the tool-less
+  loop sends one request with no tools and the arithmetic grounding; the loop
+  carries the rung. Mutation checks: without the "no output yet" guard, the two
+  post-output tests fail; without the location or the image drop, the persona
+  and prefix tests fail.
+- Commands: `swift build` (whole package) succeeded with no warnings;
+  `Scripts/test --filter "EvieBrainResolverTests|EvieBrainTurnTests|EvieProfileSelectionTests|EviePersonaTests|EviePersonaClockTests|EvieAgentLoopTests|ModelRequestBodyTests"`
+  95 passed; full `Scripts/test` 914 tests in 89 suites passed, 0 failures, 1
+  known issue (the deliberate one in the deadline test of finding #7).
+- Open: no launcher until S3, so the Mac brain answers only if `mlx_vlm.server`
+  is already serving on 38480; Settings edits the preferred profile, not a
+  conversation's pinned one (S2d's profile pane); `/plano` resolves but does not
+  fail over; the readiness refresher still probes only the launch profile; the
+  schedule runner and diagnostics still use the preferred profile; the "somente
+  local" status copy and per-profile error copy are S2d's. Manual QA not done
+  (the app UI was not launched): PC off with `.automatic` and `.ask`.
+- Next: S2d (Settings UI, key import, copy).
+
 ## 2026-10-16 — v2: with no PC key, start on the Mac instead of refusing
 
 - Completed: review finding #1, interim until S2c. The preferred profile is

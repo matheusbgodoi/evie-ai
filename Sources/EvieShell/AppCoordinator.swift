@@ -10,10 +10,9 @@ final class AppCoordinator: NSObject {
   private let preferencesStore: EviePreferencesStore
   private var preferences: EviePreferences
   private let preferencesLoadFailure: EviePreferencesStore.LoadFailure?
-  /// The `EVIE_*` variables Evie launched with, plus `EVIE_MODEL_PROFILE` once
-  /// launch moves past a profile it cannot use, so Settings edits and reloads
-  /// the profile actually in use.
-  private var configurationEnvironment: [String: String]
+  /// The `EVIE_*` variables Evie launched with. Settings edits and reloads the
+  /// profile they resolve to: `EVIE_MODEL_PROFILE`, or the preferred one.
+  private let configurationEnvironment: [String: String]
   private let viewModel: OverlayViewModel
   private let chrome: OverlayChromeModel
   private let panelController: OverlayPanelController
@@ -21,10 +20,11 @@ final class AppCoordinator: NSObject {
   /// What Evie launched with. Its profiles are what the settings pane repairs a
   /// damaged file from.
   private let startupConfiguration: EvieLoadedConfiguration
-  /// Whether each brain can answer now, kept for 30 s. Nothing reads it on the
-  /// turn path yet; the per-turn resolver (v2 S2c) will. It is kept warm from
-  /// launch so that resolver starts with an answer instead of a probe.
-  private let modelReadiness: ModelReadinessCache
+  /// Picks each conversation's brain before its turn is built, and the next
+  /// one when the first fails before answering.
+  private let brainResolver: EvieBrainResolver
+  /// Kept warm from launch, so the first turn's resolver reads an answer
+  /// instead of waiting on a probe.
   private let readinessRefresher: EvieReadinessRefresher
   private var hotKeyController: GlobalHotKeyController?
   private var statusItem: NSStatusItem?
@@ -127,10 +127,22 @@ final class AppCoordinator: NSObject {
         .appendingPathComponent("preferences.json", isDirectory: false)
     )
     let preferencesResult = preferencesStore.loadWithDiagnostics()
+    // Whether each brain can answer now, kept for 30 s, and read by the
+    // resolver on every turn.
+    let modelReadiness = ModelReadinessCache(
+      probe: ModelClientFactory.live.makeReadinessProbe()
+    )
+    // Until S3 there is no launcher: a Mac brain answers only if its server was
+    // started by hand, and otherwise the turn says it is not installed.
+    let brainResolver = EvieBrainResolver(
+      configuration: loadResult.loaded,
+      environment: configurationEnvironment,
+      factory: .live,
+      readiness: modelReadiness,
+      localBrain: EvieLocalBrainNotInstalled()
+    )
     let viewModel = OverlayViewModel(
-      agentClient: ModelClientFactory.live.makeClient(
-        configuration: loadResult.loaded.configuration
-      ),
+      brainResolver: brainResolver,
       conversationStore: conversationStore,
       capabilities: Self.capabilities(
         for: preferencesResult.preferences,
@@ -152,10 +164,7 @@ final class AppCoordinator: NSObject {
     self.chrome = chrome
     startupConfigurationError = loadResult.error
     startupConfiguration = loadResult.loaded
-    let modelReadiness = ModelReadinessCache(
-      probe: ModelClientFactory.live.makeReadinessProbe()
-    )
-    self.modelReadiness = modelReadiness
+    self.brainResolver = brainResolver
     readinessRefresher = EvieReadinessRefresher(
       cache: modelReadiness,
       profile: loadResult.loaded.activeProfile
@@ -168,6 +177,9 @@ final class AppCoordinator: NSObject {
     )
     super.init()
 
+    brainResolver.askToWake = { [weak viewModel] question in
+      await viewModel?.askToWake(question) ?? false
+    }
     viewModel.grantedRoots = { [rootsViewModel] in rootsViewModel.roots }
     viewModel.memories = { [memoryViewModel] in memoryViewModel.entries }
     viewModel.installedSkills = { [skillsViewModel] in skillsViewModel.skills }
@@ -433,7 +445,6 @@ final class AppCoordinator: NSObject {
     // her by name does not depend on having opened settings this session.
     updateWakeListening()
     readinessRefresher.start()
-    adoptAnswerableProfile()
     attachMediaLifecycle()
     buildVaultIndexIfMissing()
 
@@ -458,25 +469,6 @@ final class AppCoordinator: NSObject {
     // launch rather than something the overlay covers.
     if permissionGuide.opensAtLaunch {
       openPermissionGuide()
-    }
-  }
-
-  /// Moves off the preferred profile when it needs a key that is not saved, so a
-  /// fresh install answers instead of refusing every question.
-  ///
-  /// Interim until the per-turn resolver (v2 S2c), which builds on the same
-  /// `EvieProfileSelector`. Decided once, right after launch: it costs a keychain
-  /// read and no request. The readiness refresher keeps probing the launch
-  /// profile; nothing on the turn path reads it yet.
-  private func adoptAnswerableProfile() {
-    let launched = startupConfiguration
-    let environment = configurationEnvironment
-    Task { [weak self] in
-      let choice = await ModelClientFactory.live.makeProfileSelector()
-        .choose(launched, environment: environment)
-      guard let self, let notice = choice.notice else { return }
-      configurationEnvironment = choice.environment
-      viewModel.adoptStartingProfile(choice.loaded.configuration, notice: notice)
     }
   }
 
@@ -728,8 +720,9 @@ extension AppCoordinator {
         store: configurationStore,
         loader: configurationLoader,
         environment: configurationEnvironment
-      ) { [weak self] configuration in
-        self?.viewModel.applyConfiguration(configuration)
+      ) { [weak self] loaded in
+        guard let self else { return }
+        viewModel.applyConfiguration(loaded, environment: configurationEnvironment)
       }
       let preferencesViewModel = EviePreferencesViewModel(
         preferences: preferences,

@@ -53,9 +53,12 @@ public struct EvieProfileChoice: Sendable, Equatable {
 /// and the key store — so the choice costs a keychain read and can be made at
 /// launch. An unreachable PC, a rejected key or a cold model are the readiness
 /// probe's findings, and acting on them per conversation is the per-turn
-/// resolver's job (v2 S2c). That resolver is meant to start from `offlineRung`
-/// and this preference walk, then weigh the cached probe and `macFallback` on
-/// top, rather than replace them.
+/// resolver's job.
+///
+/// Since v2 S2c the app no longer calls `choose`: `EvieBrainResolver` makes
+/// this decision per conversation, starting from `offlineRung` and the same
+/// preference walk, with the cached probe and `macFallback` — including the
+/// `.ask` question — on top. `choose` stays the network-free form of that walk.
 ///
 /// The preferred profile is kept, key or not, when:
 /// - the environment chose it — `EVIE_MODEL_PROFILE`, or any `EVIE_MODEL_*`
@@ -63,11 +66,9 @@ public struct EvieProfileChoice: Sendable, Equatable {
 /// - `macFallback` is `.off`: the person asked never to be moved, and the
 ///   client's own "no saved key" error explains what to do.
 ///
-/// `.ask` moves without asking. The S2c card asks before waking the Mac brain
-/// for an outage, because that costs about 90 s and 8 GB; nothing here wakes
-/// anything (the Mac launcher arrives with S3), and a missing key is a setting,
-/// not an outage. When S3 lands, S2c should route this move through the same
-/// question.
+/// `.ask` moves without asking here, because nothing here wakes anything. The
+/// resolver asks before waking the Mac brain, whatever the reason the PC was
+/// passed over.
 public struct EvieProfileSelector: Sendable {
   private let credentials: any EvieCredentialProviding
   private let transportPolicy: ModelTransportPolicy

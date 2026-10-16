@@ -36,6 +36,13 @@ public struct EvieAgentLoop: Sendable {
   /// and even then the tool only ever raises a card.
   public var offersChanges: Bool
   public var maximumIterations: Int
+  /// Whether the model is offered any tool. Off for a brain that has none (the
+  /// Mac's LensVLM): the folders and the web are still searched before it is
+  /// asked, and it answers once from what was found, with no `tools` key.
+  public var offersTools: Bool
+  /// The brain's readiness when the turn was resolved, carried into every
+  /// step's options so the deadlines match it.
+  public var readiness: ReadinessRung?
 
   public init(
     toolbox: EvieFileToolbox = EvieFileToolbox(),
@@ -43,7 +50,9 @@ public struct EvieAgentLoop: Sendable {
     mailAndCalendar: (any EvieMailCalendarReading)? = nil,
     vault: (@Sendable (String) async -> [EvieRetrievedPassage])? = nil,
     offersChanges: Bool = false,
-    maximumIterations: Int = EvieAgentLoop.maximumIterations
+    maximumIterations: Int = EvieAgentLoop.maximumIterations,
+    offersTools: Bool = true,
+    readiness: ReadinessRung? = nil
   ) {
     self.toolbox = toolbox
     self.web = web
@@ -51,6 +60,8 @@ public struct EvieAgentLoop: Sendable {
     self.vault = vault
     self.offersChanges = offersChanges
     self.maximumIterations = maximumIterations
+    self.offersTools = offersTools
+    self.readiness = readiness
   }
 
   /// What the turn produced.
@@ -183,6 +194,31 @@ public struct EvieAgentLoop: Sendable {
       }
     }
 
+    guard offersTools else {
+      let step = try await Self.completeOnce(
+        messages: conversation,
+        tools: [],
+        client: client,
+        readiness: readiness,
+        emit: emit
+      )
+      // Nothing was declared, so a call it made anyway cannot be answered, and
+      // kept in the history it would be sent back as one.
+      var answer = step.message
+      answer.toolCalls = nil
+      return Outcome(
+        appended: [answer],
+        answer: answer.content,
+        toolCallCount: 0,
+        exhausted: false,
+        provenance: .from(
+          toolCalls: toolNames,
+          readAddresses: readAddresses,
+          readAttachment: carriesAttachment
+        )
+      )
+    }
+
     for iteration in 0..<maximumIterations {
       try Task.checkCancellation()
 
@@ -206,6 +242,7 @@ public struct EvieAgentLoop: Sendable {
         messages: conversation,
         tools: tools,
         client: client,
+        readiness: readiness,
         emit: emit
       )
 
@@ -243,6 +280,7 @@ public struct EvieAgentLoop: Sendable {
           messages: conversation,
           tools: tools,
           client: client,
+          readiness: readiness,
           emit: emit
         )
         appended.append(closing.message)
@@ -499,15 +537,18 @@ extension EvieAgentLoop {
     messages: [ChatMessage],
     tools: [EvieToolDefinition],
     client: any AgentClient,
+    readiness: ReadinessRung?,
     emit: @Sendable (EvieInteractionEvent) async -> Void
   ) async throws -> Step {
     var message: ChatMessage?
     var finishReason = EvieFinishReason.other
+    var options = TurnOptions.chat(client.configuration)
+    options.readiness = readiness
 
     for try await event in client.stream(
       messages: messages,
       tools: tools,
-      options: .chat(client.configuration)
+      options: options
     ) {
       try Task.checkCancellation()
       await emit(event)

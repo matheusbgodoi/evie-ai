@@ -2,10 +2,10 @@ import Foundation
 
 /// Why a model turn failed, in terms a caller can act on.
 ///
-/// The cases before the first byte — `unreachable`, `headersTimedOut`,
-/// `firstTokenTimedOut`, `unauthorized`, `credentialUnavailable` — are the ones a
-/// caller may answer by trying another model, because nothing has been shown
-/// yet. After a delta the text is already on screen and any failure is final.
+/// The cases that mean the brain never answered — see `allowsFailover` — are the
+/// ones a caller may answer by trying another model, because nothing has been
+/// shown yet. After a delta the text is already on screen and any failure is
+/// final.
 public enum ModelClientError: Error, Sendable, Equatable {
   case invalidConfiguration(String)
   /// `ModelTransportPolicy` refused the endpoint; nothing was sent.
@@ -81,6 +81,28 @@ extension ModelClientError: LocalizedError {
       "O modelo aceitou o pedido mas não começou a responder a tempo."
     case .cancelled:
       "O pedido ao modelo foi cancelado."
+    }
+  }
+}
+
+extension ModelClientError {
+  /// Whether this failure, before the turn's first delta, may be retried on
+  /// another brain: the server could not be reached (502 included, which the
+  /// gateway sends when its engine is gone), never sent its headers, refused
+  /// the key, or there was no key to send.
+  ///
+  /// Not a first-token timeout: the server accepted the request and is slow,
+  /// and a slow brain is not an absent one. Not a refusal by the transport
+  /// policy either, which is a configuration to fix, nor anything about the
+  /// request itself, which another brain would refuse the same way.
+  public var allowsFailover: Bool {
+    switch self {
+    case .unreachable, .headersTimedOut, .unauthorized, .credentialUnavailable:
+      true
+    case .server(let status, _):
+      status == 502
+    default:
+      false
     }
   }
 }
