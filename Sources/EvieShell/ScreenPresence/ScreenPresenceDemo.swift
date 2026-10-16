@@ -45,7 +45,7 @@ enum ScreenPresenceDemo {
 
     say("seeing")
     await presence.show(.seeing(displays: [display]))
-    say("seeing composited, mayCapture=\(presence.mayCapture)")
+    say("seeing composited, mayCapture=\(presence.mayCapture(display: display))")
     await pause(0.3)
     say("seeing sweep")
     await pause(hold)

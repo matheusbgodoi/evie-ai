@@ -16,9 +16,30 @@ struct ScreenPresenceMachineTests {
   /// A machine already showing `phase`, composited at `start`.
   private func machineShowing(_ phase: Machine.Phase) -> Machine {
     var machine = Machine()
-    _ = machine.handle(.show(phase), at: start)
-    _ = machine.handle(.composited, at: start)
+    let rendered = machine.handle(.show(phase), at: start)
+    _ = machine.handle(.composited(id: renderID(in: rendered)), at: start)
     return machine
+  }
+
+  /// The id of the render among `effects`, as the shell reads it to report
+  /// the composite back. Fails the test when there is no render.
+  private func renderID(
+    in effects: [Machine.Effect], sourceLocation: SourceLocation = #_sourceLocation
+  ) -> Machine.RenderID {
+    for case .render(_, let id) in effects {
+      return id
+    }
+    Issue.record("no render among \(effects)", sourceLocation: sourceLocation)
+    return Machine.RenderID(0)
+  }
+
+  /// Shows `phase` and reports that render composited at `instant`.
+  private func show(
+    _ phase: Machine.Phase, on machine: inout Machine, at instant: ContinuousClock.Instant,
+    compositedAt composite: ContinuousClock.Instant
+  ) {
+    let rendered = machine.handle(.show(phase), at: instant)
+    _ = machine.handle(.composited(id: renderID(in: rendered)), at: composite)
   }
 
   // MARK: - The indicator comes before the capture
@@ -34,7 +55,7 @@ struct ScreenPresenceMachineTests {
 
     let effects = machine.handle(.show(.seeing), at: start)
 
-    #expect(effects == [.render(.seeing)])
+    #expect(effects == [.render(.seeing, id: renderID(in: effects))])
     #expect(machine.state == .appearing(.seeing))
     #expect(!machine.mayCapture)
   }
@@ -42,9 +63,9 @@ struct ScreenPresenceMachineTests {
   @Test("capture is allowed only once the glow has been composited")
   func compositedAllowsCapture() {
     var machine = Machine()
-    _ = machine.handle(.show(.seeing), at: start)
+    let rendered = machine.handle(.show(.seeing), at: start)
 
-    let effects = machine.handle(.composited, at: at(33))
+    let effects = machine.handle(.composited(id: renderID(in: rendered)), at: at(33))
 
     #expect(effects.isEmpty)
     #expect(machine.state == .visible(.seeing, since: at(33)))
@@ -64,9 +85,9 @@ struct ScreenPresenceMachineTests {
 
     let effects = machine.handle(.show(.observing(step: 2)), at: at(100))
 
-    #expect(effects == [.render(.observing(step: 2))])
+    #expect(effects == [.render(.observing(step: 2), id: renderID(in: effects))])
     #expect(!machine.mayCapture)
-    _ = machine.handle(.composited, at: at(133))
+    _ = machine.handle(.composited(id: renderID(in: effects)), at: at(133))
     #expect(machine.mayCapture)
   }
 
@@ -74,9 +95,60 @@ struct ScreenPresenceMachineTests {
   func strayCompositedIgnored() {
     var machine = Machine()
 
-    #expect(machine.handle(.composited, at: start).isEmpty)
+    #expect(machine.handle(.composited(id: Machine.RenderID(1)), at: start).isEmpty)
     #expect(machine.state == .idle)
     #expect(!machine.mayCapture)
+  }
+
+  @Test("a composite reported for an earlier render does not make a newer phase visible")
+  func staleCompositeIgnored() {
+    var machine = Machine()
+    let first = machine.handle(.show(.acting), at: start)
+    let second = machine.handle(.show(.observing(step: 2)), at: at(10))
+
+    // The acting render's two ticks arrive after observing was asked for, but
+    // before the observing glow itself is on screen.
+    #expect(machine.handle(.composited(id: renderID(in: first)), at: at(33)).isEmpty)
+    #expect(machine.state == .appearing(.observing(step: 2)))
+    #expect(!machine.mayCapture)
+
+    _ = machine.handle(.composited(id: renderID(in: second)), at: at(43))
+    #expect(machine.state == .visible(.observing(step: 2), since: at(43)))
+    #expect(machine.mayCapture)
+  }
+
+  @Test("a composite reported twice for the same render changes nothing the second time")
+  func repeatedCompositeIgnored() {
+    var machine = Machine()
+    let rendered = machine.handle(.show(.seeing), at: start)
+    _ = machine.handle(.composited(id: renderID(in: rendered)), at: at(33))
+
+    #expect(machine.handle(.composited(id: renderID(in: rendered)), at: at(500)).isEmpty)
+    #expect(machine.state == .visible(.seeing, since: at(33)))
+  }
+
+  @Test("every render carries an id of its own, including a resume and a redraw")
+  func renderIDsAreDistinct() {
+    var machine = Machine()
+    let seeing = renderID(in: machine.handle(.show(.seeing), at: start))
+    let observing = renderID(in: machine.handle(.show(.observing(step: 1)), at: at(10)))
+    let redrawn = renderID(in: machine.handle(.redraw, at: at(20)))
+    _ = machine.handle(.composited(id: redrawn), at: at(50))
+    _ = machine.handle(.takeover, at: at(60))
+    let resumed = renderID(in: machine.handle(.resume, at: at(70)))
+
+    #expect(Set([seeing, observing, redrawn, resumed]).count == 4)
+  }
+
+  @Test("the presence is composited only when every display asked for is")
+  func compositedOnEveryDisplay() {
+    #expect(Machine.isComposited(requested: [1, 2], composited: [1, 2]))
+    #expect(Machine.isComposited(requested: [1], composited: [1, 2]))
+    // One display got no panel or did not refresh: a capture of it would
+    // have no glow on it.
+    #expect(!Machine.isComposited(requested: [1, 2], composited: [1]))
+    // Nothing asked for is nothing shown, not everything shown.
+    #expect(!Machine.isComposited(requested: [Int](), composited: [1]))
   }
 
   // MARK: - Seeing lasts at least 700 ms
@@ -106,8 +178,7 @@ struct ScreenPresenceMachineTests {
   @Test("the 700 ms are counted from the composite, not from the request to show")
   func minimumCountsFromComposite() {
     var machine = Machine()
-    _ = machine.handle(.show(.seeing), at: start)
-    _ = machine.handle(.composited, at: at(40))
+    show(.seeing, on: &machine, at: start, compositedAt: at(40))
 
     #expect(machine.handle(.hide, at: at(720)) == [.holdIndicator(until: at(740))])
   }
@@ -119,6 +190,55 @@ struct ScreenPresenceMachineTests {
 
     #expect(machine.handle(.hide, at: at(10)) == [.hideIndicator])
     #expect(machine.state == .idle)
+  }
+
+  @Test("a hold that runs out takes the seeing glow down")
+  func holdExpiryHides() {
+    var machine = machineShowing(.seeing)
+    _ = machine.handle(.hide, at: at(120))
+
+    #expect(machine.handle(.holdExpired(until: at(700)), at: at(700)) == [.hideIndicator])
+    #expect(machine.state == .idle)
+  }
+
+  @Test("a hold reported over before its time holds again")
+  func earlyHoldExpiryHoldsAgain() {
+    var machine = machineShowing(.seeing)
+    _ = machine.handle(.hide, at: at(120))
+
+    #expect(machine.handle(.holdExpired(until: at(700)), at: at(690)) == [.holdIndicator(until: at(700))])
+    #expect(machine.state == .visible(.seeing, since: start))
+  }
+
+  @Test("the hold of an earlier look cannot end the agent session shown after it")
+  func staleHoldSparesNextSession() {
+    var machine = machineShowing(.seeing)
+    _ = machine.handle(.hide, at: at(120))
+    show(.observing(step: 1), on: &machine, at: at(300), compositedAt: at(330))
+
+    #expect(machine.handle(.holdExpired(until: at(700)), at: at(700)).isEmpty)
+    #expect(machine.state == .visible(.observing(step: 1), since: at(330)))
+    #expect(machine.mayCapture)
+  }
+
+  @Test("the hold of an earlier look cannot cut a second look short")
+  func staleHoldSparesSecondLook() {
+    var machine = machineShowing(.seeing)
+    _ = machine.handle(.hide, at: at(120))
+    show(.seeing, on: &machine, at: at(300), compositedAt: at(330))
+
+    #expect(machine.handle(.holdExpired(until: at(700)), at: at(700)).isEmpty)
+    #expect(machine.state == .visible(.seeing, since: at(330)))
+    // The second look gets its own full minimum.
+    #expect(machine.handle(.hide, at: at(800)) == [.holdIndicator(until: at(1_030))])
+  }
+
+  @Test("a hold expiry with no hold asked for changes nothing")
+  func holdExpiryWithoutHoldIgnored() {
+    var machine = machineShowing(.seeing)
+
+    #expect(machine.handle(.holdExpired(until: at(700)), at: at(700)).isEmpty)
+    #expect(machine.state == .visible(.seeing, since: start))
   }
 
   @Test("the agent phases have no minimum and hide when asked")
@@ -194,7 +314,7 @@ struct ScreenPresenceMachineTests {
 
     let effects = machine.handle(.show(.observing(step: 4)), at: at(200))
 
-    #expect(effects == [.resolveDwell(.cancelled), .render(.observing(step: 4))])
+    #expect(effects == [.resolveDwell(.cancelled), .render(.observing(step: 4), id: renderID(in: effects))])
   }
 
   @Test("hiding mid-dwell cancels the pending click")
@@ -211,8 +331,7 @@ struct ScreenPresenceMachineTests {
   @Test("real input during the dwell cancels the click and pauses the session")
   func takeoverDuringDwellPauses() {
     var machine = machineShowing(.observing(step: 3))
-    _ = machine.handle(.show(.acting), at: at(10))
-    _ = machine.handle(.composited, at: at(40))
+    show(.acting, on: &machine, at: at(10), compositedAt: at(40))
     _ = machine.handle(.beginDwell, at: at(100))
 
     let effects = machine.handle(.takeover, at: at(200))
@@ -263,9 +382,18 @@ struct ScreenPresenceMachineTests {
 
     let effects = machine.handle(.resume, at: at(5_000))
 
-    #expect(effects == [.render(.observing(step: 5))])
+    #expect(effects == [.render(.observing(step: 5), id: renderID(in: effects))])
     #expect(machine.state == .appearing(.observing(step: 5)))
     #expect(!machine.mayCapture)
+  }
+
+  @Test("hiding a paused session stops it, cancelling the work first")
+  func hideWhilePausedStops() {
+    var machine = machineShowing(.observing(step: 2))
+    _ = machine.handle(.takeover, at: at(10))
+
+    #expect(machine.handle(.hide, at: at(20)) == [.cancelWork, .hideIndicator])
+    #expect(machine.state == .idle)
   }
 
   @Test("resume outside a pause does nothing")
@@ -290,12 +418,86 @@ struct ScreenPresenceMachineTests {
   func staleAutoStopIgnored() {
     var machine = machineShowing(.observing(step: 1))
     _ = machine.handle(.takeover, at: at(1_000))
-    _ = machine.handle(.resume, at: at(2_000))
-    _ = machine.handle(.composited, at: at(2_030))
+    let resumed = machine.handle(.resume, at: at(2_000))
+    _ = machine.handle(.composited(id: renderID(in: resumed)), at: at(2_030))
     _ = machine.handle(.takeover, at: at(30_000))
 
     #expect(machine.handle(.pauseExpired, at: at(61_000)).isEmpty)
     #expect(machine.state == .paused(since: at(30_000), step: 1))
+  }
+
+  // MARK: - The displays changed
+
+  @Test("after a redraw, capture waits for the new panels to be composited")
+  func redrawNeedsCompositing() {
+    var machine = machineShowing(.observing(step: 3))
+
+    let effects = machine.handle(.redraw, at: at(100))
+
+    #expect(effects == [.render(.observing(step: 3), id: renderID(in: effects))])
+    #expect(machine.state == .appearing(.observing(step: 3)))
+    #expect(!machine.mayCapture)
+    _ = machine.handle(.composited(id: renderID(in: effects)), at: at(133))
+    #expect(machine.state == .visible(.observing(step: 3), since: at(133)))
+    #expect(machine.mayCapture)
+  }
+
+  @Test("a redraw while still appearing makes the earlier render's composite stale")
+  func redrawWhileAppearing() {
+    var machine = Machine()
+    let first = machine.handle(.show(.seeing), at: start)
+    let redrawn = machine.handle(.redraw, at: at(10))
+
+    #expect(redrawn == [.render(.seeing, id: renderID(in: redrawn))])
+    #expect(machine.handle(.composited(id: renderID(in: first)), at: at(33)).isEmpty)
+    #expect(!machine.mayCapture)
+  }
+
+  @Test("a redraw mid-dwell cancels the click and draws acting again")
+  func redrawDuringDwellCancels() {
+    var machine = machineShowing(.acting)
+    _ = machine.handle(.beginDwell, at: at(100))
+
+    let effects = machine.handle(.redraw, at: at(150))
+
+    #expect(effects == [.resolveDwell(.cancelled), .render(.acting, id: renderID(in: effects))])
+    #expect(machine.state == .appearing(.acting))
+  }
+
+  @Test("a redraw while seeing is only held for its minimum ends it")
+  func redrawDuringHoldHides() {
+    var machine = machineShowing(.seeing)
+    _ = machine.handle(.hide, at: at(120))
+
+    // The capture is over, so there is nothing left to draw a new glow for.
+    #expect(machine.handle(.redraw, at: at(300)) == [.hideIndicator])
+    #expect(machine.state == .idle)
+  }
+
+  @Test("a redraw of a look still in progress draws it again")
+  func redrawDuringSeeing() {
+    var machine = machineShowing(.seeing)
+
+    let effects = machine.handle(.redraw, at: at(100))
+
+    #expect(effects == [.render(.seeing, id: renderID(in: effects))])
+    #expect(!machine.mayCapture)
+  }
+
+  @Test("a redraw while paused draws the pause again with its first deadline")
+  func redrawWhilePaused() {
+    var machine = machineShowing(.observing(step: 2))
+    _ = machine.handle(.takeover, at: at(1_000))
+
+    #expect(machine.handle(.redraw, at: at(5_000)) == [.renderPaused(autoStopAt: at(61_000))])
+    #expect(machine.state == .paused(since: at(1_000), step: 2))
+  }
+
+  @Test("a redraw while idle does nothing")
+  func redrawWhileIdle() {
+    var machine = Machine()
+
+    #expect(machine.handle(.redraw, at: start).isEmpty)
   }
 
   // MARK: - Stop is immediate
@@ -323,11 +525,11 @@ struct ScreenPresenceMachineTests {
   @Test("stop while something is still appearing hides it and refuses the capture")
   func stopWhileAppearing() {
     var machine = Machine()
-    _ = machine.handle(.show(.seeing), at: start)
+    let rendered = machine.handle(.show(.seeing), at: start)
 
     #expect(machine.handle(.stop, at: at(5)) == [.cancelWork, .hideIndicator])
     // The composite that was already on its way arrives after the stop.
-    #expect(machine.handle(.composited, at: at(33)).isEmpty)
+    #expect(machine.handle(.composited(id: renderID(in: rendered)), at: at(33)).isEmpty)
     #expect(!machine.mayCapture)
   }
 

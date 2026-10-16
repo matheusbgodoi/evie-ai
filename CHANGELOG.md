@@ -43,6 +43,20 @@ All notable changes to Evie are documented here. Dates use `YYYY-MM-DD`.
 
 ### Security
 
+- **The screen presence indicator keeps its promise in six more cases.** From the
+  2026-10-16 reviews of S6, before anything captures or acts:
+  - a composite report now names the render it is for, so the two ticks of a
+    replaced render can no longer make a newer phase count as on screen;
+  - with several displays, capture is allowed only when the glow is composited
+    on every one of them, and is asked per display (`mayCapture(display:)`);
+  - after a display change the indicator is drawn and composited again before
+    capture is allowed, instead of staying "visible" on panels not yet drawn;
+  - ending a paused session is a stop, which cancels its work;
+  - the hold timer of one look can no longer end the next look or agent
+    session (which also released Esc mid-session);
+  - the Esc stop key can be released while Evie posts input
+    (`postingSyntheticInput`), so her own Esc will not stop her session.
+
 - **Pictures and reasoning never reach a record.** `ChatMessage.images` (new,
   for screenshots and pasted images sent with one request) is excluded from the
   message's coding keys, so it is never saved, exported or logged, and existing

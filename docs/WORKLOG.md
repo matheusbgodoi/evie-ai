@@ -1,5 +1,52 @@
 # Work log
 
+## 2026-10-16 — v2: screen presence review fixes
+
+- Completed: the six presence findings of the 2026-10-16 reviews (two from the
+  security review of S6-core, four from the adversarial review of the three
+  branches, numbered 2, 3, 4 and 9 there).
+  - `ScreenPresenceMachine`: every `render(_, id:)` carries a new `RenderID`,
+    and only `composited(id:)` for the current render makes a phase visible, so
+    a stale composite can no longer turn a new `.appearing` phase `.visible`
+    before its glow is drawn. A `hide` while paused is a `stop` (`cancelWork`
+    first). The seeing hold is answered with `holdExpired(until:)`, honoured
+    only for the hold of the glow on screen now. New `redraw`, sent after a
+    display change: the current phase is drawn again under a new id, a dwell is
+    cancelled, a held seeing glow hides, a pause is redrawn with its first
+    deadline. New `isComposited(requested:composited:)`: every display, and at
+    least one.
+  - `ScreenPresence`: reports a composite only when every display of the phase
+    composited; `mayCapture(display:)` replaces `mayCapture` so S4 must name the
+    display it captures; `render` cancels any hold timer; the rebuild after a
+    screen change sends `redraw` instead of redrawing behind the machine's back,
+    and a pause after a rebuild is drawn on new panels (before, it was drawn on
+    none). `cancelWork` sets the stopped exit, whoever caused it. The shell's own
+    render generation is gone; the machine's ids replace it.
+  - `PresenceEscapeKey` and `ScreenPresence.postingSyntheticInput { … }`: the
+    plain-Esc hot key is released while Evie posts input (nested calls count)
+    and taken back afterwards. A Carbon hot key carries no
+    `eventSourceUserData`, so filtering on `0xE71E` is not possible there. The
+    contract for S5c is in the method's comment and the design doc.
+  - Docs: design doc (S4 indicator contract, S6-core and S6-shell notes),
+    `docs/UI_UX.md` (presence rules), CHANGELOG (Security),
+    `docs/PROJECT_STATUS.md`.
+- Tests (written first; the suite failed to compile against the old API): 17
+  new in "Screen presence machine" (31 → 48) — stale and repeated composites,
+  distinct ids across show/redraw/resume, `isComposited`, hold expiry (honoured,
+  early, from an earlier look against a second look and against an agent
+  session, with no hold), hide while paused, and redraw in each state. Existing
+  tests changed only to carry the render id; no assertion was removed.
+- Commands: `swift build` (whole package) succeeded with no warnings;
+  `Scripts/test --filter ScreenPresence` 68 tests in 3 suites passed; full
+  `Scripts/test` 864 tests in 85 suites passed, 0 failures, 1 skipped (the gated
+  Calendar test).
+- Not run: the presence demo (the normal sequence draws the same frames; only
+  the display-change path draws differently, and the demo does not change
+  displays). Not verified: a real display change mid-session, and whether the
+  S5c settle covers delivery of a posted Esc before the hot key is taken back
+  (marked [VERIFY] in the design doc).
+- Next: S2c, the per-turn brain resolver and failover.
+
 ## 2026-10-16 — v2: `evie-runtime launch` starts no model; `launch-custom` does
 
 - Completed, as the follow-up to merging `v2-packaging`:

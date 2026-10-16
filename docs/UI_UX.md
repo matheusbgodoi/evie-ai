@@ -264,10 +264,11 @@ opening her off screen.
 
 `ScreenPresenceMachine` in `EvieCore` enforces the indicator's promise in code and covers it with tests. Its behaviour is described in `docs/design/2026-10-16-evie-v2-design.md` § S6:
 
-- No screenshot is taken before the indicator has been composited on screen.
+- No screenshot is taken before the indicator has been composited on screen — on the display being captured, and on every other display the phase covers. A late composite report from a replaced render, or panels rebuilt after a display change, never count.
 - The seeing glow stays up for at least 700 ms.
 - A click is posted only after its 250 ms dwell has run uninterrupted.
-- Real input from the user pauses an agent session. Only Continuar resumes it, and a pause stops itself after 60 s.
+- Real input from the user pauses an agent session. Only Continuar resumes it, and a pause stops itself after 60 s. Ending a paused session any other way is a stop: the work is cancelled.
+- The hold of one look never ends the next look or session.
 - Stop cancels the work before any animation and does not wait out the seeing minimum.
 
 ### Screen presence visuals

@@ -14,9 +14,11 @@ the machine, and `evie-shell --presence-demo` to review every state. Nothing
 calls `ScreenPresence` yet.
 
 Next for this area: S4 (screen capture) shows `.seeing` before each capture and
-refuses to capture unless `mayCapture`; S5 drives observing, `lookAt`,
-`willClick`/`didClick` and typing, and wires `onStop` to `stopEverything` and
-`broker.revoke`. Still open from the S6 manual QA: an external display, a
+refuses to capture unless `mayCapture(display:)` for the display it captures; S5
+drives observing, `lookAt`, `willClick`/`didClick` and typing, posts every
+synthetic event inside `postingSyntheticInput { … }` (which releases the Esc
+hot key), and wires `onStop` to `stopEverything` and `broker.revoke`. The six
+presence findings of the 2026-10-16 reviews are fixed (see the WORKLOG). Still open from the S6 manual QA: an external display, a
 full-screen app (the `.screenSaver` level), the `presence-excluded` magenta
 diagnostic (needs S4's capture filter), and WindowServer's share of the cost.
 

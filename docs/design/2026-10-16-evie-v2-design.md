@@ -589,7 +589,7 @@ public struct CapturedScreen: Sendable { public let image: EvieImagePart; public
 2. capture;
 3. the glow holds at least 700 ms.
 
-If the presence layer cannot show, there is no capture.
+If the presence layer cannot show, there is no capture. *As implemented (2026-10-16):* the check before the capture is `presence.mayCapture(display:)` for the display about to be captured; there is no display-agnostic `mayCapture` in the shell.
 
 **Permission:**
 - `CGPreflightScreenCaptureAccess()` first, then `CGRequestScreenCaptureAccess()` once.
@@ -832,15 +832,18 @@ A one-time consent sheet tells the user that injection is mitigated by code poli
 **S6-core as implemented (2026-10-16).** Tests: `ScreenPresenceMachineTests` and `ScreenGeometryTests`.
 
 - `ScreenPresenceMachine` is a reducer: `handle(_ event:at:) -> [Effect]`, with time passed in as `ContinuousClock.Instant` and no timers of its own.
-  - Events: `show(Phase)`, `composited`, `hide`, `beginDwell`, `dwellEnded`, `takeover`, `resume`, `pauseExpired`, `stop`.
-  - Effects, carried out in order: `render(Phase)`, `holdIndicator(until:)`, `hideIndicator`, `awaitDwell(until:)`, `resolveDwell(Clearance)`, `cancelWork`, `renderPaused(autoStopAt:)`.
+  - Events: `show(Phase)`, `composited(id:)`, `hide`, `holdExpired(until:)`, `redraw`, `beginDwell`, `dwellEnded`, `takeover`, `resume`, `pauseExpired`, `stop`.
+  - Effects, carried out in order: `render(Phase, id:)`, `holdIndicator(until:)`, `hideIndicator`, `awaitDwell(until:)`, `resolveDwell(Clearance)`, `cancelWork`, `renderPaused(autoStopAt:)`.
+  - Every render carries a new `RenderID`, and only `composited(id:)` for the current one makes a phase visible. A late composite from a replaced render (or a resume, or a redraw) cannot vouch for the phase that replaced it. `isComposited(requested:composited:)` is the shell's rule for reporting it at all: every display the phase covers, and at least one.
+  - A seeing hold is answered with `holdExpired(until:)`, carrying the deadline back; it is honoured only for the hold of the glow on screen now, so the timer of an earlier look cannot end a second look or the agent session shown after it.
+  - `redraw` (the shell rebuilt its panels after a display change) draws the current phase again under a new id, so capture waits for the new panels' composite. Mid-dwell it cancels the click; a seeing glow only being held for its minimum is hidden instead, since its capture is over; a pause is drawn again with its first deadline.
   - Phases: `seeing`, `observing(step:)`, `acting`, `typing`. The shell maps its own `Phase` (displays, app name) onto these, and its `.paused` onto `takeover`.
   - `mayCapture` is true only once a capturing phase (`seeing`, `observing`) is **composited**. Asking to show is not enough.
   - The seeing minimum (700 ms) counts from the composite. Seeing that was never composited hides at once.
   - A click is cleared only by a dwell (250 ms) that ran its full length with the acting indicator on screen. Anything else resolves `.cancelled`: a stop, a takeover, a new phase, a hide, or an early `dwellEnded`.
   - Esc is one of the stop sources, so Esc during the dwell resolves `.cancelled` **and** stops the session.
   - Takeover pauses agent phases only. Moving the mouse during a one-shot `seeing` is ignored.
-  - While paused, `show` is refused. Only `resume` (Continuar) leaves the pause, and it re-observes at the interrupted step. A pause auto-stops after 60 s, checked against that pause's own start.
+  - While paused, `show` is refused. Only `resume` (Continuar) leaves the pause, and it re-observes at the interrupted step. A pause auto-stops after 60 s, checked against that pause's own start. A `hide` while paused is a `stop` (`cancelWork` first), so a loop cannot end a paused session without cancelling its work.
   - `stop` is immediate. It skips the seeing minimum, and `cancelWork` comes before `hideIndicator`. It emits `cancelWork` even when idle.
 - `ScreenGeometry` holds three types, plus `downscaledSize(_:maxLongEdge:)`, which never upscales:
   - `Display`: id, `frameInGlobalCG`, `backingScale`, `pixelSize`.
@@ -903,8 +906,11 @@ A one-time consent sheet tells the user that injection is mitigated by code poli
 
 **S6-shell as implemented (2026-10-16).** Files in `Sources/EvieShell/ScreenPresence/`, plus `ScreenPresenceLayout` and `ScreenPresenceCopy` in `EvieCore` (tests: `ScreenPresenceLayoutTests`, `ScreenPresenceCopyTests`).
 
-- `ScreenPresence` drives `ScreenPresenceMachine` and carries out its effects; it holds no rule of its own. `show` returns after every participating panel has had two `NSView.displayLink` ticks, or after a 500 ms timeout, in which case `.composited` is never reported and `mayCapture` stays false.
-- Panels exist only while the indicator is up. Hiding closes them, which removes the layer tree; the demo reports `NSApp.windows` visible = 0 afterwards. Screen-parameter changes drop every panel and redraw the glow and pill of a session still on screen; the reticle, highlight and cursor come back with the next step.
+- `ScreenPresence` drives `ScreenPresenceMachine` and carries out its effects; it holds no rule of its own. `show` returns after every participating panel has had two `NSView.displayLink` ticks, or after a 500 ms timeout, in which case `.composited` is never reported and capture stays refused. A display in the phase that has no `NSScreen` (or does not refresh in time) leaves the whole render unreported, on every display.
+- Capture code asks `mayCapture(display:)`: true only when a seeing or observing phase is composited and that display is one of the phase's displays.
+- A render cancels any hold timer left from an earlier look.
+- Panels exist only while the indicator is up. Hiding closes them, which removes the layer tree; the demo reports `NSApp.windows` visible = 0 afterwards. Screen-parameter changes drop every panel and send the machine `redraw`: the glow and pill of a session still on screen are drawn again and composited again before capture is allowed (a pause is redrawn on new panels); the reticle, highlight and cursor come back with the next step. A display that disappeared keeps the redraw from being reported until the loop shows its next phase with the displays that remain.
+- `postingSyntheticInput { … }` is the S5c executor's contract for the plain-Esc hot key: it releases the key while Evie posts input and takes it back afterwards (nested calls count). The Carbon hot key cannot see `eventSourceUserData`, so a tagged Esc would otherwise stop Evie's own session. Every key, click and scroll goes inside the call, and so does the settle after it, because a posted event is routed after `CGEvent.post` returns [VERIFY in S5c that 300 ms covers delivery]. Parar and the emergency shortcut work throughout; a real Esc in that window is untagged input for the takeover monitor.
 - Additions to the API above:
   - `typing(field:app:)` replaces `typing(rect:app:)` (same meaning) and also shows the phase.
   - `lookAt` in an acting or typing phase draws the amber element highlight instead of the reticle, so the AX frame needs no extra parameter on `willClick`.

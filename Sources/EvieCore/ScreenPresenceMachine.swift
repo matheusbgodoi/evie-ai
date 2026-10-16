@@ -48,6 +48,17 @@ public struct ScreenPresenceMachine: Sendable {
     case cancelled
   }
 
+  /// Which render a composite report is for. Each render gets a new one, so
+  /// the two ticks of a render that has since been replaced cannot vouch for
+  /// the phase that replaced it.
+  public struct RenderID: Sendable, Hashable {
+    let value: Int
+
+    init(_ value: Int) {
+      self.value = value
+    }
+  }
+
   public enum State: Sendable, Equatable {
     case idle
     /// Asked to draw, not yet confirmed on screen.
@@ -64,12 +75,19 @@ public struct ScreenPresenceMachine: Sendable {
   public enum Event: Sendable, Equatable {
     /// Draw this phase.
     case show(Phase)
-    /// The shell confirmed the last phase it was told to render is composited
-    /// — two display-link ticks after it was added, so the render server has
-    /// put it on screen and not merely accepted it.
-    case composited
+    /// The shell confirmed the render `id` is composited on every display it
+    /// covers — two display-link ticks after it was added, so the render
+    /// server has put it on screen and not merely accepted it.
+    case composited(id: RenderID)
     /// The capture or the session is finished.
     case hide
+    /// The deadline of a `holdIndicator(until:)` has come. Carries the
+    /// deadline back, so a hold set for an earlier look cannot end whatever
+    /// is on screen now.
+    case holdExpired(until: ContinuousClock.Instant)
+    /// The displays changed and the shell rebuilt its panels: whatever is on
+    /// screen has to be drawn, and composited, again.
+    case redraw
     /// A click target is on screen; start the dwell before pressing.
     case beginDwell
     /// The dwell the shell was told to wait for has elapsed.
@@ -87,9 +105,10 @@ public struct ScreenPresenceMachine: Sendable {
   }
 
   public enum Effect: Sendable, Equatable {
-    /// Draw this phase, then report `.composited`.
-    case render(Phase)
-    /// Keep the indicator up; report `.hide` again at `until`.
+    /// Draw this phase, then report `.composited(id:)` with this id once it is
+    /// on screen on every display it covers — and never if one is missing.
+    case render(Phase, id: RenderID)
+    /// Keep the indicator up; report `.holdExpired(until:)` at `until`.
     case holdIndicator(until: ContinuousClock.Instant)
     case hideIndicator
     /// Wait, then report `.dwellEnded` at `until`.
@@ -114,10 +133,18 @@ public struct ScreenPresenceMachine: Sendable {
   /// How long a paused session waits for Continuar before stopping itself.
   public let pauseAutoStop: Duration
 
-  public private(set) var state: State = .idle
+  public private(set) var state: State = .idle {
+    // A hold belongs to the visible state it was asked for in; any change of
+    // state is the end of it.
+    didSet { heldUntil = nil }
+  }
   /// The agent step most recently observed, so a resumed session observes
   /// again at the step it was interrupted in.
   private var step = 0
+  /// The render the machine is waiting to hear is composited.
+  private var currentRender = RenderID(0)
+  /// When a seeing glow whose capture is over may come down.
+  private var heldUntil: ContinuousClock.Instant?
 
   public init(
     minimumSeeing: Duration = .milliseconds(700),
@@ -139,13 +166,25 @@ public struct ScreenPresenceMachine: Sendable {
     return false
   }
 
+  /// Whether a render is on screen everywhere it was asked to be. A display
+  /// that got no panel, or did not refresh in time, would be captured with no
+  /// glow on it, so one missing display is the whole render missing; and
+  /// nothing asked for is nothing shown.
+  public static func isComposited<Display: Hashable>(
+    requested: some Collection<Display>, composited: Set<Display>
+  ) -> Bool {
+    !requested.isEmpty && requested.allSatisfy(composited.contains)
+  }
+
   /// Applies one event that happened at `now` and returns what the shell must
   /// do, in order.
   public mutating func handle(_ event: Event, at now: ContinuousClock.Instant) -> [Effect] {
     switch event {
     case .show(let phase): show(phase)
-    case .composited: composited(at: now)
+    case .composited(let id): composited(id, at: now)
     case .hide: hide(at: now)
+    case .holdExpired(let until): expireHold(until, at: now)
+    case .redraw: redraw(at: now)
     case .beginDwell: beginDwell(at: now)
     case .dwellEnded: endDwell(at: now)
     case .takeover: takeOver(at: now)
@@ -161,18 +200,25 @@ public struct ScreenPresenceMachine: Sendable {
     if case .paused = state {
       return []
     }
-    let cancelledClick = cancelPendingClick()
     if case .observing(let observedStep) = phase {
       step = observedStep
     }
-    state = .appearing(phase)
-    return cancelledClick + [.render(phase)]
+    return draw(phase)
   }
 
-  private mutating func composited(at now: ContinuousClock.Instant) -> [Effect] {
-    // A late report — after a stop, or for a phase already replaced — must not
-    // make anything visible that is not being drawn.
-    guard case .appearing(let phase) = state else {
+  /// Draws `phase` from scratch: any click waiting on the dwell is cancelled,
+  /// and nothing counts as on screen until this render's own composite.
+  private mutating func draw(_ phase: Phase) -> [Effect] {
+    let cancelledClick = cancelPendingClick()
+    currentRender = RenderID(currentRender.value + 1)
+    state = .appearing(phase)
+    return cancelledClick + [.render(phase, id: currentRender)]
+  }
+
+  private mutating func composited(_ id: RenderID, at now: ContinuousClock.Instant) -> [Effect] {
+    // A late report — after a stop, or for a render already replaced — must
+    // not make anything visible that is not being drawn.
+    guard case .appearing(let phase) = state, id == currentRender else {
       return []
     }
     state = .visible(phase, since: now)
@@ -184,8 +230,14 @@ public struct ScreenPresenceMachine: Sendable {
     case .idle:
       return []
     case .visible(.seeing, let since) where now < since + minimumSeeing:
+      heldUntil = since + minimumSeeing
       return [.holdIndicator(until: since + minimumSeeing)]
-    case .appearing, .visible, .paused:
+    case .paused:
+      // Only Continuar, Parar or the auto-stop leave a pause. A loop ending
+      // its session while the user holds the Mac is a stop: the work it left
+      // behind is cancelled, not abandoned.
+      return stop()
+    case .appearing, .visible:
       // Seeing that was never composited hides at once: capture was never
       // allowed, so there is nothing the user has to be shown happened.
       state = .idle
@@ -194,6 +246,38 @@ public struct ScreenPresenceMachine: Sendable {
       let cancelledClick = cancelPendingClick()
       state = .idle
       return cancelledClick + [.hideIndicator]
+    }
+  }
+
+  private mutating func expireHold(
+    _ until: ContinuousClock.Instant, at now: ContinuousClock.Instant
+  ) -> [Effect] {
+    // Only the hold of the glow on screen now. The timer of a look that has
+    // since been replaced — by a second look, or by an agent session — would
+    // otherwise take the new one down mid-capture.
+    guard let heldUntil, heldUntil == until else {
+      return []
+    }
+    return hide(at: now)
+  }
+
+  private mutating func redraw(at now: ContinuousClock.Instant) -> [Effect] {
+    switch state {
+    case .idle:
+      return []
+    case .visible(.seeing, _) where heldUntil != nil:
+      // The capture is over and its glow went with the old panels; drawing a
+      // new one would show more than is happening.
+      state = .idle
+      return [.hideIndicator]
+    case .appearing(let phase), .visible(let phase, _):
+      return draw(phase)
+    case .dwelling:
+      // The target the dwell was showing went with the old panels, so the
+      // click is not cleared.
+      return draw(.acting)
+    case .paused(let since, _):
+      return [.renderPaused(autoStopAt: since + pauseAutoStop)]
     }
   }
 
@@ -241,9 +325,7 @@ public struct ScreenPresenceMachine: Sendable {
     // The user changed the screen while in control, so the session resumes by
     // looking again rather than by finishing an action planned on a stale
     // observation.
-    let phase = Phase.observing(step: pausedStep)
-    state = .appearing(phase)
-    return [.render(phase)]
+    return draw(.observing(step: pausedStep))
   }
 
   private mutating func expirePause(at now: ContinuousClock.Instant) -> [Effect] {

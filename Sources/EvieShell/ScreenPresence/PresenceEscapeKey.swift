@@ -12,10 +12,22 @@ import Foundation
 /// Its own Carbon handler and signature, apart from `GlobalHotKeyController`:
 /// that controller answers only to its own signature and passes everything
 /// else on, so the two never see each other's keys.
+///
+/// A Carbon hot key cannot tell who pressed it: the event it delivers carries
+/// no `eventSourceUserData`, so an Esc Evie posts herself (tagged
+/// `ScreenPresence.syntheticEventTag`) would stop her own session. Instead,
+/// the key is released for as long as Evie is posting input — see
+/// `suspend()` — and the synthetic Esc reaches the app it was meant for.
 @MainActor
 final class PresenceEscapeKey {
   var onPress: () -> Void = {}
+  /// Held for the session: registered, and shown as the pill's keycap. Stays
+  /// true while suspended, since the key comes back as soon as the posting
+  /// ends.
   private(set) var isArmed = false
+  /// How many postings of synthetic input are under way. The key is
+  /// registered only at zero.
+  private var suspensions = 0
   private var reference: EventHotKeyRef?
   private var handler: EventHandlerRef?
 
@@ -29,6 +41,44 @@ final class PresenceEscapeKey {
     guard !isArmed else {
       return true
     }
+    guard suspensions == 0 else {
+      // Registered when the posting ends; until then the session counts it
+      // as held, as it will be.
+      isArmed = true
+      return true
+    }
+    isArmed = register()
+    return isArmed
+  }
+
+  func disarm() {
+    unregister()
+    isArmed = false
+  }
+
+  /// Releases the key while Evie posts input, so her own Esc is not taken
+  /// for the user's. Every call is matched by one `endSuspension()`; nested
+  /// postings keep it released until the last one ends.
+  func suspend() {
+    suspensions += 1
+    unregister()
+  }
+
+  /// Takes the key back for the session, if the session still wants it and
+  /// no other posting is under way. If the system refuses it now — another
+  /// app took Esc in the meantime — the session goes on without it, and Parar
+  /// remains.
+  func endSuspension() {
+    guard suspensions > 0 else {
+      return
+    }
+    suspensions -= 1
+    if suspensions == 0, isArmed {
+      isArmed = register()
+    }
+  }
+
+  private func register() -> Bool {
     if handler == nil {
       var type = EventTypeSpec(
         eventClass: OSType(kEventClassKeyboard), eventKind: UInt32(kEventHotKeyPressed))
@@ -42,16 +92,14 @@ final class PresenceEscapeKey {
     let status = RegisterEventHotKey(
       UInt32(kVK_Escape), 0, EventHotKeyID(signature: Self.signature, id: 1),
       GetApplicationEventTarget(), 0, &reference)
-    isArmed = status == noErr && reference != nil
-    return isArmed
+    return status == noErr && reference != nil
   }
 
-  func disarm() {
+  private func unregister() {
     if let reference {
       UnregisterEventHotKey(reference)
     }
     reference = nil
-    isArmed = false
   }
 
   isolated deinit {
@@ -75,7 +123,9 @@ final class PresenceEscapeKey {
     let key = Unmanaged<PresenceEscapeKey>.fromOpaque(userData).takeUnretainedValue()
     DispatchQueue.main.async {
       MainActor.assumeIsolated {
-        if key.isArmed {
+        // A press that was already queued when a posting began is dropped
+        // with the rest: it cannot be told apart from Evie's own.
+        if key.isArmed, key.suspensions == 0 {
           key.onPress()
         }
       }

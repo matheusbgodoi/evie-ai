@@ -73,9 +73,6 @@ final class ScreenPresence {
   private var drawn: Phase?
   private var observedDisplays: [CGDirectDisplayID] = []
   private var actingDisplay: CGDirectDisplayID?
-  /// Bumped on every render, so a composite report for a render that has
-  /// since been replaced is dropped instead of confirming the new one.
-  private var renderGeneration = 0
   private var exitOutcome: Outcome = .success
   private var pendingClick: CheckedContinuation<Clearance, Never>?
   private var cursorTravel: Task<Void, Never>?
@@ -110,16 +107,23 @@ final class ScreenPresence {
     }
   }
 
-  /// Whether a screenshot may be taken right now: only once a seeing or
-  /// observing glow is composited on screen.
-  var mayCapture: Bool { machine.mayCapture }
+  /// Whether `display` may be captured right now: only once a seeing or
+  /// observing glow is composited on it. Capture code asks about the display
+  /// it is about to capture, never about the indicator in general — a glow on
+  /// one display says nothing to the user about another.
+  func mayCapture(display: CGDirectDisplayID) -> Bool {
+    // Composited is all or nothing across the phase's displays, so a capturing
+    // phase that is visible is on every one of `observedDisplays`.
+    machine.mayCapture && observedDisplays.contains(display)
+  }
 
   // MARK: - The calls the capture and agent loops make
 
   /// Shows `phase` and returns once it is composited — two display refreshes
-  /// after its layers were added. Check `mayCapture` afterwards: when the
-  /// glow could not be shown (no such display, or it did not refresh in
-  /// time), capture stays refused.
+  /// after its layers were added on every display it covers. Check
+  /// `mayCapture(display:)` afterwards: when the glow could not be shown on
+  /// one of them (no such display, or it did not refresh in time), capture
+  /// stays refused on all of them.
   func show(_ phase: Phase) async {
     if case .paused(let reason) = phase {
       takeover(reason: reason)
@@ -261,7 +265,6 @@ final class ScreenPresence {
   /// Parar, Esc, the emergency shortcut, or the voice command: cancels the
   /// work first, then takes the indicator down.
   func stop() {
-    exitOutcome = .stopped
     Task { await perform(machine.handle(.stop, at: clock.now)) }
   }
 
@@ -271,6 +274,26 @@ final class ScreenPresence {
   }
 
   private var pausedReason = ""
+
+  /// Runs `post` with the global Esc stop key released, and takes it back
+  /// afterwards.
+  ///
+  /// The contract for the synthetic-input executor (S5c): every key, click
+  /// or scroll Evie posts during a session is posted inside this call, and
+  /// the settle after it (at least 300 ms) is waited out inside it too.
+  /// The Carbon hot key cannot see `syntheticEventTag`, and a posted event
+  /// is routed after `CGEvent.post` returns, so an Esc posted outside it — or
+  /// re-registered before the event was delivered — stops Evie's own
+  /// session. While the key is released the user still has Parar and the
+  /// emergency shortcut; a real Esc in that window is untagged input, which
+  /// the takeover monitor (S5d) is to treat as the user taking over.
+  func postingSyntheticInput<Result>(
+    _ post: () async throws -> Result
+  ) async rethrows -> Result {
+    escape.suspend()
+    defer { escape.endSuspension() }
+    return try await post()
+  }
 
   /// Continuar: the user hands control back. The session observes again
   /// before doing anything, because the screen changed while it was theirs.
@@ -284,11 +307,11 @@ final class ScreenPresence {
   private func perform(_ effects: [ScreenPresenceMachine.Effect]) async {
     for effect in effects {
       switch effect {
-      case .render(let phase):
-        await render(phase)
+      case .render(let phase, let id):
+        await render(phase, id: id)
       case .holdIndicator(let until):
         holdTimer?.cancel()
-        holdTimer = schedule(at: until) { $0.machine.handle(.hide, at: $0.clock.now) }
+        holdTimer = schedule(at: until) { $0.machine.handle(.holdExpired(until: until), at: $0.clock.now) }
       case .hideIndicator:
         tearDown()
       case .awaitDwell(let until):
@@ -297,15 +320,15 @@ final class ScreenPresence {
       case .resolveDwell(let clearance):
         resolvePendingClick(clearance)
       case .cancelWork:
+        // Whatever asked for it — Parar, Esc, a pause running out, a hide
+        // while paused — the work was cut short, and the exit says so.
+        exitOutcome = .stopped
         cursorTravel?.cancel()
         onStop?()
       case .renderPaused(let autoStopAt):
         renderPaused()
         pauseTimer?.cancel()
-        pauseTimer = schedule(at: autoStopAt) { presence in
-          presence.exitOutcome = .stopped
-          return presence.machine.handle(.pauseExpired, at: presence.clock.now)
-        }
+        pauseTimer = schedule(at: autoStopAt) { $0.machine.handle(.pauseExpired, at: $0.clock.now) }
       }
     }
   }
@@ -327,15 +350,18 @@ final class ScreenPresence {
     pendingClick = nil
   }
 
-  /// Draws a phase on every display taking part, then reports `.composited`
-  /// once every one of them has refreshed twice with it.
-  private func render(_ phase: ScreenPresenceMachine.Phase) async {
+  /// Draws a phase on every display taking part, then reports render `id`
+  /// composited once every one of them has refreshed twice with it.
+  private func render(_ phase: ScreenPresenceMachine.Phase, id: ScreenPresenceMachine.RenderID) async {
     exit?.cancel()
     exit = nil
-    renderGeneration += 1
-    let generation = renderGeneration
+    // A hold left over from an earlier look must not fire into this one. The
+    // machine refuses such an expiry anyway; this keeps the timer from
+    // outliving the glow it was for.
+    holdTimer?.cancel()
+    holdTimer = nil
     let styles = glowStyles(for: phase)
-    var shown: [PresencePanel] = []
+    var shown: [CGDirectDisplayID: PresencePanel] = [:]
     for (display, style) in styles {
       guard let panel = panel(for: display) else { continue }
       let entering = panel.glow.currentStyle == nil || !panel.isVisible
@@ -354,7 +380,7 @@ final class ScreenPresence {
         panel.cursor.fadeOut(duration: 0.2)
         panel.highlight.fadeOut(duration: 0.12)
       }
-      shown.append(panel)
+      shown[display] = panel
     }
     // Displays no longer taking part are let go.
     for (display, panel) in panels where styles[display] == nil {
@@ -366,26 +392,29 @@ final class ScreenPresence {
       pill.show(pillContent(for: phase), on: screen, avoiding: panels[pillDisplay ?? 0]?.highlight.target)
     }
 
-    guard !shown.isEmpty else {
-      // Nothing could be drawn, so nothing is reported composited, and a
-      // capture waiting on this stays refused.
+    var composited: Set<CGDirectDisplayID> = []
+    for (display, panel) in shown where await panel.waitForComposite() {
+      composited.insert(display)
+    }
+    // A display with no panel or no refresh leaves the whole render
+    // unreported, so a capture waiting on it stays refused. Whether this
+    // render is still the current one is the machine's to decide.
+    guard ScreenPresenceMachine.isComposited(requested: styles.keys, composited: composited) else {
       return
     }
-    var composited = true
-    for panel in shown {
-      composited = await panel.waitForComposite() && composited
-    }
-    guard composited, generation == renderGeneration else {
-      return
-    }
-    await perform(machine.handle(.composited, at: clock.now))
+    await perform(machine.handle(.composited(id: id), at: clock.now))
   }
 
   private func renderPaused() {
-    renderGeneration += 1
     cursorTravel?.cancel()
-    for panel in panels.values {
-      panel.glow.apply(.paused, entering: false)
+    // After a rebuild there are no panels yet; the pause goes on every
+    // display the session was using.
+    let displays = panels.isEmpty ? Array(glowStyles(for: .acting).keys) : Array(panels.keys)
+    for display in displays {
+      let entering = panels[display] == nil
+      guard let panel = panel(for: display) else { continue }
+      panel.orderFrontRegardless()
+      panel.glow.apply(.paused, entering: entering)
       panel.reticle.fadeOut(duration: 0.12)
       panel.cursor.fadeOut(duration: 0.2)
       panel.highlight.fadeOut(duration: 0.12)
@@ -459,7 +488,8 @@ final class ScreenPresence {
   }
 
   /// Displays were added, removed or rearranged: every panel is dropped, and
-  /// a session still on screen is drawn again on the displays that remain.
+  /// the machine has a session still on screen drawn again — and composited
+  /// again before anything may be captured — on the displays that remain.
   /// The reticle, highlight and cursor are not carried over — their
   /// coordinates belonged to the old arrangement — and come back with the
   /// next step.
@@ -469,23 +499,7 @@ final class ScreenPresence {
     }
     panels.removeAll()
     pill.close()
-    guard machine.state != .idle, let drawn else {
-      return
-    }
-    switch machine.state {
-    case .paused:
-      renderPaused()
-    default:
-      let phase = Self.machinePhase(drawn)
-      for (display, style) in glowStyles(for: phase) {
-        guard let panel = panel(for: display) else { continue }
-        panel.orderFrontRegardless()
-        panel.glow.apply(style, entering: true)
-      }
-      if let screen = pillScreen {
-        pill.show(pillContent(for: phase), on: screen)
-      }
-    }
+    Task { await perform(machine.handle(.redraw, at: clock.now)) }
   }
 
   // MARK: - What each phase looks like
