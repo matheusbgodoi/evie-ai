@@ -338,6 +338,21 @@ enum EvieDiagnosticRegistry {
       await EvieDiagnostics.schedulesCheck()
     },
 
+    // Plays every state of the screen indicator on the main display, so it can
+    // be looked at without an agent. Captures nothing, posts no input and
+    // starts no coordinator, so it asks for no permission at all.
+    EvieDiagnostic.terminating(
+      flag: "--presence-demo",
+      usage: "--presence-demo [segundos] [--reduced-motion] [--with-esc]",
+      summary: "mostra cada estado do indicador de tela, sem capturar nada"
+    ) { arguments in
+      await ScreenPresenceDemo.run(
+        hold: arguments.number() ?? 2,
+        reducedMotion: arguments.contains("--reduced-motion"),
+        takesEscape: arguments.contains("--with-esc")
+      )
+    },
+
     // Acted on by the coordinator once the application is up, not here — the
     // window it opens needs the running app. Listed so `--help` is the whole
     // truth about what the shell answers to.

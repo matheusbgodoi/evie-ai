@@ -268,6 +268,37 @@ opening her off screen.
 - Real input from the user pauses an agent session. Only Continuar resumes it, and a pause stops itself after 60 s.
 - Stop cancels the work before any animation and does not wait out the seeing minimum.
 
+### Screen presence visuals
+
+Drawn by `Sources/EvieShell/ScreenPresence/` (S6-shell). Every state has its own
+shape as well as its own colour:
+
+| State | Edge | On the target | Pill |
+|---|---|---|---|
+| Seeing | violet glow, full strength, one 700 ms shutter sweep from top centre | — | dot · "Evie está vendo sua tela" |
+| Observing | the same glow at 35%, static | violet corner brackets with a 6% fill, springing to each target | three travelling dots · "Evie está observando · passo N/25" |
+| Acting | solid amber line | amber frame on the element, amber ghost cursor, a ripple on the press | dot with a ring · "Evie vai clicar em ‘Enviar’" |
+| Typing | solid amber line | amber frame on the field and a "Digitando…" chip | amber dots · "Evie está digitando em Notas" |
+| Paused | gray, half width | — | two bars · "Pausado — você assumiu", Continuar and Parar |
+
+Violet is `#7149E9` / `#9577EE` (light / dark), with `#4F46E5` / `#818CF8` in the
+halo. Amber is `#B45309` / `#FBBF24`, haloed in `#F59E0B`; text on an amber
+button is dark in dark mode, where white on the bright amber fails contrast.
+The pill sits 8 points under the menu bar on the display being worked on, and
+moves to the bottom when the target comes within 24 points of it.
+
+All motion is Core Animation, critically damped springs and the curves
+`cubic-bezier(0.23, 1, 0.32, 1)` (entrances) and `cubic-bezier(0.77, 0, 0.175, 1)`
+(the sweep). Every animation starts from the layer's on-screen value, so a new
+target redirects the reticle or the cursor mid-flight. Exits are faster than
+entrances. Reduce Motion keeps every state and replaces travel with fades: no
+sweep, the reticle cross-fades, the cursor appears at the target, and the
+ripple becomes one flash of the highlight. VoiceOver hears each state change.
+
+`evie-shell --presence-demo` plays every state on the main display without an
+agent; `--reduced-motion` shows the reduced variants and `--with-esc` takes the
+Esc key as a real session does.
+
 ## Prototype sequence
 
 1. Static overlay with real materials and card layout. **Source implemented.**

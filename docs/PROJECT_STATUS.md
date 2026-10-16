@@ -5,13 +5,20 @@ Last updated: 2026-10-16
 ## Evie v2 (in progress)
 
 Evie v2 is specified in `docs/design/2026-10-16-evie-v2-design.md`. On branch
-`v2-presence`, slice **S6-core** is done (2026-10-16). It adds
-`ScreenPresenceMachine` (the indicator's rules) and `ScreenGeometry` (the
-coordinate maths for capture, computer use and the indicator), both pure and
-tested in `EvieCore`. Nothing calls them yet.
+`v2-presence`, slices **S6-core** and **S6-shell** are done (2026-10-16).
+S6-core adds `ScreenPresenceMachine` (the indicator's rules) and
+`ScreenGeometry` (the coordinate maths for capture, computer use and the
+indicator), both pure and tested in `EvieCore`. S6-shell adds the windows and
+layers that draw the indicator (`Sources/EvieShell/ScreenPresence/`), driven by
+the machine, and `evie-shell --presence-demo` to review every state. Nothing
+calls `ScreenPresence` yet.
 
-Next for this area: S4 (screen capture) builds on `ScreenGeometry`. S6-shell
-then draws the panels by driving `ScreenPresenceMachine`.
+Next for this area: S4 (screen capture) shows `.seeing` before each capture and
+refuses to capture unless `mayCapture`; S5 drives observing, `lookAt`,
+`willClick`/`didClick` and typing, and wires `onStop` to `stopEverything` and
+`broker.revoke`. Still open from the S6 manual QA: an external display, a
+full-screen app (the `.screenSaver` level), the `presence-excluded` magenta
+diagnostic (needs S4's capture filter), and WindowServer's share of the cost.
 
 ## Repository hygiene
 

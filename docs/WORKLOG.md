@@ -2519,3 +2519,51 @@ nobody but the owner can fetch it.**
     environment, not a fix. S8b still gates it.
 - Next: S4 builds `ObservedFrame` from `CapturedScreen`. S6-shell drives the
   machine from `ScreenPresence`.
+
+## 2026-10-16 — the screen indicator, drawn
+
+- Slice: S6-shell of `docs/design/2026-10-16-evie-v2-design.md`, branch
+  `v2-presence`.
+- Added `Sources/EvieShell/ScreenPresence/`: `ScreenPresence` (drives
+  `ScreenPresenceMachine` and carries out its effects), `PresencePanel` (one
+  click-through `.screenSaver` panel per display, closed when idle),
+  `GlowLayer`, `ReticleLayer`, `HighlightLayer` (with the typing chip),
+  `GhostCursorLayer`, `PresencePill` (separate non-activating panel, Parar,
+  Continuar, esc keycap), `PresenceEscapeKey`, `PresenceMotion`,
+  `EviePresenceTint` and `ScreenPresenceDemo`.
+- Added to `EvieCore`, test-first (both suites failed to compile before the
+  types existed): `ScreenPresenceLayout` (pill placement, cursor springs and
+  start point, reticle arm length) and `ScreenPresenceCopy` (pill text, label
+  truncation by characters) — `ScreenPresenceLayoutTests` (13) and
+  `ScreenPresenceCopyTests` (7).
+- New flag `evie-shell --presence-demo [segundos] [--reduced-motion]
+  [--with-esc]`. It starts no coordinator and captures nothing, so it asks for
+  no permission.
+  - The first run registered the global Esc. On this Mac, which was in use, an
+    Esc meant for another app stopped the demo mid-way. The demo now leaves Esc
+    alone unless `--with-esc` is given, and the keycap shows only while Esc is
+    actually registered.
+- Visual review: four demo runs (normal ×3, reduced motion ×1) captured with
+  `screencapture` and inspected; the screenshots stay outside the repository.
+  Fixes from the review:
+  - the Parar capsule stretched across the spare width (now `fixedSize`);
+  - single-dot marks sat off-centre in their slot;
+  - the seeing halo read too faintly over a light desktop (shadow opacity
+    1 instead of 0.8, wider halo stroke and sweep band).
+  Confirmed: the sweep band travels the edge, the reticle redirects
+  mid-flight and locks on, the cursor arrives and the ripple plays, the dwell
+  returned `.proceed`, and Parar/stop shows "Parado" then leaves.
+- Measured (release build, Apple M5 Mac17,2, macOS 27.2, 2026-10-16):
+  0.0–0.1% of a core in Evie's process in every held state, and zero visible
+  windows after hiding. WindowServer was not measured. Details are in
+  `docs/MACOS_RUNTIME.md`.
+- Checks:
+  - `swift build` (whole package): passed.
+  - `Scripts/test --filter "ScreenPresenceLayoutTests|ScreenPresenceCopyTests|ScreenPresenceMachineTests|ScreenGeometryTests"`:
+    79/79 passed.
+  - Full `Scripts/test`: 707 tests in 69 suites, all passed (687 before this
+    slice, plus 20).
+- Open: an external display, a full-screen app over the `.screenSaver` level,
+  the `presence-excluded` magenta diagnostic (needs S4's capture filter), and
+  real VoiceOver listening. No caller yet: S4 and S5 wire it, with `onStop`
+  going to `stopEverything` and `broker.revoke`.

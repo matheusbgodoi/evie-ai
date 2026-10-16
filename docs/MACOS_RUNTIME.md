@@ -54,6 +54,26 @@ moved the number, because the cost is the canvas frame setup rather than the
 glyphs. And never resolve `Text` inside a per-frame loop — declare the glyphs
 through `Canvas(symbols:)`, which is worth roughly 6× on its own.
 
+### Screen presence indicator cost — measured 2026-10-16
+
+Release build of `evie-shell --presence-demo 8`, Apple M5 (Mac17,2), macOS 27.2,
+Swift 6.4, one built-in display. `top -l 2 -s 5` on the demo process, second
+sample, 1 s into each 8 s hold:
+
+| State on screen | Process CPU |
+|---|---|
+| Seeing glow, after the sweep | 0.0% |
+| Observing glow and reticle | 0.0% |
+| Acting, after the click | 0.1% |
+| Typing, chip dots looping | 0.0% |
+| Paused | 0.0% |
+
+The animations are interpolated by the render server, so this measures what the
+indicator costs Evie's process, not WindowServer, which was not measured. The
+cursor's travel (under a second) was too short for this method. After the
+indicator hides, the demo reports zero visible windows: panels are closed, not
+made transparent, so idle costs nothing.
+
 ### SwiftUI macros are unavailable without Xcode
 
 `@State` is a macro in the macOS 26+ SDK and its plugin ships only with Xcode, so

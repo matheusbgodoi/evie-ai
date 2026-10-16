@@ -860,6 +860,21 @@ A one-time consent sheet tells the user that injection is mitigated by code poli
 - VoiceOver announces state changes.
 - No setting can disable the indicator while capture or input runs.
 
+**S6-shell as implemented (2026-10-16).** Files in `Sources/EvieShell/ScreenPresence/`, plus `ScreenPresenceLayout` and `ScreenPresenceCopy` in `EvieCore` (tests: `ScreenPresenceLayoutTests`, `ScreenPresenceCopyTests`).
+
+- `ScreenPresence` drives `ScreenPresenceMachine` and carries out its effects; it holds no rule of its own. `show` returns after every participating panel has had two `NSView.displayLink` ticks, or after a 500 ms timeout, in which case `.composited` is never reported and `mayCapture` stays false.
+- Panels exist only while the indicator is up. Hiding closes them, which removes the layer tree; the demo reports `NSApp.windows` visible = 0 afterwards. Screen-parameter changes drop every panel and redraw the glow and pill of a session still on screen; the reticle, highlight and cursor come back with the next step.
+- Additions to the API above:
+  - `typing(field:app:)` replaces `typing(rect:app:)` (same meaning) and also shows the phase.
+  - `lookAt` in an acting or typing phase draws the amber element highlight instead of the reticle, so the AX frame needs no extra parameter on `willClick`.
+  - `resume()` (Continuar) and `onResume`; `brainLocation` ("no PC"/"no Mac") and `stepBudget` ("passo 3/25") are set by the caller, since profiles (S2) are not on this branch.
+  - `init(usesEscapeKey:)`: the plain-Esc Carbon hot key (`PresenceEscapeKey`, own handler and signature) is armed only during agent phases and only shown as a keycap while it is actually registered. Only the demo turns it off.
+  - `ScreenPresence.syntheticEventTag = 0xE71E`; the pill's buttons refuse mouse events carrying it.
+- The ghost cursor is a `CAShapeLayer` arrow anchored at its tip rather than the pre-rendered `cursorarrow` glyph, so the tip is exactly the click point at any scale.
+- The seeing halo uses shadow opacity 1 and a wider halo stroke instead of 0.8: half the shadow falls off the display and the remainder barely read over a light desktop in the review screenshots.
+- `evie-shell --presence-demo [segundos] [--reduced-motion] [--with-esc]` plays seeing → observing with `lookAt` and a mid-flight redirect → acting with the dwell, click and ripple → typing → clipboard notice → paused → Continuar → success → stop on the main display. It captures nothing, posts no input and starts no coordinator, so it asks for no permission. It leaves Esc alone unless `--with-esc`, because it is usually run on a Mac someone is using.
+- Not wired to `AppCoordinator` yet: nothing on this branch captures or acts. S4 and S5 call it; `onStop` goes to `stopEverything` and `broker.revoke` there.
+
 **Diagnostic `presence-excluded`:** draw a 4×4 magenta marker, capture with the exclusion filter, and assert that no magenta pixels appear.
 
 **Tests (EvieCore):**
