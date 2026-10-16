@@ -48,24 +48,34 @@ enum AppleEventsProbe {
     default: return .unknown(status)
     }
   }
-
-  static func isAuthorized(for bundleIdentifier: String) -> Bool {
-    permission(for: bundleIdentifier) == .authorized
-  }
 }
 
-/// The gate on every expectation that only holds once Mail or Calendar has
-/// answered an Apple Event.
+/// The gate on the "runs to the end" expectations: exit 0, which holds once Mail
+/// or Calendar has answered an Apple Event, or when the app is closed.
 ///
-/// On by itself when the grant is already there, so this Mac checks them on every
-/// run; forced on with `EVIE_LIVE_APPLE_EVENTS=1`, which is how to see what they
-/// say in an environment the probe considers unready.
+/// On by itself when the grant is already there or the app is not running, so
+/// this Mac checks them on every run; forced on with
+/// `EVIE_LIVE_APPLE_EVENTS=1`, which is how to see what they say in an
+/// environment the probe considers unready.
 enum LiveAppleEvents {
-  static let comment: Comment = "requires the Apple Events grant (or EVIE_LIVE_APPLE_EVENTS=1)"
+  static let comment: Comment =
+    "requires the Apple Events grant or the app closed (or EVIE_LIVE_APPLE_EVENTS=1)"
+
+  /// A closed app counts: every script asks `application "…" is running` before
+  /// it addresses the app and returns `EVIE_APP_FECHADO` with exit 0, sending no
+  /// event (checked by "every script asks whether its app is running before it
+  /// addresses it"). If the app is opened between the probe and the run without
+  /// a grant, the run waits on the prompt and the test reports the precondition.
+  static func allowRunningToTheEnd(_ permission: AppleEventsProbe.Permission) -> Bool {
+    switch permission {
+    case .authorized, .targetNotRunning: true
+    case .denied, .wouldPrompt, .unknown: false
+    }
+  }
 
   static func areEnabled(for app: EvieAppleApp) -> Bool {
     ProcessInfo.processInfo.environment["EVIE_LIVE_APPLE_EVENTS"] == "1"
-      || AppleEventsProbe.isAuthorized(for: app.bundleIdentifier)
+      || allowRunningToTheEnd(AppleEventsProbe.permission(for: app.bundleIdentifier))
   }
 }
 
@@ -157,6 +167,17 @@ extension Duration {
 struct AppleEventsTestGatingTests {
   /// The probe must answer without a prompt and without a running target. An
   /// identifier nothing on any Mac has is the one target guaranteed to be absent.
+  /// A closed app is not a missing grant for the "runs to the end" tests: every
+  /// script returns `EVIE_APP_FECHADO` before it sends an event, so exit 0 holds.
+  @Test("an authorized or closed app enables the run-to-the-end checks; a refusal does not")
+  func runToTheEndGate() {
+    #expect(LiveAppleEvents.allowRunningToTheEnd(.authorized))
+    #expect(LiveAppleEvents.allowRunningToTheEnd(.targetNotRunning))
+    #expect(!LiveAppleEvents.allowRunningToTheEnd(.denied))
+    #expect(!LiveAppleEvents.allowRunningToTheEnd(.wouldPrompt))
+    #expect(!LiveAppleEvents.allowRunningToTheEnd(.unknown(-1)))
+  }
+
   @Test("the probe reports an absent app instead of asking about it")
   func probeReportsAbsentTarget() {
     #expect(

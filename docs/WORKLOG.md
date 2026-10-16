@@ -1,5 +1,36 @@
 # Work log
 
+## 2026-10-16 — v2: the osascript gates lose no coverage silently
+
+- Completed: review finding #7, test code only (no product change).
+  - `LiveAppleEvents.allowRunningToTheEnd`: a closed app (`procNotFound`) now
+    enables the three "runs to the end" tests, like an authorized one. Verified
+    first in `EvieMailCalendar.swift`: every script asks `application "…" is
+    running` before its first `tell` and returns `EVIE_APP_FECHADO`. Measured
+    2026-10-16 (M5, macOS 27.2) with Calendar closed: the real `createEvent`
+    script printed `EVIE_APP_FECHADO`, exit 0, in under 1 s, and Calendar stayed
+    closed. "a hostile event title runs to the end", skipped on every earlier
+    run of this Mac, now runs.
+  - `runHostile` records an issue when a deadline stops the payload loop
+    (naming how many payloads went unchecked) instead of passing on the
+    payloads that ran. It takes an injectable `runner` for its own tests.
+  - The unused `AppleEventsProbe.isAuthorized` is gone.
+  - These remain opt-in integration tests: they run when the grant is there or
+    the app is closed, or with `EVIE_LIVE_APPLE_EVENTS=1`. A known race: an app
+    opened between the probe and the run, without a grant, waits on the prompt
+    and the test reports the precondition.
+  - Files: `Tests/EvieCoreTests/AppleEventsTestSupport.swift`,
+    `EvieMailCalendarTests.swift`; docs: design doc (S8b note).
+- Tests (written first; the gate test and the deadline test failed against the
+  old code): the gate over all five probe answers; every script checks the app
+  before addressing it; a stub runner that times out on the first of three
+  payloads gives exactly one issue (`withKnownIssue`) and one attempt; one that
+  checks every payload records nothing.
+- Commands: `swift build` (whole package) succeeded with no warnings;
+  `Scripts/test --filter "EvieMailCalendarScriptTests|
+  AppleEventsTestGatingTests"` 20 tests in 2 suites passed, 1 known issue (the
+  deliberate one), none skipped.
+
 ## 2026-10-16 — v2: a settings save keeps what it cannot read
 
 - Completed: review finding #6. `EvieConfigurationStore.saveActiveProfile`

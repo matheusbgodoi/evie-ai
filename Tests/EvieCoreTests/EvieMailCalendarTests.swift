@@ -92,14 +92,63 @@ struct EvieMailCalendarScriptTests {
     #expect(EvieAppleScripts.saveMailDraft.contains("save msg"))
   }
 
+  /// What lets the "runs to the end" tests run with the app closed: each script
+  /// asks `application "…" is running` before it addresses the app, and that
+  /// check sends no Apple Event — measured 2026-10-16 with Calendar closed, the
+  /// creating script printed `EVIE_APP_FECHADO`, exit 0, in under a second, and
+  /// Calendar stayed closed. A script that addressed the app first would launch
+  /// it and could wait on the consent prompt instead.
+  @Test("every script asks whether its app is running before it addresses it")
+  func scriptsCheckTheAppBeforeAddressingIt() throws {
+    for script in EvieAppleScripts.all {
+      let check = try #require(script.range(of: "is running) then return \"EVIE_APP_FECHADO\""))
+      let address = try #require(script.range(of: "tell application"))
+      #expect(check.lowerBound < address.lowerBound, "\(script.prefix(60))")
+    }
+  }
+
+  /// A deadline ends the loop early, because the remaining payloads would each
+  /// wait on the same prompt. Those payloads were never checked, so the
+  /// unconditional test must say so instead of passing.
+  @Test("a hostile run cut short by the deadline is an issue, not a pass")
+  func hostileRunStoppedByTheDeadline() throws {
+    let witness = Witness()
+    var attempted: [String] = []
+
+    withKnownIssue("the stub times out on the first payload") {
+      _ = try Self.runHostile(
+        EvieAppleScripts.searchMail, app: .mail, payloads: ["um", "dois", "três"],
+        witness: witness, arguments: { [$0, "3"] }
+      ) { _, arguments, app in
+        attempted.append(arguments[0])
+        return OsascriptRun(outcome: .timedOut, standardError: "", app: app)
+      }
+    }
+    #expect(attempted == ["um"])
+  }
+
+  @Test("a hostile run that checks every payload records nothing")
+  func hostileRunCheckingEveryPayload() throws {
+    let witness = Witness()
+
+    let runs = try Self.runHostile(
+      EvieAppleScripts.searchMail, app: .mail, payloads: ["um", "dois"],
+      witness: witness, arguments: { [$0, "3"] }
+    ) { _, _, app in
+      OsascriptRun(outcome: .exited(0), standardError: "", app: app)
+    }
+    #expect(runs.map(\.payload) == ["um", "dois"])
+  }
+
   // MARK: - Through the real osascript
   //
   // Each hostile scenario is two tests. The first checks the witness file — the
   // security claim — and runs in every environment. The second checks that the
   // script ran to its end, which only holds once Mail or Calendar has answered an
-  // Apple Event, so it is gated on the grant: on this Mac with the grant it runs
-  // every time, on a runner without one it is reported as skipped instead of as
-  // four failures after 350 s. A trait gates a whole test, which is why the two
+  // Apple Event or when the app is closed, so it is gated on the grant or a
+  // closed app: on this Mac it runs every time, on a runner whose app is open
+  // without a grant it is reported as skipped instead of as four failures after
+  // 350 s. A trait gates a whole test, which is why the two
   // halves cannot share one.
 
   /// The end-to-end version of the same claim, run against the real
@@ -327,22 +376,39 @@ extension EvieMailCalendarScriptTests {
   ///
   /// Stops after a run that hit the deadline: that one was waiting on the consent
   /// prompt, and the next would wait on the same prompt for another ten seconds.
+  /// The payloads left out were never checked, which is recorded as an issue:
+  /// the witness claim holds only for the payloads that ran.
+  ///
+  /// `runner` is the real `osascript` except in the tests of this loop.
   fileprivate static func runHostile(
     _ script: String,
     app: EvieAppleApp,
     payloads: [String],
     witness: Witness,
     sourceLocation: SourceLocation = #_sourceLocation,
-    arguments: (String) -> [String]
+    arguments: (String) -> [String],
+    runner: (String, [String], EvieAppleApp) throws -> OsascriptRun = {
+      try OsascriptRun.run($0, arguments: $1, app: $2)
+    }
   ) throws -> [(payload: String, run: OsascriptRun)] {
     var runs: [(payload: String, run: OsascriptRun)] = []
     for payload in payloads {
-      let run = try OsascriptRun.run(script, arguments: arguments(payload), app: app)
+      let run = try runner(script, arguments(payload), app)
       #expect(!witness.exists, "o payload executou: \(payload)", sourceLocation: sourceLocation)
       runs.append((payload, run))
       if run.outcome == .timedOut {
         break
       }
+    }
+    if runs.count < payloads.count {
+      Issue.record(
+        Comment(
+          rawValue: "o osascript não terminou em 10 s (provavelmente a pergunta de Automação "
+            + "do macOS para o \(app.displayName)); \(payloads.count - runs.count) de "
+            + "\(payloads.count) payloads ficaram sem verificar"
+        ),
+        sourceLocation: sourceLocation
+      )
     }
     return runs
   }
