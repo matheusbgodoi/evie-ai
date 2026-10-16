@@ -1006,7 +1006,10 @@ five permission rows are in, recorded in `docs/MACOS_RUNTIME.md` § "Signing,
 install and recovery". Still open: the **PC key** and **Brain** rows (hook
 `TODO(S7-brain-rows)` in `PermissionGuideViewModel.standardItems`), waiting on
 S2d; and the manual QA above. `identity` also needed `/usr/bin/openssl` by
-absolute path (measured: a Homebrew OpenSSL 3 p12 fails `security import`).
+absolute path (measured: a Homebrew OpenSSL 3 p12 fails `security import`). Its
+scratch directory (an unencrypted key and the p12) is removed by an `EXIT` trap
+right after `mktemp`, so a failed step cannot leave the key behind (review
+finding #8, 2026-10-16; `EvieAppIdentityScriptTests`).
 
 **After the merge into `v2` (2026-10-16):** the config seeding is S2a's
 (`configure` writes the v2 built-ins plus the served Gemma as `custom`; tested in

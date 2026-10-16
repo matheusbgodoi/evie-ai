@@ -1,5 +1,27 @@
 # Work log
 
+## 2026-10-16 — v2: `evie-app identity` cleans up its key on failure
+
+- Completed: review finding #8. `identity` wrote `dev.key` (unencrypted,
+  `-nodes`) and `dev.p12` into a `mktemp -d` directory that only its last
+  `rm -rf` removed; under `set -e` a failed `security import` or a cancelled
+  `add-trusted-cert` prompt left both on disk. `trap 'rm -rf "${work_dir}"' EXIT`
+  now follows the `mktemp`. Checked first in a scratch zsh script: an EXIT trap
+  set in a function runs when the function ends, by return or by errexit, and
+  the function-local variable is still set when it runs.
+  - Files: `Scripts/evie-app`; new `Tests/EvieCoreTests/EvieAppIdentityScriptTests.swift`;
+    docs: `docs/MACOS_RUNTIME.md`, design doc (S7 note), CHANGELOG (Security).
+- Tests (written first; the import and trust cases failed before the trap):
+  new suite "Evie app signing identity", one test over three cases (import
+  fails, trust fails, both pass). It runs the real script and the real
+  `/usr/bin/openssl` with stand-ins for `security` (logs its calls, lists no
+  identity) and `mktemp` (a directory inside the sandbox), and `HOME` set to
+  the sandbox, so no keychain is touched. `mktemp -d` on this Mac ignored
+  `TMPDIR` (measured 2026-10-16, macOS 27.2), which is why it is stubbed.
+- Commands: `zsh -n Scripts/evie-app`; `swift build` (whole package) succeeded
+  with no warnings; `Scripts/test --filter EvieAppIdentityScriptTests` 1 test (3
+  cases) passed.
+
 ## 2026-10-16 — v2: the osascript gates lose no coverage silently
 
 - Completed: review finding #7, test code only (no product change).

@@ -217,7 +217,11 @@ commands through `/usr/bin/openssl` (LibreSSL 3.3.6) import cleanly. The script
 now calls `/usr/bin/openssl` by absolute path. `identity` is still needed — it is
 the only way to make the certificate on a new Mac or after losing this one — and
 it now prints the new SHA-1 and says that the pin has to be changed, and
-committed, before `build` will use it.
+committed, before `build` will use it. The scratch directory that holds the
+unencrypted private key and the p12 is removed by an `EXIT` trap, so a failed
+`security import` or a cancelled trust prompt no longer leaves the key under
+`/var/folders` (fixed 2026-10-16; `EvieAppIdentityScriptTests` runs the step with
+a stand-in `security`).
 
 **Risk: recreating the certificate invalidates every grant.** TCC attaches each
 permission to the designated requirement, and the requirement names the

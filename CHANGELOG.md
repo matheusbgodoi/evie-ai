@@ -43,6 +43,11 @@ All notable changes to Evie are documented here. Dates use `YYYY-MM-DD`.
 
 ### Security
 
+- **`Scripts/evie-app identity` no longer leaves the signing key behind when a
+  step fails.** The unencrypted private key and the p12 were written to a
+  scratch directory that only the last line removed, so a failed
+  `security import` or a cancelled trust prompt left them under `/var/folders`.
+  An `EXIT` trap now removes the directory however the step ends.
 - **The screen presence indicator keeps its promise in six more cases.** From the
   2026-10-16 reviews of S6, before anything captures or acts:
   - a composite report now names the render it is for, so the two ticks of a

@@ -248,6 +248,11 @@ function identity() {
 
   local work_dir
   work_dir=$(mktemp -d)
+  # The directory holds an unencrypted private key and its p12. Under `set -e` a
+  # failed import, or a trust prompt the person cancels, ends the script before
+  # the `rm -rf` below; in zsh an EXIT trap set in a function runs when the
+  # function ends, by return or by error, so the key never outlives this step.
+  trap 'rm -rf "${work_dir}"' EXIT
   print "Creating a self-signed code-signing certificate…"
 
   # Errors are not discarded here, and that is the point. This step used to send
