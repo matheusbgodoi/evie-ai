@@ -96,6 +96,9 @@ public protocol ScreenCapturing: AnyObject {
 /// The "Evie está vendo sua tela" glow, as capture needs it.
 @MainActor
 public protocol ScreenSeeingIndicator: AnyObject {
+  /// Whether an agent session is paused because the person took over. The
+  /// glow cannot be shown then, and taking it down is a stop.
+  var isPaused: Bool { get }
   /// Returns once the glow is on screen, or has failed to get there.
   func showSeeing(on display: CGDirectDisplayID) async
   /// Whether the glow is composited on `display` now.
@@ -142,6 +145,9 @@ public enum EvieScreenLookError: Error, Equatable, Sendable {
   case noDisplay
   /// The glow did not reach the screen, so nothing was captured.
   case indicatorNotShown
+  /// A session is paused while the person uses the Mac; nothing was shown or
+  /// captured.
+  case presencePaused
   case captureFailed(String)
 }
 
@@ -154,6 +160,9 @@ extension EvieScreenLookError: LocalizedError {
       "Não encontrei a tela ou a janela para olhar."
     case .indicatorNotShown:
       "Não consegui mostrar o aviso de que estou olhando a tela, então não olhei."
+    case .presencePaused:
+      "A Evie está pausada enquanto você usa o Mac. Toque em Continuar ou Parar "
+        + "e peça de novo para eu olhar a tela."
     case .captureFailed(let reason):
       "Não consegui capturar a tela: \(reason)"
     }
@@ -163,6 +172,11 @@ extension EvieScreenLookError: LocalizedError {
 /// One look at the screen, in the order the indicator promises: permission,
 /// then the glow on the display about to be captured, then the capture, then
 /// the glow comes down. No glow, no capture.
+///
+/// Not during a pause: the presence refuses to draw while the person holds the
+/// Mac, and taking down a glow that never came would end — and cancel — the
+/// paused session behind it. So a paused presence refuses the look first,
+/// before the permission prompt, the glow or the capture.
 @MainActor
 public struct EvieScreenLook {
   public enum Request: Sendable, Equatable {
@@ -187,6 +201,9 @@ public struct EvieScreenLook {
   }
 
   public func look(_ request: Request, maxLongEdge: Int) async throws -> CapturedScreen {
+    guard !indicator.isPaused else {
+      throw EvieScreenLookError.presencePaused
+    }
     try ensurePermission()
 
     let target: ScreenCapturePlan.Target

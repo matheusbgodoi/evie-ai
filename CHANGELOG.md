@@ -6,6 +6,11 @@ All notable changes to Evie are documented here. Dates use `YYYY-MM-DD`.
 
 ### Changed
 
+- **Asking Evie to look while a session is paused no longer ends it.** A look
+  while the person holds the Mac (a paused session, from S5 on) is refused at
+  once with "A Evie está pausada enquanto você usa o Mac. Toque em Continuar ou
+  Parar e peça de novo para eu olhar a tela." It used to fail to show the glow
+  and, taking it down, stop and cancel the paused session.
 - **Security: a picture in the conversation is never sent with tools.** After
   a look at the screen, the next questions keep the picture so the PC answers
   fast; with folders, the web or Mail switched on they used to go to the

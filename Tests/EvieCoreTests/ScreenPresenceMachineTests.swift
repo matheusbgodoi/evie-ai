@@ -341,6 +341,19 @@ struct ScreenPresenceMachineTests {
     #expect(!machine.mayCapture)
   }
 
+  @Test("isPaused is true only between a takeover and Continuar or a stop")
+  func isPausedFollowsThePause() {
+    var machine = machineShowing(.observing(step: 1))
+    #expect(!machine.isPaused)
+    _ = machine.handle(.takeover, at: at(10))
+    #expect(machine.isPaused)
+    _ = machine.handle(.resume, at: at(20))
+    #expect(!machine.isPaused)
+    _ = machine.handle(.takeover, at: at(30))
+    _ = machine.handle(.stop, at: at(40))
+    #expect(!machine.isPaused)
+  }
+
   @Test("real input while observing or typing pauses the session")
   func takeoverPausesAgentPhases() {
     var observing = machineShowing(.observing(step: 2))

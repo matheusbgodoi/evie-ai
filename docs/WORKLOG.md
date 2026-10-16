@@ -1,5 +1,24 @@
 # Work log
 
+## 2026-10-16 — v2 fix: a look during a pause is refused before the glow
+
+- Completed: second v2 review, finding #10 (latent until S5 sessions exist).
+  While paused, `ScreenPresenceMachine` refuses `show` and treats `hide` as
+  `stop`, so a look got no glow, failed with `indicatorNotShown`, and its
+  `endSeeing` stopped the paused session with `cancelWork`.
+  - `ScreenPresenceMachine.isPaused`; `ScreenSeeingIndicator.isPaused`
+    (`ScreenPresence.isPaused` in the shell); `EvieScreenLookError.presencePaused`;
+    `EvieScreenLook.look` checks it first, before the permission prompt;
+    `ScreenPresence.endSeeing` (in `ScreenPermission.swift`) never hides while
+    paused.
+- Tests: "Screen look" (2: refused with nothing shown, prompted or captured; a
+  `MachineIndicator` over the real machine stays paused and emits no
+  `cancelWork`); "Screen presence machine" (1: `isPaused` from takeover to
+  Continuar or a stop).
+- Checks: `swift build` with no warnings; `Scripts/test --filter
+  "ScreenLookTests|ScreenPresenceMachineTests"`: 65 tests passed.
+- Next: the keychain fix in this lane.
+
 ## 2026-10-16 — v2 fix: a picture in the request keeps tools away
 
 - Completed: the queued security finding on S4 (pending #5). A capture

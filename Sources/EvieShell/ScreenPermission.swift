@@ -44,7 +44,13 @@ extension ScreenPresence: ScreenSeeingIndicator {
     await show(.seeing(displays: [display]))
   }
 
+  /// A paused session is not a look's to end: hiding then is a stop, which
+  /// would cancel the session's work. `EvieScreenLook` refuses a look while
+  /// paused; this keeps the end of a glow from ever being that stop.
   func endSeeing(succeeded: Bool) {
+    guard !isPaused else {
+      return
+    }
     hide(outcome: succeeded ? .success : .failed)
   }
 }

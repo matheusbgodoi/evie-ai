@@ -60,6 +60,7 @@ private final class StubIndicator: ScreenSeeingIndicator {
   let journal: Journal
   /// Whether the glow manages to be composited on the display it is shown on.
   var composites = true
+  var isPaused = false
   private var shownOn: CGDirectDisplayID?
 
   init(journal: Journal) {
@@ -78,6 +79,42 @@ private final class StubIndicator: ScreenSeeingIndicator {
   func endSeeing(succeeded: Bool) {
     journal.entries.append(succeeded ? "hide ok" : "hide failed")
     shownOn = nil
+  }
+}
+
+/// The real presence machine behind the indicator protocol, the way the
+/// shell's `ScreenPresence` drives it, keeping every effect it asked for.
+@MainActor
+private final class MachineIndicator: ScreenSeeingIndicator {
+  private(set) var machine = ScreenPresenceMachine()
+  private(set) var effects: [ScreenPresenceMachine.Effect] = []
+  private let now = ContinuousClock.now
+
+  var isPaused: Bool { machine.isPaused }
+
+  /// An agent session observing, composited, that the user then took over.
+  func pauseAnAgentSession() {
+    let rendered = machine.handle(.show(.observing(step: 2)), at: now)
+    for case .render(_, let id) in rendered {
+      _ = machine.handle(.composited(id: id), at: now)
+    }
+    _ = machine.handle(.takeover, at: now)
+  }
+
+  func showSeeing(on display: CGDirectDisplayID) async {
+    let rendered = machine.handle(.show(.seeing), at: now)
+    effects += rendered
+    for case .render(_, let id) in rendered {
+      effects += machine.handle(.composited(id: id), at: now)
+    }
+  }
+
+  func mayCapture(display: CGDirectDisplayID) -> Bool {
+    machine.mayCapture
+  }
+
+  func endSeeing(succeeded: Bool) {
+    effects += machine.handle(.hide, at: now)
   }
 }
 
@@ -213,6 +250,40 @@ struct ScreenLookTests {
       _ = try await look(permission: permission)
     }
     #expect(journal.entries.isEmpty)
+  }
+
+  @Test("a look while a session is paused is refused before the glow, the prompt or a capture")
+  func pausedPresenceRefusesALook() async {
+    let indicator = StubIndicator(journal: journal)
+    indicator.isPaused = true
+    let permission = StubPermission(journal: journal, granted: false)
+
+    await #expect(throws: EvieScreenLookError.presencePaused) {
+      _ = try await look(indicator: indicator, permission: permission)
+    }
+    #expect(journal.entries.isEmpty)
+  }
+
+  @Test("a refused look never stops the paused session behind it")
+  func pausedSessionSurvivesALook() async {
+    let indicator = MachineIndicator()
+    indicator.pauseAnAgentSession()
+
+    await #expect(throws: EvieScreenLookError.presencePaused) {
+      _ = try await EvieScreenLook(
+        capturer: StubCapturer(journal: journal),
+        indicator: indicator,
+        permission: StubPermission(journal: journal, granted: true)
+      ).look(.screenUnderPointer, maxLongEdge: 1_024)
+    }
+    #expect(!indicator.effects.contains(.cancelWork))
+    #expect(indicator.isPaused)
+    #expect(!journal.entries.contains("capture"))
+    #expect(
+      EvieScreenLookError.presencePaused.errorDescription
+        == "A Evie está pausada enquanto você usa o Mac. Toque em Continuar ou Parar "
+        + "e peça de novo para eu olhar a tela."
+    )
   }
 
   @Test("the access decision follows the grant and whether it was asked for")

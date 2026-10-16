@@ -111,6 +111,11 @@ final class ScreenPresence {
   /// observing glow is composited on it. Capture code asks about the display
   /// it is about to capture, never about the indicator in general — a glow on
   /// one display says nothing to the user about another.
+  /// Whether an agent session is paused for the user (Continuar or Parar).
+  var isPaused: Bool {
+    machine.isPaused
+  }
+
   func mayCapture(display: CGDirectDisplayID) -> Bool {
     // Composited is all or nothing across the phase's displays, so a capturing
     // phase that is visible is on every one of `observedDisplays`.

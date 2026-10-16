@@ -156,6 +156,12 @@ public struct ScreenPresenceMachine: Sendable {
     self.pauseAutoStop = pauseAutoStop
   }
 
+  /// Whether an agent session is paused for the user: only Continuar, Parar
+  /// or the auto-stop leave it, and a `hide` now is a stop.
+  public var isPaused: Bool {
+    if case .paused = state { true } else { false }
+  }
+
   /// Whether a screenshot may be taken now: only once a phase that says so is
   /// on screen. "Asked to show" is not enough — that is the gap in which a
   /// capture would happen before the user could know about it.
