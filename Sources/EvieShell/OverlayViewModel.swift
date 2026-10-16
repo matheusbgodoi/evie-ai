@@ -219,6 +219,26 @@ final class OverlayViewModel: ObservableObject {
   var pendingEvents: [UUID: EvieCalendarEventProposal] = [:]
   var pendingMail: [UUID: EvieMailProposal] = [:]
   let visionDescriber = EvieVisionDescriber()
+  /// Looks at the screen: permission, the presence glow, the capture. Set by
+  /// the coordinator; `nil` in a build that cannot capture.
+  var screenLook: EvieScreenLook?
+  /// Opens Privacy & Security › Screen & System Audio Recording.
+  var openScreenRecordingSettings: (@MainActor () -> Void)?
+  /// A capture taken with the shortcut, waiting for the question it belongs
+  /// to. Memory only, and dropped when the overlay closes or the conversation
+  /// changes.
+  var pendingScreen: CapturedScreen?
+  var screenLookTask: Task<Void, Never>?
+  /// The exact messages the newest turn with a picture sent, replayed on the
+  /// next turns so the PC's cache keeps the picture (`EvieSentPictureTurn`).
+  /// The only place a picture outlives its turn, and only in memory.
+  var sentPictureTurn: EvieSentPictureTurn?
+  /// What the turn in flight sent with its picture, kept once it is answered.
+  var sendingPictureTurn: EvieSentPictureTurn?
+  /// The recognised text and description of the last capture, for a brain
+  /// that cannot see it; kept so a retry on another brain does not read the
+  /// screen twice.
+  var screenFallbackText: (imageID: UUID, text: String?)?
   /// Ceiling on how much document text one turn may carry, so a long PDF cannot
   /// silently push the actual question out of the model's context.
   static let attachmentCharacterLimit = 20_000
@@ -310,6 +330,7 @@ final class OverlayViewModel: ObservableObject {
     attachmentSlots = []
     // Belongs to the conversation being left, which already holds it on disk.
     conversationMedia = []
+    forgetScreenPictures()
     visualState = .ready
     primaryText = "Nova conversa"
     secondaryText = "O histórico anterior continua salvo somente neste Mac"
@@ -338,6 +359,7 @@ final class OverlayViewModel: ObservableObject {
       // Carried forward, or saving the reopened conversation would drop every
       // file it had — the record is rewritten whole on each save.
       conversationMedia = stored.media
+      forgetScreenPictures()
       conversation =
         [ChatMessage(role: .system, content: systemPrompt)]
         + stored.messages
@@ -481,7 +503,9 @@ final class OverlayViewModel: ObservableObject {
             EvieDocumentAttachment(
               name: slot.url.lastPathComponent,
               pages: pages,
-              visualDescription: seen
+              visualDescription: seen,
+              imagePart: Self.isImage(slot.url)
+                ? Self.imagePart(at: slot.url, maxLongEdge: pictureLongEdge) : nil
             )
           )
         )
@@ -496,6 +520,27 @@ final class OverlayViewModel: ObservableObject {
         )
       }
     }
+  }
+
+  /// The longer edge a picture is cut to for the brain this conversation's
+  /// next turn most likely runs on (`ScreenCapturePlan.longEdge(for:)`).
+  var pictureLongEdge: Int {
+    ScreenCapturePlan.longEdge(
+      for: brainResolver.expectedProfile(for: activeConversationID).location
+    )
+  }
+
+  /// An attached picture as the model is sent it: read from the file once,
+  /// downscaled, re-encoded as JPEG in memory without its metadata.
+  static func imagePart(at url: URL, maxLongEdge: Int) -> EvieImagePart? {
+    guard let data = try? Data(contentsOf: url) else {
+      return nil
+    }
+    return try? ScreenshotEncoding.imagePart(
+      fromImageData: data,
+      maxLongEdge: maxLongEdge,
+      origin: .attachment
+    )
   }
 
   /// A small picture of a file, for the chip.
@@ -776,6 +821,10 @@ final class OverlayViewModel: ObservableObject {
     }
 
     isQuickTextEntryPresented = false
+    // A capture nobody asked about goes with the overlay.
+    pendingScreen = nil
+    screenLookTask?.cancel()
+    screenLookTask = nil
     presentReadyState()
     onDismissRequested?()
   }
@@ -795,6 +844,10 @@ final class OverlayViewModel: ObservableObject {
     if prompt.isEmpty, attachmentSlots.contains(where: { $0.prepared != nil || $0.isPreparing }) {
       prompt = "Dá uma olhada nisso."
     }
+    // The same for a capture taken with the shortcut: it asks its own question.
+    if prompt.isEmpty, pendingScreen != nil {
+      prompt = "O que tem na minha tela?"
+    }
     guard !prompt.isEmpty, !hasActiveRequest else {
       NSSound.beep()
       return
@@ -811,7 +864,25 @@ final class OverlayViewModel: ObservableObject {
     }
 
     let requestID = UUID()
-    let userMessage = ChatMessage(role: .user, content: prompt)
+    // A look at the screen: a capture taken with the shortcut, or a question
+    // that asks for one in his own words. A command never looks, and leaves a
+    // held capture for the next question.
+    let isCommand =
+      EvieVaultSearchCommand.query(in: prompt) != nil
+      || EvieWebCommand.question(in: prompt) != nil
+      || EviePlanCommand.question(in: prompt) != nil
+    let looksAtScreen = !isCommand && (pendingScreen != nil || EvieScreenIntent.isPresent(in: prompt))
+    let heldScreen = looksAtScreen ? pendingScreen : nil
+    if looksAtScreen {
+      pendingScreen = nil
+    }
+    let looksAtWindow = heldScreen == nil && EvieScreenIntent.asksForWindow(in: prompt)
+    // Saved with "📷 captura da tela" when the screen goes with it; the picture
+    // itself is never saved.
+    let userMessage = ChatMessage(
+      role: .user,
+      content: EvieTurnPictures.storedQuestion(prompt, showsScreen: looksAtScreen)
+    )
     // The card is keyed on the question, not on a fresh identifier, because the
     // question is the one thing both this path and the restoring path know.
     // They used to disagree — a live card got a new UUID while a restored one
@@ -819,10 +890,11 @@ final class OverlayViewModel: ObservableObject {
     // finished. That put "Ver 1 mensagem anterior" on screen after every answer,
     // and pressing it added a second copy of the turn just given.
     let artifactID = userMessage.id
-    let evidence = takeAttachmentEvidence(for: userMessage.id)
+    let attachments = takeAttachments(for: userMessage.id)
     // What the person attached is the subject of the question. Looking anything
-    // up is slower and answers a different question.
-    let carriesAttachment = evidence != nil
+    // up is slower and answers a different question. The screen is the same.
+    let carriesAttachment =
+      attachments.evidence != nil || !attachments.pictures.isEmpty || looksAtScreen
     // The prompt is built later, once the turn knows which brain it runs on:
     // the budget, the persona, the tools and the pictures all depend on it.
     let conversationID = activeConversationID
@@ -950,10 +1022,12 @@ final class OverlayViewModel: ObservableObject {
       return
     }
 
-    let turn = PreparedTurn(
+    let prepared = PreparedTurn(
       requestID: requestID,
       userMessage: userMessage,
-      evidence: evidence,
+      evidence: attachments.evidence,
+      pictures: attachments.pictures,
+      screen: heldScreen,
       carriesAttachment: carriesAttachment,
       spoken: spoken,
       roots: roots,
@@ -963,7 +1037,22 @@ final class OverlayViewModel: ObservableObject {
       autoApprovesChanges: changePolicy.autoApproves && heAskedForAChange
     )
     requestTask = Task { @MainActor [weak self] in
-      await self?.runTurn(conversation: conversationID, requestID: requestID) { [weak self] brain in
+      guard let self else { return }
+      var turn = prepared
+      // Captured now, before the brain is resolved: the screen as it was when
+      // he asked, not after a probe or a wake.
+      if looksAtScreen, turn.screen == nil {
+        guard
+          let screen = await lookForTurn(
+            looksAtWindow ? .frontWindow : .screenUnderPointer,
+            requestID: requestID
+          )
+        else {
+          return
+        }
+        turn.screen = screen
+      }
+      await runTurn(conversation: conversationID, requestID: requestID) { [weak self] brain in
         try await self?.answer(turn, on: brain)
       }
     }
@@ -977,6 +1066,8 @@ final class OverlayViewModel: ObservableObject {
     activeRequestID = nil
     requestTask?.cancel()
     requestTask = nil
+    screenLookTask?.cancel()
+    screenLookTask = nil
     interactionState.apply(
       .failed(
         EvieFailure(
@@ -1027,6 +1118,11 @@ final class OverlayViewModel: ObservableObject {
 
   func performArtifactAction(_ id: UUID, action: ArtifactActionModel) {
     guard let artifact = artifacts.first(where: { $0.id == id }) else {
+      return
+    }
+
+    if action.id == "screen-settings" {
+      openScreenRecordingSettings?()
       return
     }
 

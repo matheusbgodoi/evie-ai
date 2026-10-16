@@ -230,6 +230,7 @@ extension OverlayViewModel {
         activeConversationTitle = Self.title(for: userMessage.content)
       }
       conversation.append(userMessage)
+      keepSentPictures(of: userMessage)
       conversation.append(message)
       persistConversation()
       visualState = .completed
@@ -651,6 +652,7 @@ extension OverlayViewModel {
       activeConversationTitle = Self.title(for: userMessage.content)
     }
     conversation.append(userMessage)
+    keepSentPictures(of: userMessage)
     conversation.append(contentsOf: outcome.appended)
     persistConversation()
 
@@ -695,7 +697,12 @@ extension OverlayViewModel {
     finishFailure(failure, requestID: requestID)
   }
 
-  func finishFailure(_ failure: EvieFailure, requestID: UUID) {
+  func finishFailure(
+    _ failure: EvieFailure,
+    requestID: UUID,
+    title: String = "Não consegui responder agora",
+    actions: [ArtifactActionModel] = []
+  ) {
     guard activeRequestID == requestID else {
       return
     }
@@ -711,19 +718,21 @@ extension OverlayViewModel {
       artifacts[index] = ArtifactCardModel(
         id: artifactID,
         kind: .error,
-        title: "Não consegui responder agora",
+        title: title,
         summary: failure.message,
         detail: failure.recoverySuggestion,
-        isExpanded: true
+        isExpanded: true,
+        actions: actions
       )
     } else {
       artifacts.append(
         ArtifactCardModel(
           kind: .error,
-          title: "Não consegui responder agora",
+          title: title,
           summary: failure.message,
           detail: failure.recoverySuggestion,
-            isExpanded: true
+          isExpanded: true,
+          actions: actions
         )
       )
     }
@@ -829,13 +838,15 @@ extension OverlayViewModel {
   func conversationPrefix(
     adding userMessage: ChatMessage,
     evidence: ChatMessage? = nil,
+    pictures: EvieTurnPictures = EvieTurnPictures(),
     plan: EvieTurnPlan
   ) -> [ChatMessage] {
     // Rebuilt every turn, which costs a string: the date in it may have turned
     // over, and the brain may differ from the last turn's. Within a
     // conversation both stay put, so the first bytes — and the server's cached
-    // prefix — do too.
-    var history = conversation
+    // prefix — do too. The newest turn with a picture is replayed as it was
+    // sent, so the cache reaches past its picture.
+    var history = sentPictureTurn?.replay(conversation) ?? conversation
     let persona = ChatMessage(
       role: .system,
       content: Self.systemPrompt(
@@ -870,8 +881,30 @@ extension OverlayViewModel {
     )
 
     // Evidence goes immediately before the question so the model reads the
-    // document, then what is being asked about it.
-    return plan.prefix(history, then: [guidance, evidence, asked].compactMap { $0 })
+    // document, then what is being asked about it. Pictures ride on the
+    // question itself, after a note that their text is data; a brain that
+    // cannot see gets their text, fenced, just before it.
+    let tail =
+      [guidance, evidence].compactMap { $0 } + plan.pictureTail(asking: asked, with: pictures)
+    let messages = plan.prefix(history, then: tail)
+    if !pictures.isEmpty, plan.profile.capabilities.vision {
+      sendingPictureTurn = EvieSentPictureTurn(
+        questionID: userMessage.id,
+        sent: Array(messages.suffix(tail.count))
+      )
+    }
+    return messages
+  }
+
+  /// Once a turn with a picture has its answer, what it sent becomes the turn
+  /// replayed from now on. A turn that failed or was cancelled leaves the
+  /// earlier one in place.
+  func keepSentPictures(of question: ChatMessage) {
+    guard let sending = sendingPictureTurn, sending.questionID == question.id else {
+      return
+    }
+    sentPictureTurn = sending
+    sendingPictureTurn = nil
   }
 
   /// Consumes the pending attachments into one message, bounded so a long
@@ -882,14 +915,20 @@ extension OverlayViewModel {
       .contains(url.pathExtension.lowercased())
   }
 
-  func takeAttachmentEvidence(for messageID: UUID? = nil) -> ChatMessage? {
+  /// Consumes the pending attachments: documents become one evidence message,
+  /// bounded so a long PDF cannot crowd out the question itself; pictures
+  /// become `EvieTurnPictures`, sent as images to a brain that sees and as
+  /// their text and description to one that does not.
+  func takeAttachments(for messageID: UUID? = nil) -> (
+    evidence: ChatMessage?, pictures: EvieTurnPictures
+  ) {
     // Only what finished preparing. A slot still being read, or one that failed,
     // is not evidence — and the send path waits for the first kind before
     // getting here, so arriving with one is a genuine failure rather than a race.
     let attachments = attachmentSlots.compactMap(\.prepared)
     guard !attachments.isEmpty else {
       attachmentSlots = []
-      return nil
+      return (nil, EvieTurnPictures())
     }
     // Kept before the file is forgotten. What reaches the model is the text
     // pulled out of a picture; a conversation that says "a imagem mostra uma
@@ -904,36 +943,40 @@ extension OverlayViewModel {
         conversationMedia.append(stored)
       }
     }
-    let pages = attachments.flatMap(\.pages)
-    // What was seen goes first, because it says what kind of thing this is
-    // before the recognised text arrives. A wall of OCR with no frame around it
-    // is how a chart becomes a list of stray numbers.
-    let seen = attachments.compactMap { attachment -> String? in
-      guard let description = attachment.visualDescription else {
-        return nil
-      }
-      return "\(attachment.name): \(description)"
-    }
     attachmentSlots = []
 
-    var evidence = ""
-    if !seen.isEmpty {
-      evidence += """
-        <<<O QUE A EVIE VIU NA IMAGEM — descrição, não texto extraído>>>
-        \(seen.joined(separator: "\n"))
-        <<<FIM DA DESCRIÇÃO>>>
-
-
-        """
+    let pictured = attachments.filter { $0.imagePart != nil }
+    let documents = attachments.filter { $0.imagePart == nil }
+    let pictures = EvieTurnPictures(
+      images: pictured.compactMap(\.imagePart),
+      textFallback: Self.bounded(Self.evidence(of: pictured))
+    )
+    let evidence = Self.bounded(Self.evidence(of: documents)).map {
+      ChatMessage(role: .user, content: $0)
     }
-    evidence += pages.promptEvidence
-    if evidence.count > Self.attachmentCharacterLimit {
-      let cut = evidence.index(evidence.startIndex, offsetBy: Self.attachmentCharacterLimit)
-      evidence = String(evidence[..<cut])
-      evidence +=
-        "\n<<<CORTADO AQUI — o documento é maior do que cabe nesta conversa>>>"
+    return (evidence, pictures)
+  }
+
+  /// What was seen first, because it says what kind of thing this is before
+  /// the recognised text arrives.
+  static func evidence(of attachments: [EvieDocumentAttachment]) -> String? {
+    EvieTurnPictures.fallbackEvidence(
+      seen: attachments.compactMap { attachment in
+        attachment.visualDescription.map { (name: attachment.name, description: $0) }
+      },
+      read: attachments.flatMap(\.pages)
+    )
+  }
+
+  /// Cut at `attachmentCharacterLimit`, with a visible marker.
+  static func bounded(_ evidence: String?) -> String? {
+    guard var evidence, evidence.count > attachmentCharacterLimit else {
+      return evidence
     }
-    return ChatMessage(role: .user, content: evidence)
+    let cut = evidence.index(evidence.startIndex, offsetBy: attachmentCharacterLimit)
+    evidence = String(evidence[..<cut])
+    evidence += "\n<<<CORTADO AQUI — o documento é maior do que cabe nesta conversa>>>"
+    return evidence
   }
 }
 
@@ -945,6 +988,11 @@ struct PreparedTurn {
   let requestID: UUID
   let userMessage: ChatMessage
   let evidence: ChatMessage?
+  /// Pasted or attached pictures.
+  let pictures: EvieTurnPictures
+  /// The capture of the screen this question is about, taken before the turn
+  /// resolves its brain.
+  var screen: CapturedScreen?
   let carriesAttachment: Bool
   let spoken: Bool
   let roots: [EvieFileRoot]
@@ -994,17 +1042,27 @@ extension OverlayViewModel {
   /// An ordinary question on `brain`, built from scratch for it.
   func answer(_ turn: PreparedTurn, on brain: ResolvedBrain) async throws {
     let plan = EvieTurnPlan(brain)
+    let looking = turn.screen != nil
+    let pictures = await pictures(for: turn, on: plan)
+    try Task.checkCancellation()
     let requestMessages = conversationPrefix(
       adding: turn.userMessage,
       evidence: turn.evidence,
+      pictures: pictures,
       plan: plan
     )
     let requestID = turn.requestID
+    if looking, plan.profile.capabilities.vision {
+      // Most of the wait is the picture being read before the first word.
+      secondaryText = EvieScreenLookCopy.analysing(on: plan.profile.location)
+      onLayoutInvalidated?()
+    }
 
     switch plan.route(
       hasRoots: !turn.roots.isEmpty,
       searchesTheWeb: turn.web != nil,
-      readsMailAndCalendar: turn.apps != nil
+      readsMailAndCalendar: turn.apps != nil,
+      looksAtScreen: looking
     ) {
     case .directStream:
       // Pinned at submit time, like the rest of the turn: a spoken question
@@ -1012,7 +1070,7 @@ extension OverlayViewModel {
       for try await event in brain.client.stream(
         messages: requestMessages,
         tools: [],
-        options: plan.options(spoken: turn.spoken)
+        options: plan.options(spoken: turn.spoken, looking: looking)
       ) {
         try Task.checkCancellation()
         receive(event, requestID: requestID, userMessage: turn.userMessage)

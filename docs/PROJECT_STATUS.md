@@ -10,17 +10,28 @@ merged into `v2` the same day). S6-core adds `ScreenPresenceMachine` (the indica
 `ScreenGeometry` (the coordinate maths for capture, computer use and the
 indicator), both pure and tested in `EvieCore`. S6-shell adds the windows and
 layers that draw the indicator (`Sources/EvieShell/ScreenPresence/`), driven by
-the machine, and `evie-shell --presence-demo` to review every state. Nothing
-calls `ScreenPresence` yet.
+the machine, and `evie-shell --presence-demo` to review every state. S4 (screen
+perception, 2026-10-16) is the first caller: every look shows `.seeing` and
+captures only once `mayCapture(display:)` holds for the display captured.
 
-Next for this area: S4 (screen capture) shows `.seeing` before each capture and
-refuses to capture unless `mayCapture(display:)` for the display it captures; S5
+**S4 is done (2026-10-16):** "olha a tela" in his own words, or ⌥⇧O, captures
+the screen under the pointer (or the front window for "janela") with Evie's
+windows left out, in memory only, cut to 1024 px for the PC and 1280 for the Mac
+— chosen by measurement on a synthetic screen: qwen-daily reads 14 pt text at
+1024 (first token 26.0–26.2 s) but not at 768, and needs 56.6 s at 1280;
+LensVLM answers in 3–6 s at 1280. Pasted pictures go as pictures to a brain that
+sees. `evie-shell --presence-excluded` passed (marker 8 → 0 pixels; a capture
+41–49 ms, a whole look with the glow 88 ms). Still owed for S4: the manual QA in
+the running app (Safari plus a PDF, the shortcut, the permission card, the Mac
+profile), which needs the installed app.
+
+Next for this area: S5
 drives observing, `lookAt`, `willClick`/`didClick` and typing, posts every
 synthetic event inside `postingSyntheticInput { … }` (which releases the Esc
 hot key), and wires `onStop` to `stopEverything` and `broker.revoke`. The six
 presence findings of the 2026-10-16 reviews are fixed (see the WORKLOG). Still open from the S6 manual QA: an external display, a
-full-screen app (the `.screenSaver` level), the `presence-excluded` magenta
-diagnostic (needs S4's capture filter), and WindowServer's share of the cost.
+full-screen app (the `.screenSaver` level) and WindowServer's share of the cost;
+the `presence-excluded` magenta diagnostic passed with S4.
 
 ## Repository hygiene
 
@@ -482,9 +493,9 @@ before every turn, refuses a held port or under 8 GiB free, and stops it after
 it send `context_management: []`, since 0.7.8 otherwise compacts the
 conversation itself. Still owed for S3: the in-app status line and ask card
 (UI not launched), a start with the weights not in the page cache, and the
-LensVLM tool-call eval (tools stay off). Next: S6-core is done, so S4 (screen
-perception). The first-run guide's key and brain rows (S7) are done
-(2026-10-16).
+LensVLM tool-call eval (tools stay off). The first-run guide's key and brain
+rows (S7) are done (2026-10-16). S4 (screen perception) is done (2026-10-16; see
+"Evie v2" above). Next: S5a (the pure computer-use core in `EvieCore`).
 
 **Evie v2, S7 (packaging, install, permissions) — partly done on `v2-packaging`,
 2026-10-16, merged into `v2` the same day.** Signing is pinned to the "Evie Dev"

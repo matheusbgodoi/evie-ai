@@ -260,6 +260,28 @@ opening her off screen.
 - no raw audio retention by default;
 - cards avoid displaying private content on a shared screen until expanded.
 
+### Looking at the screen (v2 S4)
+
+- **Asking.** In words ("olha a tela", "o que tem na minha tela?", "nessa
+  janela") or with ⌥⇧O, "Olhar a tela" (also in the menu bar). The shortcut
+  opens the overlay, captures the screen under the pointer and says "Tela
+  capturada. Pergunte o que quiser sobre ela."; the next question goes with it,
+  and sending nothing asks "O que tem na minha tela?". Closing the overlay drops
+  the capture.
+- **While it happens.** "Olhando a tela…" while the glow comes up and the capture
+  is taken (about 0.1 s, measured), then "Analisando a tela no PC… (~26 s)" or
+  "Analisando a tela no Mac… (~5 s)" until the first word — the PC's image
+  projector runs on its CPU. On a brain without vision, "Lendo a tela…" while the
+  text is recognised instead.
+- **Without the permission.** A card "A Evie precisa ver sua tela" with the path
+  to Ajustes do Sistema › Privacidade e Segurança › Gravação de Tela e Áudio do
+  Sistema, "reabra a Evie depois de permitir", a line saying the monthly macOS
+  re-confirmation is normal, and "Abrir Ajustes". The macOS prompt itself is
+  shown once.
+- **Afterwards.** The question is saved with "📷 captura da tela" under it; the
+  picture is not saved. A follow-up in the same conversation still sees the last
+  capture.
+
 ### Screen presence rules
 
 `ScreenPresenceMachine` in `EvieCore` enforces the indicator's promise in code and covers it with tests. Its behaviour is described in `docs/design/2026-10-16-evie-v2-design.md` § S6:

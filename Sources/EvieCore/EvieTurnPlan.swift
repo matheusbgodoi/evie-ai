@@ -45,7 +45,19 @@ public struct EvieTurnPlan: Sendable, Equatable {
   /// answer (measured 2026-10-16), so offering it tools would put that text on
   /// screen. Mail and Calendar are reached only through tools, so for such a
   /// profile they add nothing to gather.
-  public func route(hasRoots: Bool, searchesTheWeb: Bool, readsMailAndCalendar: Bool) -> Route {
+  ///
+  /// A look at the screen is always one request: the capture is the subject,
+  /// looking anything up first answers a different question, and every step of
+  /// a loop would send the picture again.
+  public func route(
+    hasRoots: Bool,
+    searchesTheWeb: Bool,
+    readsMailAndCalendar: Bool,
+    looksAtScreen: Bool = false
+  ) -> Route {
+    if looksAtScreen {
+      return .directStream
+    }
     if profile.capabilities.tools {
       return hasRoots || searchesTheWeb || readsMailAndCalendar
         ? .agentLoop(offersTools: true) : .directStream
@@ -58,6 +70,10 @@ public struct EvieTurnPlan: Sendable, Equatable {
   public func capabilities(from base: EvieCapabilitySnapshot) -> EvieCapabilitySnapshot {
     var capabilities = base
     capabilities.whereItRuns = profile.location
+    // A brain with vision sees the picture itself. Without it the system
+    // describer may still say what a picture shows, which is what the base
+    // snapshot reports.
+    capabilities.seesImages = profile.capabilities.vision || base.seesImages
     if !profile.capabilities.tools {
       capabilities.usesTools = false
       capabilities.calculates = false
@@ -68,34 +84,40 @@ public struct EvieTurnPlan: Sendable, Equatable {
 
   /// A spoken or written answer's options, with the rung the brain was resolved
   /// at, which switches on the readiness deadlines.
-  public func options(spoken: Bool) -> TurnOptions {
-    var options = spoken ? TurnOptions.voice(profile.configuration) : .chat(profile.configuration)
+  ///
+  /// `looking` (a capture of the screen rides with the question) turns thinking
+  /// off whatever the profile's default: the picture already costs the first
+  /// token most of its wait on the PC.
+  public func options(spoken: Bool, looking: Bool = false) -> TurnOptions {
+    var configuration = profile.configuration
+    if looking {
+      configuration.defaultReasoning = .off
+    }
+    var options = spoken ? TurnOptions.voice(configuration) : .chat(configuration)
     options.readiness = readiness
     return options
   }
 
   /// `history` (system prompt first) trimmed to the budget, oldest turns first,
-  /// followed by `tail` — the messages this turn adds. Pictures are dropped when
-  /// the profile does not take them.
+  /// followed by `tail` — the messages this turn adds. Only the newest message
+  /// with pictures keeps them, and none does when the profile does not take
+  /// them; a picture left out becomes a marker in its message.
   public func prefix(_ history: [ChatMessage], then tail: [ChatMessage]) -> [ChatMessage] {
-    var kept = history
-    let tailLength = Self.characters(in: tail)
+    let pictured = Self.keepingNewestPictures(history + tail, sees: profile.capabilities.vision)
+    var kept = Array(pictured.prefix(history.count))
+    let added = Array(pictured.suffix(tail.count))
+    let tailLength = Self.characters(in: added)
     while kept.count > 1, Self.characters(in: kept) + tailLength > characterBudget {
       Self.removeOldestTurn(from: &kept)
     }
-    let messages = kept + tail
-    guard !profile.capabilities.vision else {
-      return messages
-    }
-    return messages.map { message in
-      var message = message
-      message.images = nil
-      return message
-    }
+    return kept + added
   }
 
-  private static func characters(in messages: [ChatMessage]) -> Int {
-    messages.reduce(0) { $0 + $1.content.count }
+  /// Text by its length, each picture by `charactersPerImage`.
+  static func characters(in messages: [ChatMessage]) -> Int {
+    messages.reduce(0) { total, message in
+      total + message.content.count + (message.images?.count ?? 0) * charactersPerImage
+    }
   }
 
   /// Drops the oldest question and the answer after it, leaving the system

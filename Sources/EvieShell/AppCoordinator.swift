@@ -91,6 +91,11 @@ final class AppCoordinator: NSObject {
     isBundled: EvieAudioCapture.isBundled
   )
   private var permissionGuideWindowController: PermissionGuideWindowController?
+  /// The glow and pill that say Evie is looking at the screen. Nothing is
+  /// captured unless it is composited on the display being captured.
+  private lazy var screenPresence = ScreenPresence()
+  private lazy var screenCapture = ScreenCaptureService()
+  private lazy var screenPermission = ScreenPermission(guide: permissionGuide)
   /// The Cérebro tab's model while the settings window exists, so a key
   /// imported from the guide shows as saved there too.
   private weak var modelSettings: ModelSettingsViewModel?
@@ -476,6 +481,19 @@ final class AppCoordinator: NSObject {
     // her by name does not depend on having opened settings this session.
     updateWakeListening()
     readinessRefresher.start()
+    viewModel.screenLook = EvieScreenLook(
+      capturer: screenCapture,
+      indicator: screenPresence,
+      permission: screenPermission
+    )
+    viewModel.openScreenRecordingSettings = { [weak self] in
+      self?.screenPermission.openSettings()
+    }
+    // Parar on the pill, or Esc during an agent session: the same as the
+    // emergency shortcut.
+    screenPresence.onStop = { [weak self] in
+      self?.stopEverything()
+    }
     attachMediaLifecycle()
     buildVaultIndexIfMissing()
 
@@ -580,6 +598,10 @@ extension AppCoordinator {
       shortcut: .toggleCallMode
     )
 
+    add(
+      to: menu, title: "Olhar a tela", action: #selector(lookAtScreen),
+      shortcut: .lookAtScreen)
+
     menu.addItem(.separator())
 
     add(
@@ -683,6 +705,13 @@ extension AppCoordinator {
       panelController.showPassive()
     }
     updateToggleMenuTitle()
+  }
+
+  /// Captures the screen under the pointer for the next question. The
+  /// overlay opens first; it is left out of the capture anyway.
+  @objc fileprivate func lookAtScreen() {
+    openQuickText()
+    viewModel.captureScreenForNextQuestion()
   }
 
   @objc fileprivate func newConversation() {
@@ -850,6 +879,8 @@ extension AppCoordinator {
       toggleCallMode()
     case (.emergencyStop, .pressed):
       stopEverything()
+    case (.lookAtScreen, .pressed):
+      lookAtScreen()
     default:
       break
     }

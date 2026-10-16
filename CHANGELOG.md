@@ -145,6 +145,15 @@ All notable changes to Evie are documented here. Dates use `YYYY-MM-DD`.
 
 ### Security
 
+- **Screen captures stay in memory and go only to Evie's brains** (loopback, or
+  the PC over the tailnet). They are never written to disk, saved with the
+  conversation, exported or logged; the conversation keeps "📷 captura da tela".
+  Only one picture is in any request. On-screen text arrives marked as data, not
+  instruction, and a look declares no tools. The Screen Recording prompt is
+  shown once; after that a card points to System Settings. A picture pasted from
+  the clipboard is still written to a temporary PNG, and attached pictures are
+  still kept as HEIC with the conversation (`docs/SECURITY.md`).
+
 - **`Scripts/evie-app identity` no longer leaves the signing key behind when a
   step fails.** The unencrypted private key and the p12 were written to a
   scratch directory that only the last line removed, so a failed
@@ -193,6 +202,27 @@ All notable changes to Evie are documented here. Dates use `YYYY-MM-DD`.
   HTTP error.
 
 ### Added
+
+- **Evie looks at the screen when asked ("olha a tela").** A question that asks
+  in so many words — "olha a tela", "o que tem na minha tela?", "o que é isso
+  aqui na tela", "lê a tela", "nessa janela", "look at my screen" (not "não olha
+  a tela", not "telas de pintura") — or the new shortcut **⌥⇧O, "Olhar a tela"**
+  (also in the menu bar), captures the screen under the pointer, or the front
+  window when the question says "janela", and sends it with the question. The
+  violet "Evie está vendo sua tela" glow is on that display before the capture
+  and nothing is captured without it; Evie's own windows are left out of every
+  capture. The capture is cut to 1024 pixels for the PC and 1280 for the Mac
+  (chosen by measurement), goes as a picture to a brain that sees and as its
+  recognised text and description to one that does not, and the status line
+  says "Analisando a tela no PC… (~26 s)". Thinking is off for a look, and it is
+  one request. Follow-ups in the conversation still see the last capture and,
+  on the PC, do not wait for the picture again.
+- **Pasted and attached pictures go to the brain as pictures** when it sees,
+  downscaled and re-encoded in memory without their EXIF or GPS, instead of only
+  their recognised text.
+- `evie-shell --presence-excluded [--timing]` checks that Evie's windows stay
+  out of her captures (a magenta marker against a control capture) and times a
+  capture and a whole look.
 
 - **Internal, no visible change yet: the screen indicator's rules and the screen
   coordinate maths now exist in tested code** (`ScreenPresenceMachine`,

@@ -240,6 +240,9 @@ public enum EvieShortcutAction: String, CaseIterable, Codable, Sendable {
   case openHistory
   case openSettings
   case emergencyStop
+  /// Last, so the Carbon identifiers the other actions are registered under
+  /// (their position in this list) stay what they were.
+  case lookAtScreen
 
   public var title: String {
     switch self {
@@ -251,6 +254,7 @@ public enum EvieShortcutAction: String, CaseIterable, Codable, Sendable {
     case .openHistory: "Abrir o histórico"
     case .openSettings: "Abrir as configurações"
     case .emergencyStop: "Parar tudo agora"
+    case .lookAtScreen: "Olhar a tela"
     }
   }
 
@@ -272,6 +276,8 @@ public enum EvieShortcutAction: String, CaseIterable, Codable, Sendable {
       "Abre esta janela de configurações."
     case .emergencyStop:
       "Cancela a resposta, corta o áudio e fecha o microfone imediatamente."
+    case .lookAtScreen:
+      "Captura a tela sob o ponteiro, sem as janelas da Evie, para a próxima pergunta."
     }
   }
 
@@ -285,6 +291,10 @@ public enum EvieShortcutAction: String, CaseIterable, Codable, Sendable {
     case .openHistory: EvieShortcut(keyCode: 4, modifiers: [.option, .shift])
     case .openSettings: EvieShortcut(keyCode: 43, modifiers: [.option, .shift])
     case .emergencyStop: EvieShortcut(keyCode: 53, modifiers: [.option, .shift])
+    // O for "olhar". ⌘⇧3/4/5 are the system's screenshots, so the screen's
+    // obvious letters with ⌘ are taken; ⌥⇧ is the family every other default
+    // here belongs to.
+    case .lookAtScreen: EvieShortcut(keyCode: 31, modifiers: [.option, .shift])
     }
   }
 

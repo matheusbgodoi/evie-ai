@@ -21,6 +21,22 @@ struct EviePreferencesTests {
     #expect(EviePreferences().shortcuts.conflicts().isEmpty)
   }
 
+  @Test("looking at the screen has its own default, ⌥⇧O, which nothing else uses")
+  func lookAtScreenHasAFreeDefault() throws {
+    let preferences = EviePreferences()
+    let shortcut = try #require(preferences.shortcuts.shortcut(for: .lookAtScreen))
+
+    #expect(shortcut.displayString == "⌥⇧O")
+    #expect(
+      EvieShortcutAction.allCases
+        .filter { $0 != .lookAtScreen }
+        .allSatisfy { preferences.shortcuts.shortcut(for: $0) != shortcut }
+    )
+    // Appended, so the Carbon identifiers of the existing actions keep their
+    // numbers.
+    #expect(EvieShortcutAction.allCases.last == .lookAtScreen)
+  }
+
   @Test("reports the exact pair of actions that share a key combination")
   func detectsConflicts() {
     var shortcuts = EvieShortcutPreferences()

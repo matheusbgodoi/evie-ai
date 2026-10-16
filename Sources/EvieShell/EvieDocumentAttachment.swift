@@ -14,6 +14,10 @@ struct EvieDocumentAttachment: Identifiable, Hashable {
   /// understanding a photograph, a chart or a diagram needs what it depicts. A
   /// description alone loses the numbers; the text alone loses the picture.
   var visualDescription: String?
+  /// The picture itself, downscaled and re-encoded in memory, for a brain that
+  /// sees. `nil` for a PDF, or when the picture could not be encoded — then
+  /// its text and description travel instead, as for a brain that does not.
+  var imagePart: EvieImagePart?
 
   var characterCount: Int {
     pages.reduce(0) { $0 + $1.text.count }

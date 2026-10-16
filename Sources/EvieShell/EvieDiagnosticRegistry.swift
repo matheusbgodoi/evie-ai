@@ -365,6 +365,17 @@ enum EvieDiagnosticRegistry {
       )
     },
 
+    // Draws a magenta marker in one of Evie's own windows and checks that her
+    // capture leaves it out, against a control capture that finds it. Asks for
+    // no permission: without Screen Recording it says so and stops.
+    EvieDiagnostic.terminating(
+      flag: "--presence-excluded",
+      usage: "--presence-excluded [--timing]",
+      summary: "confere que as janelas da Evie ficam fora das capturas dela"
+    ) { arguments in
+      await PresenceExclusionCheck.run(timing: arguments.contains("--timing"))
+    },
+
     // Acted on by the coordinator once the application is up, not here — the
     // window it opens needs the running app. Listed so `--help` is the whole
     // truth about what the shell answers to.

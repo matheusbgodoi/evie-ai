@@ -91,6 +91,23 @@ final class PermissionGuideViewModel: ObservableObject {
     refresh()
   }
 
+  /// Whether macOS's prompt for `permission` was already shown, by the guide
+  /// or by the feature that needed it.
+  func wasRequested(_ permission: EviePermission) -> Bool {
+    record.requested.contains(permission)
+  }
+
+  /// Records that the prompt for `permission` was shown outside the guide, so
+  /// the guide offers "Abrir Ajustes" from then on rather than a "Pedir" that
+  /// would do nothing.
+  func markRequested(_ permission: EviePermission) {
+    guard record.requested.insert(permission).inserted else {
+      return
+    }
+    persist()
+    refresh()
+  }
+
   func markDismissed() {
     guard !record.dismissed else {
       return

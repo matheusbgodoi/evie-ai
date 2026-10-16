@@ -37,6 +37,17 @@ in Git; private fixtures remain local and are represented only by stable IDs.
 12. `tools-mac-lensvlm-001` (v2 S3, open): the same tool-call cases the PC passes,
     against LensVLM. Measured 2026-10-16: calls come back as malformed XML in the
     content, so the Mac profile declares no tools until this passes.
+13. `vision-screen-look-pc-001` (v2 S4): a synthetic 3024×1964 screen (a
+    "Faturas" window with text at 11–18 pt; described in `docs/VISION.md`), cut to
+    1024 by `ScreenshotEncoding`, sent to qwen-daily with thinking off and the
+    screen note: every 14 pt line transcribed exactly, first token under 30 s.
+    Passed 2026-10-16 (26.0 s and 26.2 s); 768 fails it ("Joaquina" → "Joaquim").
+14. `vision-screen-look-mac-001` (v2 S4): the same screen at 1280 on LensVLM
+    (`mlx_vlm.server`): every 14 pt line exact, first token under 10 s. Passed
+    2026-10-16 in 3 of 4 runs (2.9–5.6 s); one run stopped after the window title.
+15. `vision-screen-excluded-001` (v2 S4): `evie-shell --presence-excluded` —
+    a 4×4 magenta marker in Evie's own window is found by an unfiltered capture
+    and absent from Evie's. Passed 2026-10-16 (8 → 0 pixels).
 
 ## Model metrics
 

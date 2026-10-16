@@ -1,5 +1,71 @@
 # Work log
 
+## 2026-10-16 — v2 S4: screen perception ("olha a tela")
+
+- Completed: slice S4 of `docs/design/2026-10-16-evie-v2-design.md` (its "S4 as
+  implemented" note lists every deviation).
+  - EvieCore: `EvieScreenIntent` (pt-BR and English asks, accent-insensitive,
+    word-bounded, negation guard, `asksForWindow`); `ScreenshotEncoding`
+    (in-memory JPEG q0.8, downscale with high-quality interpolation, pasted
+    bytes with orientation applied and metadata dropped, `magentaPixelCount`);
+    `ScreenCapture.swift` (`ScreenCapturePlan` with `longEdge(for:)` 1024 PC /
+    1280 Mac, `CapturedScreen` → `ObservedFrame`, the `ScreenCapturing`,
+    `ScreenSeeingIndicator` and `ScreenCapturePermission` protocols,
+    `ScreenCaptureAccess`, `EvieScreenLook` — permission, glow, `mayCapture`,
+    capture, glow down — `EvieScreenLookError`, `EvieScreenLookCopy`);
+    `EvieTurnPictures.swift` (`EvieTurnPictures`, the screen note in
+    `<system-context>`, "📷 captura da tela", `EvieSentPictureTurn`,
+    `EvieTurnPlan.pictureTail`, 3,000 characters per picture, only the newest
+    message keeps its pictures); `EvieTurnPlan.route(…, looksAtScreen:)` and
+    `options(spoken:looking:)` (thinking off); `seesImages` from the profile's
+    vision or the describer; `EvieBrainResolver.expectedProfile(for:)`;
+    `EvieShortcutAction.lookAtScreen` (⌥⇧O, appended).
+  - Shell: `ScreenCaptureService` (ScreenCaptureKit, Evie's windows excluded by
+    window from a fresh list, 1 px per point with the cursor, display under the
+    pointer, front window), `ScreenPermission` (preflight, prompt once via the
+    guide's record, settings deep link) and `ScreenPresence:
+    ScreenSeeingIndicator`; `PermissionGuideViewModel.wasRequested/markRequested`;
+    `OverlayViewModel+Screen.swift` (look for a turn, the shortcut's held
+    capture, OCR + description for a blind brain, the permission card) and the
+    turn changes (marker on the saved question, pictures on the question,
+    pasted pictures as `EvieImagePart`, the sent picture turn replayed once
+    answered, "Analisando a tela no PC… (~26 s)"); `AppCoordinator` (presence,
+    capture service, permission, ⌥⇧O and the "Olhar a tela" menu item, presence
+    `onStop` → `stopEverything`); `evie-shell --presence-excluded [--timing]`.
+  - Docs: `docs/VISION.md` § "Screen perception" (measurements), `docs/SECURITY.md`
+    § "Screen captures and pictures", `docs/UI_UX.md` § "Looking at the screen",
+    the design doc's S4 note, `evals/README.md` cases 13–15, CHANGELOG,
+    PROJECT_STATUS.
+- Measured (M5 24 GB, macOS 27.2, 2026-10-16), one synthetic 3024×1964 screen
+  rendered with SF at 2× (text at 11–18 pt; not a capture of anyone's screen),
+  encoded by `ScreenshotEncoding`, streamed, thinking off:
+  - qwen-daily via the gateway: 768 → first token 11.46 s, a 14 pt name misread;
+    1024 → 26.01 s and 26.22 s, every line exact; 1280 → 56.58 s, exact. Chosen:
+    1024. Resent identical: 1.19 s (774/778 tokens cached); follow-up with the
+    turn replayed as sent: 0.50 s; with the question's text as the conversation
+    keeps it: 26.10 s — hence `EvieSentPictureTurn`.
+  - LensVLM via `Scripts/evie-brain start` (ready 6.6 s): 1280 → 2.92–5.63 s to
+    first token, exact in 3 of 3 full answers (a fourth stopped after the
+    title); 1024 → 2.28–3.21 s, one date misread. No prompt cache. Kept 1280.
+    Stopped afterwards; port 38480 free.
+  - `evie-shell --presence-excluded --timing`: with the first design
+    (`excludingApplications:`) the marker leaked (16 and 16 pixels; a separate
+    probe: 8 of 9 through the app filter, 0 through the window filter, because a
+    bare binary is listed under Terminal). With the window filter: control 8,
+    Evie's capture 0, "PASSOU"; a capture 41–49 ms; a whole look with the glow
+    88 ms.
+- Tests: new suites "Evie screen intent" (6 tests, 31 argument cases), "Screenshot encoding"
+  (6), "Screen look" (14), "Evie turn pictures" (17); one test each in "Evie
+  preferences" and "Evie brain resolver". No existing assertion changed.
+  `swift build` with no warnings; `Scripts/test --filter` per suite; full
+  `Scripts/test`: 1041 tests in 99 suites passed, 1 known issue (the existing
+  deadline witness), up from 996 in 95.
+- Open: the manual QA in the running app (Safari plus a PDF, ⌥⇧O, the
+  permission card and the relaunch, the Mac profile), which needs the installed
+  app; whether `excludingApplications:` would have worked for the signed bundle
+  (not checked); the transient PNG a paste writes (documented, unchanged).
+- Next: S5a.
+
 ## 2026-10-16 — v2 S7: the first-run guide's "Chave do PC" and "Cérebro" rows
 
 - Completed: the two rows deferred at `TODO(S7-brain-rows)` (the hook is gone),

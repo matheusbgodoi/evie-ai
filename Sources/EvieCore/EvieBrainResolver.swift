@@ -129,6 +129,14 @@ public final class EvieBrainResolver {
     pins[conversation]
   }
 
+  /// The brain a conversation's next turn most likely runs on — its pin, or
+  /// the preferred profile — known without the network. A screen capture is
+  /// cut for it before the turn resolves, because the capture must show the
+  /// screen as it was when asked, not after a probe or a wake.
+  public func expectedProfile(for conversation: UUID) -> EvieModelProfile {
+    pins[conversation].flatMap(profile(id:)) ?? configuration.activeProfile
+  }
+
   /// A turn on the conversation ended. When it ran on the Mac brain, the
   /// brain's idle clock starts from now rather than from the turn's start, so
   /// a long answer does not count as idle time.

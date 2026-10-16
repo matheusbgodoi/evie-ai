@@ -60,6 +60,18 @@ struct EvieBrainResolverTests {
     #expect(harness.resolver.pinnedProfileID(for: conversation) == mac)
   }
 
+  @Test("the brain a capture is cut for is the pinned one, else the preferred one, asked offline")
+  func expectedProfileNeedsNoNetwork() async {
+    let harness = ResolverHarness(
+      keys: .none, rungs: [pc: .ready, mac: .ready], fallback: .automatic)
+    let conversation = UUID()
+
+    #expect(harness.resolver.expectedProfile(for: conversation).id == pc)
+    _ = await harness.resolver.resolve(conversation: conversation)
+    #expect(harness.resolver.expectedProfile(for: conversation).id == mac)
+    #expect(harness.resolver.expectedProfile(for: UUID()).id == pc)
+  }
+
   @Test("a pinned conversation keeps its brain even when the probe says it is out")
   func pinSurvivesABadProbe() async {
     let harness = ResolverHarness(
