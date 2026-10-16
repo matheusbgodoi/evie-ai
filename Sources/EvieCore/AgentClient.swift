@@ -20,6 +20,14 @@ public protocol AgentClient: Sendable {
     messages: [ChatMessage],
     tools: [EvieToolDefinition]
   ) -> AsyncThrowingStream<EvieInteractionEvent, any Error>
+
+  /// The same turn, with the options that shape this one request: how hard to
+  /// think, the output cap, and what is known of the model's readiness.
+  func stream(
+    messages: [ChatMessage],
+    tools: [EvieToolDefinition],
+    options: TurnOptions
+  ) -> AsyncThrowingStream<EvieInteractionEvent, any Error>
 }
 
 extension AgentClient {
@@ -29,5 +37,14 @@ extension AgentClient {
     tools: [EvieToolDefinition]
   ) -> AsyncThrowingStream<EvieInteractionEvent, any Error> {
     stream(messages: messages)
+  }
+
+  /// A backend with no per-turn options answers as it always does.
+  public func stream(
+    messages: [ChatMessage],
+    tools: [EvieToolDefinition],
+    options: TurnOptions
+  ) -> AsyncThrowingStream<EvieInteractionEvent, any Error> {
+    stream(messages: messages, tools: tools)
   }
 }

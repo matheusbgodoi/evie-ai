@@ -192,6 +192,14 @@ extension OverlayViewModel {
       primaryText = "Recebendo resposta…"
       updateActiveArtifact(with: streamedResponse)
 
+    case .reasoningDelta:
+      // Only the fact that she is thinking reaches the screen. The text is never
+      // shown, never spoken, and never part of the answer that is saved.
+      visualState = .thinking
+      if primaryText != "Evie está pensando…" {
+        primaryText = "Evie está pensando…"
+      }
+
     case .status(let message):
       secondaryText = message
 
@@ -209,7 +217,7 @@ extension OverlayViewModel {
       let content = message.content.trimmingCharacters(in: .whitespacesAndNewlines)
       if content.isEmpty {
         finishFailure(
-          OpenAICompatibleClientError.emptyStream,
+          ModelClientError.emptyStream,
           requestID: requestID
         )
         return
@@ -606,7 +614,7 @@ extension OverlayViewModel {
       finishFailure(
         outcome.exhausted
           ? EvieAgentLoopFailure.exhausted
-          : OpenAICompatibleClientError.emptyStream,
+          : ModelClientError.emptyStream,
         requestID: requestID
       )
       return
@@ -838,16 +846,16 @@ extension OverlayViewModel {
     {
       removeOldestTurn(from: &prefix)
     }
-    // Skills are instructions, so they go with the instructions — at the front,
-    // before any turn of the conversation. Putting them next to the question
-    // instead would place guidance after the conversation started, which this
-    // server refuses, and would read as something the user said.
-    if let guidance = EvieSkillLibrary.guidance(
+    // Skills are instructions, so they stay a system message here — and they go
+    // just before the question, after every earlier turn. The client sends any
+    // system message after the first as a `<system-context>` block on the next
+    // user message, which every server here accepts, so the guidance lands
+    // after everything the server has cached: the prompt and the history keep
+    // their bytes whether a skill matched this turn or not. At the front, as it
+    // used to be, it changed the prefix from the second message on.
+    let guidance = EvieSkillLibrary.guidance(
       for: EvieSkillLibrary.matching(userMessage.content, in: installedSkills())
-    ) {
-      let position = prefix.first?.role == .system ? 1 : 0
-      prefix.insert(ChatMessage(role: .system, content: guidance), at: position)
-    }
+    ).map { ChatMessage(role: .system, content: $0) }
 
     // The exact time rides with the question rather than sitting in the system
     // prompt. Up there it would change every minute and break the cached prefix
@@ -861,7 +869,7 @@ extension OverlayViewModel {
 
     // Evidence goes immediately before the question so the model reads the
     // document, then what is being asked about it.
-    return prefix + [evidence, asked].compactMap { $0 }
+    return prefix + [guidance, evidence, asked].compactMap { $0 }
   }
 
   /// Consumes the pending attachments into one message, bounded so a long

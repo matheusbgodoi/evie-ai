@@ -1,5 +1,78 @@
 # Work log
 
+## 2026-10-16 — v2 S1b: request and stream features
+
+- Completed: slice S1b of `docs/design/2026-10-16-evie-v2-design.md`.
+  - New in `Sources/EvieCore/`: `ChatContentPart.swift` (`EvieImagePart`, equal
+    and hashed by id only), `TurnOptions.swift` (`ReasoningLevel`,
+    `ThinkingParameterStyle`, `TurnOptions.voice/chat/computerStep`),
+    `ModelClientError.swift` (replaces `OpenAICompatibleClientError`, Portuguese
+    messages), `ModelDeadlinePolicy.swift` (`ModelTurnDeadlines`,
+    `URLSessionConfiguration.evieModel`), `InlineThinkingSplitter.swift`, and
+    `ModelReadiness.swift` holding only `ReadinessRung` until S2b.
+  - `ChatMessage.images`, excluded from hand-written `CodingKeys` whose raw
+    values are the old synthesized names. `EvieInteractionEvent.reasoningDelta`
+    and `EvieInteractionState.isReasoning`.
+  - `AgentClient.stream(messages:tools:options:)` with a default that forwards to
+    the old signature; `OpenAICompatibleClient` implements it and its old entry
+    points use `.chat`. `makeRequest` is internal, synchronous and takes the
+    token: `max_tokens`, thinking parameters per style, `parallel_tool_calls:
+    false` only with tools, no `tools` key without them, content parts with a
+    data URL only for messages with images, late system/developer messages as
+    `<system-context>` on the next user message, a 60 MiB refusal.
+  - Stream: `reasoning_content`/`reasoning` and inline `<think>` to
+    `.reasoningDelta`; truncation by `finish_reason` or usage; reasoning with no
+    answer becomes `truncated` or `emptyStream`; `APIError.code` decodes Int or
+    String; llama-swap's `{"error":"<text>"}` bodies decode; 401 invalidates the
+    cached key, 404 "no router", 413 and 502 are named. A watchdog task group
+    enforces the headers and first-token deadlines.
+  - `EvieConfiguration` gained `thinkingStyle` (default `.none`) and
+    `defaultReasoning` (default `.off`), standing in for `EvieModelProfile`
+    until S2a. `ModelClientFactory` gained `deadlines` and the shared
+    `modelSession`.
+  - Shell: the direct stream passes `.voice` or `.chat` by whether the question
+    was spoken; `receive` turns `.reasoningDelta` into "Evie está pensando…";
+    skill guidance moved from index 1 to just before the question. The agent
+    loop passes `.chat`.
+  - Docs: `ARCHITECTURE.md`, `SECURITY.md` ("Model transport"), CHANGELOG,
+    `PROJECT_STATUS.md`, and an "Implemented" note in the design doc.
+- Measured 2026-10-16 from this Mac (M5, macOS 27.2) against the PC gateway,
+  two streaming requests to `qwen-daily` with `max_tokens` 64 (read-only
+  inference, key read from the keychain into a shell variable, never printed or
+  written): thinking on (`reasoning_effort` low) streamed `reasoning_content`
+  then `content` "4.", 43 completion tokens; thinking off with one tool streamed
+  `tool_calls` fragments and `finish_reason:"tool_calls"`, 30 tokens. **The
+  response headers arrived with the first chunk**, at 0.793 s and 1.319 s, after
+  prefills of 443 ms and 654 ms. Trimmed recordings are the fixtures in
+  `Tests/EvieCoreTests/GatewayStreamFixtures.swift`.
+- Deviation, from that measurement: the spec's 5 s headers deadline when ready
+  would cancel any turn with a long prefill (a screenshot is 31–40 s on the PC),
+  so a ready model gets the first-token allowance for its headers (60 s text,
+  120 s image); cold is 600 s as specified. Other deviations, all recorded in the
+  design doc: extra `ModelClientError` cases so the old type's information
+  survives (`streamFailed(message:code:)`, `credentialUnavailable`,
+  `invalidConfiguration`, `requestEncoding`, `malformedStreamEvent`,
+  `firstTokenTimedOut`); an unprobed turn keeps the configured timeout at every
+  stage; the thinking budget is three quarters of the turn's cap.
+- Tests (written first and seen failing to compile): suites "Model request body"
+  (17), "Model stream decoding" (17), "Model deadline policy" (4), "Inline
+  thinking splitter" (3), "Chat model types" (6). Existing expectations were
+  moved to the new type without loosening: `.server(message:code:)` became
+  `.streamFailed(message:code:)`, `.httpStatus(code:message:)` became
+  `.server(status:message:)`. Mutation checks: with the watchdog task removed the
+  two deadline tests fail; with the splitter bypassed the inline-think test
+  fails.
+- Checks: `swift build` OK; `Scripts/test --filter
+  "ModelRequestBodyTests|ModelStreamDecodingTests|ModelDeadlinePolicyTests|InlineThinkingSplitterTests|ChatModelTypesTests|OpenAICompatible|EvieAgentLoopTests"`
+  91 tests passed; full `Scripts/test` 707 tests in 74 suites, 0 failures, 1
+  skipped (the gated Calendar test), against 660 in 69 before this slice.
+- Open: no turn sets a readiness rung until S2b/S2c; the `Scripts/evie-probe`
+  manual QA waits for Evie's own keychain item (S2d); chat answers on the
+  loopback Gemma are now capped at 2048 tokens instead of the configured 4096,
+  as the spec sets; that the loopback server honours `max_tokens` rests on
+  `Scripts/evie-probe`, which already sends it, not on a new measurement.
+- Next action: S2a (config schema v2, profiles, migration, store).
+
 ## 2026-10-16 — v2 S1a: rename, transport policy, keychain credentials
 
 - Completed: slice S1a of `docs/design/2026-10-16-evie-v2-design.md`.

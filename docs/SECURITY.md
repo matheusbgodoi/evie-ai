@@ -157,6 +157,19 @@ body and decides where a conversation may go before it sends anything:
   passwords and cached in memory per process. They are never written to the
   configuration, logs, diagnostics or error messages; a keychain failure reports
   only its status code.
+- **Rejected keys.** A 401 drops the cached token, so the next turn reads the
+  keychain again, and the turn is not retried: the PC's control plane blocks an
+  address after ten bad keys in five minutes.
+- **Images stay out of every record.** `ChatMessage.images` is excluded from the
+  message's coding keys, so a picture sent with a turn is never written to a
+  conversation file, an export or a log; it exists for the one request. Model
+  requests use an ephemeral session with no URL cache (`URLSessionConfiguration
+  .evieModel`), so a request body never lands in a disk cache either, and a body
+  over 60 MiB is refused before it is sent.
+- **Reasoning stays private.** A model's reasoning trace (`reasoning_content`, or
+  inline `<think>` text) is emitted only as `.reasoningDelta`, which the shell
+  turns into "pensando…": it is never shown, spoken, saved, or part of the
+  assistant message that history keeps.
 
 ### Conversation history
 

@@ -816,6 +816,7 @@ final class OverlayViewModel: ObservableObject {
       evidence: evidence
     )
     let client = agentClient
+    let spoken = lastPromptWasSpoken
 
     activeRequestID = requestID
     activeArtifactID = artifactID
@@ -931,7 +932,15 @@ final class OverlayViewModel: ObservableObject {
     requestTask = Task { @MainActor [weak self] in
       do {
         guard !roots.isEmpty || web != nil || apps != nil else {
-          for try await event in client.stream(messages: requestMessages) {
+          // Pinned at submit time, like the rest of the turn: a spoken question
+          // gets a spoken-length answer.
+          let options: TurnOptions =
+            spoken ? .voice(client.configuration) : .chat(client.configuration)
+          for try await event in client.stream(
+            messages: requestMessages,
+            tools: [],
+            options: options
+          ) {
             try Task.checkCancellation()
             self?.receive(event, requestID: requestID, userMessage: userMessage)
           }

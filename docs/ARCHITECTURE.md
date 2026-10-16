@@ -95,6 +95,21 @@ in the configuration, is attached only over `https` to its bound host, and every
 redirect is refused so the header cannot follow one. The client still never
 executes a tool.
 
+Since v2 S1b each request carries `TurnOptions` (`AgentClient.stream(messages:
+tools:options:)`): the reasoning level, the output cap (voice 1024, chat 2048, a
+computer-use step 1024), and the model's readiness, which picks the deadlines.
+The configuration's `ThinkingParameterStyle` says how the server is told to
+think — `chat_template_kwargs` for the PC gateway, a top-level `enable_thinking`
+for mlx-vlm, nothing for the loopback Gemma. The first system message goes out
+byte for byte; any later system or developer message (skill guidance) is sent as
+a `<system-context>` block on the next user message, so the cached prefix does
+not move when a skill comes or goes. Reasoning is decoded apart from the answer
+into `.reasoningDelta`, and a turn that spent its cap thinking is reported as
+`ModelClientError.truncated` rather than as an empty answer. A watchdog bounds
+the wait for the headers and for the first token (`ModelDeadlinePolicy`); the PC
+holds its headers until prefill ends, measured, so the headers deadline is a
+first-token deadline, not a connection check.
+
 Three of the original abstinences no longer hold, and they are worth naming rather
 than leaving as an out-of-date boundary:
 
@@ -183,7 +198,7 @@ system frameworks, and every process Evie starts.
 
 | Area | Types |
 |---|---|
-| Transport and loop | `AgentClient`, `OpenAICompatibleClient`, `ModelClientFactory`, `ModelTransportPolicy`, `EvieCredentialProviding` (`KeychainCredentialProvider`, `StaticCredentialProvider`), `EvieAgentLoop`, `EvieToolCallAccumulator`, `EvieTool` |
+| Transport and loop | `AgentClient`, `OpenAICompatibleClient`, `ModelClientFactory`, `ModelTransportPolicy`, `EvieCredentialProviding` (`KeychainCredentialProvider`, `StaticCredentialProvider`), `TurnOptions`, `ModelDeadlinePolicy`, `ModelClientError`, `InlineThinkingSplitter`, `EvieImagePart`, `EvieAgentLoop`, `EvieToolCallAccumulator`, `EvieTool` |
 | Conversation | `ChatMessage`, `EvieConversation`, `EvieConversationStore`, `EvieConversationExport`, `EvieInteraction`, `EvieArtifact`, `EvieRichText` |
 | Commands | `EvieCommand`, `EvieSearchCommands`, `EviePlan`, `EviePlanPrompts` |
 | Retrieval and grounding | `EvieVaultRetriever`, `EvieVaultPassage`, `EviePassageRanker`, `EvieQueryTerms`, `EvieGrounding`, `EvieAnswerProvenance`, `EvieWebSearch`, `EvieWebPassages` |

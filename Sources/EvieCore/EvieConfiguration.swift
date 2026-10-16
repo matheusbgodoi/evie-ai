@@ -26,6 +26,13 @@ public struct EvieConfiguration: Codable, Hashable, Sendable {
   /// Which saved key goes with this endpoint, if any. Plain-http loopback
   /// endpoints have none; a remote endpoint is refused without one.
   public var credential: CredentialReference?
+  /// How this server is told whether to think. `.none` by default: the
+  /// loopback Gemma server ignores every thinking parameter.
+  public var thinkingStyle: ThinkingParameterStyle
+  /// The reasoning an ordinary turn asks for. Off unless chosen: thinking costs
+  /// seconds before the first word, and on the PC its sampler is the one with no
+  /// repetition guard.
+  public var defaultReasoning: ReasoningLevel
 
   public init(
     endpoint: URL = EvieConfiguration.defaultEndpoint,
@@ -36,7 +43,9 @@ public struct EvieConfiguration: Codable, Hashable, Sendable {
     topP: Double? = nil,
     stopSequences: [String] = [],
     requestTimeout: TimeInterval = 300,
-    credential: CredentialReference? = nil
+    credential: CredentialReference? = nil,
+    thinkingStyle: ThinkingParameterStyle = .none,
+    defaultReasoning: ReasoningLevel = .off
   ) {
     self.endpoint = endpoint
     self.model = model
@@ -47,6 +56,8 @@ public struct EvieConfiguration: Codable, Hashable, Sendable {
     self.stopSequences = stopSequences
     self.requestTimeout = requestTimeout
     self.credential = credential
+    self.thinkingStyle = thinkingStyle
+    self.defaultReasoning = defaultReasoning
   }
 
   public var chatCompletionsURL: URL {

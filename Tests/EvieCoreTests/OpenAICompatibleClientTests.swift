@@ -57,7 +57,7 @@ struct OpenAICompatibleClientTests {
   func streamErrorPayload() async {
     let error = await terminalError(for: makeClient(scenario: .serverError))
 
-    #expect(error == .server(message: "queue is full", code: "queue_full"))
+    #expect(error == .streamFailed(message: "queue is full", code: "queue_full"))
   }
 
   @Test("malformed data event has a deterministic protocol error")
@@ -71,7 +71,7 @@ struct OpenAICompatibleClientTests {
   func httpErrorEnvelope() async {
     let error = await terminalError(for: makeClient(scenario: .httpError))
 
-    #expect(error == .httpStatus(code: 503, message: "model is loading"))
+    #expect(error == .server(status: 503, message: "model is loading"))
   }
 
   @Test("chat completions URL appends once and preserves an explicit route")
@@ -125,14 +125,14 @@ extension OpenAICompatibleClientTests {
 
   fileprivate func terminalError(
     for client: OpenAICompatibleClient
-  ) async -> OpenAICompatibleClientError? {
+  ) async -> ModelClientError? {
     do {
       _ = try await collect(
         client.stream(messages: [ChatMessage(role: .user, content: "teste")])
       )
       Issue.record("The stream unexpectedly completed successfully.")
       return nil
-    } catch let error as OpenAICompatibleClientError {
+    } catch let error as ModelClientError {
       return error
     } catch {
       Issue.record("Unexpected error type: \(type(of: error))")
@@ -377,7 +377,7 @@ struct OpenAICompatibleClientTransportTests {
     let sent = TransportStubURLProtocol.requests(containing: run)
     #expect(sent.map(\.host) == [stubHost])
     #expect(!sent.contains { $0.host == TransportStubURLProtocol.redirectTarget })
-    guard case .httpStatus(let code, _) = error else {
+    guard case .server(let code, _) = error else {
       Issue.record("Expected the 302 itself to be reported, got \(String(describing: error)).")
       return
     }
@@ -488,14 +488,14 @@ extension OpenAICompatibleClientTransportTests {
 
   fileprivate func terminalError(
     for client: OpenAICompatibleClient
-  ) async -> OpenAICompatibleClientError? {
+  ) async -> ModelClientError? {
     do {
       _ = try await collect(
         client.stream(messages: [ChatMessage(role: .user, content: "teste")])
       )
       Issue.record("The stream unexpectedly completed successfully.")
       return nil
-    } catch let error as OpenAICompatibleClientError {
+    } catch let error as ModelClientError {
       return error
     } catch {
       Issue.record("Unexpected error type: \(type(of: error)): \(error)")

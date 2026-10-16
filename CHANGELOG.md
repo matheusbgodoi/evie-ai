@@ -6,6 +6,17 @@ All notable changes to Evie are documented here. Dates use `YYYY-MM-DD`.
 
 ### Security
 
+- **Pictures and reasoning never reach a record.** `ChatMessage.images` (new,
+  for screenshots and pasted images sent with one request) is excluded from the
+  message's coding keys, so it is never saved, exported or logged, and existing
+  conversation files decode unchanged. A model's reasoning trace is emitted only
+  as `.reasoningDelta`, shown as "pensando…", and never displayed, spoken, saved
+  or included in the answer. Model requests use an ephemeral session with no URL
+  cache, and a body over 60 MiB is refused before it is sent.
+- **A rejected key is dropped and not retried.** A 401 invalidates the cached
+  token, so the next turn reads the keychain again; the failing turn is not
+  repeated with the same key.
+
 - **The model client may now reach one remote host, under a policy.**
   `ModelTransportPolicy` replaces the loopback-only check (ADR 0013, superseding
   ADR 0006 in part): plain `http` only to loopback; any other host only over
@@ -25,6 +36,33 @@ All notable changes to Evie are documented here. Dates use `YYYY-MM-DD`.
 
 ### Changed
 
+- **Requests carry per-turn options** (`TurnOptions`, `AgentClient.stream(messages:
+  tools:options:)`): spoken answers are capped at 1024 tokens and written ones at
+  2048, where both used the configured 4096 before. `max_tokens` replaces
+  `max_completion_tokens`. Thinking parameters follow the configuration's
+  `ThinkingParameterStyle` (`chat_template_kwargs` for the PC gateway, top-level
+  `enable_thinking` for mlx-vlm, nothing for the loopback Gemma, which is the
+  default); reasoning is off unless configured. `tools` is omitted when empty and
+  sent with `parallel_tool_calls: false` otherwise.
+- **Skill guidance rides with the question.** Any system or developer message
+  after the first is sent as a `<system-context>` block on the next user message,
+  and the shell now places skill guidance just before the question instead of
+  at position 1, so the system prompt and the history keep their bytes — and the
+  server's cached prefix — whether a skill matched or not.
+- **Stream decoding:** `reasoning_content` (or `reasoning`) and inline
+  `<think>…</think>` go to `.reasoningDelta`; a turn whose usage reached the cap
+  counts as `finish_reason: "length"` even when the engine said `stop`; a turn
+  that spent its cap thinking fails with "O modelo gastou todo o limite … pensando"
+  instead of an empty answer; a numeric error `code` no longer turns the server's
+  message into "malformed event"; llama-swap's string error bodies are read.
+- **`OpenAICompatibleClientError` is replaced by `ModelClientError`**, with
+  Portuguese messages and named cases for 401 (`unauthorized`), 404 "no router"
+  (`modelNotFound`), 413 (`requestTooLarge`) and 502 (`unreachable("gateway")`).
+- **Deadlines** (`ModelDeadlinePolicy`): a watchdog bounds the wait for the
+  response headers and for the first token, and the idle gap follows the model's
+  readiness (120 s ready, 600 s loading). No turn sets a readiness yet, and an
+  unprobed turn keeps the configured request timeout at every stage, so nothing
+  times out sooner than before. The model session caps a turn at 900 s.
 - `TurboFieldfareClient` is now `OpenAICompatibleClient` and
   `TurboFieldfareClientError` is `OpenAICompatibleClientError`, with no
   typealias; error messages say "the model server" instead of naming

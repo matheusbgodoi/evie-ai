@@ -504,7 +504,11 @@ extension EvieAgentLoop {
     var message: ChatMessage?
     var finishReason = EvieFinishReason.other
 
-    for try await event in client.stream(messages: messages, tools: tools) {
+    for try await event in client.stream(
+      messages: messages,
+      tools: tools,
+      options: .chat(client.configuration)
+    ) {
       try Task.checkCancellation()
       await emit(event)
       if case .completed(let completed, let reason) = event {
@@ -514,7 +518,7 @@ extension EvieAgentLoop {
     }
 
     guard let message else {
-      throw OpenAICompatibleClientError.emptyStream
+      throw ModelClientError.emptyStream
     }
     return Step(message: message, finishReason: finishReason)
   }

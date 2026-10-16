@@ -24,6 +24,10 @@ public struct ChatMessage: Identifiable, Codable, Hashable, Sendable {
   /// identifiers, and a rewritten one produces an answer about nothing.
   public var toolCalls: [EvieToolCall]?
   public var createdAt: Date
+  /// Pictures sent with this message, for this request only. Not in
+  /// `CodingKeys`, so they are never saved, exported or logged, and a
+  /// conversation file written before they existed decodes unchanged.
+  public var images: [EvieImagePart]? = nil
 
   public init(
     id: UUID = UUID(),
@@ -41,5 +45,17 @@ public struct ChatMessage: Identifiable, Codable, Hashable, Sendable {
     self.toolCallID = toolCallID
     self.toolCalls = toolCalls
     self.createdAt = createdAt
+  }
+
+  /// Spelled out only to leave `images` out. The raw values are the property
+  /// names the synthesized keys always used, so saved files keep their shape.
+  private enum CodingKeys: String, CodingKey {
+    case id
+    case role
+    case content
+    case name
+    case toolCallID
+    case toolCalls
+    case createdAt
   }
 }

@@ -14,18 +14,25 @@ public struct ModelClientFactory: Sendable {
   /// and invalidating a rejected key invalidates it for all of them.
   public static let live = ModelClientFactory(credentials: KeychainCredentialProvider())
 
+  /// One session for every model request in the process, built from
+  /// `URLSessionConfiguration.evieModel`: no disk cache, a fifteen-minute cap.
+  public static let modelSession = URLSession(configuration: .evieModel)
+
   public let credentials: any EvieCredentialProviding
   public let transportPolicy: ModelTransportPolicy
   public let session: URLSession
+  public let deadlines: ModelDeadlinePolicy
 
   public init(
     credentials: any EvieCredentialProviding,
     transportPolicy: ModelTransportPolicy = ModelTransportPolicy(),
-    session: URLSession = .shared
+    session: URLSession = ModelClientFactory.modelSession,
+    deadlines: ModelDeadlinePolicy = .standard
   ) {
     self.credentials = credentials
     self.transportPolicy = transportPolicy
     self.session = session
+    self.deadlines = deadlines
   }
 
   public func makeClient(configuration: EvieConfiguration) -> OpenAICompatibleClient {
@@ -33,7 +40,8 @@ public struct ModelClientFactory: Sendable {
       configuration: configuration,
       credentials: credentials,
       transportPolicy: transportPolicy,
-      session: session
+      session: session,
+      deadlines: deadlines
     )
   }
 }

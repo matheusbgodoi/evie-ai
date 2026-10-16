@@ -761,7 +761,7 @@ private actor ScriptedClient: AgentClient {
     AsyncThrowingStream { continuation in
       Task {
         guard let turn = await record(messages: messages, toolCount: tools.count) else {
-          continuation.finish(throwing: OpenAICompatibleClientError.emptyStream)
+          continuation.finish(throwing: ModelClientError.emptyStream)
           return
         }
         switch turn {

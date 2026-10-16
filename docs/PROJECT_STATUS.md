@@ -102,7 +102,10 @@ logs also remain under `~/Library`.
   for. Since v2 S1a it passes every endpoint through `ModelTransportPolicy`
   (loopback over http, or https to the allowlisted PC gateway with a key bound to
   that host, ADR 0013), reads that key from the login keychain, never sends it
-  over http, and refuses redirects. Every client is built by `ModelClientFactory`. It never executes
+  over http, and refuses redirects. Every client is built by `ModelClientFactory`.
+  Since S1b each request carries `TurnOptions` (reasoning, output cap,
+  readiness), reasoning streams as `.reasoningDelta` and is never shown, and
+  images travel as data-URL content parts that are never persisted. It never executes
   one — that is `EvieAgentLoop`'s job, outside the client, so prompt injection
   cannot reach an executor through the transport. Its byte-level SSE framing
   preserves empty event separators across arbitrary transport fragmentation and
@@ -416,11 +419,15 @@ readiness only; they are not the Phase 1 performance suite.
 ## Next recommended action
 
 **Evie v2, on branch `v2`** (spec: `docs/design/2026-10-16-evie-v2-design.md`).
-Done as of 2026-10-16: S8a, S8b item 1 (the osascript tests are gated), and S1a
-(transport rename, policy, keychain credentials, one client factory). The shipped
-default is still the loopback Gemma endpoint, and no configuration can name the
-PC's credential yet; that arrives with the v2 schema in S2a. Next: S1b (request
-and stream features), then S2a.
+Done as of 2026-10-16: S8a, S8b item 1 (the osascript tests are gated), S1a
+(transport rename, policy, keychain credentials, one client factory) and S1b
+(per-turn options, thinking parameters, images as content parts, reasoning kept
+apart from the answer, truncation detection, `ModelClientError`, deadlines). The
+shipped default is still the loopback Gemma endpoint, and no configuration can
+name the PC's credential yet; that arrives with the v2 schema in S2a. Measured
+in S1b: the PC gateway sends its response headers only with the first chunk, so
+the headers deadline is a first-token deadline. Next: S2a (schema v2, profiles,
+migration, store).
 
 Two things, in this order, and they are the two things between here and a release.
 

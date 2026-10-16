@@ -77,6 +77,10 @@ public enum EvieInteractionEvent: Codable, Hashable, Sendable {
   case phaseChanged(EvieInteractionPhase)
   case transcriptUpdated(text: String, isFinal: Bool)
   case responseTextDelta(String)
+  /// A piece of the model's reasoning. It says that she is thinking and nothing
+  /// more: the reducer drops the text, the shell never shows or speaks it, and
+  /// it is not part of the completed message, so it never reaches history.
+  case reasoningDelta(String)
   case status(message: String)
   case artifactCreated(EvieArtifact)
   case usage(AgentUsage)
@@ -93,6 +97,8 @@ public struct EvieInteractionState: Identifiable, Codable, Hashable, Sendable {
   public var phase: EvieInteractionPhase
   public var transcript: String
   public var responseText: String
+  /// The model is reasoning and has not started the answer: "pensando…".
+  public var isReasoning: Bool
   public var statusMessage: String?
   public var artifacts: [EvieArtifact]
   public var usage: AgentUsage?
@@ -104,6 +110,7 @@ public struct EvieInteractionState: Identifiable, Codable, Hashable, Sendable {
     phase: EvieInteractionPhase = .idle,
     transcript: String = "",
     responseText: String = "",
+    isReasoning: Bool = false,
     statusMessage: String? = nil,
     artifacts: [EvieArtifact] = [],
     usage: AgentUsage? = nil,
@@ -114,6 +121,7 @@ public struct EvieInteractionState: Identifiable, Codable, Hashable, Sendable {
     self.phase = phase
     self.transcript = transcript
     self.responseText = responseText
+    self.isReasoning = isReasoning
     self.statusMessage = statusMessage
     self.artifacts = artifacts
     self.usage = usage
@@ -130,7 +138,11 @@ public struct EvieInteractionState: Identifiable, Codable, Hashable, Sendable {
       transcript = text
 
     case .responseTextDelta(let delta):
+      isReasoning = false
       responseText += delta
+
+    case .reasoningDelta:
+      isReasoning = true
 
     case .status(let message):
       statusMessage = message
@@ -144,10 +156,12 @@ public struct EvieInteractionState: Identifiable, Codable, Hashable, Sendable {
     case .completed(let message, _):
       completedMessage = message
       responseText = message.content
+      isReasoning = false
       phase = .completed
 
     case .failed(let failure):
       self.failure = failure
+      isReasoning = false
       phase = failure.kind == .cancelled ? .cancelled : .failed
     }
   }

@@ -1,58 +1,5 @@
 import Foundation
-
-/// Errors raised by the OpenAI-compatible Chat Completions adapter.
-public enum OpenAICompatibleClientError: Error, Equatable, Sendable {
-  case invalidConfiguration(String)
-  /// `ModelTransportPolicy` refused the endpoint; nothing was sent.
-  case transportRefused(String)
-  /// The endpoint needs a key and none could be read; nothing was sent.
-  case credentialUnavailable(String)
-  case requestEncoding(String)
-  case invalidHTTPResponse
-  case httpStatus(code: Int, message: String?)
-  case server(message: String, code: String?)
-  case malformedStreamEvent
-  case emptyStream
-  case streamEndedBeforeDone
-  case transport(String)
-}
-
-extension OpenAICompatibleClientError: LocalizedError {
-  public var errorDescription: String? {
-    switch self {
-    case .invalidConfiguration(let message):
-      "Invalid Evie configuration: \(message)"
-    case .transportRefused(let message):
-      "Evie refused to send the conversation: \(message)"
-    case .credentialUnavailable(let message):
-      "The model key is unavailable: \(message)"
-    case .requestEncoding(let message):
-      "Could not encode the chat request: \(message)"
-    case .invalidHTTPResponse:
-      "The model server returned a non-HTTP response."
-    case .httpStatus(let code, let message):
-      if let message, !message.isEmpty {
-        "The model server returned HTTP \(code): \(message)"
-      } else {
-        "The model server returned HTTP \(code)."
-      }
-    case .server(let message, let code):
-      if let code, !code.isEmpty {
-        "Model server error \(code): \(message)"
-      } else {
-        "Model server error: \(message)"
-      }
-    case .malformedStreamEvent:
-      "The model server sent a malformed streaming event."
-    case .emptyStream:
-      "The model server closed the stream without sending a response."
-    case .streamEndedBeforeDone:
-      "The model server closed the stream before the [DONE] marker."
-    case .transport(let message):
-      "Could not communicate with the model server: \(message)"
-    }
-  }
-}
+import Synchronization
 
 /// A dependency-free client for any OpenAI-compatible streaming Chat Completions
 /// server: the PC gateway over the tailnet, or a server on this Mac's loopback.
@@ -71,6 +18,12 @@ public final class OpenAICompatibleClient: AgentClient, Sendable {
   private let credentials: any EvieCredentialProviding
   private let transportPolicy: ModelTransportPolicy
   private let session: URLSession
+  private let deadlines: ModelDeadlinePolicy
+
+  /// The largest body Evie sends. The gateway refuses anything over 64 MB with a
+  /// 413; refusing at 60 MiB here means the conversation is never uploaded only
+  /// to be thrown away, and leaves room for the gateway's own framing.
+  static let maximumRequestBytes = 60 * 1_024 * 1_024
 
   /// Internal on purpose: outside EvieCore the only way to get a client is
   /// `ModelClientFactory`, so no caller can pick its own policy or key source.
@@ -78,21 +31,31 @@ public final class OpenAICompatibleClient: AgentClient, Sendable {
     configuration: EvieConfiguration,
     credentials: any EvieCredentialProviding,
     transportPolicy: ModelTransportPolicy,
-    session: URLSession
+    session: URLSession,
+    deadlines: ModelDeadlinePolicy = .standard
   ) {
     self.configuration = configuration
     self.credentials = credentials
     self.transportPolicy = transportPolicy
     self.session = session
+    self.deadlines = deadlines
   }
 
   public func stream(
     messages: [ChatMessage]
   ) -> AsyncThrowingStream<EvieInteractionEvent, any Error> {
-    stream(messages: messages, tools: [])
+    stream(messages: messages, tools: [], options: .chat(configuration))
   }
 
-  /// The same turn, with a set of functions the model may ask for.
+  public func stream(
+    messages: [ChatMessage],
+    tools: [EvieToolDefinition]
+  ) -> AsyncThrowingStream<EvieInteractionEvent, any Error> {
+    stream(messages: messages, tools: tools, options: .chat(configuration))
+  }
+
+  /// The same turn, with a set of functions the model may ask for and the
+  /// options that shape the request.
   ///
   /// Streaming is kept for tool turns rather than falling back to a plain
   /// request: the running server was measured emitting a complete, well-formed
@@ -100,81 +63,39 @@ public final class OpenAICompatibleClient: AgentClient, Sendable {
   /// request paths, and ordinary text still arrives token by token.
   public func stream(
     messages: [ChatMessage],
-    tools: [EvieToolDefinition]
+    tools: [EvieToolDefinition],
+    options: TurnOptions
   ) -> AsyncThrowingStream<EvieInteractionEvent, any Error> {
-    let configuration = configuration
-    let credentials = credentials
-    let transportPolicy = transportPolicy
-    let session = session
+    let turn = Turn(
+      messages: messages,
+      tools: tools,
+      options: options,
+      configuration: configuration,
+      credentials: credentials,
+      transportPolicy: transportPolicy,
+      session: session,
+      deadlines: deadlines
+    )
 
     return AsyncThrowingStream { continuation in
       let requestTask = Task {
         do {
-          try Task.checkCancellation()
-          try configuration.validate()
-          let url = configuration.chatCompletionsURL
-          if case .refused(let reason) = transportPolicy.evaluate(
-            url,
-            credentialHost: configuration.credential?.boundHost
-          ) {
-            throw OpenAICompatibleClientError.transportRefused(reason)
-          }
-          let bearerToken = try await Self.bearerToken(
-            for: url,
-            credential: configuration.credential,
-            from: credentials
-          )
-
-          var request = try Self.makeRequest(
-            messages: messages,
-            tools: tools,
-            configuration: configuration
-          )
-          if let bearerToken {
-            request.setValue("Bearer \(bearerToken)", forHTTPHeaderField: "Authorization")
-          }
-          continuation.yield(.phaseChanged(.thinking))
-
-          let (bytes, response) = try await session.bytes(
-            for: request,
-            delegate: RedirectRefusal()
-          )
-          try Task.checkCancellation()
-
-          guard let httpResponse = response as? HTTPURLResponse else {
-            throw OpenAICompatibleClientError.invalidHTTPResponse
-          }
-
-          guard (200...299).contains(httpResponse.statusCode) else {
-            let errorBody = try await Self.readErrorBody(from: bytes)
-            let apiError = errorBody.flatMap(Self.decodeAPIError(from:))
-            throw OpenAICompatibleClientError.httpStatus(
-              code: httpResponse.statusCode,
-              message: apiError?.message ?? errorBody
-            )
-          }
-
-          try await Self.consumeStream(
-            bytes,
-            continuation: continuation
-          )
+          try await turn.run(continuation: continuation)
         } catch is CancellationError {
           continuation.finish(throwing: CancellationError())
         } catch let error as EvieConfiguration.ValidationError {
           continuation.finish(
-            throwing: OpenAICompatibleClientError.invalidConfiguration(
-              error.localizedDescription
-            )
+            throwing: ModelClientError.invalidConfiguration(error.localizedDescription)
           )
-        } catch let error as OpenAICompatibleClientError {
+        } catch let error as ModelClientError {
           continuation.finish(throwing: error)
         } catch let error as URLError where error.code == .cancelled {
-          continuation.finish(throwing: CancellationError())
+          continuation.finish(
+            throwing: Task.isCancelled ? CancellationError() : ModelClientError.cancelled
+          )
         } catch {
           continuation.finish(
-            throwing: OpenAICompatibleClientError.transport(
-              error.localizedDescription
-            )
+            throwing: ModelClientError.unreachable(error.localizedDescription)
           )
         }
       }
@@ -182,6 +103,89 @@ public final class OpenAICompatibleClient: AgentClient, Sendable {
       continuation.onTermination = { @Sendable _ in
         requestTask.cancel()
       }
+    }
+  }
+}
+
+/// Everything one request needs, gathered so the work runs off the client.
+private struct Turn: Sendable {
+  let messages: [ChatMessage]
+  let tools: [EvieToolDefinition]
+  let options: TurnOptions
+  let configuration: EvieConfiguration
+  let credentials: any EvieCredentialProviding
+  let transportPolicy: ModelTransportPolicy
+  let session: URLSession
+  let deadlines: ModelDeadlinePolicy
+
+  typealias Continuation = AsyncThrowingStream<EvieInteractionEvent, any Error>.Continuation
+
+  func run(continuation: Continuation) async throws {
+    try Task.checkCancellation()
+    try configuration.validate()
+    let url = configuration.chatCompletionsURL
+    if case .refused(let reason) = transportPolicy.evaluate(
+      url,
+      credentialHost: configuration.credential?.boundHost
+    ) {
+      throw ModelClientError.transportRefused(reason)
+    }
+    let bearerToken = try await OpenAICompatibleClient.bearerToken(
+      for: url,
+      credential: configuration.credential,
+      from: credentials
+    )
+    let request = try OpenAICompatibleClient.makeRequest(
+      messages: messages,
+      tools: tools,
+      options: options,
+      configuration: configuration,
+      bearerToken: bearerToken,
+      deadlines: deadlines
+    )
+    let watchdog = ResponseWatchdog(
+      deadlines: deadlines.deadlines(
+        readiness: options.readiness,
+        carriesImage: messages.contains { !($0.images ?? []).isEmpty },
+        configuration: configuration
+      )
+    )
+    let outputCap = OpenAICompatibleClient.outputCap(options: options, configuration: configuration)
+    continuation.yield(.phaseChanged(.thinking))
+
+    try await watchdog.guarding {
+      let (bytes, response) = try await session.bytes(
+        for: request,
+        delegate: RedirectRefusal()
+      )
+      watchdog.headersArrived()
+      try Task.checkCancellation()
+
+      guard let httpResponse = response as? HTTPURLResponse else {
+        throw ModelClientError.unreachable("a resposta não era HTTP")
+      }
+      guard (200...299).contains(httpResponse.statusCode) else {
+        let errorBody = try await OpenAICompatibleClient.readErrorBody(from: bytes)
+        if httpResponse.statusCode == 401, bearerToken != nil,
+          let credential = configuration.credential
+        {
+          // Dropped so the next turn reads the keychain again — the key may
+          // have been replaced — but this turn is not retried with it.
+          await credentials.invalidate(credential)
+        }
+        throw OpenAICompatibleClient.httpError(
+          status: httpResponse.statusCode,
+          body: errorBody,
+          model: configuration.model
+        )
+      }
+
+      try await OpenAICompatibleClient.consumeStream(
+        bytes,
+        outputCap: outputCap,
+        watchdog: watchdog,
+        continuation: continuation
+      )
     }
   }
 }
@@ -202,6 +206,86 @@ private final class RedirectRefusal: NSObject, URLSessionTaskDelegate, Sendable 
     newRequest request: URLRequest
   ) async -> URLRequest? {
     nil
+  }
+}
+
+/// Ends a turn that waits too long for its headers or for its first token.
+///
+/// The idle gap (`URLRequest.timeoutInterval`) cannot do this: it restarts on
+/// every byte, and a request waiting on a cold model or a long prefill receives
+/// no bytes at all, so it would wait the whole gap at each stage. The watchdog
+/// runs beside the request and cancels it when the current stage's deadline
+/// passes; the request reports which deadline that was.
+private final class ResponseWatchdog: Sendable {
+  private enum Stage: Equatable {
+    case awaitingHeaders
+    case awaitingFirstToken
+    case streaming
+  }
+
+  private struct State {
+    var stage: Stage
+    var deadline: ContinuousClock.Instant
+  }
+
+  private let deadlines: ModelTurnDeadlines
+  private let state: Mutex<State>
+
+  init(deadlines: ModelTurnDeadlines) {
+    self.deadlines = deadlines
+    state = Mutex(State(stage: .awaitingHeaders, deadline: .now + deadlines.headers))
+  }
+
+  func headersArrived() {
+    let firstToken = deadlines.firstToken
+    state.withLock { state in
+      guard state.stage == .awaitingHeaders else { return }
+      state = State(stage: .awaitingFirstToken, deadline: .now + firstToken)
+    }
+  }
+
+  func firstTokenArrived() {
+    state.withLock { $0.stage = .streaming }
+  }
+
+  /// Runs `work`, cancelling it with the matching error if a deadline passes
+  /// first. Once the first token is in, only the idle gap applies.
+  func guarding(_ work: @escaping @Sendable () async throws -> Void) async throws {
+    try await withThrowingTaskGroup(of: Bool.self) { group in
+      group.addTask {
+        try await work()
+        return true
+      }
+      group.addTask {
+        try await self.enforce()
+        return false
+      }
+      while let workFinished = try await group.next() {
+        if workFinished {
+          group.cancelAll()
+          return
+        }
+      }
+    }
+  }
+
+  private func enforce() async throws {
+    while true {
+      let current = state.withLock { $0 }
+      switch current.stage {
+      case .streaming:
+        return
+      case .awaitingHeaders, .awaitingFirstToken:
+        if ContinuousClock.now >= current.deadline {
+          throw current.stage == .awaitingHeaders
+            ? ModelClientError.headersTimedOut
+            : ModelClientError.firstTokenTimedOut
+        }
+        // Wakes at the deadline of the stage it saw; if the stage moved on in
+        // the meantime the loop simply reads the new deadline.
+        try await Task.sleep(until: current.deadline, clock: .continuous)
+      }
+    }
   }
 }
 
@@ -231,79 +315,159 @@ extension OpenAICompatibleClient {
     do {
       token = try await credentials.bearerToken(for: credential)
     } catch {
-      throw OpenAICompatibleClientError.credentialUnavailable(error.localizedDescription)
+      throw ModelClientError.credentialUnavailable(error.localizedDescription)
     }
     guard let token else {
-      throw OpenAICompatibleClientError.credentialUnavailable(
-        "no key is saved for \(host)."
+      throw ModelClientError.credentialUnavailable(
+        "nenhuma chave salva para \(host)."
       )
     }
     return token
   }
 
-  fileprivate static func makeRequest(
+  /// The output cap the request asks for: the turn's own, never above the
+  /// configuration's.
+  static func outputCap(options: TurnOptions, configuration: EvieConfiguration) -> Int {
+    min(options.maxTokens ?? configuration.maxCompletionTokens, configuration.maxCompletionTokens)
+  }
+
+  /// The request for one turn. Synchronous and free of I/O — the token is read
+  /// before the call — so the body can be tested without a server.
+  static func makeRequest(
     messages: [ChatMessage],
     tools: [EvieToolDefinition],
-    configuration: EvieConfiguration
+    options: TurnOptions,
+    configuration: EvieConfiguration,
+    bearerToken: String?,
+    deadlines: ModelDeadlinePolicy = .standard
   ) throws -> URLRequest {
     var request = URLRequest(url: configuration.chatCompletionsURL)
     request.httpMethod = "POST"
-    request.timeoutInterval = configuration.requestTimeout
+    request.timeoutInterval =
+      deadlines.deadlines(
+        readiness: options.readiness,
+        carriesImage: messages.contains { !($0.images ?? []).isEmpty },
+        configuration: configuration
+      ).idleGap
     request.setValue("application/json", forHTTPHeaderField: "Content-Type")
     request.setValue("text/event-stream", forHTTPHeaderField: "Accept")
+    if let bearerToken {
+      request.setValue("Bearer \(bearerToken)", forHTTPHeaderField: "Authorization")
+    }
 
+    let outputCap = outputCap(options: options, configuration: configuration)
+    let thinking = ThinkingParameters(
+      style: configuration.thinkingStyle,
+      options: options,
+      outputCap: outputCap
+    )
     let body = ChatCompletionRequest(
       model: configuration.model,
-      messages: messages.map(APIMessage.init),
+      messages: WireConversation.messages(from: messages),
       stream: true,
       streamOptions: .init(includeUsage: true),
-      maxCompletionTokens: configuration.maxCompletionTokens,
+      maxTokens: outputCap,
       temperature: configuration.temperature,
       topP: configuration.topP,
-      stop: configuration.stopSequences.isEmpty
-        ? nil
-        : configuration.stopSequences
+      stop: configuration.stopSequences.isEmpty ? nil : configuration.stopSequences,
+      // Sent only with tools: a server may reject the field on a request that
+      // declares none, and one call per turn is what the agent loop expects.
+      parallelToolCalls: tools.isEmpty ? nil : false,
+      chatTemplateKwargs: thinking.templateKwargs,
+      enableThinking: thinking.topLevelEnable,
+      thinkingBudgetTokens: thinking.budget
     )
 
+    let encoded: Data
     do {
-      let encoded = try JSONEncoder().encode(body)
-      guard tools.isEmpty else {
-        // JSON Schema is open-ended, so the tools are built as dictionaries and
-        // grafted onto the encoded body. Keeping the other fields in `Encodable`
-        // means there is still one description of them.
-        guard
-          var object = try JSONSerialization.jsonObject(with: encoded) as? [String: Any]
-        else {
-          throw OpenAICompatibleClientError.requestEncoding("body was not an object")
-        }
-        object["tools"] = tools.map(\.wireRepresentation)
-        request.httpBody = try JSONSerialization.data(
-          withJSONObject: object,
-          options: [.sortedKeys]
-        )
-        return request
+      let encoder = JSONEncoder()
+      // A base64 image is full of "/"; escaping each one would add bytes for
+      // nothing, since every JSON reader decodes both forms the same.
+      encoder.outputFormatting = [.withoutEscapingSlashes]
+      encoded = try encoder.encode(body)
+    } catch {
+      throw ModelClientError.requestEncoding(error.localizedDescription)
+    }
+    let finished = tools.isEmpty ? encoded : try graft(tools: tools, onto: encoded)
+    guard finished.count <= maximumRequestBytes else {
+      throw ModelClientError.requestTooLarge
+    }
+    request.httpBody = finished
+    return request
+  }
+
+  /// JSON Schema is open-ended, so the tools are built as dictionaries and
+  /// grafted onto the encoded body. Keeping the other fields in `Encodable`
+  /// means there is still one description of them.
+  private static func graft(tools: [EvieToolDefinition], onto encoded: Data) throws -> Data {
+    do {
+      guard var object = try JSONSerialization.jsonObject(with: encoded) as? [String: Any]
+      else {
+        throw ModelClientError.requestEncoding("o corpo não era um objeto")
       }
-      request.httpBody = encoded
-    } catch let error as OpenAICompatibleClientError {
+      object["tools"] = tools.map(\.wireRepresentation)
+      return try JSONSerialization.data(
+        withJSONObject: object,
+        options: [.sortedKeys, .withoutEscapingSlashes]
+      )
+    } catch let error as ModelClientError {
       throw error
     } catch {
-      throw OpenAICompatibleClientError.requestEncoding(error.localizedDescription)
+      throw ModelClientError.requestEncoding(error.localizedDescription)
     }
-    return request
+  }
+
+  /// What a non-2xx status means for the caller. The bodies are the gateway's:
+  /// llama-swap answers with `{"error": "<text>"}`, gateway-edge with
+  /// `{"type":"error","error":{…}}`, the engine with an OpenAI error object.
+  fileprivate static func httpError(status: Int, body: String?, model: String) -> ModelClientError {
+    let message = body.flatMap(decodeAPIError(from:))?.message ?? body ?? ""
+    switch status {
+    case 401:
+      return .unauthorized
+    case 404 where message.localizedCaseInsensitiveContains("no router"):
+      return .modelNotFound(model)
+    case 413:
+      return .requestTooLarge
+    case 502:
+      // gateway-edge could not reach the engine, or Tailscale Serve is up
+      // while the gateway is stopped (the PC's gaming mode).
+      return .unreachable("gateway")
+    default:
+      return .server(status: status, message: message)
+    }
   }
 
   fileprivate static func consumeStream(
     _ bytes: URLSession.AsyncBytes,
+    outputCap: Int,
+    watchdog: ResponseWatchdog,
     continuation: AsyncThrowingStream<EvieInteractionEvent, any Error>.Continuation
   ) async throws {
     var lineBuffer = SSELineBuffer()
     var eventBuffer = SSEDataBuffer()
+    var inlineThinking = InlineThinkingSplitter()
     var fullText = ""
     var finishReason: String?
+    var completionTokens: Int?
+    var receivedReasoning = false
     var receivedEvent = false
     var receivedDone = false
     var toolCalls = EvieToolCallAccumulator()
     var announcedToolPhase = false
+
+    func emit(_ pieces: [InlineThinkingSplitter.Piece]) {
+      for piece in pieces {
+        switch piece {
+        case .answer(let text):
+          fullText += text
+          continuation.yield(.responseTextDelta(text))
+        case .reasoning(let text):
+          receivedReasoning = true
+          continuation.yield(.reasoningDelta(text))
+        }
+      }
+    }
 
     func processPayload(_ payload: String) throws -> Bool {
       switch try decodeStreamPayload(payload) {
@@ -312,22 +476,25 @@ extension OpenAICompatibleClient {
 
       case .chunk(let chunk):
         if let error = chunk.error {
-          throw OpenAICompatibleClientError.server(
-            message: error.message,
-            code: error.code
-          )
+          throw ModelClientError.streamFailed(message: error.message, code: error.code)
         }
 
         if let usage = chunk.usage {
+          completionTokens = usage.completionTokens
           continuation.yield(.usage(usage.normalized))
         }
 
         for choice in chunk.choices ?? [] {
+          if let reasoning = choice.delta.reasoning, !reasoning.isEmpty {
+            watchdog.firstTokenArrived()
+            emit([.reasoning(reasoning)])
+          }
           if let delta = choice.delta.content, !delta.isEmpty {
-            fullText += delta
-            continuation.yield(.responseTextDelta(delta))
+            watchdog.firstTokenArrived()
+            emit(inlineThinking.consume(delta))
           }
           for fragment in choice.delta.toolCalls ?? [] {
+            watchdog.firstTokenArrived()
             toolCalls.absorb(
               index: fragment.index,
               id: fragment.id,
@@ -379,21 +546,33 @@ extension OpenAICompatibleClient {
     }
 
     guard receivedEvent else {
-      throw OpenAICompatibleClientError.emptyStream
+      throw ModelClientError.emptyStream
     }
     guard receivedDone else {
-      throw OpenAICompatibleClientError.streamEndedBeforeDone
+      throw ModelClientError.streamEndedBeforeDone
+    }
+    emit(inlineThinking.finish())
+
+    // The engine can say "stop" when it was cut at the limit, which the gateway
+    // does not correct; the usage is the reliable witness.
+    let reachedCap = finishReason == "length" || (completionTokens ?? 0) >= outputCap
+    let assembled = toolCalls.calls()
+    let answered =
+      !fullText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || !assembled.isEmpty
+    if !answered, receivedReasoning || reachedCap {
+      throw reachedCap
+        ? ModelClientError.truncated(completionTokens: completionTokens ?? outputCap)
+        : ModelClientError.emptyStream
     }
 
     try Task.checkCancellation()
-    let assembled = toolCalls.calls()
     let message = ChatMessage(
       role: .assistant,
       content: fullText,
       toolCalls: assembled.isEmpty ? nil : assembled
     )
     continuation.yield(
-      .completed(message: message, finishReason: finishReason)
+      .completed(message: message, finishReason: reachedCap ? "length" : finishReason)
     )
     continuation.finish()
   }
@@ -404,13 +583,13 @@ extension OpenAICompatibleClient {
     }
 
     guard let data = payload.data(using: .utf8) else {
-      throw OpenAICompatibleClientError.malformedStreamEvent
+      throw ModelClientError.malformedStreamEvent
     }
 
     do {
       return .chunk(try JSONDecoder().decode(StreamChunk.self, from: data))
     } catch {
-      throw OpenAICompatibleClientError.malformedStreamEvent
+      throw ModelClientError.malformedStreamEvent
     }
   }
 
@@ -436,25 +615,129 @@ extension OpenAICompatibleClient {
   }
 }
 
+/// The thinking fields for one request, in the form its server understands.
+private struct ThinkingParameters {
+  var templateKwargs: ChatTemplateKwargs?
+  var topLevelEnable: Bool?
+  var budget: Int?
+
+  init(style: ThinkingParameterStyle, options: TurnOptions, outputCap: Int) {
+    let thinks = options.reasoning != .off
+    switch style {
+    case .templateKwargs:
+      // Off sends only the switch: the gateway drops an effort that comes with
+      // thinking off, and an absent switch means the template's default, which
+      // for Qwen is to think.
+      templateKwargs =
+        thinks
+        ? ChatTemplateKwargs(
+          enableThinking: true,
+          reasoningEffort: options.reasoning.rawValue,
+          preserveThinking: false
+        )
+        : ChatTemplateKwargs(enableThinking: false, reasoningEffort: nil, preserveThinking: nil)
+      budget =
+        thinks
+        ? options.thinkingBudgetTokens.map {
+          min($0, ReasoningLevel.thinkingBudget(forOutputCap: outputCap))
+        }
+        : nil
+    case .topLevel:
+      topLevelEnable = thinks
+    case .none:
+      break
+    }
+  }
+}
+
+/// The conversation as the wire carries it.
+///
+/// The first message, when it is the system prompt, goes out byte for byte: it
+/// is the head of the server's prefix cache. Any later system or developer
+/// message — skill guidance, a screen note — is not merged into it, which would
+/// change the cached head whenever a skill came or went, and not sent as a
+/// system message either, which Qwen's template refuses after index 0. It is
+/// wrapped in `<system-context>` and prepended to the next user message, the
+/// same rewrite the PC gateway applies to a late system message.
+private enum WireConversation {
+  static func messages(from messages: [ChatMessage]) -> [APIMessage] {
+    var wire: [APIMessage] = []
+    var lateInstructions: [String] = []
+
+    for (index, message) in messages.enumerated() {
+      if index > 0, message.role == .system || message.role == .developer {
+        let text = message.content.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !text.isEmpty {
+          lateInstructions.append(text)
+        }
+        continue
+      }
+      if message.role == .user, !lateInstructions.isEmpty {
+        wire.append(APIMessage(message, systemContext: block(lateInstructions)))
+        lateInstructions.removeAll()
+      } else {
+        wire.append(APIMessage(message, systemContext: nil))
+      }
+    }
+    // Guidance with no question after it still has to arrive somewhere.
+    if !lateInstructions.isEmpty {
+      wire.append(APIMessage(role: .user, content: .text(block(lateInstructions))))
+    }
+    return wire
+  }
+
+  /// Text that is already a block is kept as it is, so replaying a rewritten
+  /// conversation cannot nest the tags.
+  private static func block(_ instructions: [String]) -> String {
+    instructions.map { text in
+      text.hasPrefix("<system-context>") && text.hasSuffix("</system-context>")
+        ? text
+        : "<system-context>\n\(text)\n</system-context>"
+    }.joined(separator: "\n\n")
+  }
+}
+
 private struct ChatCompletionRequest: Encodable {
   let model: String
   let messages: [APIMessage]
   let stream: Bool
   let streamOptions: StreamOptions
-  let maxCompletionTokens: Int
+  /// `max_tokens`, not `max_completion_tokens`: it is what the gateway, every
+  /// other client of it and the loopback server all honour.
+  let maxTokens: Int
   let temperature: Double?
   let topP: Double?
   let stop: [String]?
+  let parallelToolCalls: Bool?
+  let chatTemplateKwargs: ChatTemplateKwargs?
+  let enableThinking: Bool?
+  let thinkingBudgetTokens: Int?
 
   enum CodingKeys: String, CodingKey {
     case model
     case messages
     case stream
     case streamOptions = "stream_options"
-    case maxCompletionTokens = "max_completion_tokens"
+    case maxTokens = "max_tokens"
     case temperature
     case topP = "top_p"
     case stop
+    case parallelToolCalls = "parallel_tool_calls"
+    case chatTemplateKwargs = "chat_template_kwargs"
+    case enableThinking = "enable_thinking"
+    case thinkingBudgetTokens = "thinking_budget_tokens"
+  }
+}
+
+private struct ChatTemplateKwargs: Encodable {
+  let enableThinking: Bool
+  let reasoningEffort: String?
+  let preserveThinking: Bool?
+
+  enum CodingKeys: String, CodingKey {
+    case enableThinking = "enable_thinking"
+    case reasoningEffort = "reasoning_effort"
+    case preserveThinking = "preserve_thinking"
   }
 }
 
@@ -468,14 +751,32 @@ private struct StreamOptions: Encodable {
 
 private struct APIMessage: Encodable {
   let role: String
-  let content: String
+  let content: APIContent
   let name: String?
   let toolCallID: String?
   let toolCalls: [APIToolCall]?
 
-  init(_ message: ChatMessage) {
+  init(role: ChatRole, content: APIContent) {
+    self.role = role.rawValue
+    self.content = content
+    name = nil
+    toolCallID = nil
+    toolCalls = nil
+  }
+
+  init(_ message: ChatMessage, systemContext: String?) {
     role = message.role.rawValue
-    content = message.content
+    let text =
+      switch systemContext {
+      case nil: message.content
+      case let context? where message.content.isEmpty: context
+      case let context?: context + "\n\n" + message.content
+      }
+    if let images = message.images, !images.isEmpty {
+      content = .parts([.text(text)] + images.map { .image(dataURL: $0.dataURL) })
+    } else {
+      content = .text(text)
+    }
     name = message.name
     toolCallID = message.toolCallID
     toolCalls = message.toolCalls.map { $0.map(APIToolCall.init) }
@@ -487,6 +788,48 @@ private struct APIMessage: Encodable {
     case name
     case toolCallID = "tool_call_id"
     case toolCalls = "tool_calls"
+  }
+}
+
+/// A plain string unless the message carries an image, so a text-only request
+/// is the same bytes it always was.
+private enum APIContent: Encodable {
+  case text(String)
+  case parts([APIContentPart])
+
+  func encode(to encoder: any Encoder) throws {
+    var container = encoder.singleValueContainer()
+    switch self {
+    case .text(let text): try container.encode(text)
+    case .parts(let parts): try container.encode(parts)
+    }
+  }
+}
+
+private enum APIContentPart: Encodable {
+  case text(String)
+  case image(dataURL: String)
+
+  private enum CodingKeys: String, CodingKey {
+    case type
+    case text
+    case imageURL = "image_url"
+  }
+
+  private struct ImageURL: Encodable {
+    let url: String
+  }
+
+  func encode(to encoder: any Encoder) throws {
+    var container = encoder.container(keyedBy: CodingKeys.self)
+    switch self {
+    case .text(let text):
+      try container.encode("text", forKey: .type)
+      try container.encode(text, forKey: .text)
+    case .image(let dataURL):
+      try container.encode("image_url", forKey: .type)
+      try container.encode(ImageURL(url: dataURL), forKey: .imageURL)
+    }
   }
 }
 
@@ -534,10 +877,25 @@ private struct StreamChoice: Decodable {
 
 private struct StreamDelta: Decodable {
   let content: String?
+  /// `reasoning_content` from llama.cpp (`--reasoning-format deepseek`, as the
+  /// PC runs it — recorded 2026-10-16), or `reasoning` from servers that use
+  /// the newer name.
+  let reasoning: String?
   let toolCalls: [StreamToolCall]?
+
+  init(from decoder: any Decoder) throws {
+    let container = try decoder.container(keyedBy: CodingKeys.self)
+    content = try container.decodeIfPresent(String.self, forKey: .content)
+    reasoning =
+      try container.decodeIfPresent(String.self, forKey: .reasoningContent)
+      ?? container.decodeIfPresent(String.self, forKey: .reasoning)
+    toolCalls = try container.decodeIfPresent([StreamToolCall].self, forKey: .toolCalls)
+  }
 
   enum CodingKeys: String, CodingKey {
     case content
+    case reasoningContent = "reasoning_content"
+    case reasoning
     case toolCalls = "tool_calls"
   }
 }
@@ -599,13 +957,51 @@ private struct PromptTokenDetails: Decodable {
   }
 }
 
+/// `{"error": {…}}` from the engine and gateway-edge, `{"error": "<text>"}` from
+/// llama-swap.
 private struct APIErrorEnvelope: Decodable {
   let error: APIError
+
+  init(from decoder: any Decoder) throws {
+    let container = try decoder.container(keyedBy: CodingKeys.self)
+    if let message = try? container.decode(String.self, forKey: .error) {
+      error = APIError(message: message, code: nil)
+    } else {
+      error = try container.decode(APIError.self, forKey: .error)
+    }
+  }
+
+  enum CodingKeys: String, CodingKey {
+    case error
+  }
 }
 
 private struct APIError: Decodable {
   let message: String
+  /// Text whichever way it was sent: llama.cpp sends `"code": 500`, other
+  /// servers a string such as `"queue_full"`. A number used to fail the whole
+  /// decode and turn the server's message into "malformed event".
   let code: String?
+
+  init(message: String, code: String?) {
+    self.message = message
+    self.code = code
+  }
+
+  init(from decoder: any Decoder) throws {
+    let container = try decoder.container(keyedBy: CodingKeys.self)
+    message = try container.decode(String.self, forKey: .message)
+    if let number = try? container.decodeIfPresent(Int.self, forKey: .code) {
+      code = String(number)
+    } else {
+      code = try container.decodeIfPresent(String.self, forKey: .code)
+    }
+  }
+
+  enum CodingKeys: String, CodingKey {
+    case message
+    case code
+  }
 }
 
 private struct SSELineBuffer {
@@ -641,7 +1037,7 @@ private struct SSELineBuffer {
   private mutating func finishLine() throws -> String {
     defer { bytes.removeAll(keepingCapacity: true) }
     guard let line = String(data: bytes, encoding: .utf8) else {
-      throw OpenAICompatibleClientError.malformedStreamEvent
+      throw ModelClientError.malformedStreamEvent
     }
     return line
   }
