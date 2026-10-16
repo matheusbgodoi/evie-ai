@@ -103,7 +103,7 @@ final class AppCoordinator: NSObject {
     )
     let preferencesResult = preferencesStore.loadWithDiagnostics()
     let viewModel = OverlayViewModel(
-      agentClient: TurboFieldfareClient(configuration: loadResult.configuration),
+      agentClient: ModelClientFactory.live.makeClient(configuration: loadResult.configuration),
       conversationStore: conversationStore,
       capabilities: Self.capabilities(
         for: preferencesResult.preferences,

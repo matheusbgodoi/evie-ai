@@ -152,7 +152,7 @@ extension OverlayViewModel {
     ) { _ in }
     let text = outcome.answer.trimmingCharacters(in: .whitespacesAndNewlines)
     guard !text.isEmpty else {
-      throw TurboFieldfareClientError.emptyStream
+      throw OpenAICompatibleClientError.emptyStream
     }
     return text
   }

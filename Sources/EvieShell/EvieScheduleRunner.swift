@@ -81,7 +81,7 @@ enum EvieScheduleRunner {
       ).run(
         messages: messages,
         roots: roots,
-        client: TurboFieldfareClient(configuration: configuration),
+        client: ModelClientFactory.live.makeClient(configuration: configuration),
         emit: { event in
           if case .status(let message) = event {
             await log("   · \(message)")

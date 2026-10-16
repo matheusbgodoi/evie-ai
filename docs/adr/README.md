@@ -6,14 +6,15 @@ supersede rather than silently rewrite them when the decision changes.
 | ADR | Title | Status |
 |---|---|---|
 | [0001](0001-documentation-first.md) | Documentation-first, gate-based delivery | Accepted |
-| [0002](0002-primary-model-and-context.md) | Gemma/TurboFieldfare primary candidate at 64K FP16 KV | Accepted for planning |
+| [0002](0002-primary-model-and-context.md) | Gemma/TurboFieldfare primary candidate at 64K FP16 KV | Accepted for planning; superseded in part by 0013 |
 | [0003](0003-native-overlay.md) | Native macOS overlay inspired by CLUI CC | Accepted for planning |
 | [0004](0004-specialist-workers.md) | On-demand specialist workers | Accepted for planning |
 | [0005](0005-node-red-workflow-plane.md) | Node-RED as visual deterministic workflow plane | Accepted for planning |
-| [0006](0006-direct-turbo-vertical-slice.md) | Backend-neutral core with direct TurboFieldfare prototype adapter | Accepted for VS-001 |
+| [0006](0006-direct-turbo-vertical-slice.md) | Backend-neutral core with direct TurboFieldfare prototype adapter | Accepted for VS-001; superseded in part by 0013 |
 | [0007](0007-local-development-runtime.md) | Pinned local development runtime outside Git | Accepted for first-test development |
 | [0008](0008-local-conversation-history.md) | Local visible conversation history before Hermes | Accepted for native-shell prototype |
 | [0009](0009-nominal-capability-authority.md) | Nominal read/propose/commit with process-local authority | Accepted for policy-broker foundation |
 | [0010](0010-refuse-unseen-mail-recipients.md) | Refuse a recipient the conversation never contained | Accepted for `propose_mail` |
 | [0011](0011-draft-beside-send.md) | A draft button beside the send button | Accepted for `propose_mail` |
 | [0012](0012-fused-local-retrieval.md) | Retrieval by three fused signals over a cached local embedding | Accepted for the shipped retrieval path |
+| [0013](0013-authenticated-tailnet-model-transport.md) | Authenticated tailnet model transport | Accepted for Evie v2 |

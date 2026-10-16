@@ -131,6 +131,15 @@ public struct StaticCredentialProvider: EvieCredentialProviding { /* tests */ }
 - Update the comment at `EvieConfiguration.swift:3-6`: the configuration holds a *reference* to a credential, never the credential itself.
 - Update `docs/ARCHITECTURE.md:83` and `docs/SECURITY.md` (allowlist, host binding, redirect refusal).
 
+**Implemented 2026-10-16:**
+- `EvieConfiguration` gained `credential: CredentialReference?` (default `nil`). The loader and store do not read or write it yet; the v2 schema in S2a does. Until then no file can point Evie at the PC.
+- The error type is renamed too: `OpenAICompatibleClientError`, with two new cases, `transportRefused(String)` and `credentialUnavailable(String)`. The second covers a key that applies but is not saved, and a keychain failure; nothing is sent in either case. S1b's `ModelClientError` will replace this type.
+- The redirect refusal is a **task** delegate (`session.bytes(for:delegate:)`), not a session delegate. It then holds for any injected session, `URLSession.shared` included, and the stub-session tests exercise the real code path.
+- The client's initialiser is `internal`. Outside EvieCore the only way to get a client is `ModelClientFactory`; `ModelClientFactory.live` shares one `KeychainCredentialProvider` per process.
+- The policy also refuses URLs that carry a user or password. A wildcard counts only in the form `*.<one label>.ts.net`, and it admits exactly one label.
+- `TurboFieldfareStreamSplitTests.swift` is renamed to `OpenAICompatibleStreamSplitTests.swift`. The old test "non-loopback inference endpoint is rejected before transport", which expected `invalidConfiguration` mentioning "loopback", is replaced by "an endpoint off the allowlist is refused before any request is sent".
+- Measured 2026-10-16 from this Mac, read-only: the gateway's `GET /health` returns 200 with no redirect (49 ms); `GET /v1/models` returns 401 without a key and 200 with one, with no redirect; plain `http` to the gateway name does not connect.
+
 ### S1b: Request and stream features (one commit)
 
 **Files:**

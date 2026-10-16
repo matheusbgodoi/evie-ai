@@ -273,7 +273,7 @@ final class OverlayViewModel: ObservableObject {
   }
 
   func applyConfiguration(_ configuration: EvieConfiguration) {
-    agentClient = TurboFieldfareClient(configuration: configuration)
+    agentClient = ModelClientFactory.live.makeClient(configuration: configuration)
     secondaryText = "Novos ajustes serão usados na próxima pergunta"
     onLayoutInvalidated?()
   }

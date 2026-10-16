@@ -122,17 +122,44 @@ having written nothing. What is true today:
   below.
 - **Arithmetic**: `calculate` evaluates a fixed grammar in process. It has no
   I/O, no preference, and is declared on every turn.
-- **Accounts and credentials**: still none. Mail and Calendar are read through
-  the accounts the Apple apps already hold, so there is no OAuth application, no
-  token on disk, and nothing to revoke inside Evie.
+- **Accounts and credentials**: one, the model gateway's key, held only in the
+  keychain. Mail and Calendar are read through the accounts the Apple
+  apps already hold, so there is no OAuth application and no token on disk. The
+  PC gateway's bearer token lives in the login keychain; configuration names the
+  item and the host it was saved for, never the token. See "Model transport"
+  below.
 
 The invariant that has not moved: no tool the model can call changes anything.
 Creating a calendar event did not move it, and neither did sending mail —
 `propose_event` and `propose_mail` both perform nothing, and the functions that
 write and send are not reachable from the loop.
 
-Its direct TurboFieldfare adapter
-rejects non-loopback hosts, sends no credential, and logs no prompt/result body.
+### Model transport
+
+The model client (`OpenAICompatibleClient`, ADR 0013) logs no prompt or result
+body and decides where a conversation may go before it sends anything:
+
+- **Allowlist.** Plain `http` only to loopback. Every other host needs `https`
+  and an exact match in `ModelTransportPolicy.allowedRemoteHosts`, by default
+  only `ai-node-3090.tail6146ef.ts.net`. The one wildcard accepted is
+  `*.<tailnet>.ts.net`, one label inside that tailnet; `*.ts.net` never matches,
+  because Tailscale Funnel serves strangers' machines under it. URLs carrying a
+  user or password are refused. The web client's private-range check is not
+  reused: a tailnet lives in 100.64.0.0/10, which it refuses.
+- **Host binding.** A remote endpoint needs a `CredentialReference` whose
+  `boundHost` is the request host. The token is attached only over `https` and
+  only to that host — never over `http`, loopback included, since any local
+  process can bind a loopback port. A key that applies but is not saved stops the
+  turn before a request is made.
+- **Redirect refusal.** Every redirect is refused, so the `Authorization` header
+  cannot follow a `Location` anywhere; the 3xx is reported as an error.
+- **Storage.** Tokens are read from the legacy login keychain as generic
+  passwords and cached in memory per process. They are never written to the
+  configuration, logs, diagnostics or error messages; a keychain failure reports
+  only its status code.
+
+### Conversation history
+
 Visible conversation history persists under Application Support using
 an actor-isolated, schema-versioned, per-record store. The directory is mode
 `0700`, records are `0600`, writes replace atomically, and hidden system/developer
@@ -144,7 +171,7 @@ from future filesystem tools: user-file deletion must always use an approved,
 recoverable Trash operation and must never expose a model-callable permanent
 delete primitive.
 
-The loopback server itself has no authentication or TLS and must never be exposed
+A loopback model server has no authentication or TLS and must never be exposed
 through a proxy, tunnel, wildcard bind, or remote interface. Future tools cannot be
 added to the direct UI adapter; they require the supervisor/policy boundary and
 separate read/propose/commit capabilities.

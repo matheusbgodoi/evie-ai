@@ -146,8 +146,12 @@ from. It shows up in the smallest places:
   always-on processor no third-party app can reach, "so while Evie is armed, the
   dot is on. That is the true statement, and the settings pane says it."
 
-**Nothing leaves the Mac unless you sent it.** The inference client refuses a
-non-loopback endpoint. There are two exceptions and no others: web search, which
+**Nothing leaves the Mac unless you sent it.** The inference client refuses
+any endpoint that is not this Mac's loopback, save one reserved for Evie v2: your
+own PC, over https, on an exact allowlist, with a key saved for that host
+([ADR 0013](docs/adr/0013-authenticated-tailnet-model-transport.md)); no shipped
+configuration points there yet. Beyond the model there are two exceptions and no
+others: web search, which
 is off by default and says so where you turn it on, and an e-mail you approved by
 pressing the button on a card that showed you every recipient and the whole text.
 

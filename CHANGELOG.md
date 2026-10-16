@@ -4,6 +4,35 @@ All notable changes to Evie are documented here. Dates use `YYYY-MM-DD`.
 
 ## [Unreleased]
 
+### Security
+
+- **The model client may now reach one remote host, under a policy.**
+  `ModelTransportPolicy` replaces the loopback-only check (ADR 0013, superseding
+  ADR 0006 in part): plain `http` only to loopback; any other host only over
+  `https`, on an exact allowlist whose default is the owner's PC gateway
+  `ai-node-3090.tail6146ef.ts.net`, and only with a credential bound to that
+  host. `*.ts.net` is never trusted, URLs carrying a user or password are
+  refused, and an off-list endpoint fails before any request with "Evie refused
+  to send the conversation".
+- **Bearer keys come from the login keychain and stay bound to their host.**
+  Configuration may now hold a `CredentialReference` (keychain service, account,
+  bound host), never a token. The token is attached only over `https` and only
+  to the bound host — never over `http`, loopback included — and a key that
+  applies but is not saved stops the turn before anything is sent.
+- **Redirects are refused.** The client answers every redirect with no request,
+  so the `Authorization` header cannot follow one; the 3xx is reported as an
+  HTTP error.
+
+### Changed
+
+- `TurboFieldfareClient` is now `OpenAICompatibleClient` and
+  `TurboFieldfareClientError` is `OpenAICompatibleClientError`, with no
+  typealias; error messages say "the model server" instead of naming
+  TurboFieldfare. Every client is built by `ModelClientFactory`, whose shared
+  `live` instance holds the one keychain cache; the client's initialiser is
+  internal to EvieCore. With the shipped loopback default, behaviour is
+  unchanged.
+
 ### Fixed
 
 - **The Mail and Calendar switch now survives a relaunch.** It was declared on the

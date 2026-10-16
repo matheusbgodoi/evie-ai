@@ -1,6 +1,8 @@
 # ADR 0006: backend-neutral core with a direct TurboFieldfare prototype adapter
 
-Status: Accepted for VS-001
+Status: Accepted for VS-001; superseded in part by
+[ADR 0013](0013-authenticated-tailnet-model-transport.md) (the loopback-only and
+no-credential clauses)
 
 Date: 2026-08-04
 

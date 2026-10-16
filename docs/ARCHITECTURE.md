@@ -64,23 +64,36 @@ Carbon global shortcut / AppKit status item
        OverlayViewModel -> AgentClient
                     |
                     v
-  TurboFieldfareClient -> loopback Chat Completions SSE
+  ModelClientFactory -> OpenAICompatibleClient
+                    |
+                    v
+  ModelTransportPolicy -> Chat Completions SSE
+  (loopback http, or https to the allowlisted PC with its bound key)
 ```
 
 `EvieCore` owns backend-neutral message, phase, failure, usage, artifact, and
 reducer types, plus nominal read/propose/commit capability contracts. SwiftUI does
 not parse SSE or authorize backend output. The
 application composition root is the only place that chooses the concrete
-TurboFieldfare adapter.
+adapter, and it builds it through `ModelClientFactory`; the client's initialiser
+is internal to EvieCore, so no call site can choose its own policy or key source.
 
 The commit-authority contract is deliberately non-serializable and constructible
 only inside EvieCore's future trusted broker path. It currently has no executor;
 adding a filesystem/network implementation to the direct UI client remains
 forbidden.
 
-This direct connection is accepted only for the current prototype under
-[ADR 0006](adr/0006-direct-turbo-vertical-slice.md). The client still carries no
-credential and rejects non-loopback hosts, and it still never executes a tool.
+This direct connection was accepted for the prototype under
+[ADR 0006](adr/0006-direct-turbo-vertical-slice.md), whose loopback-only and
+no-credential clauses are superseded by
+[ADR 0013](adr/0013-authenticated-tailnet-model-transport.md). Before any request
+`ModelTransportPolicy` allows plain `http` only to loopback, and any other host
+only over `https`, on an exact allowlist (by default the PC gateway
+`ai-node-3090.tail6146ef.ts.net`), with a credential bound to that host. The
+bearer token is read from the login keychain through a `CredentialReference` held
+in the configuration, is attached only over `https` to its bound host, and every
+redirect is refused so the header cannot follow one. The client still never
+executes a tool.
 
 Three of the original abstinences no longer hold, and they are worth naming rather
 than leaving as an out-of-date boundary:
@@ -170,7 +183,7 @@ system frameworks, and every process Evie starts.
 
 | Area | Types |
 |---|---|
-| Transport and loop | `AgentClient`, `TurboFieldfareClient`, `EvieAgentLoop`, `EvieToolCallAccumulator`, `EvieTool` |
+| Transport and loop | `AgentClient`, `OpenAICompatibleClient`, `ModelClientFactory`, `ModelTransportPolicy`, `EvieCredentialProviding` (`KeychainCredentialProvider`, `StaticCredentialProvider`), `EvieAgentLoop`, `EvieToolCallAccumulator`, `EvieTool` |
 | Conversation | `ChatMessage`, `EvieConversation`, `EvieConversationStore`, `EvieConversationExport`, `EvieInteraction`, `EvieArtifact`, `EvieRichText` |
 | Commands | `EvieCommand`, `EvieSearchCommands`, `EviePlan`, `EviePlanPrompts` |
 | Retrieval and grounding | `EvieVaultRetriever`, `EvieVaultPassage`, `EviePassageRanker`, `EvieQueryTerms`, `EvieGrounding`, `EvieAnswerProvenance`, `EvieWebSearch`, `EvieWebPassages` |

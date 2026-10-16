@@ -209,7 +209,7 @@ extension OverlayViewModel {
       let content = message.content.trimmingCharacters(in: .whitespacesAndNewlines)
       if content.isEmpty {
         finishFailure(
-          TurboFieldfareClientError.emptyStream,
+          OpenAICompatibleClientError.emptyStream,
           requestID: requestID
         )
         return
@@ -606,7 +606,7 @@ extension OverlayViewModel {
       finishFailure(
         outcome.exhausted
           ? EvieAgentLoopFailure.exhausted
-          : TurboFieldfareClientError.emptyStream,
+          : OpenAICompatibleClientError.emptyStream,
         requestID: requestID
       )
       return

@@ -1,6 +1,6 @@
 # Project status
 
-Last updated: 2026-08-08
+Last updated: 2026-10-16
 
 ## Repository hygiene
 
@@ -96,9 +96,13 @@ logs also remain under `~/Library`.
 
 - `EvieCore` provides backend-neutral messages, phases, artifacts, reducer state,
   configuration, and an `AgentClient` protocol.
-- `TurboFieldfareClient` streams Chat Completions from
-  `http://127.0.0.1:38433/v1`, requires loopback, supports cancellation, and can
-  declare tools and reassemble the calls the model asks for. It never executes
+- `OpenAICompatibleClient` (renamed from `TurboFieldfareClient` on 2026-10-16)
+  streams Chat Completions from `http://127.0.0.1:38433/v1` by default, supports
+  cancellation, and can declare tools and reassemble the calls the model asks
+  for. Since v2 S1a it passes every endpoint through `ModelTransportPolicy`
+  (loopback over http, or https to the allowlisted PC gateway with a key bound to
+  that host, ADR 0013), reads that key from the login keychain, never sends it
+  over http, and refuses redirects. Every client is built by `ModelClientFactory`. It never executes
   one — that is `EvieAgentLoop`'s job, outside the client, so prompt injection
   cannot reach an executor through the transport. Its byte-level SSE framing
   preserves empty event separators across arbitrary transport fragmentation and
@@ -171,8 +175,9 @@ logs also remain under `~/Library`.
 - `evie-shell` is a SwiftUI/AppKit menu-bar executable with a transparent floating
   `NSPanel`, quick text, a "/" command menu, attachment chips, answer cards that
   scroll inside themselves, a history window, and a settings window.
-- The composition root talks directly to TurboFieldfare only for this reversible
-  slice. ADR 0006 records why this is not the future trust/lifecycle boundary.
+- The composition root talks directly to the model server only for this
+  reversible slice. ADR 0006 records why this is not the future trust/lifecycle
+  boundary; ADR 0013 replaces its loopback-only and no-credential clauses.
 - `EvieConfigurationLoader` applies built-in defaults, an optional versioned local
   JSON file, then supported environment overrides; invalid settings surface an
   actionable startup error and no credential is read or printed.
@@ -409,6 +414,13 @@ readiness only; they are not the Phase 1 performance suite.
   618 tests run on one machine. A macOS 27 runner image closes this.
 
 ## Next recommended action
+
+**Evie v2, on branch `v2`** (spec: `docs/design/2026-10-16-evie-v2-design.md`).
+Done as of 2026-10-16: S8a, S8b item 1 (the osascript tests are gated), and S1a
+(transport rename, policy, keychain credentials, one client factory). The shipped
+default is still the loopback Gemma endpoint, and no configuration can name the
+PC's credential yet; that arrives with the v2 schema in S2a. Next: S1b (request
+and stream features), then S2a.
 
 Two things, in this order, and they are the two things between here and a release.
 

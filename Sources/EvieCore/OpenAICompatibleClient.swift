@@ -1,8 +1,12 @@
 import Foundation
 
-/// Errors raised by the local TurboFieldfare Chat Completions adapter.
-public enum TurboFieldfareClientError: Error, Equatable, Sendable {
+/// Errors raised by the OpenAI-compatible Chat Completions adapter.
+public enum OpenAICompatibleClientError: Error, Equatable, Sendable {
   case invalidConfiguration(String)
+  /// `ModelTransportPolicy` refused the endpoint; nothing was sent.
+  case transportRefused(String)
+  /// The endpoint needs a key and none could be read; nothing was sent.
+  case credentialUnavailable(String)
   case requestEncoding(String)
   case invalidHTTPResponse
   case httpStatus(code: Int, message: String?)
@@ -13,52 +17,72 @@ public enum TurboFieldfareClientError: Error, Equatable, Sendable {
   case transport(String)
 }
 
-extension TurboFieldfareClientError: LocalizedError {
+extension OpenAICompatibleClientError: LocalizedError {
   public var errorDescription: String? {
     switch self {
     case .invalidConfiguration(let message):
       "Invalid Evie configuration: \(message)"
+    case .transportRefused(let message):
+      "Evie refused to send the conversation: \(message)"
+    case .credentialUnavailable(let message):
+      "The model key is unavailable: \(message)"
     case .requestEncoding(let message):
       "Could not encode the chat request: \(message)"
     case .invalidHTTPResponse:
-      "TurboFieldfare returned a non-HTTP response."
+      "The model server returned a non-HTTP response."
     case .httpStatus(let code, let message):
       if let message, !message.isEmpty {
-        "TurboFieldfare returned HTTP \(code): \(message)"
+        "The model server returned HTTP \(code): \(message)"
       } else {
-        "TurboFieldfare returned HTTP \(code)."
+        "The model server returned HTTP \(code)."
       }
     case .server(let message, let code):
       if let code, !code.isEmpty {
-        "TurboFieldfare error \(code): \(message)"
+        "Model server error \(code): \(message)"
       } else {
-        "TurboFieldfare error: \(message)"
+        "Model server error: \(message)"
       }
     case .malformedStreamEvent:
-      "TurboFieldfare sent a malformed streaming event."
+      "The model server sent a malformed streaming event."
     case .emptyStream:
-      "TurboFieldfare closed the stream without sending a response."
+      "The model server closed the stream without sending a response."
     case .streamEndedBeforeDone:
-      "TurboFieldfare closed the stream before the [DONE] marker."
+      "The model server closed the stream before the [DONE] marker."
     case .transport(let message):
-      "Could not communicate with TurboFieldfare: \(message)"
+      "Could not communicate with the model server: \(message)"
     }
   }
 }
 
-/// A dependency-free client for TurboFieldfare's OpenAI-compatible streaming API.
+/// A dependency-free client for any OpenAI-compatible streaming Chat Completions
+/// server: the PC gateway over the tailnet, or a server on this Mac's loopback.
+///
+/// Before a byte leaves the Mac the endpoint must pass `ModelTransportPolicy`,
+/// and the key goes only over https to the host it was saved for. Redirects are
+/// refused outright, so the `Authorization` header cannot follow one anywhere.
 ///
 /// The client only performs inference. Tool execution and authorization belong to
 /// Hermes/the Evie supervisor and are intentionally outside this adapter.
-public final class TurboFieldfareClient: AgentClient, Sendable {
+///
+/// Build it through `ModelClientFactory`, which is where the keychain and the
+/// policy are chosen.
+public final class OpenAICompatibleClient: AgentClient, Sendable {
   public let configuration: EvieConfiguration
+  private let credentials: any EvieCredentialProviding
+  private let transportPolicy: ModelTransportPolicy
   private let session: URLSession
 
-  public init(
-    configuration: EvieConfiguration = EvieConfiguration(),
-    session: URLSession = .shared
+  /// Internal on purpose: outside EvieCore the only way to get a client is
+  /// `ModelClientFactory`, so no caller can pick its own policy or key source.
+  init(
+    configuration: EvieConfiguration,
+    credentials: any EvieCredentialProviding,
+    transportPolicy: ModelTransportPolicy,
+    session: URLSession
   ) {
     self.configuration = configuration
+    self.credentials = credentials
+    self.transportPolicy = transportPolicy
     self.session = session
   }
 
@@ -79,6 +103,8 @@ public final class TurboFieldfareClient: AgentClient, Sendable {
     tools: [EvieToolDefinition]
   ) -> AsyncThrowingStream<EvieInteractionEvent, any Error> {
     let configuration = configuration
+    let credentials = credentials
+    let transportPolicy = transportPolicy
     let session = session
 
     return AsyncThrowingStream { continuation in
@@ -86,26 +112,43 @@ public final class TurboFieldfareClient: AgentClient, Sendable {
         do {
           try Task.checkCancellation()
           try configuration.validate()
-          try Self.validateLoopbackEndpoint(configuration.endpoint)
+          let url = configuration.chatCompletionsURL
+          if case .refused(let reason) = transportPolicy.evaluate(
+            url,
+            credentialHost: configuration.credential?.boundHost
+          ) {
+            throw OpenAICompatibleClientError.transportRefused(reason)
+          }
+          let bearerToken = try await Self.bearerToken(
+            for: url,
+            credential: configuration.credential,
+            from: credentials
+          )
 
-          let request = try Self.makeRequest(
+          var request = try Self.makeRequest(
             messages: messages,
             tools: tools,
             configuration: configuration
           )
+          if let bearerToken {
+            request.setValue("Bearer \(bearerToken)", forHTTPHeaderField: "Authorization")
+          }
           continuation.yield(.phaseChanged(.thinking))
 
-          let (bytes, response) = try await session.bytes(for: request)
+          let (bytes, response) = try await session.bytes(
+            for: request,
+            delegate: RedirectRefusal()
+          )
           try Task.checkCancellation()
 
           guard let httpResponse = response as? HTTPURLResponse else {
-            throw TurboFieldfareClientError.invalidHTTPResponse
+            throw OpenAICompatibleClientError.invalidHTTPResponse
           }
 
           guard (200...299).contains(httpResponse.statusCode) else {
             let errorBody = try await Self.readErrorBody(from: bytes)
             let apiError = errorBody.flatMap(Self.decodeAPIError(from:))
-            throw TurboFieldfareClientError.httpStatus(
+            throw OpenAICompatibleClientError.httpStatus(
               code: httpResponse.statusCode,
               message: apiError?.message ?? errorBody
             )
@@ -119,17 +162,17 @@ public final class TurboFieldfareClient: AgentClient, Sendable {
           continuation.finish(throwing: CancellationError())
         } catch let error as EvieConfiguration.ValidationError {
           continuation.finish(
-            throwing: TurboFieldfareClientError.invalidConfiguration(
+            throwing: OpenAICompatibleClientError.invalidConfiguration(
               error.localizedDescription
             )
           )
-        } catch let error as TurboFieldfareClientError {
+        } catch let error as OpenAICompatibleClientError {
           continuation.finish(throwing: error)
         } catch let error as URLError where error.code == .cancelled {
           continuation.finish(throwing: CancellationError())
         } catch {
           continuation.finish(
-            throwing: TurboFieldfareClientError.transport(
+            throwing: OpenAICompatibleClientError.transport(
               error.localizedDescription
             )
           )
@@ -143,15 +186,59 @@ public final class TurboFieldfareClient: AgentClient, Sendable {
   }
 }
 
-extension TurboFieldfareClient {
-  fileprivate static func validateLoopbackEndpoint(_ endpoint: URL) throws {
-    let host = endpoint.host?.lowercased()
-    let loopbackHosts: Set<String> = ["127.0.0.1", "localhost", "::1", "[::1]"]
-    guard let host, loopbackHosts.contains(host) else {
-      throw TurboFieldfareClientError.invalidConfiguration(
-        "TurboFieldfare must use a loopback endpoint."
+/// Refuses every HTTP redirect by handing back no request.
+///
+/// The model endpoints Evie uses never redirect, so a redirect is either a
+/// misconfiguration or someone steering the request — and following one would
+/// carry the `Authorization` header to wherever `Location` points. With the
+/// redirect refused, the 3xx itself becomes the response and is reported as an
+/// HTTP error. It is a task delegate rather than a session delegate so it holds
+/// for any session the client is given, `URLSession.shared` included.
+private final class RedirectRefusal: NSObject, URLSessionTaskDelegate, Sendable {
+  func urlSession(
+    _ session: URLSession,
+    task: URLSessionTask,
+    willPerformHTTPRedirection response: HTTPURLResponse,
+    newRequest request: URLRequest
+  ) async -> URLRequest? {
+    nil
+  }
+}
+
+extension OpenAICompatibleClient {
+  /// The token to attach, or `nil` when none may be.
+  ///
+  /// A token is attached only over https, and only to the host its credential
+  /// was saved for — never over plain http, loopback included, because a
+  /// loopback port can be bound by any local process. When a token applies but
+  /// nothing is saved, the request is not sent at all: an unauthenticated
+  /// request to the PC could only fail, and would do so after the gateway has
+  /// logged it.
+  fileprivate static func bearerToken(
+    for url: URL,
+    credential: CredentialReference?,
+    from credentials: any EvieCredentialProviding
+  ) async throws -> String? {
+    guard url.scheme?.lowercased() == "https",
+      let credential,
+      let host = url.host?.lowercased(),
+      credential.boundHost.lowercased() == host
+    else {
+      return nil
+    }
+
+    let token: String?
+    do {
+      token = try await credentials.bearerToken(for: credential)
+    } catch {
+      throw OpenAICompatibleClientError.credentialUnavailable(error.localizedDescription)
+    }
+    guard let token else {
+      throw OpenAICompatibleClientError.credentialUnavailable(
+        "no key is saved for \(host)."
       )
     }
+    return token
   }
 
   fileprivate static func makeRequest(
@@ -187,7 +274,7 @@ extension TurboFieldfareClient {
         guard
           var object = try JSONSerialization.jsonObject(with: encoded) as? [String: Any]
         else {
-          throw TurboFieldfareClientError.requestEncoding("body was not an object")
+          throw OpenAICompatibleClientError.requestEncoding("body was not an object")
         }
         object["tools"] = tools.map(\.wireRepresentation)
         request.httpBody = try JSONSerialization.data(
@@ -197,10 +284,10 @@ extension TurboFieldfareClient {
         return request
       }
       request.httpBody = encoded
-    } catch let error as TurboFieldfareClientError {
+    } catch let error as OpenAICompatibleClientError {
       throw error
     } catch {
-      throw TurboFieldfareClientError.requestEncoding(error.localizedDescription)
+      throw OpenAICompatibleClientError.requestEncoding(error.localizedDescription)
     }
     return request
   }
@@ -225,7 +312,7 @@ extension TurboFieldfareClient {
 
       case .chunk(let chunk):
         if let error = chunk.error {
-          throw TurboFieldfareClientError.server(
+          throw OpenAICompatibleClientError.server(
             message: error.message,
             code: error.code
           )
@@ -292,10 +379,10 @@ extension TurboFieldfareClient {
     }
 
     guard receivedEvent else {
-      throw TurboFieldfareClientError.emptyStream
+      throw OpenAICompatibleClientError.emptyStream
     }
     guard receivedDone else {
-      throw TurboFieldfareClientError.streamEndedBeforeDone
+      throw OpenAICompatibleClientError.streamEndedBeforeDone
     }
 
     try Task.checkCancellation()
@@ -317,13 +404,13 @@ extension TurboFieldfareClient {
     }
 
     guard let data = payload.data(using: .utf8) else {
-      throw TurboFieldfareClientError.malformedStreamEvent
+      throw OpenAICompatibleClientError.malformedStreamEvent
     }
 
     do {
       return .chunk(try JSONDecoder().decode(StreamChunk.self, from: data))
     } catch {
-      throw TurboFieldfareClientError.malformedStreamEvent
+      throw OpenAICompatibleClientError.malformedStreamEvent
     }
   }
 
@@ -554,7 +641,7 @@ private struct SSELineBuffer {
   private mutating func finishLine() throws -> String {
     defer { bytes.removeAll(keepingCapacity: true) }
     guard let line = String(data: bytes, encoding: .utf8) else {
-      throw TurboFieldfareClientError.malformedStreamEvent
+      throw OpenAICompatibleClientError.malformedStreamEvent
     }
     return line
   }

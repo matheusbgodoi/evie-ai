@@ -1,9 +1,11 @@
 import Foundation
 
-/// Runtime configuration shared by Evie's local agent adapters.
+/// Runtime configuration shared by Evie's model adapters.
 ///
-/// It intentionally contains no API key or credential field. Secrets for future
-/// integrations belong in Keychain-backed adapters, not this Codable value.
+/// It holds a *reference* to a credential — which keychain item, and the host
+/// that item was saved for — and never the credential itself. The token is read
+/// from the keychain at request time by an `EvieCredentialProviding`, so nothing
+/// that encodes, logs or exports this value can carry a key.
 public struct EvieConfiguration: Codable, Hashable, Sendable {
   public static let defaultEndpoint = URL(
     string: "http://127.0.0.1:38433/v1"
@@ -13,14 +15,17 @@ public struct EvieConfiguration: Codable, Hashable, Sendable {
 
   public var endpoint: URL
   public var model: String
-  /// Expected server capacity. TurboFieldfare must still be launched with a
-  /// matching `--max-context`; Chat Completions has no per-request context field.
+  /// Expected server capacity. The server must still be launched with a matching
+  /// context limit; Chat Completions has no per-request context field.
   public var contextWindowTokens: Int
   public var maxCompletionTokens: Int
   public var temperature: Double?
   public var topP: Double?
   public var stopSequences: [String]
   public var requestTimeout: TimeInterval
+  /// Which saved key goes with this endpoint, if any. Plain-http loopback
+  /// endpoints have none; a remote endpoint is refused without one.
+  public var credential: CredentialReference?
 
   public init(
     endpoint: URL = EvieConfiguration.defaultEndpoint,
@@ -30,7 +35,8 @@ public struct EvieConfiguration: Codable, Hashable, Sendable {
     temperature: Double? = nil,
     topP: Double? = nil,
     stopSequences: [String] = [],
-    requestTimeout: TimeInterval = 300
+    requestTimeout: TimeInterval = 300,
+    credential: CredentialReference? = nil
   ) {
     self.endpoint = endpoint
     self.model = model
@@ -40,6 +46,7 @@ public struct EvieConfiguration: Codable, Hashable, Sendable {
     self.topP = topP
     self.stopSequences = stopSequences
     self.requestTimeout = requestTimeout
+    self.credential = credential
   }
 
   public var chatCompletionsURL: URL {

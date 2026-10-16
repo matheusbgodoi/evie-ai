@@ -514,7 +514,7 @@ extension EvieAgentLoop {
     }
 
     guard let message else {
-      throw TurboFieldfareClientError.emptyStream
+      throw OpenAICompatibleClientError.emptyStream
     }
     return Step(message: message, finishReason: finishReason)
   }

@@ -21,8 +21,8 @@ import Testing
 /// network boundary has no representation it could act on, and the single place
 /// bytes become a `String` is `SSELineBuffer.finishLine`, which runs on a whole
 /// line. There is no code path that decodes a partial character.
-@Suite("TurboFieldfare stream chunk boundaries")
-struct TurboFieldfareStreamSplitTests {
+@Suite("OpenAI-compatible stream chunk boundaries")
+struct OpenAICompatibleStreamSplitTests {
   @Test("text survives a cut at every byte offset, LF framing")
   func everyOffsetLineFeed() async throws {
     try await sweepEveryOffset(basePort: SplitStubURLProtocol.lineFeedBasePort)
@@ -43,7 +43,7 @@ struct TurboFieldfareStreamSplitTests {
   }
 }
 
-extension TurboFieldfareStreamSplitTests {
+extension OpenAICompatibleStreamSplitTests {
   /// One request per possible cut. The offsets are byte offsets into the encoded
   /// body, not character offsets, which is the whole point: a character offset
   /// could never land inside `é`.
@@ -71,13 +71,15 @@ extension TurboFieldfareStreamSplitTests {
     port: Int,
     session: URLSession? = nil
   ) async throws -> String {
-    let client = TurboFieldfareClient(
+    let client = ModelClientFactory(
+      credentials: StaticCredentialProvider(),
+      session: session ?? makeSession()
+    ).makeClient(
       configuration: EvieConfiguration(
         endpoint: URL(string: "http://127.0.0.1:\(port)/v1")!,
         maxCompletionTokens: 128,
         requestTimeout: 5
-      ),
-      session: session ?? makeSession()
+      )
     )
 
     var deltas = ""
@@ -145,7 +147,7 @@ private enum SplitStreamFixture {
 /// Serves the fixture with the split described by the port.
 ///
 /// The port carries the cut offset because `URLProtocol` gets no other channel
-/// from the test, and the client is only willing to talk to loopback.
+/// from the test, and plain http is only allowed to loopback.
 private final class SplitStubURLProtocol: URLProtocol, @unchecked Sendable {
   static let lineFeedBasePort = 19_000
   static let carriageReturnBasePort = 21_000

@@ -1,5 +1,52 @@
 # Work log
 
+## 2026-10-16 — v2 S1a: rename, transport policy, keychain credentials
+
+- Completed: slice S1a of `docs/design/2026-10-16-evie-v2-design.md`.
+  - `git mv` `TurboFieldfareClient.swift` to `OpenAICompatibleClient.swift`; the
+    class, its error type (`OpenAICompatibleClientError`) and every use are
+    renamed with no typealias. Error copy says "the model server".
+  - New `Sources/EvieCore/ModelTransportPolicy.swift`: http only to loopback;
+    https plus an exact allowlist (default `ai-node-3090.tail6146ef.ts.net`; one
+    wildcard form, `*.<tailnet>.ts.net`, one label) plus a credential bound to
+    the host for anything else; no userinfo in URLs.
+  - New `Sources/EvieCore/EvieCredentialProviding.swift`: `CredentialReference`,
+    the protocol, `KeychainCredentialProvider` (legacy login keychain, generic
+    password, in-memory cache of hits only) and `StaticCredentialProvider`.
+  - New `Sources/EvieCore/ModelClientFactory.swift`; all nine construction sites
+    (`AppCoordinator`, `OverlayViewModel.applyConfiguration`,
+    `EvieScheduleRunner`, five in `EvieDiagnostics+ModelAndRetrieval`, one in
+    `EvieDiagnostics+FilesAndDocuments`) use `ModelClientFactory.live`. The
+    client initialiser is internal, so the compiler enforces it.
+  - The client: policy check before any request, Bearer only over https to the
+    bound host, a missing key stops the turn (`credentialUnavailable`), every
+    redirect refused by a task delegate. Still checked `Sendable`, `let` only.
+  - `EvieConfiguration.credential: CredentialReference?` (default nil); the
+    file schema is untouched until S2a.
+  - Docs: ADR 0013 (supersedes 0006 in part, amends 0002 in part; both marked,
+    README row added), `ARCHITECTURE.md`, `SECURITY.md` ("Model transport"),
+    `README.md`, `PROJECT_STATUS.md`, CHANGELOG, and an "Implemented" note in the
+    design doc.
+- Tests (written first; seen failing to compile before the types existed):
+  suite "Model transport policy" (13), "OpenAI-compatible client transport" (6:
+  no Bearer over http, Bearer over https to the bound host, redirect refused and
+  never followed, off-list host and foreign-bound key refused before transport,
+  missing key not sent), "Model credential providers" (6, one a read-only
+  keychain lookup of an absent item). Mutation check: with the redirect delegate
+  removed, the redirect test fails. Replaced, as the spec requires: "non-loopback
+  inference endpoint is rejected before transport".
+- Measured 2026-10-16 on this Mac (M5, macOS 27.2), read-only against the PC
+  gateway: `/health` 200 in 49 ms, no redirect; `/v1/models` 401 without a key,
+  200 with it, no redirect; plain http to the gateway name does not connect.
+- Checks: `swift build` OK; `Scripts/test --filter
+  "ModelTransportPolicyTests|OpenAICompatibleClientTests|OpenAICompatibleClientTransportTests|OpenAICompatibleStreamSplitTests|EvieCredentialProvidingTests"`
+  all passed; full `Scripts/test` 660 tests in 69 suites, 0 failures, 1 skipped
+  (the gated Calendar test), against 636 in 66 before this slice.
+- Open: no configuration can carry a credential reference until S2a, so the PC
+  path is exercised only by the stub tests; the Keychain access prompt for
+  another program's item is expected, not observed.
+- Next action: S1b (request and stream features).
+
 ## 2026-10-16 — v2 S8b item 1: the osascript tests are opt-in integration tests
 
 - Completed: the end-to-end `osascript` tests in "Evie mail and calendar scripts"

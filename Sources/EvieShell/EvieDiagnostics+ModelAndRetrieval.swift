@@ -29,7 +29,7 @@ extension EvieDiagnostics {
     // for seven minutes while the model worked.
     setvbuf(stdout, nil, _IOLBF, 0)
 
-    let client = TurboFieldfareClient(
+    let client = ModelClientFactory.live.makeClient(
       configuration: (try? EvieConfigurationLoader().load()) ?? EvieConfiguration()
     )
     let loop = EvieAgentLoop(web: nil, vault: nil, offersChanges: false)
@@ -97,7 +97,7 @@ extension EvieDiagnostics {
       EvieFileRoot(id: "test0001", displayName: "Pasta de teste", path: directory.path)
     ]
     let configuration = (try? EvieConfigurationLoader().load()) ?? EvieConfiguration()
-    let client = TurboFieldfareClient(configuration: configuration)
+    let client = ModelClientFactory.live.makeClient(configuration: configuration)
     let loop = EvieAgentLoop()
 
     var capabilities = EvieCapabilitySnapshot.textOnly
@@ -180,7 +180,7 @@ extension EvieDiagnostics {
           ChatMessage(role: .user, content: EvieBrevityPreamble.annotated(question)),
         ],
         roots: roots,
-        client: TurboFieldfareClient(configuration: configuration),
+        client: ModelClientFactory.live.makeClient(configuration: configuration),
         emit: { event in
           if case .status(let message) = event {
             print("   · \(message)")
@@ -224,7 +224,7 @@ extension EvieDiagnostics {
           ChatMessage(role: .user, content: EvieBrevityPreamble.annotated(question)),
         ],
         roots: [],
-        client: TurboFieldfareClient(configuration: configuration),
+        client: ModelClientFactory.live.makeClient(configuration: configuration),
         emit: { event in
           if case .status(let message) = event {
             print("   · \(message)")
@@ -372,7 +372,7 @@ extension EvieDiagnostics {
           ChatMessage(role: .user, content: EvieBrevityPreamble.annotated(question)),
         ],
         roots: [],
-        client: TurboFieldfareClient(configuration: configuration),
+        client: ModelClientFactory.live.makeClient(configuration: configuration),
         emit: { _ in }
       )
       print("resposta em \(String(format: "%.0f", Date().timeIntervalSince(started))) s:")
