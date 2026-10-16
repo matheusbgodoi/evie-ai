@@ -28,9 +28,13 @@ public struct EvieToolParameter: Hashable, Sendable {
 
 /// A function Evie is willing to let the model call.
 ///
-/// Every tool in this type is read-only by construction. Anything that changes
-/// the world is a proposal the user approves, and never appears here — prompt
-/// injection cannot call a function that is not in the schema.
+/// Tools are read-only unless the loop holds an active `EvieAgentModeGrant`.
+/// Outside a computer-use session anything that changes the world is a
+/// proposal the user approves, and never appears here — prompt injection
+/// cannot call a function that is not in the schema. Inside one, the session's
+/// tools (`ComputerToolName`) are declared only through
+/// `EvieAgentModeBroker.toolDefinitions(for:convention:)`, and every call they
+/// make is cleared by the broker's policy and commit before it acts (ADR 0016).
 public struct EvieToolDefinition: Hashable, Sendable {
   public var name: String
   public var summary: String

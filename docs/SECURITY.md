@@ -293,6 +293,41 @@ keeps a HEIC copy of every attached picture with the conversation so it can be
 shown again. What is *sent* is re-encoded in memory (JPEG, EXIF and GPS
 dropped), but those two copies exist on disk.
 
+### Computer use (v2 S5, ADR 0016)
+
+The rules exist in `EvieCore` since S5a (2026-10-16); nothing acts yet — the
+observer, the executor and the cards are S5b–S5d.
+
+- **A session only from a hand.** `EvieAgentModeBroker.begin` makes a grant
+  (at most 15 minutes) for push-to-talk or a click, never for the wake word,
+  which the microphone can hear from anyone. Without the active grant the
+  computer-use tools are not declared at all.
+- **Every action is an ADR 0009 proposal**, bound to the session (plan id),
+  the observation it was read from (revision) and the grant's expiry, and
+  committed only through the 0009 factory: under ADR 0016's policy when nothing
+  needs asking, with the person's click on the card otherwise. Destructive
+  chords (⌘⌫, ⇧⌘⌫) and emptying the Trash are `.delete`, which the factory
+  refuses without that click. The executor revalidates the commit right before
+  acting, so Parar, Esc, expiry or a newer screen voids what was cleared; a
+  commit is used once, and one observation authorizes one action.
+- **Refused by code:** Evie's own windows; a point off the observed screen; a
+  front app that changed; keystrokes into a password field or under secure
+  input ("campo de senha: digite você"); System Settings, Keychain Access, the
+  terminals, Shortcuts, Script Editor, Automator, Installer, Passwords and the
+  password managers; opening one of those by any name; any link that is not
+  plain `https`.
+- **Asked first:** confirm-word buttons (enviar, pagar, excluir, …), any Return
+  or button in a browser (a page names its own buttons), Return in a launcher,
+  the quit/close/lock/log-out/switch chords, opening an app the request did not
+  name or any link, and reading the clipboard. The question is built from the
+  accessibility title and the system's app name, never from the model's words.
+- **On-screen text is fenced** with a nonce made for each observation, after the
+  screen was read, and cleaned so it cannot close the fence or start a line.
+- **What remains.** Injection can still waste a session inside allowed apps, and
+  the accessibility tree covers the front app only (the Dock and menu-bar
+  extras are coordinate clicks). This is mitigation, not proof; the one-time
+  consent sheet (S5d) says so.
+
 ### Conversation history
 
 Visible conversation history persists under Application Support using

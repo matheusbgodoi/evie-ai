@@ -218,6 +218,7 @@ system frameworks, and every process Evie starts.
 | Arithmetic | `EvieCalculator`, `EvieCalculatorTool` |
 | Schedules | `EvieSchedule`, `EvieScheduleTrigger`, `EvieScheduleAgent`, `EviePropertyList` |
 | Knowledge and identity | `EvieMemory`, `EvieSkill`, `EviePersona`, `EvieCapabilityContracts` |
+| Computer use (`ComputerUse/`, ADR 0016) | `EvieAgentModeBroker` (grant, proposals, commits), `ComputerActionPolicy`, `ComputerUseBudget`, `ComputerAction`, `ComputerToolDefinitions`, `ObservationFormatter` |
 | Voice | `EvieTTS`, `OmniVoiceBatchTTSAdapter`, `EvieSpeechGate`, `EvieSilenceTrim`, `EvieWakePhrase`, `EvieWakeGate` |
 | Settings and release | `EvieConfiguration`, `EvieConfigurationLoader`, `EvieConfigurationStore`, `EviePreferences`, `EviePreferencesStore`, `EvieShortcut`, `EvieRelease` |
 | Presentation-adjacent | `EvieOverlayGeometry`, `EvieThinkingWave` |

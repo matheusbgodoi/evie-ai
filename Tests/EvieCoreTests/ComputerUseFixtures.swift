@@ -1,0 +1,202 @@
+import CoreGraphics
+import Foundation
+
+@testable import EvieCore
+
+/// One synthetic screen the computer-use tests act on: Mail in front, a
+/// compose window with a send button, a subject field and a password field,
+/// and Evie's overlay in the top-right corner.
+enum ComputerUseFixture {
+  static let start = Date(timeIntervalSinceReferenceDate: 800_000_000)
+
+  static let mail = ComputerAppIdentity(bundleID: "com.apple.mail", name: "Mail", processID: 501)
+  static let safari = ComputerAppIdentity(
+    bundleID: "com.apple.Safari",
+    name: "Safari",
+    processID: 502
+  )
+  static let finder = ComputerAppIdentity(
+    bundleID: "com.apple.finder",
+    name: "Finder",
+    processID: 503
+  )
+  static let spotlight = ComputerAppIdentity(
+    bundleID: "com.apple.Spotlight",
+    name: "Spotlight",
+    processID: 504
+  )
+
+  /// A 1512×982-point display sent as a 1024×665 image.
+  static let frame = ScreenGeometry.ObservedFrame(
+    frameInGlobalCG: CGRect(x: 0, y: 0, width: 1_512, height: 982),
+    imageSize: CGSize(width: 1_024, height: 665)
+  )
+  /// Evie's overlay, in global points: grid x from about 794, y up to about 204.
+  static let evieWindow = CGRect(x: 1_200, y: 0, width: 312, height: 200)
+
+  static let sendButton = AXElementSummary(
+    index: 0,
+    role: "AXButton",
+    title: "Enviar",
+    box0to1000: CGRect(x: 500, y: 880, width: 60, height: 20),
+    isSecure: false
+  )
+  static let subjectField = AXElementSummary(
+    index: 1,
+    role: "AXTextField",
+    title: "Assunto",
+    box0to1000: CGRect(x: 100, y: 100, width: 500, height: 30),
+    isSecure: false
+  )
+  static let passwordField = AXElementSummary(
+    index: 2,
+    role: "AXSecureTextField",
+    title: "Senha",
+    box0to1000: CGRect(x: 100, y: 300, width: 300, height: 30),
+    isSecure: true
+  )
+  static let saveButton = AXElementSummary(
+    index: 3,
+    role: "AXButton",
+    title: "Salvar rascunho",
+    box0to1000: CGRect(x: 600, y: 880, width: 80, height: 20),
+    isSecure: false
+  )
+
+  static let defaultElements = [sendButton, subjectField, passwordField, saveButton]
+
+  static func observation(
+    id: String = "obs-1",
+    app: ComputerAppIdentity = mail,
+    elements: [AXElementSummary] = defaultElements,
+    focused: Int? = 1,
+    windowTitle: String? = "Nova mensagem",
+    capturedAt: Date = start
+  ) -> ComputerObservation {
+    ComputerObservation(
+      id: id,
+      capturedAt: capturedAt,
+      displayID: 1,
+      frame: frame,
+      frontApp: app,
+      windowTitle: windowTitle,
+      elements: elements,
+      focusedElementIndex: focused,
+      evieWindowFrames: [evieWindow]
+    )
+  }
+
+  static func live(
+    for observation: ComputerObservation,
+    secureInput: Bool = false,
+    focusedFieldIsSecure: Bool = false
+  ) -> ComputerLiveState {
+    ComputerLiveState(
+      frontApp: observation.frontApp,
+      secureInputEnabled: secureInput,
+      focusedFieldIsSecure: focusedFieldIsSecure
+    )
+  }
+
+  /// A one-button screen of `app`, for the app-specific rules.
+  static func screen(
+    of app: ComputerAppIdentity,
+    button title: String = "OK",
+    role: String = "AXButton",
+    id: String = "obs-1"
+  ) -> ComputerObservation {
+    observation(
+      id: id,
+      app: app,
+      elements: [
+        AXElementSummary(
+          index: 0,
+          role: role,
+          title: title,
+          box0to1000: CGRect(x: 400, y: 400, width: 100, height: 40),
+          isSecure: false
+        )
+      ],
+      focused: nil
+    )
+  }
+
+  static func identity(_ bundleID: String, _ name: String) -> ComputerAppIdentity {
+    ComputerAppIdentity(bundleID: bundleID, name: name, processID: 700)
+  }
+
+  static let policy = ComputerActionPolicy(resolver: StubAppResolver())
+}
+
+/// Resolves the few names the tests use, the way the shell's resolver would:
+/// a localised name or an English one, to the bundle and its display name.
+struct StubAppResolver: ComputerAppResolving {
+  func resolve(name: String) -> ResolvedApp? {
+    let key = name.folding(options: [.caseInsensitive, .diacriticInsensitive], locale: nil)
+      .lowercased()
+    switch key {
+    case "atalhos", "shortcuts":
+      return ResolvedApp(bundleID: "com.apple.shortcuts", displayName: "Atalhos")
+    case "terminal":
+      return ResolvedApp(bundleID: "com.apple.Terminal", displayName: "Terminal")
+    case "editor de scripts", "script editor":
+      return ResolvedApp(bundleID: "com.apple.ScriptEditor2", displayName: "Editor de Scripts")
+    case "notas", "notes":
+      return ResolvedApp(
+        bundleID: "com.apple.Notes",
+        displayName: "Notas",
+        otherNames: ["Notes"]
+      )
+    case "safari":
+      return ResolvedApp(bundleID: "com.apple.Safari", displayName: "Safari")
+    case "calculadora", "calculator":
+      return ResolvedApp(bundleID: "com.apple.calculator", displayName: "Calculadora")
+    case "evie":
+      return ResolvedApp(bundleID: ComputerActionPolicy.evieBundleID, displayName: "Evie")
+    default:
+      return nil
+    }
+  }
+}
+
+/// The executor's side of the contract, in the `ScriptedClient` style: it
+/// acts only on a commit the broker still accepts, and records what it did.
+@MainActor
+final class StubComputer: EvieComputerActing {
+  let broker: EvieAgentModeBroker
+  private(set) var performed: [ComputerAction] = []
+  private(set) var refusals: [String] = []
+
+  init(broker: EvieAgentModeBroker) {
+    self.broker = broker
+  }
+
+  func observe(_ plan: ScreenCapturePlan, withImage: Bool) async throws -> ComputerObservation {
+    ComputerUseFixture.observation()
+  }
+
+  func perform(_ action: ComputerAction, commit: CapabilityCommit) async throws -> ActionResult {
+    do {
+      try broker.validate(commit, for: action)
+    } catch {
+      refusals.append(error.localizedDescription)
+      throw error
+    }
+    performed.append(action)
+    return ActionResult(outcome: .changed, detail: "ok")
+  }
+}
+
+/// A clock the broker tests move by hand.
+@MainActor
+final class TestClock {
+  var now: Date
+
+  init(_ now: Date = ComputerUseFixture.start) {
+    self.now = now
+  }
+
+  func advance(_ seconds: TimeInterval) {
+    now = now.addingTimeInterval(seconds)
+  }
+}

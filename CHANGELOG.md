@@ -278,6 +278,19 @@ All notable changes to Evie are documented here. Dates use `YYYY-MM-DD`.
 
 ### Added
 
+- **Architecture and security: the rules for controlling the Mac, before any
+  of it acts** (v2 S5a, ADR 0016, amending ADR 0009). A computer-use session
+  will start only from push-to-talk or a click, never from the wake word, and
+  last at most 15 minutes; its tools are declared only while it runs. Every
+  click, key or app opening becomes an ADR 0009 proposal committed by the
+  broker and checked again just before acting, one action per look at the
+  screen, at most 25 per session. Code refuses Evie's own windows, password
+  fields, System Settings, the Keychain, the terminals, Shortcuts and the other
+  apps on the denylist, and any link that is not `https`; it asks first before
+  send/pay/delete-style buttons, any Return or button in a browser, Return in
+  Spotlight, quitting or closing, an app the request did not name, and reading
+  the clipboard — in words taken from the screen, never from the model.
+  Nothing is wired to the overlay yet (S5b–S5d).
 - **Evie looks at the screen when asked ("olha a tela").** A question that asks
   in so many words — "olha a tela", "o que tem na minha tela?", "o que é isso
   aqui na tela", "lê a tela", "nessa janela", "look at my screen" (not "não olha

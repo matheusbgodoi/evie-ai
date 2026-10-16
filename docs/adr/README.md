@@ -13,11 +13,12 @@ supersede rather than silently rewrite them when the decision changes.
 | [0006](0006-direct-turbo-vertical-slice.md) | Backend-neutral core with direct TurboFieldfare prototype adapter | Accepted for VS-001; superseded in part by 0013 |
 | [0007](0007-local-development-runtime.md) | Pinned local development runtime outside Git | Accepted for first-test development |
 | [0008](0008-local-conversation-history.md) | Local visible conversation history before Hermes | Accepted for native-shell prototype |
-| [0009](0009-nominal-capability-authority.md) | Nominal read/propose/commit with process-local authority | Accepted for policy-broker foundation |
+| [0009](0009-nominal-capability-authority.md) | Nominal read/propose/commit with process-local authority | Accepted for policy-broker foundation; amended by 0016 |
 | [0010](0010-refuse-unseen-mail-recipients.md) | Refuse a recipient the conversation never contained | Accepted for `propose_mail` |
 | [0011](0011-draft-beside-send.md) | A draft button beside the send button | Accepted for `propose_mail` |
 | [0012](0012-fused-local-retrieval.md) | Retrieval by three fused signals over a cached local embedding | Accepted for the shipped retrieval path |
 | [0013](0013-authenticated-tailnet-model-transport.md) | Authenticated tailnet model transport | Accepted for Evie v2; superseded in part by 0017 |
 | [0014](0014-model-profiles-per-turn-resolution-failover.md) | Model profiles, per-turn resolution and per-conversation failover | Accepted for Evie v2; superseded in part by 0015 |
 | [0015](0015-on-demand-local-vlm-brain.md) | On-demand local VLM brain | Accepted for Evie v2; superseded in part by 0017 |
-| [0017](0017-per-launch-key-for-the-local-brain.md) | A per-launch key for the local brain | Accepted for Evie v2 (0016 is reserved for S5's computer-use authority) |
+| [0016](0016-in-process-computer-use-executor-under-agent-mode-grant.md) | An in-process computer-use executor under an agent-mode grant | Accepted for Evie v2 (S5a implemented) |
+| [0017](0017-per-launch-key-for-the-local-brain.md) | A per-launch key for the local brain | Accepted for Evie v2 |

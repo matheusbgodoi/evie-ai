@@ -45,7 +45,18 @@ request carrying a picture is sent with tools or auto-approves a change
 markers without neutralising; [VERIFY] in the installed app that re-saving over
 an item `import-pc-key` created does not prompt.
 
-Next for this area: S5
+**S5a is done (2026-10-16, ADR 0016, amending 0009):** the computer-use core in
+`EvieCore/ComputerUse/` — the agent-mode grant (push-to-talk or a click, never
+the wake word; 15 minutes), the broker that turns each action into an ADR 0009
+proposal and commit and revalidates it for the executor, the code policy
+(denylist, https-only links, secure input, stale observation, off-frame, Evie's
+windows, front-app change, confirmations from accessibility data), the budget
+and the nonce-fenced observation text. 75 new tests. Measured: qwen-daily, given
+the six tools and a text observation with an injected line, made the right
+`computer` call (1.87 s warm, 16.6 s uncached). Nothing is wired to the overlay
+yet. Next: S5b (the accessibility snapshotter and `look_screen` in the loop).
+
+Next for this area after S5b: S5
 drives observing, `lookAt`, `willClick`/`didClick` and typing, posts every
 synthetic event inside `postingSyntheticInput { … }` (which releases the Esc
 hot key), and wires `onStop` to `stopEverything` and `broker.revoke`. The six
@@ -515,7 +526,8 @@ conversation itself. Still owed for S3: the in-app status line and ask card
 (UI not launched), a start with the weights not in the page cache, and the
 LensVLM tool-call eval (tools stay off). The first-run guide's key and brain
 rows (S7) are done (2026-10-16). S4 (screen perception) is done (2026-10-16; see
-"Evie v2" above). Next: S5a (the pure computer-use core in `EvieCore`).
+"Evie v2" above). S5a (the pure computer-use core in `EvieCore`, ADR 0016) is
+done (2026-10-16). Next: S5b (observe-only).
 
 **Evie v2, S7 (packaging, install, permissions) — partly done on `v2-packaging`,
 2026-10-16, merged into `v2` the same day.** Signing is pinned to the "Evie Dev"
