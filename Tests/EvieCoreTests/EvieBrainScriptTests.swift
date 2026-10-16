@@ -79,6 +79,46 @@ struct EvieBrainScriptTests {
     #expect(bystander.isRunning)
     #expect(!sandbox.exists("Runtime/brain.pid"))
   }
+
+  @Test("stop leaves alone a server not bound to loopback by its last --host")
+  func stopIgnoresAServerOffLoopback() throws {
+    let sandbox = try BrainSandbox()
+    let runtime = LocalRuntime(
+      launcher: .mlxVLM, executable: sandbox.lingering.path, port: sandbox.port, maxKVSize: 32_768)
+    for exposed in [
+      ["--model", "m", "--port", String(sandbox.port)],
+      LocalBrainPolicy.makeArguments(runtime, model: "m") + ["--host", "0.0.0.0"],
+      LocalBrainPolicy.makeArguments(runtime, model: "m") + ["--hos=0.0.0.0"],
+    ] {
+      let server = try sandbox.startLingering(arguments: exposed)
+      defer { server.terminate() }
+      try sandbox.write("\(server.processIdentifier)\n", to: "Runtime/brain.pid")
+
+      let run = try sandbox.run("stop", executable: sandbox.lingering.path)
+
+      #expect(run.status == 0, "\(exposed)")
+      #expect(server.isRunning, "\(exposed)")
+      #expect(!sandbox.exists("Runtime/brain.pid"))
+    }
+  }
+
+  @Test("stop stops a server it recognises: the executable, its port, loopback last")
+  func stopStopsItsServer() throws {
+    let sandbox = try BrainSandbox()
+    let runtime = LocalRuntime(
+      launcher: .mlxVLM, executable: sandbox.lingering.path, port: sandbox.port, maxKVSize: 32_768)
+    let server = try sandbox.startLingering(
+      arguments: ["--host", "0.0.0.0"] + LocalBrainPolicy.makeArguments(runtime, model: "m"))
+    defer { server.terminate() }
+    try sandbox.write("\(server.processIdentifier)\n", to: "Runtime/brain.pid")
+
+    let run = try sandbox.run("stop", executable: sandbox.lingering.path)
+    server.waitUntilExit()
+
+    #expect(run.status == 0)
+    #expect(!server.isRunning)
+    #expect(!sandbox.exists("Runtime/brain.pid"))
+  }
 }
 
 /// A support directory, a free loopback port, and a stand-in server that writes
@@ -93,6 +133,9 @@ private struct BrainSandbox {
   let port: Int
   var support: URL { root.appendingPathComponent("Support", isDirectory: true) }
   var standIn: URL { root.appendingPathComponent("mlx_vlm.server") }
+  /// A stand-in that stays up for 30 s without a child of its own and listens
+  /// on nothing, so only its argv decides whether it is the server.
+  var lingering: URL { root.appendingPathComponent("lingering_mlx_vlm.server") }
   var argumentsRecord: URL { root.appendingPathComponent("argv.txt") }
   var environmentRecord: URL { root.appendingPathComponent("env.txt") }
 
@@ -110,6 +153,25 @@ private struct BrainSandbox {
       """
     try script.write(to: standIn, atomically: true, encoding: .utf8)
     try FileManager.default.setAttributes([.posixPermissions: 0o700], ofItemAtPath: standIn.path)
+    let lingeringScript = """
+      #!/bin/zsh
+      zmodload zsh/zselect
+      zselect -t 3000
+      """
+    try lingeringScript.write(to: lingering, atomically: true, encoding: .utf8)
+    try FileManager.default.setAttributes([.posixPermissions: 0o700], ofItemAtPath: lingering.path)
+  }
+
+  /// Runs the lingering stand-in with `arguments`, as the kernel runs a `#!`
+  /// script: `/bin/zsh <path> <arguments…>`.
+  func startLingering(arguments: [String]) throws -> Process {
+    let process = Process()
+    process.executableURL = lingering
+    process.arguments = arguments
+    process.standardOutput = FileHandle.nullDevice
+    process.standardError = FileHandle.nullDevice
+    try process.run()
+    return process
   }
 
   func run(

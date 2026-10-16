@@ -2,8 +2,8 @@ import Darwin
 import Foundation
 
 /// What the kernel says about a process, through libproc and `sysctl`: its
-/// executable image, its argv, its children, and which process listens on a
-/// loopback port. Read-only, and limited to what the current user may inspect:
+/// executable image, its argv, its children, which process listens on a port,
+/// and on which addresses. Read-only, and limited to what the current user may inspect:
 /// another user's process simply answers nothing.
 enum EvieProcessInspector {
   /// The process's executable image (`proc_pidpath`). For a `#!` script that is
@@ -79,18 +79,27 @@ enum EvieProcessInspector {
     allPIDs().first { listens($0, onPort: port) }
   }
 
-  /// Whether the process holds a TCP socket listening on `port`.
+  /// Whether the process holds a TCP socket listening on `port`, on any
+  /// address.
   static func listens(_ pid: pid_t, onPort port: Int) -> Bool {
+    listeningSockets(of: pid).contains { $0.port == port }
+  }
+
+  /// The local address and port of every TCP socket the process listens on,
+  /// the address as `inet_ntop` writes it (`127.0.0.1`, `::1`, `0.0.0.0`,
+  /// `::`).
+  static func listeningSockets(of pid: pid_t) -> [(address: String, port: Int)] {
     let bytes = proc_pidinfo(pid, PROC_PIDLISTFDS, 0, nil, 0)
     guard bytes > 0 else {
-      return false
+      return []
     }
     let stride = MemoryLayout<proc_fdinfo>.stride
     var descriptors = [proc_fdinfo](repeating: proc_fdinfo(), count: Int(bytes) / stride)
     let filled = proc_pidinfo(pid, PROC_PIDLISTFDS, 0, &descriptors, bytes)
     guard filled > 0 else {
-      return false
+      return []
     }
+    var sockets: [(address: String, port: Int)] = []
     for descriptor in descriptors.prefix(Int(filled) / stride)
     where descriptor.proc_fdtype == UInt32(PROX_FDTYPE_SOCKET) {
       var socket = socket_fdinfo()
@@ -102,12 +111,37 @@ enum EvieProcessInspector {
         continue
       }
       let tcp = socket.psi.soi_proto.pri_tcp
-      let localPort = UInt16(bigEndian: UInt16(truncatingIfNeeded: tcp.tcpsi_ini.insi_lport))
-      if tcp.tcpsi_state == TSI_S_LISTEN, Int(localPort) == port {
-        return true
+      guard tcp.tcpsi_state == TSI_S_LISTEN else {
+        continue
       }
+      let localPort = UInt16(bigEndian: UInt16(truncatingIfNeeded: tcp.tcpsi_ini.insi_lport))
+      sockets.append((localAddress(of: tcp.tcpsi_ini), Int(localPort)))
     }
-    return false
+    return sockets
+  }
+
+  /// `insi_laddr` as text. A v6 socket is read as v6 even when it also takes
+  /// v4 (a dual-stack `::`); an address that cannot be read is "?", which no
+  /// rule counts as loopback.
+  private static func localAddress(of info: in_sockinfo) -> String {
+    var buffer = [CChar](repeating: 0, count: Int(INET6_ADDRSTRLEN))
+    var laddr = info.insi_laddr
+    let written: UnsafePointer<CChar>?
+    if info.insi_vflag & UInt8(INI_IPV6) != 0 {
+      written = withUnsafePointer(to: &laddr.ina_6) {
+        inet_ntop(AF_INET6, $0, &buffer, socklen_t(buffer.count))
+      }
+    } else if info.insi_vflag & UInt8(INI_IPV4) != 0 {
+      written = withUnsafePointer(to: &laddr.ina_46.i46a_addr4) {
+        inet_ntop(AF_INET, $0, &buffer, socklen_t(buffer.count))
+      }
+    } else {
+      written = nil
+    }
+    guard written != nil else {
+      return "?"
+    }
+    return String(decoding: buffer.prefix { $0 != 0 }.map { UInt8(bitPattern: $0) }, as: UTF8.self)
   }
 
   private static func allPIDs() -> [pid_t] {

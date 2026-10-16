@@ -300,7 +300,8 @@ final class EvieLocalBrainLauncher: LocalBrainStarting {
     return runtime
   }
 
-  /// The pid's argv names the configured executable and port, and its image
+  /// The pid's argv names the configured executable and port with
+  /// `--host 127.0.0.1` last, it listens on nothing but loopback, and its image
   /// is that executable — or, for a `#!` script, the interpreter it names —
   /// with symlinks resolved.
   static func isServer(_ pid: pid_t, runtime: LocalRuntime) -> Bool {
@@ -308,6 +309,8 @@ final class EvieLocalBrainLauncher: LocalBrainStarting {
       EvieProcessInspector.isAlive(pid),
       let arguments = EvieProcessInspector.arguments(of: pid),
       LocalBrainPolicy.argumentsIdentifyServer(arguments, runtime: runtime),
+      LocalBrainPolicy.listensOnlyOnLoopback(
+        EvieProcessInspector.listeningSockets(of: pid).map(\.address)),
       let image = EvieProcessInspector.executablePath(of: pid)
     else {
       return false

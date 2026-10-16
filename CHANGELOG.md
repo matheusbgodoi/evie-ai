@@ -6,6 +6,13 @@ All notable changes to Evie are documented here. Dates use `YYYY-MM-DD`.
 
 ### Changed
 
+- **Security: a Mac brain server on every interface is no longer adopted.** A
+  `mlx_vlm.server` started by hand without `--host` listens on `0.0.0.0` with no
+  key, and Evie used to take it for her own because its executable and port
+  matched. Now the last `--host` it was given must be `127.0.0.1` and every
+  socket it listens on must be `127.0.0.1` or `::1`; otherwise it is "A porta
+  38480 está ocupada por outro processo." and `Scripts/evie-brain stop` leaves
+  it alone.
 - **Security: a turn on the Mac brain goes only to the address Evie starts it
   on.** The check of who listens covered port 38480, but the conversation went
   to the profile's address, which Configurações › Cérebro, `config.json` or

@@ -204,6 +204,53 @@ struct LocalBrainPolicyTests {
     #expect(!LocalBrainPolicy.argumentsIdentifyServer([], runtime: runtime))
   }
 
+  @Test("a server not bound to loopback by its last --host is not the server")
+  func requiresLoopbackAsTheLastHost() {
+    let program = ["/usr/bin/python3", runtime.executable]
+    let base = ["--model", model, "--port", "38480"]
+
+    // mlx-vlm's default is 0.0.0.0: no --host at all is every interface.
+    #expect(!LocalBrainPolicy.argumentsIdentifyServer(program + base, runtime: runtime))
+    // argparse keeps the last value, in every spelling it accepts.
+    for later in [
+      ["--host", "0.0.0.0"], ["--host=0.0.0.0"], ["--hos", "0.0.0.0"], ["--ho=::"],
+      ["--host", "localhost"], ["--host", "192.168.1.20"],
+    ] {
+      #expect(
+        !LocalBrainPolicy.argumentsIdentifyServer(
+          program + base + ["--host", "127.0.0.1"] + later, runtime: runtime),
+        "\(later)"
+      )
+    }
+    #expect(
+      LocalBrainPolicy.argumentsIdentifyServer(
+        program + base + ["--host", "0.0.0.0", "--host=127.0.0.1"], runtime: runtime))
+  }
+
+  @Test("the port that counts is the last one the server was given")
+  func usesTheLastPort() {
+    let program = [runtime.executable, "--model", model, "--host", "127.0.0.1"]
+
+    #expect(
+      !LocalBrainPolicy.argumentsIdentifyServer(
+        program + ["--port", "38480", "--port", "9999"], runtime: runtime))
+    #expect(
+      !LocalBrainPolicy.argumentsIdentifyServer(
+        program + ["--port", "38480", "--por=9999"], runtime: runtime))
+    #expect(LocalBrainPolicy.argumentsIdentifyServer(program + ["--port=38480"], runtime: runtime))
+  }
+
+  @Test("only listening sockets on 127.0.0.1 or ::1 count as loopback")
+  func listenersMustBeLoopback() {
+    #expect(LocalBrainPolicy.listensOnlyOnLoopback(["127.0.0.1"]))
+    #expect(LocalBrainPolicy.listensOnlyOnLoopback(["::1", "127.0.0.1"]))
+    // Still loading: nothing bound yet, nothing exposed.
+    #expect(LocalBrainPolicy.listensOnlyOnLoopback([]))
+    for exposed in ["0.0.0.0", "::", "192.168.1.20", "100.101.102.103", "127.0.0.2", "::ffff:127.0.0.1"] {
+      #expect(!LocalBrainPolicy.listensOnlyOnLoopback(["127.0.0.1", exposed]), "\(exposed)")
+    }
+  }
+
   @Test("the interpreter is read from a script's first line")
   func interpreterFromShebang() {
     #expect(

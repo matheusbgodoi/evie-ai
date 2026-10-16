@@ -1,5 +1,30 @@
 # Work log
 
+## 2026-10-16 — v2 fix: adopt a Mac brain server only when it serves loopback alone
+
+- Completed: second v2 review, finding #4. `LocalBrainPolicy.argumentsIdentifyServer`
+  now reads the **last** `--port` and `--host` the way argparse does
+  (`lastValue`: `--opt X`, `--opt=X`, abbreviations of four or more characters)
+  and requires `127.0.0.1`; `LocalBrainPolicy.listensOnlyOnLoopback` requires
+  every listening address to be `127.0.0.1` or `::1`;
+  `EvieProcessInspector.listeningSockets(of:)` reads `insi_laddr` (v6 first, for
+  a dual-stack `::`) and `EvieLocalBrainLauncher.isServer` checks both.
+  `Scripts/evie-brain`'s `is_our_server` applies the same rules with `ps -ww`
+  (executable as `argv[0]` or `argv[1]`) and `lsof -Fn`.
+- Tests: three in "Local brain policy" (last host in four spellings, last port,
+  loopback addresses), two in "Evie brain script" (stop leaves a server whose
+  argv is not loopback alone; stop still stops one that is). The first script
+  test failed before the script change (3 issues: all three exposed servers
+  were killed).
+- Checked live (M5 24 GB, macOS 27.2, 2026-10-16), with Python listeners on
+  random ports, no model: `listeningSockets` read `127.0.0.1`, `::1`,
+  `0.0.0.0` and `::` correctly; `Scripts/evie-brain stop` left a stand-in with
+  the right argv listening on `0.0.0.0` running and stopped the same stand-in
+  listening on `127.0.0.1`.
+- Checks: `swift build` with no warnings; `Scripts/test --filter` "Local brain
+  policy" and "Evie brain script": 22 tests passed.
+- Next: #8 wake cancellation, #9 stop off the main actor, the per-launch key.
+
 ## 2026-10-16 — v2 fix: the Mac brain's turn goes only where its listener was checked
 
 - Completed: second v2 review, finding #3. `LocalRuntime.endpoint`

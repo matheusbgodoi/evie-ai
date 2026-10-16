@@ -109,14 +109,61 @@ function process_is_running() {
   [[ "${process_state}" != Z* ]]
 }
 
-# Whether the pid is this brain and not a process that reused its number: its
-# command line names the configured executable and port.
+# The value argparse ends up with for an option: the last one given, as
+# "--opt value", "--opt=value" or an abbreviation of at least four characters
+# ("--hos"), as LocalBrainPolicy.lastValue reads it.
+function last_option_value() {
+  local option="$1"
+  shift
+  local value="" argument name
+  while (( $# > 0 )); do
+    argument="$1"
+    shift
+    name="${argument%%=*}"
+    if (( ${#name} >= 4 )) && [[ "${option}" == "${name}"* ]]; then
+      if [[ "${argument}" == *=* ]]; then
+        value="${argument#*=}"
+      elif (( $# > 0 )); then
+        value="$1"
+        shift
+      fi
+    fi
+  done
+  print -r -- "${value}"
+}
+
+# Whether every TCP socket the pid listens on is 127.0.0.1 or ::1. A wildcard
+# (lsof prints "*:port") or a real interface is reachable from the network. A
+# server still loading listens on nothing yet, which exposes nothing.
+function listens_only_on_loopback() {
+  local process_pid="$1"
+  local line address
+  for line in ${(f)"$(/usr/sbin/lsof -nP -a -p "${process_pid}" -iTCP -sTCP:LISTEN -Fn 2>/dev/null)"}; do
+    [[ "${line}" == n* ]] || continue
+    address="${line#n}"
+    address="${address%:*}"
+    [[ "${address}" == "127.0.0.1" || "${address}" == "[::1]" ]] || return 1
+  done
+  return 0
+}
+
+# Whether the pid is this brain and not a process that reused its number, nor
+# a server started by hand on every interface: its argv names the configured
+# executable as the program or as the script its interpreter runs, the last
+# --port is the configured one and the last --host is 127.0.0.1 (the server's
+# own default is 0.0.0.0), and it listens on loopback only. The same rules as
+# LocalBrainPolicy.argumentsIdentifyServer and listensOnlyOnLoopback.
 function is_our_server() {
   local process_pid="$1"
   local command_line
-  command_line=$(ps -p "${process_pid}" -o command= 2>/dev/null) || return 1
-  [[ "${command_line}" == *"${EVIE_BRAIN_EXECUTABLE} "* \
-    && "${command_line}" == *"--port ${EVIE_BRAIN_PORT}"* ]]
+  command_line=$(ps -ww -p "${process_pid}" -o command= 2>/dev/null) || return 1
+  local -a words=(${=command_line})
+  local program=${words[(ie)${EVIE_BRAIN_EXECUTABLE}]}
+  (( program <= 2 )) || return 1
+  local -a options=("${(@)words[program+1,-1]}")
+  [[ "$(last_option_value --port "${options[@]}")" == "${EVIE_BRAIN_PORT}" ]] || return 1
+  [[ "$(last_option_value --host "${options[@]}")" == "127.0.0.1" ]] || return 1
+  listens_only_on_loopback "${process_pid}"
 }
 
 # The pid in the pid file when it is still this brain; a stale file is removed.

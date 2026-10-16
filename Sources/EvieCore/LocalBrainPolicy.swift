@@ -110,15 +110,55 @@ public struct LocalBrainPolicy: Sendable, Equatable {
   /// Whether a process's argv is this server's: the configured executable as
   /// the program (`argv[0]`), or as the script an interpreter runs (`argv[1]`,
   /// which is how the kernel starts a `#!` script), serving the configured
-  /// port. A pid file can name a pid that was since reused; this is what is
-  /// checked before trusting it, and before signalling it.
+  /// port on loopback only. A pid file can name a pid that was since reused,
+  /// and a server can be started by hand; this is what is checked before
+  /// trusting it, and before signalling it.
+  ///
+  /// The port and the host are the *last* values given, in any spelling
+  /// argparse accepts (`--host X`, `--host=X`, an unambiguous prefix such as
+  /// `--hos X`), because that is the value the server uses. The host must be
+  /// `127.0.0.1`: mlx-vlm's default is `0.0.0.0`, so a server started without
+  /// `--host` serves every interface, with no key, and would be handed the
+  /// conversation and the screen.
   public static func argumentsIdentifyServer(_ arguments: [String], runtime: LocalRuntime) -> Bool {
     guard let program = arguments.firstIndex(where: { $0 == runtime.executable }), program <= 1
     else {
       return false
     }
-    let rest = arguments[(program + 1)...]
-    return zip(rest, rest.dropFirst()).contains { $0 == "--port" && $1 == String(runtime.port) }
+    let options = arguments[(program + 1)...]
+    return lastValue(of: "--port", in: options) == String(runtime.port)
+      && lastValue(of: "--host", in: options) == "127.0.0.1"
+  }
+
+  /// Whether every address the server listens on is loopback: exactly
+  /// `127.0.0.1` or `::1`. A wildcard (`0.0.0.0`, `::`) or a real interface is
+  /// reachable from the network. No listener at all (still loading) exposes
+  /// nothing.
+  public static func listensOnlyOnLoopback(_ addresses: [String]) -> Bool {
+    addresses.allSatisfy { $0 == "127.0.0.1" || $0 == "::1" }
+  }
+
+  /// The value argparse ends up with for `option`: the last `option value`,
+  /// `option=value`, or the same with an abbreviation argparse would expand
+  /// (a prefix of at least `--` and two letters; the shorter `--h` and `--p`
+  /// are ambiguous in mlx-vlm and refused by it).
+  static func lastValue(of option: String, in arguments: ArraySlice<String>) -> String? {
+    var value: String?
+    var index = arguments.startIndex
+    while index < arguments.endIndex {
+      let argument = arguments[index]
+      let name = argument.split(separator: "=", maxSplits: 1).first.map(String.init) ?? argument
+      if name.count >= 4, option.hasPrefix(name) {
+        if name.count < argument.count {
+          value = String(argument.dropFirst(name.count + 1))
+        } else if index + 1 < arguments.endIndex {
+          value = arguments[index + 1]
+          index += 1
+        }
+      }
+      index += 1
+    }
+    return value
   }
 
   /// The interpreter a script names on its first line, when that is an

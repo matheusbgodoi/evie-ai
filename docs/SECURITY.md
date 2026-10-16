@@ -293,7 +293,10 @@ fixed `PATH`, nothing else inherited but the account basics and the model cache
 location), so a variable in Evie's environment cannot reconfigure it and a wrong
 model id cannot trigger a download. Before every turn on it, the process
 listening on the port must be the configured executable serving that port (argv,
-and the `proc_pidpath` image or its `#!` interpreter); otherwise the turn — and
+and the `proc_pidpath` image or its `#!` interpreter), on loopback only: the last
+`--host` in its argv is `127.0.0.1` (argparse keeps the last one, in any
+spelling it accepts) and every socket it listens on is `127.0.0.1` or `::1`
+(`insi_laddr`, through libproc); otherwise the turn — and
 the screen — is not sent, with "A porta 38480 está ocupada por outro
 processo.". After a start the listener must be the process Evie spawned. The turn goes
 only to `http://127.0.0.1:<port>/v1`, the address that check covers: a Mac
