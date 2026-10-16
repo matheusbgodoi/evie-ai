@@ -140,6 +140,97 @@ struct EvieBrainResolverTests {
     #expect(harness.resolver.pinnedProfileID(for: conversation) == pc)
   }
 
+  @Test(".ask: after a no, a PC the cache says is out is not sent the turn, and nobody is asked twice")
+  func askDeclinedForAnUnreachablePC() async throws {
+    let pcClient = RecordingClient([.fail(.unreachable("gateway"))])
+    let harness = ResolverHarness(
+      keys: .saved,
+      rungs: [pc: .unreachable, mac: .modelCold],
+      fallback: .ask,
+      clients: [pc: pcClient]
+    )
+    harness.answers = [false, false]
+    let conversation = UUID()
+
+    let brain = await harness.resolver.resolve(conversation: conversation)
+    let failure = await streamFailure(brain.client)
+    let next = await harness.resolver.failover(
+      conversation: conversation, after: .unreachable("gateway"))
+
+    #expect(brain.profile.id == pc)
+    #expect(failure == "O PC está fora. O cérebro do Mac continua desligado, como você pediu.")
+    #expect(await pcClient.calls.isEmpty)
+    #expect(next == nil)
+    #expect(harness.questions.count == 1)
+    #expect(harness.launcher.starts == 0)
+    // Nothing answered, so nothing is pinned: the next turn is resolved afresh.
+    #expect(harness.resolver.pinnedProfileID(for: conversation) == nil)
+  }
+
+  @Test(".ask: a no is not taken for an outage the person was never asked about")
+  func declineFailsTheTurnWithoutAFailover() async throws {
+    let pcClient = RecordingClient([.fail(.unreachable("gateway"))])
+    let harness = ResolverHarness(
+      keys: .saved,
+      rungs: [pc: .unreachable, mac: .modelCold],
+      fallback: .ask,
+      clients: [pc: pcClient]
+    )
+    harness.answers = [false, true]
+    let conversation = UUID()
+    let brain = await harness.resolver.resolve(conversation: conversation)
+
+    await #expect(throws: EvieBrainUnavailable.self) {
+      try await EvieBrainTurn.run(
+        conversation: conversation,
+        on: brain,
+        resolver: harness.resolver,
+        onSwitch: { _ in Issue.record("switched after a no") },
+        attempt: { brain in
+          for try await _ in brain.client.stream(messages: []) {}
+        }
+      )
+    }
+    #expect(harness.questions.count == 1)
+    #expect(await pcClient.calls.isEmpty)
+  }
+
+  @Test(".ask: a no after a missing key fails the turn with where to import one")
+  func declineAfterAMissingKey() async {
+    let harness = ResolverHarness(keys: .none, rungs: [mac: .modelCold], fallback: .ask)
+    harness.answers = [false]
+
+    let brain = await harness.resolver.resolve(conversation: UUID())
+
+    #expect(
+      await streamFailure(brain.client)
+        == "Sem a chave do PC. O cérebro do Mac continua desligado, como você pediu. "
+        + "Importe a chave em Configurações › Cérebro."
+    )
+  }
+
+  @Test(".ask: a no holds for the rest of its turn only")
+  func declineLastsOneTurn() async {
+    let harness = ResolverHarness(
+      keys: .saved, rungs: [pc: .ready, mac: .modelCold], fallback: .ask)
+    harness.answers = [false, true]
+    let conversation = UUID()
+    _ = await harness.resolver.resolve(conversation: conversation)
+
+    let declined = await harness.resolver.failover(
+      conversation: conversation, after: .unreachable("gateway"))
+    let sameTurn = await harness.resolver.failover(
+      conversation: conversation, after: .headersTimedOut)
+    harness.resolver.turnEnded(conversation: conversation)
+    let nextTurn = await harness.resolver.failover(
+      conversation: conversation, after: .unreachable("gateway"))
+
+    #expect(declined == nil)
+    #expect(sameTurn == nil)
+    #expect(nextTurn?.profile.id == mac)
+    #expect(harness.questions.count == 2)
+  }
+
   @Test(".ask: a yes wakes the Mac, re-pins, and counts for the rest of the session")
   func askAccepted() async {
     let harness = ResolverHarness(

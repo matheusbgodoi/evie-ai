@@ -1,5 +1,30 @@
 # Work log
 
+## 2026-10-16 — v2 fix: a declined Mac wake holds for its turn
+
+- Completed: second v2 review, finding #1. `EvieBrainResolver` remembered only
+  a yes (`wakeAccepted`), so with the PC cached `.unreachable` and
+  `macFallback == .ask`, a no in `resolve` sent the turn to the PC, the request
+  failed before its first delta, and `failover` asked again in the same turn.
+  - `wakeDeclined: Set<UUID>`, filled by a no in `move`, cleared in
+    `turnEnded(conversation:)`; `move` skips a consent-needing candidate for a
+    conversation in it without asking.
+  - `resolve`: when the preferred rung is not answerable, moving is allowed and
+    the person said no, the brain returned fails every request with
+    `EvieBrainCopy.declinedWake` ("O PC está fora. O cérebro do Mac continua
+    desligado, como você pediu.", plus the import hint for a missing PC key)
+    and sends nothing; it is an `EvieBrainUnavailable`, so `EvieBrainTurn.run`
+    does not fail over, and nothing is pinned. `unavailable(_:rung:because:)`
+    is shared with the failed-wake path.
+- Tests ("Evie brain resolver", 4 new): PC `.unreachable`, a no, resolve plus
+  failover → one question, no request to the PC, the reason, no pin; the same
+  through `EvieBrainTurn.run` → `EvieBrainUnavailable`, no switch, one question;
+  a no in one turn is not asked again in it and is asked again after
+  `turnEnded`; the missing-key wording. Red before the change (10 issues).
+- Checks: `swift build` with no warnings; `Scripts/test --filter
+  "EvieBrainResolverTests|EvieBrainTurnTests"`: 41 tests passed.
+- Next: the other second-review fixes in this lane.
+
 ## 2026-10-16 — v2 fix: the stream cancellation test asserts what happened, not how fast
 
 - Completed: second v2 review, finding #5. "cancelling the consumer ends the

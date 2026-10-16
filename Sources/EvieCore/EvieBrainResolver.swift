@@ -61,7 +61,11 @@ public struct EvieBrainWakeQuestion: Sendable, Equatable {
 /// **Moving at all** follows `macFallback`: `.off` never moves, `.automatic`
 /// moves, and `.ask` asks before waking a brain on this Mac — it costs memory
 /// the person may be using — and a yes holds for the rest of the app session. A
-/// profile the environment chose is never moved: someone asked for it by name.
+/// no holds for the rest of that conversation's turn: the card is not shown a
+/// second time when the turn it refused then fails over, and a turn whose
+/// preferred brain the cache already knows cannot answer fails with the reason
+/// instead of being sent there. A profile the environment chose is never
+/// moved: someone asked for it by name.
 @MainActor
 public final class EvieBrainResolver {
   /// The profiles in use and the preferred one, with environment overrides.
@@ -83,6 +87,8 @@ public final class EvieBrainResolver {
   private let makeClient: @Sendable (EvieModelProfile) -> any AgentClient
   private var pins: [UUID: String] = [:]
   private var wakeAccepted = false
+  /// Conversations whose current turn was answered "Agora não".
+  private var wakeDeclined: Set<UUID> = []
 
   public convenience init(
     configuration: EvieLoadedConfiguration,
@@ -141,6 +147,7 @@ public final class EvieBrainResolver {
   /// brain's idle clock starts from now rather than from the turn's start, so
   /// a long answer does not count as idle time.
   public func turnEnded(conversation: UUID) {
+    wakeDeclined.remove(conversation)
     guard let pinned = pins[conversation].flatMap(profile(id:)), pinned.startsOnDemand else {
       return
     }
@@ -154,10 +161,20 @@ public final class EvieBrainResolver {
     }
     let preferred = configuration.activeProfile
     let preferredRung = await rung(of: preferred)
-    if !preferredRung.isAnswerable, mayMove,
-      let moved = await move(conversation, from: preferred, because: preferredRung)
-    {
-      return moved
+    if !preferredRung.isAnswerable, mayMove {
+      if let moved = await move(conversation, from: preferred, because: preferredRung) {
+        return moved
+      }
+      if wakeDeclined.contains(conversation) {
+        // He was told the PC cannot answer and chose not to wake the Mac;
+        // sending the turn there anyway would only fail the same way, after
+        // the network's own timeout.
+        return unavailable(
+          preferred,
+          rung: preferredRung,
+          because: EvieBrainCopy.declinedWake(passingOver: preferred, because: preferredRung)
+        )
+      }
     }
     return await prepare(preferred, rung: preferredRung, for: conversation)
   }
@@ -196,9 +213,14 @@ public final class EvieBrainResolver {
         continue
       }
       if needsConsent(toWake: candidate, rung: rung) {
+        // Asked once a turn: the answer stands until the turn ends.
+        guard !wakeDeclined.contains(conversation) else {
+          continue
+        }
         let question = EvieBrainWakeQuestion(
           passingOver: failed, reason: reason, candidate: candidate)
         guard await askToWake(question) else {
+          wakeDeclined.insert(conversation)
           continue
         }
         wakeAccepted = true
@@ -242,15 +264,7 @@ public final class EvieBrainResolver {
           skipped.map {
             EvieBrainCopy.reasonSentence(passingOver: $0.profile, because: $0.reason) + " " + reason
           } ?? reason
-        return ResolvedBrain(
-          profile: profile,
-          client: UnavailableBrainClient(
-            configuration: profile.configuration,
-            failure: EvieBrainUnavailable(message: message)
-          ),
-          rung: rung,
-          notice: nil
-        )
+        return unavailable(profile, rung: rung, because: message)
       }
     }
     pins[conversation] = profile.id
@@ -261,6 +275,22 @@ public final class EvieBrainResolver {
       notice: skipped.map {
         EvieBrainCopy.notice(passingOver: $0.profile, because: $0.reason, for: profile)
       }
+    )
+  }
+
+  /// A brain whose every request fails with `message`, sending nothing, and
+  /// with nothing pinned to it.
+  private func unavailable(_ profile: EvieModelProfile, rung: ReadinessRung, because message: String)
+    -> ResolvedBrain
+  {
+    ResolvedBrain(
+      profile: profile,
+      client: UnavailableBrainClient(
+        configuration: profile.configuration,
+        failure: EvieBrainUnavailable(message: message)
+      ),
+      rung: rung,
+      notice: nil
     )
   }
 
@@ -365,6 +395,20 @@ enum EvieBrainCopy {
     case .unreachable, .modelCold, .ready:
       return "\(subject) está fora."
     }
+  }
+
+  /// Why a turn fails when the preferred brain cannot answer and the person
+  /// chose not to wake the one that could: "O PC está fora. O cérebro do Mac
+  /// continua desligado, como você pediu." A missing PC key also says where
+  /// to put one.
+  static func declinedWake(passingOver skipped: EvieModelProfile, because reason: ReadinessRung)
+    -> String
+  {
+    let fix =
+      reason == .keyMissing && skipped.location == .yourPC
+      ? " Importe a chave em Configurações › Cérebro." : ""
+    return reasonSentence(passingOver: skipped, because: reason)
+      + " O cérebro do Mac continua desligado, como você pediu." + fix
   }
 
   /// The status line after a move.

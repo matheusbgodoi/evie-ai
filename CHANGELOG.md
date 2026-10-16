@@ -6,6 +6,12 @@ All notable changes to Evie are documented here. Dates use `YYYY-MM-DD`.
 
 ### Changed
 
+- **"Agora não" on the wake card is asked once per question.** With the PC out
+  and the fallback on "Perguntar", a no used to send the question to the PC
+  anyway; when that failed, the same card came back in the same turn. Now a no
+  holds until the turn ends, and a question whose PC is already known to be out
+  ends at once with "O PC está fora. O cérebro do Mac continua desligado, como
+  você pediu." instead of waiting on the network. The next question asks again.
 - **Security: the Mac brain answers only with the key it was started with.**
   Every start — by Evie or by `Scripts/evie-brain` — makes a random key, keeps it
   in `Application Support/Evie/Runtime/brain.key` (0600, removed when the server
