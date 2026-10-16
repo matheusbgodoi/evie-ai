@@ -48,6 +48,19 @@ final class AppCoordinator: NSObject {
   /// coordinator does not. Every use is inside an availability check.
   private var transcription: AnyObject?
   private var historyWindowController: ConversationHistoryWindowController?
+  /// One checklist shared by the first-run window and the Settings pane, so a
+  /// permission granted in one shows as granted in the other. Lazy because it
+  /// asks the coordinator's own `audioCapture` for the microphone.
+  private lazy var permissionGuide = PermissionGuideViewModel(
+    items: PermissionGuideViewModel.standardItems(audioCapture: audioCapture),
+    store: PermissionGuideStore(
+      fileURL: preferencesStore.fileURL
+        .deletingLastPathComponent()
+        .appendingPathComponent("permission-guide.json", isDirectory: false)
+    ),
+    isBundled: EvieAudioCapture.isBundled
+  )
+  private var permissionGuideWindowController: PermissionGuideWindowController?
   private weak var visibilityMenuItem: NSMenuItem?
 
   override init() {
@@ -415,6 +428,12 @@ final class AppCoordinator: NSObject {
     } else {
       openQuickText()
     }
+
+    // After the overlay, so the checklist is the window in front on a first
+    // launch rather than something the overlay covers.
+    if permissionGuide.opensAtLaunch {
+      openPermissionGuide()
+    }
   }
 
   /// Diagnostics for `--presentation-check`. Not used by the running application.
@@ -647,6 +666,15 @@ extension AppCoordinator {
     NSApp.terminate(nil)
   }
 
+  fileprivate func openPermissionGuide() {
+    if permissionGuideWindowController == nil {
+      permissionGuideWindowController = PermissionGuideWindowController(
+        viewModel: permissionGuide
+      )
+    }
+    permissionGuideWindowController?.present()
+  }
+
   @objc fileprivate func openSettings() {
     if settingsWindowController == nil {
       let modelViewModel = ModelSettingsViewModel(
@@ -697,6 +725,7 @@ extension AppCoordinator {
         updater: updater,
         wakeListener: wakeListener,
         schedulesViewModel: schedulesViewModel,
+        permissionGuide: permissionGuide,
         preferencesPath: preferencesStore.fileURL.path,
         configurationPath: configurationStore.fileURL.path
       )

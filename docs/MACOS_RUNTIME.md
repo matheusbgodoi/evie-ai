@@ -135,19 +135,150 @@ speaking.
 
 ## Permission plan
 
-Expected initial permissions:
+Permissions Evie holds or asks for, all attached to the signed bundle at
+`~/Applications/Evie.app` (see "Signing, install and recovery" below):
 
-- microphone for push-to-talk/wake word;
-- user-selected file roots when file RAG is enabled;
-- service-specific OAuth handled locally.
+- microphone, for push-to-talk, call mode and the wake phrase;
+- speech recognition, declared in the Info.plist for the system recogniser;
+- user-selected file roots when file RAG is enabled (Desktop, Documents and
+  Downloads consent);
+- Apple Events, for the Mail and Calendar applications only;
+- Screen Recording, for "olha a tela" (v2 S4) — `NSScreenCaptureUsageDescription`
+  is in the Info.plist;
+- Accessibility and Post Events, for computer use (v2 S5). Neither has an
+  Info.plist key, so the first-run guide is where they are explained.
 
-Deferred and separately brokered:
+Input Monitoring is not asked for. It joins the guide only if the computer-use
+takeover monitor (v2 S5d) turns out to need a listen-only event tap; NSEvent
+monitors do not. Full Disk Access is not a requirement.
 
-- Screen Recording for explicit screen analysis;
-- Apple Events for specific target applications;
-- Accessibility for future UI automation only.
+## Signing, install and recovery
 
-Full Disk Access is not an initial requirement.
+Updated 2026-10-16 (v2 S7).
+
+### Signing
+
+`Scripts/evie-app build` signs only with the certificate whose SHA-1 is pinned
+in the script, `E1CDAAB36B6D3B8B6FEB3E7D46BA020120524C9E` ("Evie Dev"). It looks
+the name up in `security find-identity -v -p codesigning`, then signs with the
+hash, so a second certificate with the same name cannot make the choice
+ambiguous. A missing or different certificate fails the build before compiling;
+there is no ad-hoc fallback any more, because an ad-hoc build loses every grant
+on every rebuild and refuses every update.
+
+After signing, the build asserts:
+
+- `codesign --verify --deep --strict` passes;
+- `codesign -d -r-` gives exactly Evie's designated requirement. Measured on
+  2026-10-16 (Apple M5, 24 GB, macOS 27.2, Xcode 27.1): `designated => identifier
+  "com.matheusbgodoi.evie" and certificate leaf = H"e1cdaab36b6d3b8b6feb3e7d46ba020120524c9e"`.
+  A self-signed certificate is its own leaf, so the requirement names the leaf.
+- `plutil -lint` accepts the Info.plist.
+
+codesign's own output is no longer sent to `/dev/null`. The bundle has no
+sandbox and no hardened runtime (`flags=0x0(none)`, no entitlements): reading
+the accessibility tree and posting events need the sandbox off, and neither
+grant needs the hardened runtime. `LSMinimumSystemVersion` is 26.0, matching
+`Package.swift`.
+
+**Why `Scripts/evie-app identity` never worked, and what was still wrong.** The
+first cause is in `e2cebec`: the script passed `-legacy` to an `openssl` that is
+LibreSSL and has no such flag, and sent both `openssl` calls to `/dev/null`, so
+the p12 was never written and Evie stayed ad-hoc signed in silence. That fix
+left the step depending on whichever `openssl` comes first on `PATH`. Measured on
+2026-10-16 against throwaway keychains: a p12 exported by Homebrew's OpenSSL
+3.6.4 is refused by `security import` ("MAC verification failed during PKCS12
+import"), because OpenSSL 3 encrypts with AES-256 and PBKDF2 by default; the same
+commands through `/usr/bin/openssl` (LibreSSL 3.3.6) import cleanly. The script
+now calls `/usr/bin/openssl` by absolute path. `identity` is still needed — it is
+the only way to make the certificate on a new Mac or after losing this one — and
+it now prints the new SHA-1 and says that the pin has to be changed, and
+committed, before `build` will use it.
+
+**Risk: recreating the certificate invalidates every grant.** TCC attaches each
+permission to the designated requirement, and the requirement names the
+certificate. A new "Evie Dev" is a different application to macOS: microphone,
+speech, folders, Apple Events, Screen Recording, Accessibility and Post Events
+all have to be granted again, and every copy signed with the old certificate
+refuses updates signed with the new one. Back up the identity rather than
+recreating it.
+
+### Install and launch
+
+- `Scripts/evie-app install` checks the built bundle's signature, stops any
+  running Evie and waits up to 5 s for it to exit, copies the bundle with
+  `ditto` to `~/Applications/Evie.app`, checks the installed copy's signature
+  again, and opens it through Launch Services (`open`).
+- Grant permissions to that copy only. `Scripts/evie-app run` opens the
+  installed copy and refuses when there is none; it never launches the bundle in
+  `.build`, which is rebuilt and deleted constantly, and two registered bundles
+  with one identifier leave Launch Services free to open either.
+- `Scripts/evie-runtime launch` no longer runs the bare SwiftPM binary. It starts
+  the local runtime as before, then hands over to `Scripts/evie-app run`. A bare
+  binary started from a terminal is attributed to the terminal, which hangs the
+  microphone and would give Screen Recording and Accessibility to Terminal.
+
+### Recovery
+
+When a grant is stuck, or was given to the wrong copy:
+
+```bash
+tccutil reset ScreenCapture com.matheusbgodoi.evie
+tccutil reset Accessibility com.matheusbgodoi.evie
+tccutil reset PostEvent com.matheusbgodoi.evie
+```
+
+then ask again from the guide. `tccutil reset All com.matheusbgodoi.evie`
+resets everything, including the microphone and folders.
+
+### First-run guide
+
+`Sources/EvieShell/Onboarding/`. A checklist window, "Primeiros passos com a
+Evie", opens at launch until it has been closed once; afterwards the same list is
+Settings › Avançado › Permissões. Rows today: Microfone, Reconhecimento de fala,
+Gravação de tela (with "reabra a Evie" — a running process keeps the answer it
+got at launch), Acessibilidade, and Controlar o teclado e o mouse (Post Events).
+
+- Each row shows its live state with a distinct symbol per state, and one
+  button. "Pedir" shows the system prompt; "Abrir Ajustes" opens the right
+  Privacy & Security pane (`x-apple.systempreferences:com.apple.preference.security?Privacy_…`;
+  Post Events lives under Accessibility).
+- `CGPreflightScreenCaptureAccess`, `AXIsProcessTrusted` and
+  `CGPreflightPostEventAccess` answer only yes or no, and macOS shows each prompt
+  once. So "Pedir" is offered until it has been pressed once, and the guide
+  remembers that in `~/Library/Application Support/Evie/permission-guide.json`
+  (mode 0600, next to `preferences.json`), with whether the window was closed.
+  A missing or damaged file shows the guide again; nothing else depends on it.
+- Rows are read again whenever Evie becomes active, which is what coming back
+  from System Settings does. There is no polling, because macOS posts nothing
+  when a privacy switch changes.
+- A copy that is not bundled shows the state and no buttons: TCC would give the
+  permission to the terminal.
+- The decisions — which button a state offers, the deep links, the record — are
+  in `Sources/EvieCore/EviePermissionGuide.swift` and tested in
+  `EviePermissionGuideTests`. The probes and the window are in the shell and have
+  no automated test; see the manual QA below.
+
+**Hook for the two rows that wait on model profiles.** The "Chave do PC" row
+(Importar da configuração do PC: one read of `local-ai-3090` /
+`gateway-api-key`, copied into Evie's own Keychain item, with the explanation of
+the macOS prompt shown before the button) and the "Cérebro" row (Testar conexão:
+PC reachable → key valid → model loaded) depend on model profiles and the
+readiness probe (v2 S2a–S2d), which are built on another branch. They go in
+`PermissionGuideViewModel.standardItems`, marked `TODO(S7-brain-rows)`, as two
+more `PermissionGuideItem` conformances; the view and the view model need no
+other change. A row whose button is neither a system prompt nor a Settings pane
+adds its own case to `PermissionGuideRow.Action.Kind`.
+
+**Also waiting on S2a:** `Scripts/evie-runtime configure` still seeds the v1
+local configuration; writing the v2 built-ins when the file is missing needs the
+v2 schema.
+
+**Manual QA, not yet run** (it needs the app launched, which grants and prompts
+on the owner's Mac): install, then rebuild and install twice and confirm the
+grants survive; a first run against an empty `~/Library/Application Support/Evie`;
+each row's "Pedir" and "Abrir Ajustes", including that each deep link lands on
+its pane on macOS 27.
 
 ## Phase 2 spikes
 

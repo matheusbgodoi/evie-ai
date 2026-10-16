@@ -501,6 +501,49 @@ assumed.
 The identity is self-signed, so the build is not notarized and cannot be. That
 constrains what a release can be; see `docs/PROJECT_STATUS.md`.
 
+### The signing identity is pinned, and the requirement is asserted
+
+Since 2026-10-16 (v2 S7), `Scripts/evie-app build` signs only with the
+certificate whose SHA-1 is pinned in the script,
+`E1CDAAB36B6D3B8B6FEB3E7D46BA020120524C9E`. It used to sign with whatever
+certificate answered to the name "Evie Dev", and to sign ad-hoc when none did,
+with codesign's errors sent to `/dev/null`. Both were ways to produce a bundle
+that TCC and the updater treat as somebody else without anyone noticing: a
+second certificate with the same name — an old one, or one planted in the login
+keychain — would have been as good as the real one. Now a missing or different
+certificate fails the build, and every build and every install asserts that
+`codesign -d -r-` is `identifier "com.matheusbgodoi.evie" and certificate leaf =
+H"e1cdaab3…"` before the bundle is used.
+
+The bundle has no sandbox and no hardened runtime. Computer use needs the sandbox
+off; that is a property of what Evie is allowed to do, decided by the grants the
+user makes in the first-run guide and by the agent-mode policy, not by the
+signature.
+
+**Recreating the certificate invalidates every grant**, and that is by design: a
+new key is a new application to TCC and to the updater. It is also the recovery
+for a leaked private key. `Scripts/evie-app identity` refuses to build with a new
+certificate until the pinned hash is changed and committed, so the change is
+visible in history.
+
+`identity` had a second latent fault after the `-legacy` fix: it ran whichever
+`openssl` was first on `PATH`, and a p12 from Homebrew's OpenSSL 3 is refused by
+`security import` (measured 2026-10-16). It now calls `/usr/bin/openssl`.
+
+### Permissions are granted to one installed copy
+
+`Scripts/evie-app install` puts the bundle at `~/Applications/Evie.app` and opens
+it through Launch Services; `run` opens only that copy, and `Scripts/evie-runtime
+launch` hands over to it instead of running the bare binary. A binary started from
+a terminal is attributed to the terminal, so a Screen Recording or Accessibility
+grant meant for Evie would land on Terminal and extend to everything that ever
+runs there. Recovery for a grant given to the wrong place:
+`tccutil reset ScreenCapture|Accessibility|PostEvent com.matheusbgodoi.evie`.
+
+The first-run guide never prompts by itself. Every system prompt follows a press
+of its row's "Pedir"; a refused permission is only ever offered as a link to its
+pane in System Settings.
+
 ## Update and dependency policy
 
 - Pin model/runtime/plugin revisions used in validated builds.

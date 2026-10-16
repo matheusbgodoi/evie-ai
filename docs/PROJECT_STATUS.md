@@ -1,6 +1,6 @@
 # Project status
 
-Last updated: 2026-08-08
+Last updated: 2026-10-16
 
 ## Repository hygiene
 
@@ -409,6 +409,16 @@ readiness only; they are not the Phase 1 performance suite.
   618 tests run on one machine. A macOS 27 runner image closes this.
 
 ## Next recommended action
+
+**Evie v2, S7 (packaging, install, permissions) — partly done on `v2-packaging`,
+2026-10-16.** Signing is pinned to the "Evie Dev" certificate's SHA-1 with the
+designated requirement asserted; `install` opens `~/Applications/Evie.app`, `run`
+opens only that copy and `evie-runtime launch` hands over to it; the first-run
+permission checklist has its five system rows. Open: the PC key and Brain rows
+and the v2 config seeding, which wait on model profiles (S2a–S2d, hook
+`TODO(S7-brain-rows)`), and the manual QA in `docs/MACOS_RUNTIME.md`, which needs
+the owner to run `Scripts/evie-app install` — nothing is installed in
+`~/Applications` on this Mac today.
 
 Two things, in this order, and they are the two things between here and a release.
 

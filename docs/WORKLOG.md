@@ -2475,3 +2475,57 @@ nobody but the owner can fetch it.**
   only the handful of words that could be within one edit of it and keeps no text
   at all. Correctness unchanged; the successful-search path measured 64 s before
   and after.
+
+## 2026-10-16 — v2 S7: a pinned signature, one installed copy, and a permission checklist
+
+- **Signing.** `Scripts/evie-app build` resolves "Evie Dev" in
+  `security find-identity -v -p codesigning`, signs with the pinned SHA-1
+  `E1CDAAB36B6D3B8B6FEB3E7D46BA020120524C9E`, and fails before compiling when that
+  certificate is missing or another one has the name — no ad-hoc fallback.
+  codesign's stderr is no longer discarded. After signing, and again after
+  installing, it asserts `codesign --verify --deep --strict` and that
+  `codesign -d -r-` names `identifier "com.matheusbgodoi.evie"` and
+  `certificate leaf = H"e1cdaab3…"`; `plutil -lint` checks the Info.plist. The
+  first attempt matched `H"…"` against a lower-cased line and failed on a good
+  bundle; it now matches codesign's own lower-case hex.
+- **Info.plist:** `NSScreenCaptureUsageDescription`, and `LSMinimumSystemVersion`
+  26.0 (the same one-line change S8a makes on `v2`).
+- **Install.** `install` verifies, stops a running copy and waits for it, copies
+  with `ditto` to `~/Applications/Evie.app`, verifies again and opens it with
+  Launch Services. `run` opens only the installed copy. `evie-runtime launch`
+  starts the runtime and execs `evie-app run` instead of the bare binary.
+  `install` and `run` were implemented but **not run**, because launching the app
+  raises permission prompts on the owner's Mac.
+- **Why `identity` never worked.** `git log -S-legacy` → `e2cebec`: LibreSSL has
+  no `-legacy`, and both `openssl` calls went to `/dev/null`. Still needed (a new
+  Mac or a lost certificate), and still had a latent fault: it ran the first
+  `openssl` on `PATH`. Measured against throwaway keychains: a Homebrew OpenSSL
+  3.6.4 p12 fails `security import` with "MAC verification failed during PKCS12
+  import"; `/usr/bin/openssl` (LibreSSL 3.3.6) imports. It now uses the absolute
+  path, and prints the new hash with the instruction to change the pin.
+- **First-run guide.** `EvieCore/EviePermissionGuide.swift` (the five
+  permissions, deep links, which button each state offers, the
+  `permission-guide.json` record) and `EvieShell/Onboarding/` (probes, view model,
+  view, window). Opens at launch until closed once; also Settings › Avançado ›
+  Permissões. "Pedir" for a yes-or-no permission is offered once, then "Abrir
+  Ajustes", because macOS shows each prompt once. Rows refresh on app activation.
+  The PC key and Brain rows wait on model profiles: hook `TODO(S7-brain-rows)` in
+  `PermissionGuideViewModel.standardItems`, documented in `docs/MACOS_RUNTIME.md`.
+  The v2 config seeding in `evie-runtime configure` also waits on S2a.
+- Docs: `docs/MACOS_RUNTIME.md` (new "Signing, install and recovery"),
+  `docs/SECURITY.md`, `README.md`, the S7 status note in the v2 design, CHANGELOG,
+  PROJECT_STATUS.
+- Checks (Apple M5, 24 GB, macOS 27.2, Xcode 27.1, Swift 6.4): `swift build` and
+  `swift build -Xswiftc -warnings-as-errors` pass; `Scripts/evie-app build`
+  signs `.build/release/Evie.app`; `codesign --verify --deep --strict` passes and
+  `codesign -d -r-` gives `designated => identifier "com.matheusbgodoi.evie" and
+  certificate leaf = H"e1cdaab36b6d3b8b6feb3e7d46ba020120524c9e"`; a copy of the
+  script with a wrong pin refuses to build. `Scripts/test --filter
+  EviePermissionGuide`: 12 tests, 2 suites, pass (written first, failed to
+  compile before the implementation). Full `Scripts/test`: **640 tests in 67
+  suites, all pass in 1.3 s** — including "Evie mail and calendar scripts", which
+  failed 4 tests in earlier runs; in this environment it passed, so those
+  failures are environment-dependent as the v2 design says, not fixed here.
+- Next: on the owner's Mac, `Scripts/evie-app install`, then the manual QA in
+  `docs/MACOS_RUNTIME.md` § "First-run guide"; after S2a–S2d, add the two rows at
+  the hook and the v2 config seeding.

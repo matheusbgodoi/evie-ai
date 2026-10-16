@@ -18,6 +18,7 @@ struct SettingsView: View {
   @ObservedObject var updater: EvieUpdater
   @ObservedObject var wakeListener: EvieWakeListener
   @ObservedObject var schedulesViewModel: EvieSchedulesViewModel
+  @ObservedObject var permissionGuide: PermissionGuideViewModel
   var preferencesPath: String = EviePreferencesStore.defaultFileURL.path
   var configurationPath: String = EvieConfigurationLoader.defaultFileURL.path
 
@@ -48,6 +49,7 @@ struct SettingsView: View {
       AdvancedTabView(
         updater: updater,
         modelViewModel: modelViewModel,
+        permissionGuide: permissionGuide,
         preferencesPath: preferencesPath,
         configurationPath: configurationPath
       )
@@ -141,24 +143,32 @@ private struct KnowledgeTabView: View {
   }
 }
 
-/// The two panes nobody opens until something is wrong.
+/// The panes nobody opens until something is wrong.
+///
+/// "Permissões" is here rather than in a tab of its own: after the first-run
+/// window has been closed, the checklist is something you come back to when a
+/// feature stops working, which is what this tab is for.
 private struct AdvancedTabView: View {
   @ObservedObject var updater: EvieUpdater
   @ObservedObject var modelViewModel: ModelSettingsViewModel
+  @ObservedObject var permissionGuide: PermissionGuideViewModel
   var preferencesPath: String
   var configurationPath: String
 
   var body: some View {
     VStack(spacing: 0) {
       PaneSelector(
-        titles: ["Modelo", "Diagnóstico", "Atualizar"],
+        titles: ["Modelo", "Diagnóstico", "Atualizar", "Permissões"],
         selection: $modelViewModel.advancedPane
       )
-      if modelViewModel.advancedPane == 0 {
+      switch modelViewModel.advancedPane {
+      case 0:
         ModelSettingsView(viewModel: modelViewModel)
-      } else if modelViewModel.advancedPane == 2 {
+      case 2:
         UpdateSettingsView(updater: updater)
-      } else {
+      case 3:
+        PermissionGuideView(viewModel: permissionGuide)
+      default:
         DiagnosticsSettingsView(
           modelName: modelViewModel.model,
           endpoint: modelViewModel.endpoint,
