@@ -489,6 +489,7 @@ extension OpenAICompatibleClient {
         for choice in chunk.choices ?? [] {
           if let reasoning = choice.delta.reasoning, !reasoning.isEmpty {
             watchdog.firstTokenArrived()
+            inlineThinking.noteSeparateReasoning()
             emit([.reasoning(reasoning)])
           }
           if let delta = choice.delta.content, !delta.isEmpty {

@@ -54,6 +54,23 @@ struct ModelStreamDecodingTests {
     #expect(completed(in: events)?.message.content == "Resposta final.")
   }
 
+  @Test("an answer that quotes the think tag is shown whole, not hidden as reasoning")
+  func quotedThinkTag() async throws {
+    let events = try await collect(makeClient(.quotedThinkTag))
+
+    #expect(reasoning(in: events).isEmpty)
+    #expect(answer(in: events) == ModelStreamStub.quotedThinkTagAnswer)
+    #expect(completed(in: events)?.message.content == ModelStreamStub.quotedThinkTagAnswer)
+  }
+
+  @Test("after separate reasoning, an answer that opens with the think tag is still the answer")
+  func separateReasoningThenTag() async throws {
+    let events = try await collect(makeClient(.reasoningThenTagAnswer))
+
+    #expect(reasoning(in: events) == "pensando")
+    #expect(answer(in: events) == "<think> abre o raciocínio do Qwen.")
+  }
+
   @Test("reasoning that used the whole cap with no answer is reported as truncated")
   func truncatedReasoning() async {
     let error = await terminalError(makeClient(.reasoningUsedTheCap), maxTokens: 64)
@@ -246,6 +263,56 @@ struct InlineThinkingSplitterTests {
     #expect(text(of: pieces, reasoning: false) == "2 < 3 e <b")
   }
 
+  @Test("a tag quoted inside the answer stays answer text at every cut")
+  func quotedTag() {
+    let quoted = "O Qwen usa a tag <think> para raciocinar, e fecha com </think>."
+    for offset in 0...quoted.count {
+      let cut = quoted.index(quoted.startIndex, offsetBy: offset)
+      var splitter = InlineThinkingSplitter()
+      let pieces =
+        splitter.consume(String(quoted[..<cut]))
+        + splitter.consume(String(quoted[cut...]))
+        + splitter.finish()
+
+      #expect(text(of: pieces, reasoning: true).isEmpty, "cut at \(offset)")
+      #expect(text(of: pieces, reasoning: false) == quoted, "cut at \(offset)")
+    }
+  }
+
+  @Test("only a trace that opens the answer is reasoning; a later tag is text")
+  func onlyTheOpeningTrace() {
+    var splitter = InlineThinkingSplitter()
+    let pieces =
+      splitter.consume("\n<think>passo</think>\n\nA tag <think> abre")
+      + splitter.consume(" um raciocínio.")
+      + splitter.finish()
+
+    #expect(text(of: pieces, reasoning: true) == "passo")
+    #expect(text(of: pieces, reasoning: false) == "A tag <think> abre um raciocínio.")
+  }
+
+  @Test("once the server sends reasoning apart, an opening tag is answer text")
+  func separateReasoningDisablesSplitting() {
+    var splitter = InlineThinkingSplitter()
+    splitter.noteSeparateReasoning()
+    let pieces = splitter.consume("<think> é a tag.") + splitter.finish()
+
+    #expect(text(of: pieces, reasoning: true).isEmpty)
+    #expect(text(of: pieces, reasoning: false) == "<think> é a tag.")
+  }
+
+  @Test("whitespace alone, or a partial tag at the end, is answer text")
+  func undecidedTailIsAnswer() {
+    var whitespace = InlineThinkingSplitter()
+    let blank = whitespace.consume("\n") + whitespace.finish()
+    #expect(text(of: blank, reasoning: false) == "\n")
+
+    var partial = InlineThinkingSplitter()
+    let cut = partial.consume("<thi") + partial.finish()
+    #expect(text(of: cut, reasoning: false) == "<thi")
+    #expect(text(of: cut, reasoning: true).isEmpty)
+  }
+
   @Test("an unclosed think block is all reasoning")
   func unclosed() {
     var splitter = InlineThinkingSplitter()
@@ -398,7 +465,14 @@ private enum ModelStreamStub {
     case serviceUnavailable = "service-unavailable"
     case slowHeaders = "slow-headers"
     case slowFirstToken = "slow-first-token"
+    case quotedThinkTag = "quoted-think-tag"
+    case reasoningThenTagAnswer = "reasoning-then-tag-answer"
   }
+
+  /// The PC's shape with thinking off: the answer alone in `delta.content`. It
+  /// talks about the tag and never closes it, so a splitter that matched the tag
+  /// anywhere would hide everything after it and end the turn empty.
+  static let quotedThinkTagAnswer = "O Qwen marca o raciocínio com a tag <think> no começo."
 
   static func chunk(_ delta: String, finish: String? = nil) -> String {
     let reason = finish.map { "\"\($0)\"" } ?? "null"
@@ -467,6 +541,26 @@ private final class ModelStreamStubURLProtocol: URLProtocol, @unchecked Sendable
           Stub.chunk(#"{"content":" mais</th"}"#),
           Stub.chunk(#"{"content":"ink>\n\nResposta"}"#),
           Stub.chunk(#"{"content":" final."}"#, finish: "stop"),
+          "[DONE]",
+        ])
+      )
+    case .quotedThinkTag:
+      respond(
+        200,
+        GatewayStreamFixtures.sse([
+          Stub.chunk(#"{"role":"assistant","content":""}"#),
+          Stub.chunk(#"{"content":"O Qwen marca o raciocínio com a tag <th"}"#),
+          Stub.chunk(#"{"content":"ink> no começo."}"#, finish: "stop"),
+          "[DONE]",
+        ])
+      )
+    case .reasoningThenTagAnswer:
+      respond(
+        200,
+        GatewayStreamFixtures.sse([
+          Stub.chunk(#"{"reasoning_content":"pensando"}"#),
+          Stub.chunk(#"{"content":"<think> abre"}"#),
+          Stub.chunk(#"{"content":" o raciocínio do Qwen."}"#, finish: "stop"),
           "[DONE]",
         ])
       )

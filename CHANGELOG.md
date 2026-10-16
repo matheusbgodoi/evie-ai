@@ -168,6 +168,12 @@ All notable changes to Evie are documented here. Dates use `YYYY-MM-DD`.
 
 ### Fixed
 
+- **An answer that mentions `<think>` is no longer hidden.** The inline-reasoning
+  splitter matched the tag anywhere in the content, on every server, so an
+  answer quoting it ("o Qwen usa a tag `<think>`…") lost everything after the
+  tag, and ended empty when no `</think>` followed. Only a trace that opens the
+  content is reasoning now, and none at all once the server has sent reasoning
+  in its own field, as the PC gateway does.
 - **The Mail and Calendar switch now survives a relaunch.** It was declared on the
   preferences but never written by the preferences store, so it read back as off
   on every launch. Behaviour change: once it is on and saved, every turn goes

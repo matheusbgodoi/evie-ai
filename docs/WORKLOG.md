@@ -1,5 +1,38 @@
 # Work log
 
+## 2026-10-16 — v2: the `<think>` splitter takes only an opening trace
+
+- Completed: review finding #5 of the 2026-10-16 adversarial review.
+  `InlineThinkingSplitter` ran on every server and matched `<think>` anywhere in
+  the content, so an answer quoting the tag hid everything after it as
+  reasoning, and with no `</think>` the turn ended `emptyStream`/`truncated`.
+  - Now a trace counts only when `<think>` opens the content (whitespace
+    before it allowed). After `</think>`, and in content that started any
+    other way, the tag is text.
+  - `noteSeparateReasoning()`: once a delta carries `reasoning_content` or
+    `reasoning`, the server has parsed reasoning out (the PC gateway does), so
+    the content is never split. `OpenAICompatibleClient.consumeStream` calls it.
+  - Chosen over gating on `thinkingStyle == .topLevel`: the rule needs no
+    profile field, keeps the existing inline-trace test (which runs with
+    `.templateKwargs`) as written, and still strips the Mac template's opening
+    trace.
+  - Files: `Sources/EvieCore/InlineThinkingSplitter.swift`,
+    `OpenAICompatibleClient.swift`; docs: design doc (S1b note), CHANGELOG
+    (Fixed), `docs/SECURITY.md`.
+- Tests (written first; 5 failed against the old splitter): in "Inline
+  thinking splitter", a quoted tag at every cut point, only the opening trace,
+  separate reasoning turning splitting off, and the undecided tail; in "Model
+  stream decoding", a PC-shaped answer quoting an unclosed `<think>` across
+  chunks, and an answer opening with `<think>` after `reasoning_content`.
+  Existing assertions unchanged.
+- Commands: `swift build` (whole package) succeeded with no warnings;
+  `Scripts/test --filter "ModelStreamDecodingTests|InlineThinkingSplitterTests|
+  OpenAICompatible"` 46 tests in 6 suites passed.
+- Still not handled (as before): a template that ends the prompt with
+  `<think>` so only `</think>` streams. The Mac profile always sends
+  `enable_thinking:false`, so it does not arise today.
+- Next: the remaining review fixes (#6, #7, #8, #1 interim).
+
 ## 2026-10-16 — v2: screen presence review fixes
 
 - Completed: the six presence findings of the 2026-10-16 reviews (two from the
