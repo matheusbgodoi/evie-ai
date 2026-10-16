@@ -22,9 +22,12 @@ readonly EVIE_SERVER_LOG="${EVIE_LOG_DIR}/turbo-fieldfare-server.log"
 readonly EVIE_HEALTH_URL="http://127.0.0.1:${EVIE_PORT}/health"
 readonly EVIE_MODELS_URL="http://127.0.0.1:${EVIE_PORT}/v1/models"
 readonly EVIE_CHAT_URL="http://127.0.0.1:${EVIE_PORT}/v1/chat/completions"
+readonly EVIE_ENDPOINT="http://127.0.0.1:${EVIE_PORT}/v1"
+# Tests point this at a stand-in so they can check what would be opened.
+readonly EVIE_APP_SCRIPT="${EVIE_APP_SCRIPT_OVERRIDE:-${EVIE_SCRIPT_DIR}/evie-app}"
 
 function usage() {
-  print "Usage: Scripts/evie-runtime <doctor|setup|configure|verify|start|stop|status|smoke|launch>"
+  print "Usage: Scripts/evie-runtime <doctor|setup|configure|verify|start|stop|status|smoke|launch|launch-custom>"
 }
 
 function ensure_directories() {
@@ -161,7 +164,7 @@ function configure() {
   umask 077
   /usr/bin/jq -n \
     --arg mac_executable "${HOME}/.local/bin/mlx_vlm.server" \
-    --arg gemma_endpoint "http://127.0.0.1:${EVIE_PORT}/v1" \
+    --arg gemma_endpoint "${EVIE_ENDPOINT}" \
     --arg gemma_model "${EVIE_MODEL_ID}" \
     --argjson gemma_context "${EVIE_CONTEXT_TOKENS}" \
     '{
@@ -491,7 +494,7 @@ function smoke() {
   print "Streaming completion finished with [DONE]."
 }
 
-# Starts the model, then hands Evie herself to `Scripts/evie-app run`.
+# Hands Evie herself to `Scripts/evie-app run`, and starts no model.
 #
 # This used to build `evie-shell` and run the bare binary from here, and that
 # is exactly the launch TCC cannot work with: an executable started from a
@@ -500,9 +503,34 @@ function smoke() {
 # which over-authorises everything else that ever runs in it. The bare binary
 # is never run any more; the installed, signed bundle is opened through Launch
 # Services or nothing is.
+#
+# It also used to start the loopback Gemma first. Since v2 the default brain is
+# the PC, so that cost about 15 GB of memory for a server the default profile
+# never asks; `launch-custom` is the explicit way to have both.
 function launch() {
+  exec "${EVIE_APP_SCRIPT}" run
+}
+
+# Starts the Gemma this script serves and opens Evie on the `custom` profile.
+#
+# The profile is chosen through EVIE_MODEL_PROFILE, which `open` passes on to the
+# app (measured on macOS 27.2). The configuration is checked before anything
+# starts: a file with no `custom` profile, or one pointing somewhere other than
+# this server, would make Evie fall back to the built-ins and leave 15 GB
+# resident for nothing.
+function launch_custom() {
+  ensure_directories
+  configure
+  if ! /usr/bin/jq -e --arg endpoint "${EVIE_ENDPOINT}" \
+    '.profiles | any(.id == "custom" and .endpoint == $endpoint)' \
+    "${EVIE_CONFIG_FILE}" >/dev/null 2>&1
+  then
+    print -u2 "${EVIE_CONFIG_FILE} has no \"custom\" profile at ${EVIE_ENDPOINT},"
+    print -u2 "so Evie would not use the server this command starts. Nothing was started."
+    return 1
+  fi
   start
-  exec "${EVIE_SCRIPT_DIR}/evie-app" run
+  EVIE_MODEL_PROFILE=custom exec "${EVIE_APP_SCRIPT}" run
 }
 
 if (( $# != 1 )); then
@@ -520,6 +548,7 @@ case "$1" in
   status) status ;;
   smoke) smoke ;;
   launch) launch ;;
+  launch-custom) launch_custom ;;
   *)
     usage
     exit 64

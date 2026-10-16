@@ -6,6 +6,12 @@ All notable changes to Evie are documented here. Dates use `YYYY-MM-DD`.
 
 ### Changed
 
+- **`Scripts/evie-runtime launch` no longer starts the local Gemma.** The default
+  brain is the PC, which never uses it, and the server holds about 15 GB; `launch`
+  now only opens the installed Evie. The new `Scripts/evie-runtime launch-custom`
+  starts the Gemma and opens Evie on the `custom` profile
+  (`EVIE_MODEL_PROFILE=custom`), and refuses before starting anything when
+  `config.json` has no `custom` profile at `http://127.0.0.1:38433/v1`.
 - **Evie checks whether the brain is ready before she needs it.**
   `ModelReadinessProbe` reports one of unreachable, key missing, key rejected,
   model unknown, model cold or ready, using only `GET`s that cannot load a model:

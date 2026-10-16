@@ -996,10 +996,18 @@ Each row shows live status and a "Pedir"/"Abrir Ajustes" button. The guide runs 
 Info.plist keys, `install`/`run`/`launch`, the recovery commands and the guide's
 five permission rows are in, recorded in `docs/MACOS_RUNTIME.md` § "Signing,
 install and recovery". Still open: the **PC key** and **Brain** rows (hook
-`TODO(S7-brain-rows)` in `PermissionGuideViewModel.standardItems`) and the v2
-config seeding, all waiting on S2a–S2d; and the manual QA above. `identity`
-also needed `/usr/bin/openssl` by absolute path (measured: a Homebrew OpenSSL 3
-p12 fails `security import`).
+`TODO(S7-brain-rows)` in `PermissionGuideViewModel.standardItems`), waiting on
+S2d; and the manual QA above. `identity` also needed `/usr/bin/openssl` by
+absolute path (measured: a Homebrew OpenSSL 3 p12 fails `security import`).
+
+**After the merge into `v2` (2026-10-16):** the config seeding is S2a's
+(`configure` writes the v2 built-ins plus the served Gemma as `custom`; tested in
+`EvieModelProfileTests`). `evie-runtime launch` no longer starts the loopback
+Gemma, since the default profile is the PC; `evie-runtime launch-custom` starts
+it and opens Evie with `EVIE_MODEL_PROFILE=custom`, refusing first when
+`config.json` has no `custom` profile at the served endpoint. Tests:
+`EvieRuntimeLaunchTests`, which run the script against a stand-in for
+`evie-app`.
 
 ---
 

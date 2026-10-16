@@ -463,14 +463,17 @@ nowhere else, and it does not pass Gatekeeper on another machine.
 Then, whenever you want her running:
 
 ```bash
-Scripts/evie-runtime start     # the model. ~15 GB resident, so it is explicit
-Scripts/evie-app run           # Evie herself
+Scripts/evie-app run                # Evie herself, on the PC brain by default
+Scripts/evie-runtime launch-custom  # or the local Gemma (~15 GB resident, so it
+                                    # is explicit) and Evie on its "custom" profile
 ```
 
 **Always launch with `Scripts/evie-app run` or from `~/Applications`, never the
 binary directly.** Running the executable from a terminal makes macOS attribute
 the microphone and folder permissions to the terminal instead of to Evie. `run`
-opens only the installed copy, and `Scripts/evie-runtime launch` hands over to it.
+opens only the installed copy, and `Scripts/evie-runtime launch` hands over to it
+without starting any model; `launch-custom` starts the loopback Gemma first and
+opens Evie with `EVIE_MODEL_PROFILE=custom`.
 If a permission ends up stuck, `tccutil reset ScreenCapture com.matheusbgodoi.evie`
 (or `Accessibility`, `PostEvent`) and ask again from the checklist.
 

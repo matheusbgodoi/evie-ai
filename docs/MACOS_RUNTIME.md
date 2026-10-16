@@ -237,10 +237,19 @@ recreating it.
   installed copy and refuses when there is none; it never launches the bundle in
   `.build`, which is rebuilt and deleted constantly, and two registered bundles
   with one identifier leave Launch Services free to open either.
-- `Scripts/evie-runtime launch` no longer runs the bare SwiftPM binary. It starts
-  the local runtime as before, then hands over to `Scripts/evie-app run`. A bare
-  binary started from a terminal is attributed to the terminal, which hangs the
-  microphone and would give Screen Recording and Accessibility to Terminal.
+- `Scripts/evie-runtime launch` no longer runs the bare SwiftPM binary; it hands
+  over to `Scripts/evie-app run`. A bare binary started from a terminal is
+  attributed to the terminal, which hangs the microphone and would give Screen
+  Recording and Accessibility to Terminal.
+- Since the v2 merge (2026-10-16) `launch` starts no model: the default profile
+  is the PC, which never asks the loopback Gemma, and that server holds about
+  15 GB. `Scripts/evie-runtime launch-custom` is the explicit way to have it: it
+  checks that `config.json` has a `custom` profile at `http://127.0.0.1:38433/v1`
+  (seeding the file first if it is missing) and refuses otherwise, starts the
+  server, then runs `evie-app run` with `EVIE_MODEL_PROFILE=custom`. Measured on
+  macOS 27.2 with a throwaway background bundle: an app opened by `open` sees the
+  variables of the shell that ran `open` (and `open --env` adds more), so the
+  choice reaches the installed Evie.
 
 ### Recovery
 
@@ -288,15 +297,17 @@ got at launch), Acessibilidade, and Controlar o teclado e o mouse (Post Events).
 `gateway-api-key`, copied into Evie's own Keychain item, with the explanation of
 the macOS prompt shown before the button) and the "Cérebro" row (Testar conexão:
 PC reachable → key valid → model loaded) depend on model profiles and the
-readiness probe (v2 S2a–S2d), which are built on another branch. They go in
+readiness probe (v2 S2a–S2d; S2a and S2b are on `v2` since the merge, the key
+import is S2d's). They go in
 `PermissionGuideViewModel.standardItems`, marked `TODO(S7-brain-rows)`, as two
 more `PermissionGuideItem` conformances; the view and the view model need no
 other change. A row whose button is neither a system prompt nor a Settings pane
 adds its own case to `PermissionGuideRow.Action.Kind`.
 
-**Also waiting on S2a:** `Scripts/evie-runtime configure` still seeds the v1
-local configuration; writing the v2 built-ins when the file is missing needs the
-v2 schema.
+**Config seeding (done with S2a, on `v2`):** `Scripts/evie-runtime configure`
+writes schema v2 when the file is missing — the two built-ins, then the Gemma it
+serves as `custom`, outside the preference order. A test runs the script and
+checks the file against `EvieModelProfileSet.builtIn`.
 
 **Manual QA, not yet run** (it needs the app launched, which grants and prompts
 on the owner's Mac): install, then rebuild and install twice and confirm the

@@ -1,5 +1,40 @@
 # Work log
 
+## 2026-10-16 — v2: `evie-runtime launch` starts no model; `launch-custom` does
+
+- Completed, as the follow-up to merging `v2-packaging`:
+  - `Scripts/evie-runtime launch` only hands over to `Scripts/evie-app run`. It
+    used to call `start` first, which serves the loopback Gemma (about 15 GB
+    resident) that the default PC profile never asks.
+  - New `Scripts/evie-runtime launch-custom`: seeds `config.json` if missing,
+    refuses unless it has a `custom` profile at `http://127.0.0.1:38433/v1`, then
+    `start`s the Gemma and runs `evie-app run` with `EVIE_MODEL_PROFILE=custom`.
+  - `EVIE_APP_SCRIPT_OVERRIDE` lets the tests replace `evie-app` with a stand-in;
+    the served endpoint is one constant shared with `configure`.
+  - `configure` already wrote the v2 built-ins (S2a, on `v2`), so it is
+    unchanged; the S7 notes in the design doc, `docs/MACOS_RUNTIME.md` and
+    `docs/PROJECT_STATUS.md` that said it still waited on S2a now say so.
+  - Docs: README, `docs/MACOS_RUNTIME.md`, design doc S7 note, CHANGELOG,
+    `docs/PROJECT_STATUS.md`.
+- Measured 2026-10-16 (M5, macOS 27.2): a throwaway background-only bundle
+  opened with `open` recorded a variable set in the calling shell, and one passed
+  with `open --env`; so `EVIE_MODEL_PROFILE` reaches an app opened by
+  `evie-app run`. The bundle was deleted afterwards. Evie itself was not opened.
+- Tests (written first and seen failing): new suite "Evie runtime launch" (3),
+  which runs the script against a temporary support directory and an
+  `evie-app` stand-in, with no network: `launch` opens Evie with no profile
+  override, writes no PID file and seeds nothing; `launch-custom` refuses a file
+  with no `custom` profile, and one whose `custom` points elsewhere, without
+  opening Evie.
+- Commands: `swift build` (whole package) succeeded with no warnings; `zsh -n
+  Scripts/evie-runtime`; `Scripts/test --filter "EvieRuntimeLaunchTests|
+  EvieConfigurationSchemaV2Tests|EvieModelProfileTests"` 23 tests in 3 suites
+  passed; full `Scripts/test` 847 tests in 85 suites passed, 0 failures, 1
+  skipped (the gated Calendar test).
+- Not run: `launch-custom` with the real server, which needs `evie-runtime
+  setup` and would open the app.
+- Next: S2c, the per-turn brain resolver and failover.
+
 ## 2026-10-16 — v2: merge of `v2-packaging` (S7, partial)
 
 - Completed: `git merge --no-ff v2-packaging` into `v2`. `Scripts/evie-app`,

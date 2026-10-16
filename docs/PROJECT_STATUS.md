@@ -459,8 +459,9 @@ brain resolver and failover), the first consumer of the readiness cache.
 2026-10-16, merged into `v2` the same day.** Signing is pinned to the "Evie Dev"
 certificate's SHA-1 with the designated requirement asserted; `install` opens
 `~/Applications/Evie.app`, `run` opens only that copy and `evie-runtime launch`
-hands over to it; the first-run permission checklist has its five system rows.
-The v2 config seeding came with S2a on `v2`. Open: the PC key and Brain rows,
+hands over to it, starting no model (the loopback Gemma for the `custom`
+profile is `evie-runtime launch-custom`); the first-run permission checklist
+has its five system rows. The v2 config seeding came with S2a on `v2`. Open: the PC key and Brain rows,
 which wait on S2d (hook `TODO(S7-brain-rows)`), and the manual QA in
 `docs/MACOS_RUNTIME.md`, which needs the owner to run `Scripts/evie-app install`
 — nothing is installed in `~/Applications` on this Mac today.
