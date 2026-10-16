@@ -23,6 +23,20 @@ struct EvieScreenIntentTests {
       "what's on my screen?",
       "what is on the screen right now",
       "can you read this window?",
+      // Second review: clear asks the tightened rules must keep.
+      "O que está escrito na tela?",
+      "oq tem na minha tela?",
+      "Você consegue ver minha tela?",
+      "Pode ler a tela pra mim?",
+      "Confere essa tela e me diz se o formulário está certo",
+      "O que aparece nessa janela?",
+      "Tá vendo a minha tela?",
+      "Olha na tela e me fala qual botão eu aperto",
+      "Analisa a minha tela",
+      "o que você vê na tela?",
+      "Evie, dá uma olhada na minha tela",
+      "o que é isso aí na tela?",
+      "what do you see on my screen?",
     ]
   )
   func recognisesAnAsk(_ ask: String) {
@@ -49,6 +63,25 @@ struct EvieScreenIntentTests {
       "o que é uma tela de pintura a óleo?",
       "screen time on my phone is too high",
       "olha, eu preciso de ajuda com a planilha",
+      // Second review, measured: each of these used to capture the screen.
+      "O que fazer com uma mancha na tela do iPhone?",
+      "Qual o preço de trocar o vidro, tenho um risco na tela",
+      "Que filme tá passando hoje? Quero ver em tela grande",
+      // A screen as a topic, another device's screen, or a statement.
+      "Olha, a tela do meu celular quebrou",
+      "É ruim ler na tela por muito tempo?",
+      "Passo o dia todo olhando a tela do computador, isso faz mal?",
+      "Quanto custa trocar a tela do iPad?",
+      "Qual a melhor película pra tela do celular?",
+      "Vou ver o jogo na tela da TV",
+      "Como deixar o vídeo em tela cheia?",
+      "Meu filho fica muito tempo na tela, o que eu faço?",
+      "Você consegue ver o filme em tela cheia?",
+      "Esqueci a senha da tela de bloqueio",
+      "Tem um risco na tela do meu celular, o que faço?",
+      "Dei uma olhada na tela e não entendi nada",
+      "A criança olha a tela o dia inteiro",
+      "I can't see my screen, it's too dark",
     ]
   )
   func ignoresOtherSentences(_ sentence: String) {

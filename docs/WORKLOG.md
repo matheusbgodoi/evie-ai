@@ -1,5 +1,28 @@
 # Work log
 
+## 2026-10-16 — v2 fix: the screen intent asks for a clear request
+
+- Completed: second v2 review, finding #2 (privacy). `EvieScreenIntent`
+  (`Sources/EvieCore/EvieScreenIntent.swift`) matched "O que fazer com uma
+  mancha na tela do iPhone?", "Qual o preço de trocar o vidro, tenho um risco na
+  tela" and "Que filme tá passando hoje? Quero ver em tela grande" — confirmed
+  red with the new tests before the change, together with 6 more of the new
+  negatives and one new positive ("oq tem na minha tela?").
+  - Clauses (`clauses(in:)`: `, . ; : ! ? …` and line breaks); looking verbs
+    split into `requestVerbs` (anywhere), `leadingVerbs` (only after
+    `leadIns`), `auxiliaryVerbs` (within two words of `auxiliaries`) and
+    `glanceWords` ("dá uma olhada"); "em" out of `objectFillers`;
+    `questionAboutWhatIsThere` (question word, ≤ 2 words, `presenceVerbs`,
+    ≤ 2 `presenceComplements`, place); `namesAnotherDevice`; "cant", "cannot",
+    "wont" negate.
+- Tests ("Evie screen intent"): 17 new negatives (the review's three, 14 of
+  our own) and 13 new positives; every earlier case unchanged.
+- Docs: `docs/VISION.md` § "Screen perception", the S4 notes in the design
+  doc, CHANGELOG.
+- Checks: `swift build` with no warnings; `Scripts/test --filter
+  EvieScreenIntentTests`: 6 tests passed (27 negatives, 28 positives).
+- Next: the other second-review fixes in this lane.
+
 ## 2026-10-16 — v2 fix: a declined Mac wake holds for its turn
 
 - Completed: second v2 review, finding #1. `EvieBrainResolver` remembered only

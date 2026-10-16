@@ -162,7 +162,15 @@ Evie looks at the screen only when asked, in one of two ways:
   case-insensitive, word by word; a negation just before the ask cancels it
   ("não olha a tela"); plurals and a screen that is only a topic do not count
   ("telas de pintura", "minha tela quebrou"). Text in a document or on a page can
-  never ask for a capture: only the person's own message is read.
+  never ask for a capture: only the person's own message is read. Since the
+  second v2 review (2026-10-16) the ask must sit in one clause; "olha"/"vê"/"lê"
+  count only at the head of it (otherwise "a criança olha a tela" is a
+  statement); infinitives and gerunds need "pode"/"consegue"/"tá" before them;
+  "o que … na tela" needs the question word, a verb of presence ("tem", "está",
+  "aparece", "é") and the place side by side; and another device's screen ("a
+  tela do meu celular") never counts. "O que fazer com uma mancha na tela do
+  iPhone?", "tenho um risco na tela" and "quero ver em tela grande" used to
+  capture the screen and no longer do (`EvieScreenIntentTests`, 27 negatives).
 - **The shortcut ⌥⇧O** ("Olhar a tela", also in the menu bar): the screen under
   the pointer is captured at once and held, in memory, for the next question;
   sent alone it asks "O que tem na minha tela?". Closing the overlay or changing

@@ -6,6 +6,13 @@ All notable changes to Evie are documented here. Dates use `YYYY-MM-DD`.
 
 ### Changed
 
+- **Privacy: Evie looks at the screen only when a sentence clearly asks her
+  to.** "O que fazer com uma mancha na tela do iPhone?", "tenho um risco na
+  tela" and "quero ver em tela grande" used to capture the whole screen and
+  send it to the brain. Now the ask must be a request in one clause ("olha a
+  tela", "pode ler a tela?", "o que tem na minha tela?", "nessa janela"), and a
+  screen that is a topic, a habit ("ler na tela"), a statement ("a criança olha
+  a tela") or another device's ("a tela do meu celular") does not count.
 - **"Agora não" on the wake card is asked once per question.** With the PC out
   and the fallback on "Perguntar", a no used to send the question to the PC
   anyway; when that failed, the same card came back in the same turn. Now a no
