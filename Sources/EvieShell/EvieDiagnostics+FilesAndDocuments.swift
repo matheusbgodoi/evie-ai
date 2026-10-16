@@ -55,7 +55,7 @@ extension EvieDiagnostics {
     ]
     var capabilities = EvieCapabilitySnapshot.textOnly
     capabilities.readsLocalFiles = true
-    let configuration = (try? EvieConfigurationLoader().load()) ?? EvieConfiguration()
+    let configuration = EvieConfigurationLoader().loadWithDiagnostics().loaded.configuration
 
     let question = "manda o rascunho-antigo.txt pro lixo"
     print("pergunta: \(question)")

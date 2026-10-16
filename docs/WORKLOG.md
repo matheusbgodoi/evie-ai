@@ -1,5 +1,66 @@
 # Work log
 
+## 2026-10-16 — v2 S2a: config schema v2, profiles, migration, store
+
+- Completed: slice S2a of `docs/design/2026-10-16-evie-v2-design.md`.
+  - New `Sources/EvieCore/EvieModelProfile.swift`: `EvieModelProfile` (with
+    `Capabilities` and `Runtime`), `LocalRuntime`, `ModelLocation`,
+    `ModelFamily`, `CoordinateConvention`, `MacFallback`, and
+    `EvieModelProfileSet` with `builtIn` (`pc-3090` preferred, `mac-local`),
+    `preferredProfile`, `updateProfile` and `validate`. Hand-written snake_case
+    keys. `EvieModelProfile.configuration` flattens a profile into the
+    `EvieConfiguration` the client reads.
+  - `EvieConfigurationLoader`: reads the `schema_version` header first; v2 is
+    decoded, v1 becomes the profile `custom` after the built-ins and outside the
+    preference order and is rewritten as v2 with `config.json.v1.bak` holding the
+    bytes read; any other version throws. `loadWithDiagnostics` returns the
+    built-ins plus the error instead of throwing. `EVIE_MODEL_PROFILE` selects a
+    profile; `EVIE_MODEL_*` override only the one in use and are never part of
+    the returned `profiles`.
+  - `EvieConfigurationStore`: writes v2 only; `saveActiveProfile` is the
+    settings save (re-read, edit the active profile, keep the rest, repair from a
+    baseline, write v2). `ModelSettingsViewModel.save` calls it.
+  - `EvieConfiguration.builtIn`, and `defaultEndpoint/defaultModel/
+    defaultContextWindow` now derive from it. Every former
+    `?? EvieConfiguration()` fallback — `AppCoordinator`, `EvieScheduleRunner`,
+    six diagnostics — uses `loadWithDiagnostics`. `EVIE_MODEL_PROFILE` added to
+    the coordinator's environment allowlist.
+  - `Scripts/evie-runtime configure` builds a v2 file with `jq`: the two
+    built-ins, then its Gemma as `custom`. The literals at the old `:158` now come
+    from the constants at `:6-8`.
+  - Docs: design doc "Implemented" note, `ARCHITECTURE.md` (configuration),
+    `SECURITY.md` (key reference in the file), CHANGELOG, `PROJECT_STATUS.md`.
+- Verified 2026-10-16 from this Mac (M5, macOS 27.2), read-only: the PC
+  gateway's `GET /v1/models` entry for `qwen-daily` reports `contextWindow`
+  200704, `maxTokens` 32768, `vision` and `tools` true, `loadState` "loaded" (key
+  read from the keychain into a shell variable, never printed or written).
+  `lsof -nP -iTCP:38480` returned nothing, so the Mac profile's port is free.
+  `~/.local/bin/mlx_vlm.server` exists (symlink into the uv-installed mlx-vlm).
+- Deviations, recorded in the design doc: the profile carries `temperature`,
+  `topP`, `stopSequences` and `requestTimeout` (v1 had them, Settings edits
+  them); `load` keeps throwing and `loadWithDiagnostics` is the lenient form; the
+  credential is written as `bound_host` by the profile's coder while
+  `CredentialReference`'s own coding (asserted by an S1a test) is unchanged;
+  `evie-runtime configure` also writes the Gemma it serves, as `custom`.
+- Tests (written first and seen failing to compile; the script test was then
+  tightened to read the header before the loader migrates, and seen failing on
+  the old script): new suites "Evie model profiles" (7) and "Evie configuration
+  schema v2" (13). Existing tests adapted, not loosened: the loader's defaults
+  test expects the PC's 135168 where it expected Gemma's 65536 (the spec changes
+  that default); its precedence test adds `EVIE_MODEL_PROFILE=custom`, because a
+  v1 file is now an inactive profile, and keeps every assertion; the four store
+  tests round-trip, restrict permissions, refuse an invalid save and repair a
+  damaged file through the v2 API.
+- Commands: `swift build` (whole package, Shell included) succeeded;
+  `Scripts/test --filter "EvieModelProfileTests|EvieConfigurationSchemaV2Tests|
+  EvieConfigurationLoaderTests|EvieConfigurationStoreTests"` 29 tests passed;
+  full `Scripts/test` 727 tests in 76 suites passed, 0 failures.
+- Open: on a fresh install the PC default has no key until S2d's import creates
+  `com.matheusbgodoi.evie.model` / `pc-3090`, so PC turns stop with "no saved
+  key"; the Settings context line and cap editing are S2d; the Mac launcher and
+  `vision` are provisional until S3.
+- Next: S2b, the readiness probe (`ModelReadinessProbe`).
+
 ## 2026-10-16 — v2 S1b: request and stream features
 
 - Completed: slice S1b of `docs/design/2026-10-16-evie-v2-design.md`.

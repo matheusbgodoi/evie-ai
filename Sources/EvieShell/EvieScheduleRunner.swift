@@ -44,7 +44,7 @@ enum EvieScheduleRunner {
 
     let preferences = EviePreferencesStore().load()
     let roots = EvieRootRegistry().load()
-    let configuration = (try? EvieConfigurationLoader().load()) ?? EvieConfiguration()
+    let configuration = EvieConfigurationLoader().loadWithDiagnostics().loaded.configuration
 
     // The same rule the coordinator applies when the overlay opens: a capability
     // is claimed only where its code path is actually wired. The two that a

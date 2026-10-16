@@ -415,20 +415,32 @@ the right shape for whatever is eventually built, and none of it is written.
 
 The native shell resolves model configuration in this order:
 
-1. compiled non-secret defaults;
+1. the compiled built-in profiles (`EvieModelProfileSet.builtIn`): `pc-3090`, the
+   PC gateway's `qwen-daily`, preferred, then `mac-local`, LensVLM on loopback
+   port 38480, started on demand (S3);
 2. versioned JSON at `~/Library/Application Support/Evie/config.json` (or another
-   absolute path selected through `EVIE_CONFIG_FILE`);
-3. supported non-secret environment overrides.
+   absolute path selected through `EVIE_CONFIG_FILE`), schema v2: a list of
+   profiles, a preference order and the Mac-fallback choice;
+3. supported non-secret environment overrides: `EVIE_MODEL_PROFILE` picks the
+   profile in use, and the other `EVIE_MODEL_*` variables override that profile
+   for the run.
 
-Invalid model configuration produces a visible startup error. The loader does not
-read credentials or print configuration. Secrets remain a future Keychain/broker
-concern, never part of the model endpoint file.
+The profile in use is flattened into the `EvieConfiguration` the client reads.
+A schema v1 file (one endpoint) is migrated in place: its endpoint becomes the
+profile `custom`, kept after the built-ins and outside the preference order, and
+the original bytes are kept as `config.json.v1.bak`. A file or environment that
+cannot be used — damaged, an unknown schema version, an invalid profile —
+falls back to the built-ins and shows "Configuração local inválida"; launch never
+blocks on it. The loader does not read credentials or print configuration. A
+profile holds a `CredentialReference` (keychain service, account, bound host),
+never a key.
 
-The model settings window writes the same schema with atomic replacement and mode
-`0600`, then swaps the direct client's non-secret settings for the next request.
-Environment variables still override the file after a future relaunch. Endpoint,
-model identity, and context remain visible but read-only in this initial settings
-surface.
+The model settings window saves through
+`EvieConfigurationStore.saveActiveProfile`, which re-reads the file, changes only
+the profile in use, never writes an environment override, and writes schema v2
+with atomic replacement and mode `0600`; the direct client then swaps its
+settings for the next request. Endpoint, model identity, and context remain
+visible but read-only until the profile pane (S2d).
 
 [ADR 0007](adr/0007-local-development-runtime.md) accepts this development-only
 layout:

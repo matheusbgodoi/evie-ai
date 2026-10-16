@@ -15,6 +15,9 @@ final class AppCoordinator: NSObject {
   private let chrome: OverlayChromeModel
   private let panelController: OverlayPanelController
   private let startupConfigurationError: (any Error)?
+  /// The profiles Evie launched with, which the settings pane repairs a damaged
+  /// file from.
+  private let startupProfiles: EvieModelProfileSet
   private var hotKeyController: GlobalHotKeyController?
   private var statusItem: NSStatusItem?
   private var settingsWindowController: SettingsWindowController?
@@ -54,6 +57,7 @@ final class AppCoordinator: NSObject {
     let processEnvironment = ProcessInfo.processInfo.environment
     let supportedEnvironmentNames = [
       "EVIE_CONFIG_FILE",
+      "EVIE_MODEL_PROFILE",
       "EVIE_MODEL_ENDPOINT",
       "EVIE_MODEL_NAME",
       "EVIE_MODEL_CONTEXT",
@@ -77,22 +81,22 @@ final class AppCoordinator: NSObject {
       resolvedFileResult = .failure(error)
     }
 
+    // A file or environment that cannot be used falls back to the built-in
+    // profiles — the PC — and the reason is shown once the overlay is up.
     let loadResult:
       (
-        configuration: EvieConfiguration,
+        loaded: EvieLoadedConfiguration,
         fileURL: URL,
         error: (any Error)?
       )
     switch resolvedFileResult {
     case .success(let configurationFileURL):
-      do {
-        let configuration = try configurationLoader.load(environment: configurationEnvironment)
-        loadResult = (configuration, configurationFileURL, nil)
-      } catch {
-        loadResult = (EvieConfiguration(), configurationFileURL, error)
-      }
+      let (loaded, failure) = configurationLoader.loadWithDiagnostics(
+        environment: configurationEnvironment
+      )
+      loadResult = (loaded, configurationFileURL, failure)
     case .failure(let error):
-      loadResult = (EvieConfiguration(), configurationLoader.fileURL, error)
+      loadResult = (.builtIn, configurationLoader.fileURL, error)
     }
 
     let conversationStore = EvieConversationStore()
@@ -103,7 +107,9 @@ final class AppCoordinator: NSObject {
     )
     let preferencesResult = preferencesStore.loadWithDiagnostics()
     let viewModel = OverlayViewModel(
-      agentClient: ModelClientFactory.live.makeClient(configuration: loadResult.configuration),
+      agentClient: ModelClientFactory.live.makeClient(
+        configuration: loadResult.loaded.configuration
+      ),
       conversationStore: conversationStore,
       capabilities: Self.capabilities(
         for: preferencesResult.preferences,
@@ -124,6 +130,7 @@ final class AppCoordinator: NSObject {
     self.viewModel = viewModel
     self.chrome = chrome
     startupConfigurationError = loadResult.error
+    startupProfiles = loadResult.loaded.profiles
     panelController = OverlayPanelController(
       viewModel: viewModel,
       chrome: chrome,
@@ -651,6 +658,7 @@ extension AppCoordinator {
     if settingsWindowController == nil {
       let modelViewModel = ModelSettingsViewModel(
         configuration: viewModel.configuration,
+        profiles: startupProfiles,
         store: configurationStore,
         loader: configurationLoader,
         environment: configurationEnvironment

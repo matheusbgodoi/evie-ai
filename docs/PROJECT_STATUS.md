@@ -97,7 +97,8 @@ logs also remain under `~/Library`.
 - `EvieCore` provides backend-neutral messages, phases, artifacts, reducer state,
   configuration, and an `AgentClient` protocol.
 - `OpenAICompatibleClient` (renamed from `TurboFieldfareClient` on 2026-10-16)
-  streams Chat Completions from `http://127.0.0.1:38433/v1` by default, supports
+  streams Chat Completions from the profile in use — by default, since v2 S2a,
+  the PC gateway's `qwen-daily` (`EvieModelProfileSet.builtIn`) — supports
   cancellation, and can declare tools and reassemble the calls the model asks
   for. Since v2 S1a it passes every endpoint through `ModelTransportPolicy`
   (loopback over http, or https to the allowlisted PC gateway with a key bound to
@@ -422,12 +423,16 @@ readiness only; they are not the Phase 1 performance suite.
 Done as of 2026-10-16: S8a, S8b item 1 (the osascript tests are gated), S1a
 (transport rename, policy, keychain credentials, one client factory) and S1b
 (per-turn options, thinking parameters, images as content parts, reasoning kept
-apart from the answer, truncation detection, `ModelClientError`, deadlines). The
-shipped default is still the loopback Gemma endpoint, and no configuration can
-name the PC's credential yet; that arrives with the v2 schema in S2a. Measured
-in S1b: the PC gateway sends its response headers only with the first chunk, so
-the headers deadline is a first-token deadline. Next: S2a (schema v2, profiles,
-migration, store).
+apart from the answer, truncation detection, `ModelClientError`, deadlines) and
+S2a (config schema v2 with model profiles, v1 migration with a `.v1.bak`, a v2
+store and settings save, `evie-runtime configure` seeding v2). The default and
+every fallback is now the built-in PC profile (`qwen-daily`), whose key
+reference is Evie's own keychain item; that item is created by S2d's import, so
+until then a PC turn stops with "no saved key". Measured in S1b: the PC gateway
+sends its response headers only with the first chunk, so the headers deadline is
+a first-token deadline. Verified in S2a: `qwen-daily` reports a 200704-token
+context window and 32768 max tokens; port 38480 is free. Next: S2b (readiness
+probe).
 
 Two things, in this order, and they are the two things between here and a release.
 

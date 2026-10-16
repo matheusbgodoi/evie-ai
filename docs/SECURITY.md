@@ -153,6 +153,11 @@ body and decides where a conversation may go before it sends anything:
   turn before a request is made.
 - **Redirect refusal.** Every redirect is refused, so the `Authorization` header
   cannot follow a `Location` anywhere; the 3xx is reported as an error.
+- **Configuration names the key's place, not the key.** Since schema v2 the
+  built-in PC profile carries the reference `com.matheusbgodoi.evie.model` /
+  `pc-3090`, bound to `ai-node-3090.tail6146ef.ts.net`; the file stores only
+  that reference, and a test checks that no key-like field appears in it.
+  Environment overrides are never written into the file by a settings save.
 - **Storage.** Tokens are read from the legacy login keychain as generic
   passwords and cached in memory per process. They are never written to the
   configuration, logs, diagnostics or error messages; a keychain failure reports

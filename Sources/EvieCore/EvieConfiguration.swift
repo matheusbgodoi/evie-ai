@@ -7,11 +7,17 @@ import Foundation
 /// from the keychain at request time by an `EvieCredentialProviding`, so nothing
 /// that encodes, logs or exports this value can carry a key.
 public struct EvieConfiguration: Codable, Hashable, Sendable {
-  public static let defaultEndpoint = URL(
-    string: "http://127.0.0.1:38433/v1"
-  )!
-  public static let defaultModel = "gemma-4-26b-a4b-it"
-  public static let defaultContextWindow = 65_536
+  /// The configuration Evie runs with when there is no file, or the file cannot
+  /// be used: the preferred built-in profile, the PC, with its key reference.
+  /// Every fallback resolves here, never to `EvieConfiguration()`, which has no
+  /// key reference and so is refused by the transport policy for the PC.
+  public static let builtIn = EvieModelProfileSet.builtIn.preferredProfile.configuration
+
+  // The built-in profile's figures, kept as the memberwise defaults. They were
+  // Gemma on 127.0.0.1:38433 with 65536 tokens until schema v2.
+  public static let defaultEndpoint = builtIn.endpoint
+  public static let defaultModel = builtIn.model
+  public static let defaultContextWindow = builtIn.contextWindowTokens
 
   public var endpoint: URL
   public var model: String

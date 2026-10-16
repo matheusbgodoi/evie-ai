@@ -21,10 +21,13 @@ final class ModelSettingsViewModel: ObservableObject {
   private let loader: EvieConfigurationLoader
   private let environment: [String: String]
   private let onSave: @MainActor (EvieConfiguration) -> Void
-  private var repairBaseline: EvieConfiguration
+  /// The profiles a damaged file is repaired from: those Evie launched with,
+  /// then the last ones saved.
+  private var repairBaseline: EvieModelProfileSet
 
   init(
     configuration: EvieConfiguration,
+    profiles: EvieModelProfileSet,
     store: EvieConfigurationStore = EvieConfigurationStore(),
     loader: EvieConfigurationLoader = EvieConfigurationLoader(),
     environment: [String: String] = [:],
@@ -34,7 +37,7 @@ final class ModelSettingsViewModel: ObservableObject {
     self.loader = loader
     self.environment = environment
     self.onSave = onSave
-    repairBaseline = configuration
+    repairBaseline = profiles
     temperature = configuration.temperature ?? 0.2
     topP = configuration.topP ?? 0.95
     usesDefaultTemperature = configuration.temperature == nil
@@ -80,29 +83,28 @@ final class ModelSettingsViewModel: ObservableObject {
 
   func save() {
     do {
-      let fileSelectionEnvironment =
-        environment["EVIE_CONFIG_FILE"].map {
-          ["EVIE_CONFIG_FILE": $0]
-        } ?? [:]
-      var updated =
-        (try? loader.load(environment: fileSelectionEnvironment))
-        ?? repairBaseline
-      if !temperatureIsManaged {
-        updated.temperature = usesDefaultTemperature ? nil : temperature
+      // The store re-reads the file, edits only the profile in use and writes
+      // schema v2; the environment's overrides are never written into it.
+      let saved = try store.saveActiveProfile(
+        reading: loader,
+        environment: environment,
+        otherwise: repairBaseline
+      ) { profile in
+        if !temperatureIsManaged {
+          profile.temperature = usesDefaultTemperature ? nil : temperature
+        }
+        if !topPIsManaged {
+          profile.topP = usesDefaultTopP ? nil : topP
+        }
+        if !completionLimitIsManaged {
+          profile.maxCompletionTokens = maxCompletionTokens
+        }
+        if !timeoutIsManaged {
+          profile.requestTimeout = requestTimeout
+        }
       }
-      if !topPIsManaged {
-        updated.topP = usesDefaultTopP ? nil : topP
-      }
-      if !completionLimitIsManaged {
-        updated.maxCompletionTokens = maxCompletionTokens
-      }
-      if !timeoutIsManaged {
-        updated.requestTimeout = requestTimeout
-      }
-
-      try store.save(updated)
       let effective = try loader.load(environment: environment)
-      repairBaseline = updated
+      repairBaseline = saved
       onSave(effective)
       feedback = Feedback(
         message: hasManagedValues

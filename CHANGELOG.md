@@ -4,6 +4,29 @@ All notable changes to Evie are documented here. Dates use `YYYY-MM-DD`.
 
 ## [Unreleased]
 
+### Changed
+
+- **The PC is the default brain, and the configuration lists profiles.**
+  `config.json` schema v2 holds model profiles (`EvieModelProfile`), a
+  preference order and the Mac-fallback choice. With no file — and whenever the
+  file cannot be used — Evie uses the built-in set: `pc-3090` (`qwen-daily` on
+  the PC gateway, 135168-token client cap of the server's 200704, vision and
+  tools, its key looked up in the keychain item `com.matheusbgodoi.evie.model` /
+  `pc-3090`) first, then `mac-local` (LensVLM on `127.0.0.1:38480`, no tools).
+  Before, every fallback was the loopback Gemma on 38433. Until the key import
+  in S2d exists, a turn on the PC stops with "no saved key".
+- **A v1 configuration is migrated, not refused.** Its endpoint becomes the
+  profile `custom`, after the built-ins and not preferred, so the PC wins unless
+  `EVIE_MODEL_PROFILE=custom` is set; the original file is kept as
+  `config.json.v1.bak`. An unknown schema version now falls back to the built-ins
+  with the "Configuração local inválida" warning instead of failing the load.
+- **Saving from Settings keeps schema v2** and changes only the profile in use;
+  before, the save path always wrote v1. `EVIE_MODEL_PROFILE` joins the
+  supported environment variables.
+- **`Scripts/evie-runtime configure` seeds schema v2**: the two built-ins, then
+  the Gemma it serves as `custom`. `evie-runtime start` still serves Gemma, but
+  a freshly seeded Evie uses the PC unless told otherwise.
+
 ### Security
 
 - **Pictures and reasoning never reach a record.** `ChatMessage.images` (new,

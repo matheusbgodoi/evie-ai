@@ -30,7 +30,7 @@ extension EvieDiagnostics {
     setvbuf(stdout, nil, _IOLBF, 0)
 
     let client = ModelClientFactory.live.makeClient(
-      configuration: (try? EvieConfigurationLoader().load()) ?? EvieConfiguration()
+      configuration: EvieConfigurationLoader().loadWithDiagnostics().loaded.configuration
     )
     let loop = EvieAgentLoop(web: nil, vault: nil, offersChanges: false)
 
@@ -96,7 +96,7 @@ extension EvieDiagnostics {
     let roots = [
       EvieFileRoot(id: "test0001", displayName: "Pasta de teste", path: directory.path)
     ]
-    let configuration = (try? EvieConfigurationLoader().load()) ?? EvieConfiguration()
+    let configuration = EvieConfigurationLoader().loadWithDiagnostics().loaded.configuration
     let client = ModelClientFactory.live.makeClient(configuration: configuration)
     let loop = EvieAgentLoop()
 
@@ -167,7 +167,7 @@ extension EvieDiagnostics {
     ]
     var capabilities = EvieCapabilitySnapshot.textOnly
     capabilities.readsLocalFiles = true
-    let configuration = (try? EvieConfigurationLoader().load()) ?? EvieConfiguration()
+    let configuration = EvieConfigurationLoader().loadWithDiagnostics().loaded.configuration
 
     let started = Date()
     do {
@@ -211,7 +211,7 @@ extension EvieDiagnostics {
   static func webQuestion(_ question: String) async {
     var capabilities = EvieCapabilitySnapshot.textOnly
     capabilities.searchesTheWeb = true
-    let configuration = (try? EvieConfigurationLoader().load()) ?? EvieConfiguration()
+    let configuration = EvieConfigurationLoader().loadWithDiagnostics().loaded.configuration
     let started = Date()
 
     do {
@@ -359,7 +359,7 @@ extension EvieDiagnostics {
     print("")
 
     let capabilities = EvieCapabilitySnapshot.textOnly
-    let configuration = (try? EvieConfigurationLoader().load()) ?? EvieConfiguration()
+    let configuration = EvieConfigurationLoader().loadWithDiagnostics().loaded.configuration
     let started = Date()
     do {
       let outcome = try await EvieAgentLoop().run(
