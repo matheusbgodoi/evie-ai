@@ -1,5 +1,32 @@
 # Work log
 
+## 2026-10-16 — v2: merge of `v2-presence` (S6-core, S6-shell)
+
+- Completed: `git merge --no-ff v2-presence` into `v2`. Code merged without
+  conflict; the documentation conflicts kept both sides.
+  - `docs/MACOS_RUNTIME.md`: the presence CPU measurement and v2's
+    "SwiftUI macros need Xcode, which is now selected" are both kept.
+  - `docs/PROJECT_STATUS.md`: the "Evie v2 (in progress)" section from the
+    branch now says the branch was merged; v2's progress note under "Next
+    recommended action" is unchanged.
+  - `docs/WORKLOG.md` and `CHANGELOG.md` merged by themselves, but the branch's
+    entries landed at the end of the log and under "Repository". The two log
+    entries now sit among v2's by commit time (newest first), and the three
+    changelog items are an "Added" section of Unreleased.
+- Unified the violet: S6-shell's `EviePresenceTint.seeing` and S8a's
+  `EvieVoiceTint.output` defined the same `#7149E9`/`#9577EE` pair twice. Both
+  now come from `EviePalette.violet` (`Sources/EvieShell/EviePalette.swift`),
+  which also holds the `rgb` and per-appearance helpers the two enums each kept.
+  No colour changed. Design doc (S6-shell note) and `docs/UI_UX.md` (Voice
+  colours) say so.
+- Commands: `swift build` (whole package) succeeded with no warnings, also from
+  an empty build directory; full `Scripts/test` 832 tests in 82 suites passed,
+  0 failures, 1 skipped ("a hostile event title runs to the end", gated on the
+  Apple Events grant). 753 before the merge plus the branch's 79.
+- Not verified: the colour in the running app (the UI was not launched); the
+  code paths are a constant moved, not a change of value.
+- Next: merge `v2-packaging`.
+
 ## 2026-10-16 — v2 S2b: model readiness probe and cache
 
 - Completed: slice S2b of `docs/design/2026-10-16-evie-v2-design.md`.
@@ -178,6 +205,54 @@
   `Scripts/evie-probe`, which already sends it, not on a new measurement.
 - Next action: S2a (config schema v2, profiles, migration, store).
 
+## 2026-10-16 — the screen indicator, drawn
+
+- Slice: S6-shell of `docs/design/2026-10-16-evie-v2-design.md`, branch
+  `v2-presence`.
+- Added `Sources/EvieShell/ScreenPresence/`: `ScreenPresence` (drives
+  `ScreenPresenceMachine` and carries out its effects), `PresencePanel` (one
+  click-through `.screenSaver` panel per display, closed when idle),
+  `GlowLayer`, `ReticleLayer`, `HighlightLayer` (with the typing chip),
+  `GhostCursorLayer`, `PresencePill` (separate non-activating panel, Parar,
+  Continuar, esc keycap), `PresenceEscapeKey`, `PresenceMotion`,
+  `EviePresenceTint` and `ScreenPresenceDemo`.
+- Added to `EvieCore`, test-first (both suites failed to compile before the
+  types existed): `ScreenPresenceLayout` (pill placement, cursor springs and
+  start point, reticle arm length) and `ScreenPresenceCopy` (pill text, label
+  truncation by characters) — `ScreenPresenceLayoutTests` (13) and
+  `ScreenPresenceCopyTests` (7).
+- New flag `evie-shell --presence-demo [segundos] [--reduced-motion]
+  [--with-esc]`. It starts no coordinator and captures nothing, so it asks for
+  no permission.
+  - The first run registered the global Esc. On this Mac, which was in use, an
+    Esc meant for another app stopped the demo mid-way. The demo now leaves Esc
+    alone unless `--with-esc` is given, and the keycap shows only while Esc is
+    actually registered.
+- Visual review: four demo runs (normal ×3, reduced motion ×1) captured with
+  `screencapture` and inspected; the screenshots stay outside the repository.
+  Fixes from the review:
+  - the Parar capsule stretched across the spare width (now `fixedSize`);
+  - single-dot marks sat off-centre in their slot;
+  - the seeing halo read too faintly over a light desktop (shadow opacity
+    1 instead of 0.8, wider halo stroke and sweep band).
+  Confirmed: the sweep band travels the edge, the reticle redirects
+  mid-flight and locks on, the cursor arrives and the ripple plays, the dwell
+  returned `.proceed`, and Parar/stop shows "Parado" then leaves.
+- Measured (release build, Apple M5 Mac17,2, macOS 27.2, 2026-10-16):
+  0.0–0.1% of a core in Evie's process in every held state, and zero visible
+  windows after hiding. WindowServer was not measured. Details are in
+  `docs/MACOS_RUNTIME.md`.
+- Checks:
+  - `swift build` (whole package): passed.
+  - `Scripts/test --filter "ScreenPresenceLayoutTests|ScreenPresenceCopyTests|ScreenPresenceMachineTests|ScreenGeometryTests"`:
+    79/79 passed.
+  - Full `Scripts/test`: 707 tests in 69 suites, all passed (687 before this
+    slice, plus 20).
+- Open: an external display, a full-screen app over the `.screenSaver` level,
+  the `presence-excluded` magenta diagnostic (needs S4's capture filter), and
+  real VoiceOver listening. No caller yet: S4 and S5 wire it, with `onStop`
+  going to `stopEverything` and `broker.revoke`.
+
 ## 2026-10-16 — v2 S1a: rename, transport policy, keychain credentials
 
 - Completed: slice S1a of `docs/design/2026-10-16-evie-v2-design.md`.
@@ -263,6 +338,50 @@
   wall including the build), against 628 tests with 4 failures in 350.3 s before
   v2 began.
 - Next action: S1a (transport rename, policy, credentials).
+
+## 2026-10-16 — the screen indicator's rules, before its windows
+
+- Slice: S6-core of `docs/design/2026-10-16-evie-v2-design.md`, branch
+  `v2-presence`.
+- Added `Sources/EvieCore/ScreenPresenceMachine.swift` and
+  `Sources/EvieCore/ScreenGeometry.swift`, with
+  `Tests/EvieCoreTests/ScreenPresenceMachineTests.swift` (31 tests) and
+  `ScreenGeometryTests.swift` (28 tests). The tests were written first and
+  failed to compile against the missing types before the implementation
+  existed.
+- **The machine is a reducer with the clock passed in.** It owns no timers.
+  When something has to wait (the seeing minimum, the dwell, the 60 s pause
+  auto-stop), the effect names the deadline and the shell reports back.
+  - The deadline checks live in the machine. A stale timer, such as the
+    auto-stop of a pause that was already resumed, or a dwell reported early,
+    cannot clear a click or end a later pause.
+- **Choices the spec left open.**
+  - Esc counts as a stop, as the pill's esc keycap says, so Esc during the
+    dwell both cancels the click and ends the session.
+  - A paused session refuses `show`, so a loop that missed the takeover cannot
+    carry on by drawing its next step.
+  - `resume` re-observes rather than finishing the interrupted action.
+  - Takeover is ignored during a one-shot "olha a tela".
+- **The geometry refuses rather than corrects.**
+  - A grid value outside 0–1000 or a pixel outside the sent image gives `nil`.
+    Only values on the grid are clamped, one point inside the far edge, because
+    that edge is the neighbouring display's first column.
+  - The primary display is found by its Core Graphics origin, not by list order.
+  - `ScreenGeometry` deliberately does not reference S2a's
+    `CoordinateConvention`, which is not on this branch. It offers a grid mapper
+    and a pixel mapper, and S5 picks one from the profile.
+- Checks:
+  - `swift build` (whole package, shell included): passed.
+  - `Scripts/test --filter "ScreenGeometryTests|ScreenPresenceMachineTests"`:
+    59/59 passed.
+  - Full `Scripts/test`: 687 tests in 67 suites, all passed (628 before this
+    slice, plus 59). Measured on this Mac on 2026-10-16.
+  - "Evie mail and calendar scripts" passed in 0.87 s this run, against the
+    four failures and roughly 350 s recorded earlier. That suite depends on
+    the test runner's Apple Events grant, so this result describes the
+    environment, not a fix. S8b still gates it.
+- Next: S4 builds `ObservedFrame` from `CapturedScreen`. S6-shell drives the
+  machine from `ScreenPresence`.
 
 ## 2026-10-16 — v2 S8a: toolchain note and three small fixes
 

@@ -829,6 +829,28 @@ A one-time consent sheet tells the user that injection is mitigated by code poli
 - `ScreenPresenceMachine.swift`: a pure state machine.
 - `ScreenGeometry.swift`. Rect conversion uses the height: `nsMinY = primaryH − (cg.minY + cg.height)`.
 
+**S6-core as implemented (2026-10-16).** Tests: `ScreenPresenceMachineTests` and `ScreenGeometryTests`.
+
+- `ScreenPresenceMachine` is a reducer: `handle(_ event:at:) -> [Effect]`, with time passed in as `ContinuousClock.Instant` and no timers of its own.
+  - Events: `show(Phase)`, `composited`, `hide`, `beginDwell`, `dwellEnded`, `takeover`, `resume`, `pauseExpired`, `stop`.
+  - Effects, carried out in order: `render(Phase)`, `holdIndicator(until:)`, `hideIndicator`, `awaitDwell(until:)`, `resolveDwell(Clearance)`, `cancelWork`, `renderPaused(autoStopAt:)`.
+  - Phases: `seeing`, `observing(step:)`, `acting`, `typing`. The shell maps its own `Phase` (displays, app name) onto these, and its `.paused` onto `takeover`.
+  - `mayCapture` is true only once a capturing phase (`seeing`, `observing`) is **composited**. Asking to show is not enough.
+  - The seeing minimum (700 ms) counts from the composite. Seeing that was never composited hides at once.
+  - A click is cleared only by a dwell (250 ms) that ran its full length with the acting indicator on screen. Anything else resolves `.cancelled`: a stop, a takeover, a new phase, a hide, or an early `dwellEnded`.
+  - Esc is one of the stop sources, so Esc during the dwell resolves `.cancelled` **and** stops the session.
+  - Takeover pauses agent phases only. Moving the mouse during a one-shot `seeing` is ignored.
+  - While paused, `show` is refused. Only `resume` (Continuar) leaves the pause, and it re-observes at the interrupted step. A pause auto-stops after 60 s, checked against that pause's own start.
+  - `stop` is immediate. It skips the seeing minimum, and `cancelWork` comes before `hideIndicator`. It emits `cancelWork` even when idle.
+- `ScreenGeometry` holds three types, plus `downscaledSize(_:maxLongEdge:)`, which never upscales:
+  - `Display`: id, `frameInGlobalCG`, `backingScale`, `pixelSize`.
+  - `Layout`: a failable init that finds the primary display by its CG origin, not by list order. It provides CG↔AppKit point and rect flips, `appKitFrame(of:)`, `panelRect(fromGlobalCG:on:)` and `display(containingGlobalCG:)`.
+  - `ObservedFrame`: `frameInGlobalCG` and `imageSize`. Its methods:
+    - `globalPoint(normalizedX:normalizedY:)` and `globalPoint(imagePixel:)`. Values outside the grid or the image are refused (`nil`); values on it are clamped to one point inside the far edge.
+    - `normalizedBox(forGlobalCG:)` drops an element that is fully outside and clips one that is partly outside.
+    - `hasMoved(comparedTo:)`, with a 1 pt tolerance.
+- S4's `CapturedScreen` (`frameInGlobalCG`, `imageSize`) builds an `ObservedFrame` directly. S5 chooses the grid or pixel mapper from `coordinateConvention`, so `ScreenGeometry` does not depend on the S2a profile type.
+
 **S6-shell:** `Sources/EvieShell/ScreenPresence/`:
 - `ScreenPresence.swift`
 - `PresencePanel.swift`
@@ -878,6 +900,22 @@ A one-time consent sheet tells the user that injection is mitigated by code poli
 - Each state has its own shape, so colour is never the only signal.
 - VoiceOver announces state changes.
 - No setting can disable the indicator while capture or input runs.
+
+**S6-shell as implemented (2026-10-16).** Files in `Sources/EvieShell/ScreenPresence/`, plus `ScreenPresenceLayout` and `ScreenPresenceCopy` in `EvieCore` (tests: `ScreenPresenceLayoutTests`, `ScreenPresenceCopyTests`).
+
+- `ScreenPresence` drives `ScreenPresenceMachine` and carries out its effects; it holds no rule of its own. `show` returns after every participating panel has had two `NSView.displayLink` ticks, or after a 500 ms timeout, in which case `.composited` is never reported and `mayCapture` stays false.
+- Panels exist only while the indicator is up. Hiding closes them, which removes the layer tree; the demo reports `NSApp.windows` visible = 0 afterwards. Screen-parameter changes drop every panel and redraw the glow and pill of a session still on screen; the reticle, highlight and cursor come back with the next step.
+- Additions to the API above:
+  - `typing(field:app:)` replaces `typing(rect:app:)` (same meaning) and also shows the phase.
+  - `lookAt` in an acting or typing phase draws the amber element highlight instead of the reticle, so the AX frame needs no extra parameter on `willClick`.
+  - `resume()` (Continuar) and `onResume`; `brainLocation` ("no PC"/"no Mac") and `stepBudget` ("passo 3/25") are set by the caller, since profiles (S2) are not on this branch.
+  - `init(usesEscapeKey:)`: the plain-Esc Carbon hot key (`PresenceEscapeKey`, own handler and signature) is armed only during agent phases and only shown as a keycap while it is actually registered. Only the demo turns it off.
+  - `ScreenPresence.syntheticEventTag = 0xE71E`; the pill's buttons refuse mouse events carrying it.
+- The ghost cursor is a `CAShapeLayer` arrow anchored at its tip rather than the pre-rendered `cursorarrow` glyph, so the tip is exactly the click point at any scale.
+- The seeing halo uses shadow opacity 1 and a wider halo stroke instead of 0.8: half the shadow falls off the display and the remainder barely read over a light desktop in the review screenshots.
+- `evie-shell --presence-demo [segundos] [--reduced-motion] [--with-esc]` plays seeing → observing with `lookAt` and a mid-flight redirect → acting with the dwell, click and ripple → typing → clipboard notice → paused → Continuar → success → stop on the main display. It captures nothing, posts no input and starts no coordinator, so it asks for no permission. It leaves Esc alone unless `--with-esc`, because it is usually run on a Mac someone is using.
+- Not wired to `AppCoordinator` yet: nothing on this branch captures or acts. S4 and S5 call it; `onStop` goes to `stopEverything` and `broker.revoke` there.
+- **Merged into `v2` on 2026-10-16.** The seeing violet and the outgoing-voice violet (S8a) were the same pair, `#7149E9`/`#9577EE`, defined twice. Both now come from one definition, `EviePalette.violet` (`Sources/EvieShell/EviePalette.swift`): `EviePresenceTint.seeing` is it, and `EvieVoiceTint.output` wraps it as a SwiftUI `Color`.
 
 **Diagnostic `presence-excluded`:** draw a 4×4 magenta marker, capture with the exclusion filter, and assert that no magenta pixels appear.
 

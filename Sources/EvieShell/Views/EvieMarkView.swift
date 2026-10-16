@@ -11,14 +11,11 @@ import SwiftUI
 /// `.pink` in code until 2026-10-16 while the document already said violet; the
 /// document was the decision and the code is what changed.
 enum EvieVoiceTint {
-  static let input = adaptive(
-    light: NSColor(srgbRed: 0x0D / 255, green: 0x77 / 255, blue: 0x70 / 255, alpha: 1),
-    dark: NSColor(Color.mint)
+  static let input = Color(
+    nsColor: EviePalette.adaptive(light: EviePalette.rgb(0x0D7770), dark: NSColor(Color.mint))
   )
-  static let output = adaptive(
-    light: NSColor(srgbRed: 0x71 / 255, green: 0x49 / 255, blue: 0xE9 / 255, alpha: 1),
-    dark: NSColor(srgbRed: 0x95 / 255, green: 0x77 / 255, blue: 0xEE / 255, alpha: 1)
-  )
+  /// The same violet as the screen presence glow (`EviePalette.violet`).
+  static let output = Color(nsColor: EviePalette.violet)
   static let idle = Color.indigo
 
   static func color(for direction: WaveformDirection?) -> Color {
@@ -27,14 +24,6 @@ enum EvieVoiceTint {
     case .output: output
     case nil: idle
     }
-  }
-
-  private static func adaptive(light: NSColor, dark: NSColor) -> Color {
-    Color(
-      nsColor: NSColor(name: nil) { appearance in
-        appearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua ? dark : light
-      }
-    )
   }
 }
 

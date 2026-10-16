@@ -65,6 +65,30 @@ All notable changes to Evie are documented here. Dates use `YYYY-MM-DD`.
   so the `Authorization` header cannot follow one; the 3xx is reported as an
   HTTP error.
 
+### Added
+
+- **Internal, no visible change yet: the screen indicator's rules and the screen
+  coordinate maths now exist in tested code** (`ScreenPresenceMachine`,
+  `ScreenGeometry`).
+  - No screenshot is allowed before the indicator is on screen.
+  - The glow stays up for at least 700 ms.
+  - A click needs an uninterrupted dwell, so Esc or a grab of the mouse cancels it.
+  - Stop is immediate.
+  - A point the model names outside what it was shown is refused, not moved onto the nearest edge.
+
+  The windows that draw the indicator, screen capture and computer use come in later commits.
+- **The screen indicator can now be drawn** (`Sources/EvieShell/ScreenPresence/`):
+  a violet edge glow while Evie looks, a corner-bracket reticle while she works
+  out a step, an amber edge, element frame and ghost cursor while she clicks or
+  types, and a gray half-width edge when you take over. A pill at the top of the
+  screen says what she is doing and carries **Parar**; during an agent session
+  plain Esc stops her too, and Esc is released the moment the indicator leaves.
+  Clicks that Evie posts herself cannot press Parar or Continuar. Reduce Motion
+  keeps every state as fades, and VoiceOver announces each change. Nothing calls
+  it yet; screen capture and computer use do, in later commits.
+- `evie-shell --presence-demo` plays every state of the indicator on the main
+  display without capturing anything or asking for any permission.
+
 ### Changed
 
 - **Requests carry per-turn options** (`TurnOptions`, `AgentClient.stream(messages:
