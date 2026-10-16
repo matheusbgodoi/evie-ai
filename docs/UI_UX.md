@@ -258,6 +258,16 @@ opening her off screen.
 - no raw audio retention by default;
 - cards avoid displaying private content on a shared screen until expanded.
 
+### Screen presence rules
+
+`ScreenPresenceMachine` in `EvieCore` enforces the indicator's promise in code and covers it with tests. Its behaviour is described in `docs/design/2026-10-16-evie-v2-design.md` § S6:
+
+- No screenshot is taken before the indicator has been composited on screen.
+- The seeing glow stays up for at least 700 ms.
+- A click is posted only after its 250 ms dwell has run uninterrupted.
+- Real input from the user pauses an agent session. Only Continuar resumes it, and a pause stops itself after 60 s.
+- Stop cancels the work before any animation and does not wait out the seeing minimum.
+
 ## Prototype sequence
 
 1. Static overlay with real materials and card layout. **Source implemented.**

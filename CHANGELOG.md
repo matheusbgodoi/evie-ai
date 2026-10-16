@@ -6,6 +6,16 @@ All notable changes to Evie are documented here. Dates use `YYYY-MM-DD`.
 
 - Repository attribution and terminology cleanup; Git history is being prepared
   to contain only the owner's author and committer identity.
+- **Internal, no visible change yet: the screen indicator's rules and the screen
+  coordinate maths now exist in tested code** (`ScreenPresenceMachine`,
+  `ScreenGeometry`).
+  - No screenshot is allowed before the indicator is on screen.
+  - The glow stays up for at least 700 ms.
+  - A click needs an uninterrupted dwell, so Esc or a grab of the mouse cancels it.
+  - Stop is immediate.
+  - A point the model names outside what it was shown is refused, not moved onto the nearest edge.
+
+  The windows that draw the indicator, screen capture and computer use come in later commits.
 
 ## [1.0.2] - 2026-08-07
 

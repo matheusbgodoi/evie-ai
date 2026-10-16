@@ -2475,3 +2475,47 @@ nobody but the owner can fetch it.**
   only the handful of words that could be within one edit of it and keeps no text
   at all. Correctness unchanged; the successful-search path measured 64 s before
   and after.
+
+## 2026-10-16 — the screen indicator's rules, before its windows
+
+- Slice: S6-core of `docs/design/2026-10-16-evie-v2-design.md`, branch
+  `v2-presence`.
+- Added `Sources/EvieCore/ScreenPresenceMachine.swift` and
+  `Sources/EvieCore/ScreenGeometry.swift`, with
+  `Tests/EvieCoreTests/ScreenPresenceMachineTests.swift` (31 tests) and
+  `ScreenGeometryTests.swift` (28 tests). The tests were written first and
+  failed to compile against the missing types before the implementation
+  existed.
+- **The machine is a reducer with the clock passed in.** It owns no timers.
+  When something has to wait (the seeing minimum, the dwell, the 60 s pause
+  auto-stop), the effect names the deadline and the shell reports back.
+  - The deadline checks live in the machine. A stale timer, such as the
+    auto-stop of a pause that was already resumed, or a dwell reported early,
+    cannot clear a click or end a later pause.
+- **Choices the spec left open.**
+  - Esc counts as a stop, as the pill's esc keycap says, so Esc during the
+    dwell both cancels the click and ends the session.
+  - A paused session refuses `show`, so a loop that missed the takeover cannot
+    carry on by drawing its next step.
+  - `resume` re-observes rather than finishing the interrupted action.
+  - Takeover is ignored during a one-shot "olha a tela".
+- **The geometry refuses rather than corrects.**
+  - A grid value outside 0–1000 or a pixel outside the sent image gives `nil`.
+    Only values on the grid are clamped, one point inside the far edge, because
+    that edge is the neighbouring display's first column.
+  - The primary display is found by its Core Graphics origin, not by list order.
+  - `ScreenGeometry` deliberately does not reference S2a's
+    `CoordinateConvention`, which is not on this branch. It offers a grid mapper
+    and a pixel mapper, and S5 picks one from the profile.
+- Checks:
+  - `swift build` (whole package, shell included): passed.
+  - `Scripts/test --filter "ScreenGeometryTests|ScreenPresenceMachineTests"`:
+    59/59 passed.
+  - Full `Scripts/test`: 687 tests in 67 suites, all passed (628 before this
+    slice, plus 59). Measured on this Mac on 2026-10-16.
+  - "Evie mail and calendar scripts" passed in 0.87 s this run, against the
+    four failures and roughly 350 s recorded earlier. That suite depends on
+    the test runner's Apple Events grant, so this result describes the
+    environment, not a fix. S8b still gates it.
+- Next: S4 builds `ObservedFrame` from `CapturedScreen`. S6-shell drives the
+  machine from `ScreenPresence`.

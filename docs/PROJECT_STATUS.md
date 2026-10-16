@@ -1,6 +1,17 @@
 # Project status
 
-Last updated: 2026-08-08
+Last updated: 2026-10-16
+
+## Evie v2 (in progress)
+
+Evie v2 is specified in `docs/design/2026-10-16-evie-v2-design.md`. On branch
+`v2-presence`, slice **S6-core** is done (2026-10-16). It adds
+`ScreenPresenceMachine` (the indicator's rules) and `ScreenGeometry` (the
+coordinate maths for capture, computer use and the indicator), both pure and
+tested in `EvieCore`. Nothing calls them yet.
+
+Next for this area: S4 (screen capture) builds on `ScreenGeometry`. S6-shell
+then draws the panels by driving `ScreenPresenceMachine`.
 
 ## Repository hygiene
 

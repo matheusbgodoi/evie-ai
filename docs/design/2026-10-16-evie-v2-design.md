@@ -788,6 +788,28 @@ A one-time consent sheet tells the user that injection is mitigated by code poli
 - `ScreenPresenceMachine.swift`: a pure state machine.
 - `ScreenGeometry.swift`. Rect conversion uses the height: `nsMinY = primaryH − (cg.minY + cg.height)`.
 
+**S6-core as implemented (2026-10-16).** Tests: `ScreenPresenceMachineTests` and `ScreenGeometryTests`.
+
+- `ScreenPresenceMachine` is a reducer: `handle(_ event:at:) -> [Effect]`, with time passed in as `ContinuousClock.Instant` and no timers of its own.
+  - Events: `show(Phase)`, `composited`, `hide`, `beginDwell`, `dwellEnded`, `takeover`, `resume`, `pauseExpired`, `stop`.
+  - Effects, carried out in order: `render(Phase)`, `holdIndicator(until:)`, `hideIndicator`, `awaitDwell(until:)`, `resolveDwell(Clearance)`, `cancelWork`, `renderPaused(autoStopAt:)`.
+  - Phases: `seeing`, `observing(step:)`, `acting`, `typing`. The shell maps its own `Phase` (displays, app name) onto these, and its `.paused` onto `takeover`.
+  - `mayCapture` is true only once a capturing phase (`seeing`, `observing`) is **composited**. Asking to show is not enough.
+  - The seeing minimum (700 ms) counts from the composite. Seeing that was never composited hides at once.
+  - A click is cleared only by a dwell (250 ms) that ran its full length with the acting indicator on screen. Anything else resolves `.cancelled`: a stop, a takeover, a new phase, a hide, or an early `dwellEnded`.
+  - Esc is one of the stop sources, so Esc during the dwell resolves `.cancelled` **and** stops the session.
+  - Takeover pauses agent phases only. Moving the mouse during a one-shot `seeing` is ignored.
+  - While paused, `show` is refused. Only `resume` (Continuar) leaves the pause, and it re-observes at the interrupted step. A pause auto-stops after 60 s, checked against that pause's own start.
+  - `stop` is immediate. It skips the seeing minimum, and `cancelWork` comes before `hideIndicator`. It emits `cancelWork` even when idle.
+- `ScreenGeometry` holds three types, plus `downscaledSize(_:maxLongEdge:)`, which never upscales:
+  - `Display`: id, `frameInGlobalCG`, `backingScale`, `pixelSize`.
+  - `Layout`: a failable init that finds the primary display by its CG origin, not by list order. It provides CG↔AppKit point and rect flips, `appKitFrame(of:)`, `panelRect(fromGlobalCG:on:)` and `display(containingGlobalCG:)`.
+  - `ObservedFrame`: `frameInGlobalCG` and `imageSize`. Its methods:
+    - `globalPoint(normalizedX:normalizedY:)` and `globalPoint(imagePixel:)`. Values outside the grid or the image are refused (`nil`); values on it are clamped to one point inside the far edge.
+    - `normalizedBox(forGlobalCG:)` drops an element that is fully outside and clips one that is partly outside.
+    - `hasMoved(comparedTo:)`, with a 1 pt tolerance.
+- S4's `CapturedScreen` (`frameInGlobalCG`, `imageSize`) builds an `ObservedFrame` directly. S5 chooses the grid or pixel mapper from `coordinateConvention`, so `ScreenGeometry` does not depend on the S2a profile type.
+
 **S6-shell:** `Sources/EvieShell/ScreenPresence/`:
 - `ScreenPresence.swift`
 - `PresencePanel.swift`
