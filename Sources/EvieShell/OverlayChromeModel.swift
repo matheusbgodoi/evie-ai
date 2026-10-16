@@ -8,9 +8,10 @@ import SwiftUI
 /// saying, and mixing the two makes both harder to reason about.
 ///
 /// It also holds the small pieces of transient view state that would normally be
-/// `@State`. This toolchain has the macOS Command Line Tools without full Xcode,
-/// and SwiftUI's `@State` macro plugin ships only with Xcode, so view-local
-/// state lives in an observable object instead. See `docs/MACOS_RUNTIME.md`.
+/// `@State`. They moved here when this Mac had only the Command Line Tools, whose
+/// SDK lacks the `@State` macro plugin. Xcode 27.1 has been selected since
+/// 2026-10-16 and `@State` compiles now (see `AGENTS.md`), so new view-local state
+/// may use it; this state stays here because the panel controller reads it too.
 @MainActor
 final class OverlayChromeModel: ObservableObject {
   @Published private(set) var contentWidth: CGFloat

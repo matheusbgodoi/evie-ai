@@ -4,6 +4,29 @@ All notable changes to Evie are documented here. Dates use `YYYY-MM-DD`.
 
 ## [Unreleased]
 
+### Fixed
+
+- **The Mail and Calendar switch now survives a relaunch.** It was declared on the
+  preferences but never written by the preferences store, so it read back as off
+  on every launch. Behaviour change: once it is on and saved, every turn goes
+  through the agent loop (the loop is chosen whenever Mail and Calendar are
+  available), including turns with no authorised folder and web search off,
+  which after a relaunch used to take the direct stream.
+- **Evie's voice is violet, as the design said.** The outgoing waveform was
+  `.pink` in code while `docs/UI_UX.md` documented `#7149E9` (light) and
+  `#9577EE` (dark); it now resolves per appearance through
+  `NSColor(name:dynamicProvider:)`.
+- **The app bundle declares macOS 26 as its minimum.** `LSMinimumSystemVersion`
+  said 15.0 while the package requires macOS 26.
+
+### Documented
+
+- The toolchain section of `AGENTS.md` now records Xcode 27.1 as selected:
+  `@State` and `@Observable` compile, and EvieCore still may not use macOS 27
+  SDK APIs because CI builds it against the 26.5 SDK.
+
+### Repository
+
 - Repository attribution and terminology cleanup; Git history is being prepared
   to contain only the owner's author and committer identity.
 

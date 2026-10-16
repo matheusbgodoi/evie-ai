@@ -130,7 +130,7 @@ function write_info_plist() {
   <key>CFBundleVersion</key>
   <string>${EVIE_SHORT_VERSION}</string>
   <key>LSMinimumSystemVersion</key>
-  <string>15.0</string>
+  <string>26.0</string>
   <key>LSUIElement</key>
   <true/>
   <key>NSHumanReadableCopyright</key>

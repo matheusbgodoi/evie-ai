@@ -1,5 +1,28 @@
 # Work log
 
+## 2026-10-16 — v2 S8a: toolchain note and three small fixes
+
+- Completed: slice S8a of `docs/design/2026-10-16-evie-v2-design.md`.
+  - `mailAndCalendarEnabled` is now part of the preferences document the store
+    writes and reads (`mail_and_calendar_enabled`). Regression test "the mail and
+    calendar switch survives a relaunch" failed before the fix (2 issues) and
+    passes after.
+  - `EvieVoiceTint.output` is the documented violet pair instead of `.pink`.
+  - `Scripts/evie-app` writes `LSMinimumSystemVersion` 26.0.
+  - `AGENTS.md` toolchain section replaced; the matching notes in
+    `OverlayChromeModel`, `docs/MACOS_RUNTIME.md` and `docs/HANDOFF.md` updated.
+- Verified on this Mac (M5, macOS 27.2, Xcode 27.1 build 27A9275, Swift 6.4),
+  2026-10-16: a view with `@State` and an `@Observable` model passes
+  `xcrun swiftc -typecheck -target arm64-apple-macos26.0` and builds as a SwiftPM
+  executable with `-warnings-as-errors`. `xcrun metal` exists but refuses to run
+  ("missing Metal Toolchain"), so shaders still need
+  `xcodebuild -downloadComponent MetalToolchain` first.
+- Checks: `swift build` (whole package) OK; `Scripts/test --filter
+  EviePreferences` 36 tests passed.
+- Not done here: `docs/UI_UX.md` lists `#17CFC2` for incoming voice in dark mode
+  while the code uses the system `.mint`; out of this slice's scope.
+- Next action: S1a (transport rename, policy, credentials).
+
 ## 2026-10-16 — Evie v2 design specification
 
 - Completed: wrote the v2 implementation specification after a read-only pass over

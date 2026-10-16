@@ -62,10 +62,10 @@ in light and dark. It is deferred, not passed.
 
 ## Constraints that will bite
 
-- **`@State` does not compile here.** This Mac has Command Line Tools without full
-  Xcode, and `@State` is a macro whose plugin ships only with Xcode. Transient
-  view state goes in an observable object. There is also no Metal toolchain, so
-  custom shader effects are out. See `AGENTS.md`.
+- **`@State` compiles since 2026-10-16.** It is a macro whose plugin ships only
+  with Xcode, and until that date this Mac had only the Command Line Tools, which
+  is why older views keep transient state in observable objects. Xcode 27.1 is now
+  selected. See `AGENTS.md`.
 - **`orderOut` does not stop a SwiftUI timeline.** A hidden overlay was measured
   redrawing at 55 fps. The motion gate must be lowered before the window leaves.
 - **Never run the executable directly once permissions matter.** TCC attributes

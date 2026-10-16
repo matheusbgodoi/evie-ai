@@ -373,6 +373,23 @@ struct EviePreferencesStoreTests {
     #expect(loaded == preferences)
   }
 
+  /// The bug this exists to prevent: the switch was declared on the type and
+  /// encoded by its own `Codable`, but the store writes a separate document that
+  /// never named it, so turning Mail on in Settings lasted until the next launch.
+  @Test("the mail and calendar switch survives a relaunch")
+  func mailAndCalendarSwitchPersists() throws {
+    let fileURL = temporaryFileURL()
+    var preferences = EviePreferences()
+    preferences.mailAndCalendarEnabled = true
+
+    try EviePreferencesStore(fileURL: fileURL).save(preferences)
+    let relaunched = EviePreferencesStore(fileURL: fileURL).loadWithDiagnostics()
+
+    #expect(relaunched.failure == nil)
+    #expect(relaunched.preferences.mailAndCalendarEnabled)
+    #expect(relaunched.preferences == preferences)
+  }
+
   @Test("a missing file resolves to defaults instead of failing")
   func missingFileUsesDefaults() throws {
     let loaded = EviePreferencesStore(fileURL: temporaryFileURL()).load()

@@ -3,17 +3,22 @@ import SwiftUI
 
 /// The colours that separate "you are talking" from "Evie is talking".
 ///
-/// These are the system colours the interface has always used. Only one value is
-/// substituted, and only in light appearance: `.mint` resolves to 1.82:1 against
-/// the HUD surface there, below the 3:1 WCAG asks of a graphical object, which
-/// made "listening" almost invisible on a light desktop. Dark appearance — where
-/// it measures 9:1 — is untouched.
+/// `.mint` resolves to 1.82:1 against the HUD surface in light appearance, below
+/// the 3:1 WCAG asks of a graphical object, which made "listening" almost
+/// invisible on a light desktop; there it is replaced by a darker teal, and dark
+/// appearance — where it measures 9:1 — is untouched. Evie's own voice is the
+/// violet pair `docs/UI_UX.md` documents (`#7149E9` light, `#9577EE` dark). It was
+/// `.pink` in code until 2026-10-16 while the document already said violet; the
+/// document was the decision and the code is what changed.
 enum EvieVoiceTint {
   static let input = adaptive(
     light: NSColor(srgbRed: 0x0D / 255, green: 0x77 / 255, blue: 0x70 / 255, alpha: 1),
     dark: NSColor(Color.mint)
   )
-  static let output = Color.pink
+  static let output = adaptive(
+    light: NSColor(srgbRed: 0x71 / 255, green: 0x49 / 255, blue: 0xE9 / 255, alpha: 1),
+    dark: NSColor(srgbRed: 0x95 / 255, green: 0x77 / 255, blue: 0xEE / 255, alpha: 1)
+  )
   static let idle = Color.indigo
 
   static func color(for direction: WaveformDirection?) -> Color {

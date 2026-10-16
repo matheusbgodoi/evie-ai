@@ -54,11 +54,15 @@ moved the number, because the cost is the canvas frame setup rather than the
 glyphs. And never resolve `Text` inside a per-frame loop — declare the glyphs
 through `Canvas(symbols:)`, which is worth roughly 6× on its own.
 
-### SwiftUI macros are unavailable without Xcode
+### SwiftUI macros need Xcode, which is now selected
 
-`@State` is a macro in the macOS 26+ SDK and its plugin ships only with Xcode, so
-it cannot be used here; see `AGENTS.md`. There is also no Metal toolchain, which
-rules out custom shader effects.
+`@State` is a macro in the macOS 26+ SDK and its plugin ships only with Xcode.
+Until 2026-10-16 this Mac had only the Command Line Tools, so it could not be used
+and transient view state moved into observable objects. Xcode 27.1 is installed
+and selected since 2026-10-16, and `@State` and `@Observable` compile; see
+`AGENTS.md`. Custom shader effects are allowed but not needed; the `metal`
+compiler also needs the separately downloaded Metal Toolchain component, which
+was not installed on that date.
 
 ## Current development runtime
 
