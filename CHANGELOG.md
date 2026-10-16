@@ -6,6 +6,12 @@ All notable changes to Evie are documented here. Dates use `YYYY-MM-DD`.
 
 ### Changed
 
+- **Security: the PC key is never saved into a keychain item Evie did not
+  create.** Saving over an existing item kept that item's access list, so an
+  item another program had made first under Evie's name could have read the
+  key. Configurações › Cérebro, the first-run guide and `Scripts/evie-app
+  import-pc-key` now delete the item and create a new one that only Evie may
+  read; when the old item cannot be deleted, or reappears, nothing is saved.
 - **Asking Evie to look while a session is paused no longer ends it.** A look
   while the person holds the Mac (a paused session, from S5 on) is refused at
   once with "A Evie está pausada enquanto você usa o Mac. Toque em Continuar ou

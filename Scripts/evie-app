@@ -470,6 +470,13 @@ function uninstall_app() {
 # `-T` names the installed bundle as the one program allowed to read the item
 # without asking — not `security`, not this script, and not the copy in .build,
 # which is rebuilt and deleted constantly.
+#
+# The item under Evie's name is deleted first and the add has no `-U`: `-U`
+# updates an existing item in place, keeping its access list, so an item that
+# another program made first under this name ("squatting" it, readable by that
+# program) would be handed the key. A delete that fails for any reason but "no
+# such item" (44) stops the import, and so does an add that finds the item back
+# (45).
 function import_pc_key() {
   if [[ ! -d "${EVIE_INSTALLED_APP}" ]]; then
     print -u2 "Evie is not installed at ${EVIE_INSTALLED_APP}, and the key is tied to that copy."
@@ -493,10 +500,25 @@ function import_pc_key() {
     return 1
   fi
 
-  printf '%s\n%s\n' "${key}" "${key}" | security add-generic-password -U \
+  local deleted=0
+  security delete-generic-password \
+    -s "${EVIE_MODEL_KEY_SERVICE}" -a "${EVIE_MODEL_KEY_ACCOUNT}" >/dev/null 2>&1 || deleted=$?
+  if (( deleted != 0 && deleted != 44 )); then
+    key=""
+    print -u2 "Could not remove the existing ${EVIE_MODEL_KEY_SERVICE} / ${EVIE_MODEL_KEY_ACCOUNT} item"
+    print -u2 "(security exited ${deleted}); nothing was saved. Delete it in Keychain Access and retry."
+    return 1
+  fi
+
+  if ! printf '%s\n%s\n' "${key}" "${key}" | security add-generic-password \
     -s "${EVIE_MODEL_KEY_SERVICE}" -a "${EVIE_MODEL_KEY_ACCOUNT}" \
     -l "Evie — chave do modelo (${EVIE_MODEL_KEY_HOST})" \
-    -T "${EVIE_INSTALLED_APP}" -w >/dev/null
+    -T "${EVIE_INSTALLED_APP}" -w >/dev/null; then
+    key=""
+    print -u2 "Could not create the ${EVIE_MODEL_KEY_SERVICE} / ${EVIE_MODEL_KEY_ACCOUNT} item"
+    print -u2 "(another program may have made it again); nothing was saved."
+    return 1
+  fi
   key=""
 
   print "Saved the PC key as ${EVIE_MODEL_KEY_SERVICE} / ${EVIE_MODEL_KEY_ACCOUNT}, readable by"

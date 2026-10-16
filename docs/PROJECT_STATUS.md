@@ -31,8 +31,19 @@ adopted only when its last `--host` and every socket are loopback; cancelling
 "Acordando o cérebro do Mac…" stops the wake; stops no longer hold the main
 actor and quit waits at most the 5 s grace; and every start gets a per-launch
 key (ADR 0017) — measured live: 401 without it, 200 with it, a key-less server
-refused. Still open from the second review: findings #1, #2, #5–#7 and #10
-(other lanes) and the pending security findings #3 and #5.
+refused.
+
+**The turn and picture review fixes are in (2026-10-16):** a "Agora não" on the
+wake card holds for its turn and a PC known to be out is not sent the question
+(#1); the screen is captured only for a clear request (#2, 27 negative and 28
+positive phrases); the stream cancellation test asserts causes, not time (#5);
+the PC gets one picture per request (#6); recognised text cannot close Evie's
+fences (#7); a look during a paused session is refused before the glow (#10);
+the PC key always goes into a new item only Evie may read (pending #3); and no
+request carrying a picture is sent with tools or auto-approves a change
+(pending #5). Open: the tool-result fence (`EvieTool.swift`) still uses fixed
+markers without neutralising; [VERIFY] in the installed app that re-saving over
+an item `import-pc-key` created does not prompt.
 
 Next for this area: S5
 drives observing, `lookAt`, `willClick`/`didClick` and typing, posts every

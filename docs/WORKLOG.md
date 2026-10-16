@@ -1,5 +1,43 @@
 # Work log
 
+## 2026-10-16 — v2 fix: the PC key goes only into an item Evie creates
+
+- Completed: the queued security finding on S2d (pending #3, keychain
+  squatting). `LoginKeychainItems.write` answered `errSecDuplicateItem` with
+  `SecItemUpdate`, and `import-pc-key` used `add-generic-password -U`; both
+  keep the existing item's access list.
+  - `Sources/EvieCore/EvieModelKeys.swift`: `KeychainWriteCalls` (delete, add;
+    `.system` is `SecItemDelete`/`SecItemAdd`), `LoginKeychainItems(calls:)`;
+    `write` deletes (not-found is fine, any other status throws, nothing
+    added), then adds with no `kSecAttrAccess` (the legacy keychain's default
+    list trusts the creating program; `SecAccessCreate` is deprecated, and the
+    gate is no warnings); a duplicate on the add throws, never updates.
+  - `Scripts/evie-app import-pc-key`: `security delete-generic-password` first
+    (exit 44 is fine, anything else stops with a message), then
+    `add-generic-password` without `-U`, still `-T` the installed bundle; a
+    failed add is reported and nothing is saved.
+- Measured 2026-10-16 (M5 24 GB, macOS 27.2), with a throwaway login-keychain
+  item `com.matheusbgodoi.evie.tests.squat-<uuid>`, deleted afterwards: add 0,
+  a second add without `-U` 45, delete 0, delete again 44.
+- Tests: "Evie model keys" (4: delete then add with the right attributes and no
+  update; not-found then add; an undeletable item stops the write before any
+  add; a duplicate after the delete is refused). "Evie app PC key import": the
+  first test now expects three calls (find, delete, add without `-U`) instead
+  of two with `-U` — the contract this fix changes, not a weaker check — plus 3
+  new (no earlier item, an undeletable item gets no key, an add that finds the
+  item back fails).
+- Docs: `docs/SECURITY.md` § the PC key, the S2d notes in the design doc,
+  CHANGELOG.
+- Checks: `swift build` with no warnings; `Scripts/test --filter
+  "EvieModelKeysTests|EviePermissionGuideBrainTests|EvieAppImportKeyScriptTests"`:
+  39 tests passed; full `Scripts/test`: 1098 tests in 102 suites passed, 1
+  known issue (the existing deadline witness), up from 1074 before this lane's
+  seven commits.
+- Status: `docs/PROJECT_STATUS.md` § "Evie v2" lists this lane's fixes and what
+  stays open.
+- Open: [VERIFY] in the installed app that deleting an item `import-pc-key`
+  created does not prompt.
+
 ## 2026-10-16 — v2 fix: a look during a pause is refused before the glow
 
 - Completed: second v2 review, finding #10 (latent until S5 sessions exist).

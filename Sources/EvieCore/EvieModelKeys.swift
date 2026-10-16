@@ -28,8 +28,28 @@ public protocol EvieKeychainItems: Sendable {
   /// program created, macOS asks the person first and this call waits for the
   /// answer.
   func read(_ item: KeychainItemName) throws -> String?
-  /// Creates the item, or replaces the secret of the one already there.
+  /// Replaces whatever item has this name with a new one holding `secret`.
   func write(_ secret: String, to item: KeychainItemName, label: String) throws
+}
+
+/// The two Security calls a keychain write makes, kept apart so their order
+/// can be tested without a keychain.
+public struct KeychainWriteCalls: Sendable {
+  let delete: @Sendable ([CFString: Any]) -> OSStatus
+  let add: @Sendable ([CFString: Any]) -> OSStatus
+
+  init(
+    delete: @escaping @Sendable ([CFString: Any]) -> OSStatus,
+    add: @escaping @Sendable ([CFString: Any]) -> OSStatus
+  ) {
+    self.delete = delete
+    self.add = add
+  }
+
+  public static let system = KeychainWriteCalls(
+    delete: { SecItemDelete($0 as CFDictionary) },
+    add: { SecItemAdd($0 as CFDictionary, nil) }
+  )
 }
 
 /// The legacy login keychain, the same one `KeychainCredentialProvider` reads.
@@ -39,8 +59,23 @@ public protocol EvieKeychainItems: Sendable {
 /// its own copy of the PC key instead of reading the PC configuration's item on
 /// every turn: that item belongs to another program, and each read of it would
 /// be a prompt.
+///
+/// **A write never reuses an item.** An existing item keeps its access list
+/// when only its secret is updated, so an item another program created first
+/// under Evie's name — "squatting" it, with an access list that lets that
+/// program read it — would be handed the key. A write therefore deletes the
+/// item and adds a new one, which lists Evie alone; if the item cannot be
+/// deleted, or is there again by the time of the add, nothing is written.
 public struct LoginKeychainItems: EvieKeychainItems {
-  public init() {}
+  private let calls: KeychainWriteCalls
+
+  public init() {
+    self.init(calls: .system)
+  }
+
+  init(calls: KeychainWriteCalls) {
+    self.calls = calls
+  }
 
   public func contains(_ item: KeychainItemName) throws -> Bool {
     var query = Self.query(for: item)
@@ -72,26 +107,20 @@ public struct LoginKeychainItems: EvieKeychainItems {
   }
 
   public func write(_ secret: String, to item: KeychainItemName, label: String) throws {
-    let data = Data(secret.utf8)
+    let deleted = calls.delete(Self.query(for: item))
+    guard deleted == errSecSuccess || deleted == errSecItemNotFound else {
+      throw EvieModelKeyError(status: deleted)
+    }
     var attributes = Self.query(for: item)
-    attributes[kSecValueData] = data
+    attributes[kSecValueData] = Data(secret.utf8)
     attributes[kSecAttrLabel] = label
-    let added = SecItemAdd(attributes as CFDictionary, nil)
-    switch added {
-    case errSecSuccess:
-      return
-    case errSecDuplicateItem:
-      // Replacing the secret keeps the item's access list: the program that
-      // created it — Evie, or the `-T` list `Scripts/evie-app import-pc-key`
-      // gave — stays the one allowed to read it.
-      let updated = SecItemUpdate(
-        Self.query(for: item) as CFDictionary,
-        [kSecValueData: data, kSecAttrLabel: label] as CFDictionary
-      )
-      guard updated == errSecSuccess else {
-        throw EvieModelKeyError(status: updated)
-      }
-    default:
+    // No `kSecAttrAccess`: SecItemAdd gives an item in the legacy keychain an
+    // access list that trusts the program creating it — Evie, by her code
+    // signature — and no other. Building one by hand needs `SecAccessCreate`,
+    // deprecated since macOS 10.10. A duplicate here means the item came back
+    // between the two calls: it is refused, never updated.
+    let added = calls.add(attributes)
+    guard added == errSecSuccess else {
       throw EvieModelKeyError(status: added)
     }
   }

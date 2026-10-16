@@ -185,15 +185,23 @@ body and decides where a conversation may go before it sends anything:
   allowed to read it, which is why she does not read the PC configuration's
   item on every turn: each read would be a prompt, and "Permitir sempre" there
   would let her read an item that is not hers. Replacing the key invalidates the
-  process's key cache. **[VERIFY]** that a rebuilt Evie still reads her own item
+  process's key cache. **A save never reuses an item** (since 2026-10-16): an
+  update keeps the item's access list, so an item another program made first
+  under Evie's name ("squatting" it) would have received the key. Every save
+  deletes the item and adds a new one, which trusts only Evie; if the delete is
+  refused, or the item is back by the time of the add, nothing is written. **[VERIFY]** that a rebuilt Evie still reads her own item
   without a prompt: the bundle is self-signed with no team identifier, and how
   the legacy keychain's partition list treats such a signer is not documented.
 - **`Scripts/evie-app import-pc-key`** makes the same copy from a terminal.
   The key never appears in an argument list, where any process could read it
   while the command runs: it is read with `security find-generic-password -w`
   into a shell variable, checked to be one line of printable characters, and
-  piped into `security add-generic-password -U … -T ~/Applications/Evie.app -w`,
-  which reads it from stdin when `-w` is last. It is never printed. `-T` names
+  piped into `security add-generic-password … -T ~/Applications/Evie.app -w`,
+  which reads it from stdin when `-w` is last. As in the app, the item under
+  Evie's name is deleted first (`security delete-generic-password`; "no such
+  item" is fine, any other failure stops the import) and the add has no `-U`,
+  so a squatted item cannot keep its access list; an add that finds the item
+  back fails and saves nothing. It is never printed. `-T` names
   only the installed bundle — not `security`, and not the copy in `.build` — so
   no other program reads the item without asking. The script refuses when Evie
   is not installed. Its test runs it against a stand-in `security` that records
