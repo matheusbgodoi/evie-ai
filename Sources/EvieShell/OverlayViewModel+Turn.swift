@@ -1058,11 +1058,16 @@ extension OverlayViewModel {
       onLayoutInvalidated?()
     }
 
+    // A capture replayed from an earlier turn counts, and so does a pasted
+    // picture's text on a brain that cannot see it: none of it rides with tools.
+    let carriesPicture = !pictures.isEmpty || EvieTurnPlan.carriesPicture(requestMessages)
+
     switch plan.route(
       hasRoots: !turn.roots.isEmpty,
       searchesTheWeb: turn.web != nil,
       readsMailAndCalendar: turn.apps != nil,
-      looksAtScreen: looking
+      looksAtScreen: looking,
+      carriesPicture: carriesPicture
     ) {
     case .directStream:
       // Pinned at submit time, like the rest of the turn: a spoken question
@@ -1099,7 +1104,8 @@ extension OverlayViewModel {
         outcome,
         requestID: requestID,
         userMessage: turn.userMessage,
-        autoApproveChanges: turn.autoApprovesChanges
+        autoApproveChanges: EvieTurnPlan.autoApprovesChanges(
+          turn.autoApprovesChanges, carriesPicture: carriesPicture)
       )
     }
   }

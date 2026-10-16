@@ -49,20 +49,44 @@ public struct EvieTurnPlan: Sendable, Equatable {
   /// A look at the screen is always one request: the capture is the subject,
   /// looking anything up first answers a different question, and every step of
   /// a loop would send the picture again.
+  ///
+  /// **A picture never rides with tools.** While the request carries one — a
+  /// capture still replayed from an earlier turn, a pasted picture, or their
+  /// recognised text (`carriesPicture`) — the turn takes the tool-less route a
+  /// brain without tools takes. Text on the screen is whatever a web page, a
+  /// message or an ad put there; with tools declared it could steer a web
+  /// search (a query is a way out for what the screen shows) or a proposal.
+  /// The folders and the web are still searched, before the model is asked,
+  /// with the person's own question. The computer-use loop (S5) is the one
+  /// exception, under its own policy and confirmations, and does not come
+  /// through here.
   public func route(
     hasRoots: Bool,
     searchesTheWeb: Bool,
     readsMailAndCalendar: Bool,
-    looksAtScreen: Bool = false
+    looksAtScreen: Bool = false,
+    carriesPicture: Bool = false
   ) -> Route {
     if looksAtScreen {
       return .directStream
     }
-    if profile.capabilities.tools {
+    if profile.capabilities.tools, !carriesPicture {
       return hasRoots || searchesTheWeb || readsMailAndCalendar
         ? .agentLoop(offersTools: true) : .directStream
     }
     return hasRoots || searchesTheWeb ? .agentLoop(offersTools: false) : .directStream
+  }
+
+  /// Whether a picture rides in `messages`. One that became a marker does not.
+  public static func carriesPicture(_ messages: [ChatMessage]) -> Bool {
+    messages.contains { !($0.images ?? []).isEmpty }
+  }
+
+  /// Whether a change may be applied without its card being clicked: only when
+  /// the person turned that on, asked for a change, and no picture is in the
+  /// request — the screen's text cannot be what approves a change.
+  public static func autoApprovesChanges(_ requested: Bool, carriesPicture: Bool) -> Bool {
+    requested && !carriesPicture
   }
 
   /// The capabilities the persona announces on this brain: where it runs, and

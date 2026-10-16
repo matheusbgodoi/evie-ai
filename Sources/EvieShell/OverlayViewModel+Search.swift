@@ -82,8 +82,16 @@ extension OverlayViewModel {
       plan: plan
     )
     // No vault, because the whole point is not to consult it. Passing it and
-    // ignoring the result would still pay for the retrieval.
-    let offersTools = plan.profile.capabilities.tools
+    // ignoring the result would still pay for the retrieval. A capture still
+    // replayed from an earlier turn keeps the model away from the web tools:
+    // the search runs first, on the question's own words.
+    let offersTools =
+      plan.route(
+        hasRoots: !roots.isEmpty,
+        searchesTheWeb: true,
+        readsMailAndCalendar: false,
+        carriesPicture: EvieTurnPlan.carriesPicture(messages)
+      ) == .agentLoop(offersTools: true)
     let outcome = try await EvieAgentLoop(
       web: web,
       vault: nil,

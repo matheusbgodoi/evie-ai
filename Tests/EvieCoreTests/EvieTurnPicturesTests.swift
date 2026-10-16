@@ -289,6 +289,85 @@ struct EvieTurnPicturesTests {
     #expect(EvieTurnPlan(profile: blindProfile, readiness: .ready).capabilities(from: describing).seesImages)
   }
 
+  // MARK: - A picture never meets a tool
+
+  @Test("a picture still in history keeps a follow-up away from tools, whatever is switched on")
+  func pictureInHistoryRoutesWithoutTools() {
+    let plan = EvieTurnPlan(profile: pcProfile, readiness: .ready)
+    var looked = ChatMessage(role: .user, content: "o que tem na tela?")
+    looked.images = [screenshot()]
+    let history = [
+      ChatMessage(role: .system, content: "Evie"), looked,
+      ChatMessage(role: .assistant, content: "Uma fatura."),
+    ]
+    let messages = plan.prefix(history, then: [ChatMessage(role: .user, content: "qual o valor?")])
+
+    #expect(EvieTurnPlan.carriesPicture(messages))
+    // The folders and the web are still searched first, by the question's own
+    // words; the model is asked once, with no tools.
+    #expect(
+      plan.route(
+        hasRoots: true, searchesTheWeb: true, readsMailAndCalendar: true,
+        carriesPicture: true) == .agentLoop(offersTools: false))
+    // Mail and Calendar are reached only through tools: nothing to gather.
+    #expect(
+      plan.route(
+        hasRoots: false, searchesTheWeb: false, readsMailAndCalendar: true,
+        carriesPicture: true) == .directStream)
+    #expect(
+      plan.route(hasRoots: true, searchesTheWeb: false, readsMailAndCalendar: false)
+        == .agentLoop(offersTools: true))
+  }
+
+  @Test("a picture that became a marker no longer counts as one")
+  func markerIsNotAPicture() {
+    let plan = EvieTurnPlan(profile: blindProfile, readiness: .ready)
+    var looked = ChatMessage(role: .user, content: "o que tem na tela?")
+    looked.images = [screenshot()]
+
+    let messages = plan.prefix(
+      [ChatMessage(role: .system, content: "Evie"), looked],
+      then: [ChatMessage(role: .user, content: "qual o valor?")]
+    )
+
+    #expect(!EvieTurnPlan.carriesPicture(messages))
+  }
+
+  @Test("changes are never applied without a click while a picture is in context")
+  func noAutoApprovalWithAPicture() {
+    #expect(!EvieTurnPlan.autoApprovesChanges(true, carriesPicture: true))
+    #expect(EvieTurnPlan.autoApprovesChanges(true, carriesPicture: false))
+    #expect(!EvieTurnPlan.autoApprovesChanges(false, carriesPicture: false))
+  }
+
+  @Test("the loop a picture rides into declares no tools, and the picture still reaches the model")
+  func toolLessLoopKeepsThePicture() async throws {
+    let plan = EvieTurnPlan(profile: pcProfile, readiness: .ready)
+    var looked = ChatMessage(role: .user, content: "o que tem na tela?")
+    looked.images = [screenshot()]
+    let messages = plan.prefix(
+      [ChatMessage(role: .system, content: "Evie"), looked, ChatMessage(role: .assistant, content: "Uma fatura.")],
+      then: [ChatMessage(role: .user, content: "procura isso na web")]
+    )
+    guard
+      case .agentLoop(let offersTools) = plan.route(
+        hasRoots: false, searchesTheWeb: true, readsMailAndCalendar: false,
+        carriesPicture: EvieTurnPlan.carriesPicture(messages))
+    else {
+      Issue.record("expected the loop")
+      return
+    }
+    let client = RecordingClient([.answer("Pronto.")])
+
+    _ = try await EvieAgentLoop(offersChanges: true, offersTools: offersTools).run(
+      messages: messages, roots: [], client: client, emit: { _ in })
+
+    let calls = await client.calls
+    #expect(calls.count == 1)
+    #expect(calls.first?.tools == 0)
+    #expect(calls.first?.messages.contains { !($0.images ?? []).isEmpty } == true)
+  }
+
   // MARK: - What survives the turn
 
   @Test("the saved question says a capture was sent, and carries no picture")

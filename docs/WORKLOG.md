@@ -1,5 +1,33 @@
 # Work log
 
+## 2026-10-16 — v2 fix: a picture in the request keeps tools away
+
+- Completed: the queued security finding on S4 (pending #5). A capture
+  replayed by `EvieSentPictureTurn`, or a pasted picture, could ride into a
+  later turn routed to the tool-enabled `EvieAgentLoop`.
+  - `EvieTurnPlan.route(…, carriesPicture:)`: with a picture, a tool-enabled
+    profile routes as a tool-less one (`.agentLoop(offersTools: false)` with
+    folders or the web, else `.directStream`); `EvieTurnPlan.carriesPicture`
+    (a picture that became a marker does not count);
+    `EvieTurnPlan.autoApprovesChanges(_:carriesPicture:)`.
+  - `OverlayViewModel.answer(_:on:)`: `carriesPicture` is the turn's pictures
+    (their OCR text included) or any picture in the request; it picks the
+    route and gates auto-approval. `runWebOnlyTurn` (`/web`) takes its
+    `offersTools` from the same route. `/plano` and the schedule runner send no
+    history, so no picture.
+  - Chosen over stripping the picture to its marker before
+    `EvieAgentLoop.run`: the follow-up stays answerable and the replayed
+    prefix stays byte-identical for the PC's cache.
+- Tests ("Evie turn pictures", 4): a replayed picture routes a follow-up
+  tool-less with everything on; a marker is not a picture; no auto-approval
+  with a picture; the loop it lands in declares no tools and still sends the
+  picture.
+- Docs: `docs/SECURITY.md` § "Screen captures and pictures", `docs/VISION.md`,
+  the S4 notes in the design doc, CHANGELOG.
+- Checks: `swift build` with no warnings; `Scripts/test --filter
+  "EvieTurnPicturesTests|EvieBrainTurnTests|EvieAgentLoopTests"`: 65 tests passed.
+- Next: the other fixes in this lane.
+
 ## 2026-10-16 — v2 fix: one picture per PC request; fences that text cannot close
 
 - Completed: second v2 review, findings #6 and #7.

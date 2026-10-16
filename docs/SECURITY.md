@@ -254,6 +254,20 @@ manager's window — so it is treated as the most sensitive input Evie has.
   is one request with no tools declared, so a page that says "ignore your
   instructions" has nothing to call. That is mitigation, not proof; S5's action
   policy is what holds when tools exist.
+- **A picture never rides with tools** (since 2026-10-16, queued security
+  finding on S4). The newest picture turn is replayed into the follow-ups, so a
+  later question with folders, the web or Mail on used to reach the
+  tool-enabled loop with the screen still in it — where on-screen text could
+  steer a web search (a query leaves the Mac) or a proposal. Now any request
+  carrying a picture — a replayed capture, a pasted picture, or a pasted
+  picture's recognised text on a brain without vision — takes the tool-less
+  route: the folders and the web are searched first with the person's own
+  question, and the model is asked once with no `tools` key (`EvieTurnPlan.route
+  (…, carriesPicture:)`; `/web` too). A change is never applied without its
+  card being clicked while a picture is in the request
+  (`EvieTurnPlan.autoApprovesChanges`). The S5 computer-use loop is the
+  deliberate exception, under its own policy, observation fencing and
+  confirmations.
 - **Permission.** `CGPreflightScreenCaptureAccess` first; the macOS prompt
   (`CGRequestScreenCaptureAccess`) is shown once, recorded in the first-run
   guide's record, and never again — after that a card offers "Abrir Ajustes"

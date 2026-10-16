@@ -6,6 +6,13 @@ All notable changes to Evie are documented here. Dates use `YYYY-MM-DD`.
 
 ### Changed
 
+- **Security: a picture in the conversation is never sent with tools.** After
+  a look at the screen, the next questions keep the picture so the PC answers
+  fast; with folders, the web or Mail switched on they used to go to the
+  model with tools declared, where text on the screen could steer a web search
+  or a proposal. While a capture or a pasted picture is in the request, the
+  folders and the web are searched first with the question's own words and the
+  model is asked once with no tools; a change is never applied without a click.
 - **One picture per question on the PC.** A question with a capture of the
   screen and pasted pictures sent them all, and the PC's image reader, which
   runs on its CPU, paid for each (about a minute for two, while the status line
