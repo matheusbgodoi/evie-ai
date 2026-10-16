@@ -1,5 +1,17 @@
 # Work log
 
+## 2026-10-16 — Evie v2 design specification
+
+- Completed: wrote the v2 implementation specification after a read-only pass over
+  the code, the PC gateway contract, and macOS computer-use and screen-indicator
+  research. Measured on this Mac (M5, 24 GB, macOS 27.2): LensVLM-9B-OptiQ-4bit via
+  mlx-vlm 0.7.8 — 8,164 MB footprint (peak 10 GB), text 6.69 s, a 1280 px screenshot
+  description 14.11 s, tool calls emitted as malformed XML text. qwen-daily on the PC
+  (thinking off) — text 2.13 s, structured tool call 1.22 s, a 1280 px screenshot
+  57.56 s (projector runs on the PC's CPU).
+- Files/components: `docs/design/2026-10-16-evie-v2-design.md`.
+- Next action: implement slices in the order the specification gives.
+
 ## 2026-08-08 — repository attribution and terminology cleanup
 
 - Completed: removed external-tool names from tracked documentation and commit
