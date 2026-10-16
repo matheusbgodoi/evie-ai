@@ -18,6 +18,7 @@ struct PermissionGuideView: View {
           PermissionGuideRowView(
             row: row,
             showsAction: viewModel.isBundled,
+            isBusy: viewModel.busyRows.contains(row.id),
             perform: { action in
               Task { await viewModel.perform(action, onRow: row.id) }
             }
@@ -50,7 +51,8 @@ struct PermissionGuideView: View {
         """
         Cada permissão é pedida uma vez pelo macOS. Se você recusar, o botão \
         passa a abrir a página certa dos Ajustes, onde dá para mudar de ideia. \
-        Esta lista também fica em Configurações › Avançado › Permissões.
+        A chave e o cérebro também ficam em Configurações › Cérebro, e esta \
+        lista em Configurações › Avançado › Permissões.
         """
       )
       .font(.footnote)
@@ -73,6 +75,7 @@ struct PermissionGuideView: View {
 private struct PermissionGuideRowView: View {
   let row: PermissionGuideRow
   let showsAction: Bool
+  let isBusy: Bool
   let perform: (PermissionGuideRow.Action) -> Void
 
   var body: some View {
@@ -95,8 +98,12 @@ private struct PermissionGuideRowView: View {
       Text(row.statusText)
         .font(.footnote)
         .foregroundStyle(.secondary)
+      if isBusy {
+        ProgressView().controlSize(.small)
+      }
       if showsAction, let action = row.action {
         Button(action.title) { perform(action) }
+          .disabled(isBusy)
           .help(help(for: action))
       }
     }
@@ -121,6 +128,9 @@ private struct PermissionGuideRowView: View {
     switch action.kind {
     case .request: "Mostra o pedido do macOS para \(row.title.lowercased())"
     case .openSettings: "Abre Ajustes do Sistema › Privacidade e Segurança na página certa"
+    case .importPCKey: "Copia a chave do gateway que a configuração do PC guardou no Keychain"
+    case .testConnection:
+      "Pergunta ao servidor se ele responde, se aceita a chave e se o modelo está carregado"
     }
   }
 }

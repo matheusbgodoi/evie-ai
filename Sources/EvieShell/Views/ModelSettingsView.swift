@@ -203,15 +203,8 @@ struct ModelSettingsView: View {
 
       if viewModel.offersKeyImport {
         VStack(alignment: .leading, spacing: 8) {
-          // Said before the button is pressed, because the prompt that follows
-          // names a keychain item, not Evie's settings, and asking for the Mac
-          // password out of nowhere reads like something gone wrong.
-          Text(
-            "O macOS vai pedir permissão para a Evie ler a chave que a configuração do PC "
-              + "guardou neste Mac (item local-ai-3090 do Keychain), e pode pedir a senha de "
-              + "login do Mac. \"Permitir\" basta: a Evie lê uma vez e guarda a própria cópia, "
-              + "que só ela lê."
-          )
+          // Said before the button is pressed; the first-run guide says the same.
+          Text(EvieModelKeys.importPromptExplanation)
           .font(.caption)
           .foregroundStyle(.secondary)
           .fixedSize(horizontal: false, vertical: true)

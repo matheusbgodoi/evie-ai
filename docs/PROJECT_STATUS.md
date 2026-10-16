@@ -483,8 +483,8 @@ it send `context_management: []`, since 0.7.8 otherwise compacts the
 conversation itself. Still owed for S3: the in-app status line and ask card
 (UI not launched), a start with the weights not in the page cache, and the
 LensVLM tool-call eval (tools stay off). Next: S6-core is done, so S4 (screen
-perception); the first-run guide's key and brain rows (S7) can now call the S2d
-functions.
+perception). The first-run guide's key and brain rows (S7) are done
+(2026-10-16).
 
 **Evie v2, S7 (packaging, install, permissions) — partly done on `v2-packaging`,
 2026-10-16, merged into `v2` the same day.** Signing is pinned to the "Evie Dev"
@@ -492,11 +492,16 @@ certificate's SHA-1 with the designated requirement asserted; `install` opens
 `~/Applications/Evie.app`, `run` opens only that copy and `evie-runtime launch`
 hands over to it, starting no model (the loopback Gemma for the `custom`
 profile is `evie-runtime launch-custom`); the first-run permission checklist
-has its five system rows. The v2 config seeding came with S2a on `v2`. Open: the PC key and Brain rows
-(hook `TODO(S7-brain-rows)`; S2d's `EvieModelKeys` and
-`ModelReadinessProbe.connectionReport` are what they call), and the manual QA in
-`docs/MACOS_RUNTIME.md`, which needs the owner to run `Scripts/evie-app install`
-— nothing is installed in `~/Applications` on this Mac today.
+has its five system rows. The v2 config seeding came with S2a on `v2`. The
+"Chave do PC" row (attributes-only status, "Importar" from `local-ai-3090`) and
+the "Cérebro" row (Testar conexão) are in, on `v2`, 2026-10-16, so a first
+launch can import the key and test the PC without visiting Settings. The bundle
+from `Scripts/evie-app build` passes `codesign --verify --deep --strict` and
+carries the pinned designated requirement (2026-10-16). Open: the manual QA in
+`docs/MACOS_RUNTIME.md` (grants surviving two rebuilds, a first run on an empty
+support directory, each row's button, the import prompt), which needs the owner
+to run `Scripts/evie-app install` — nothing is installed in `~/Applications` on
+this Mac today, and Evie's own key item does not exist yet.
 
 Two things, in this order, and they are the two things between here and a release.
 

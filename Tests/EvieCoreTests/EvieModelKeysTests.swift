@@ -154,8 +154,9 @@ struct EvieModelKeysTests {
 
 // MARK: - Stand-ins
 
-/// A keychain in memory that counts reads and writes per item.
-private final class MemoryKeychainItems: EvieKeychainItems {
+/// A keychain in memory that counts reads and writes per item. Shared with
+/// `EviePermissionGuideBrainTests`, which drives the guide's import through it.
+final class MemoryKeychainItems: EvieKeychainItems {
   private struct State {
     var secrets: [KeychainItemName: String] = [:]
     var labels: [KeychainItemName: String] = [:]
@@ -215,7 +216,7 @@ private final class MemoryKeychainItems: EvieKeychainItems {
 }
 
 /// No tokens, and a record of which references were invalidated.
-private actor InvalidationRecorder: EvieCredentialProviding {
+actor InvalidationRecorder: EvieCredentialProviding {
   private(set) var invalidated: [CredentialReference] = []
 
   func bearerToken(for reference: CredentialReference) -> String? {

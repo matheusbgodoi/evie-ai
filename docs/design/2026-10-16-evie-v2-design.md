@@ -522,7 +522,7 @@ public struct ResolvedBrain: Sendable { public let profile: EvieModelProfile; pu
 - **Keychain.** `EvieModelKeys` (EvieCore, over an `EvieKeychainItems` protocol; `LoginKeychainItems` is the legacy login keychain) saves a pasted key or imports one: one read of `local-ai-3090` / `gateway-api-key`, on a thread of its own because it waits for the macOS prompt, then `SecItemAdd` (or `SecItemUpdate` of the secret alone) into the profile's reference, labelled "Evie — chave do modelo (<host>)", and the shared key cache is invalidated. A key is trimmed and must be one printable token of at most 4,096 characters ("Bearer …", two lines or a control character are refused, and no message repeats it). The status reads attributes only ("chave salva ✓" / "sem chave"), so it never prompts; the field is cleared before the write and never filled back. After a save the coordinator refreshes the readiness cache for that profile. The explanation of the prompt sits above the import button.
 - **`Scripts/evie-app import-pc-key`** makes the same copy from a terminal: it refuses unless `~/Applications/Evie.app` is installed, reads the source with `security find-generic-password -w` once, checks it is one line of printable characters, and pipes it twice into `security add-generic-password -U -s com.matheusbgodoi.evie.model -a pc-3090 -l … -T ~/Applications/Evie.app -w` (with `-w` last, `security` reads the password and its confirmation from stdin: verified 2026-10-16 on macOS 27.2 with a throwaway item, deleted afterwards). The key is never in an argv and never printed. `EvieAppImportKeyScriptTests` runs the script against a stand-in `security` and checks exactly that.
 - **Copy.** "· somente local" on the status line is now "· no seu PC" / "· somente neste Mac" for the brain that answered (`OverlayViewModel.answeringLocation`, set when a turn resolves and when it fails over; `/plano` too). The error card's suggestion is "O PC não respondeu. Abra Configurações › Cérebro e use Testar conexão." or the Mac's. A note search keeps "somente local": it asks no brain. The persona's "assistente pessoal local" is now "assistente pessoal". The missing-key notice says "Configurações › Cérebro" (the app's settings are "Configurações"; "Ajustes" is System Settings), and a 401 says to paste or import the key there. Diagnostics shows the profile in use and no longer names 127.0.0.1 and port 38433.
-- **Not done here:** the first-run guide's "Chave do PC" and "Cérebro" rows (S7, `TODO(S7-brain-rows)`, which now names the two EvieCore calls); the manual QA above, which needs an installed app. **[VERIFY]** whether the Evie-created item is read without a prompt after a rebuild: the bundle is self-signed with no team identifier, and the legacy keychain's partition list for such a signer is not documented; and whether the item `security` creates with `-T` is read by Evie without the "senha do Mac" prompt.
+- **Not done here:** the first-run guide's "Chave do PC" and "Cérebro" rows (S7, `TODO(S7-brain-rows)`, which now names the two EvieCore calls; done in S7, 2026-10-16); the manual QA above, which needs an installed app. **[VERIFY]** whether the Evie-created item is read without a prompt after a rebuild: the bundle is self-signed with no team identifier, and the legacy keychain's partition list for such a signer is not documented; and whether the item `security` creates with `-T` is read by Evie without the "senha do Mac" prompt.
 
 ---
 
@@ -1063,6 +1063,30 @@ it and opens Evie with `EVIE_MODEL_PROFILE=custom`, refusing first when
 `config.json` has no `custom` profile at the served endpoint. Tests:
 `EvieRuntimeLaunchTests`, which run the script against a stand-in for
 `evie-app`.
+
+**The PC key and Brain rows, implemented 2026-10-16** (the `TODO(S7-brain-rows)`
+hook is gone; details in `docs/MACOS_RUNTIME.md` § "First-run guide"):
+- Titles "Chave do PC" and "Cérebro", after the five permission rows. The rules
+  are in EvieCore (`EviePermissionGuide+Brain.swift`: the two row factories,
+  `EvieGuidePCKeyStep`, `EvieGuideBrainStep`, `EvieLoadedConfiguration.pcKeyProfile`),
+  so they are tested without the shell; `Action.Kind` gained `.importPCKey` and
+  `.testConnection`.
+- The key's status is an attributes-only query, never the secret. Verified
+  2026-10-16 on this Mac (M5 24 GB, macOS 27.2): that query from a program in
+  neither item's access list answered in 4 ms with no prompt, both for the
+  absent Evie item and for the existing `local-ai-3090` one.
+- **Deviations.** The key row imports into the PC profile's item even when the
+  Mac is the brain in use, because a missing key is what puts the Mac there.
+  The Brain row tests the profile in use (`activeProfile`), not a draft. An
+  unloaded model counts as set up, because the PC loads it on the first
+  question and the Mac brain is off until a turn wakes it. A failed import keeps
+  its button: the keychain prompt is not one of the once-only privacy prompts.
+  Pasting a key stays in Configurações › Cérebro; the row points there.
+- The bundle built by `Scripts/evie-app build` passes `codesign --verify --deep
+  --strict`, and its designated requirement is `identifier
+  "com.matheusbgodoi.evie" and certificate leaf =
+  H"e1cdaab36b6d3b8b6feb3e7d46ba020120524c9e"` (2026-10-16). Still open: the
+  manual QA above, which needs `install` and the app launched.
 
 ---
 

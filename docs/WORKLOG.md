@@ -1,5 +1,57 @@
 # Work log
 
+## 2026-10-16 — v2 S7: the first-run guide's "Chave do PC" and "Cérebro" rows
+
+- Completed: the two rows deferred at `TODO(S7-brain-rows)` (the hook is gone),
+  so the first-run guide imports the PC key and tests the brain without a visit
+  to Configurações › Cérebro.
+  - New `Sources/EvieCore/EviePermissionGuide+Brain.swift`:
+    `PermissionGuideRow.pcKey(status:importFailure:)` and
+    `.brain(profile:report:)`, `ModelConnectionReport.stepsLine(for:)`,
+    `EvieLoadedConfiguration.pcKeyProfile` (the PC profile with a key, even
+    while the Mac is in use), and the two main-actor steps behind the buttons,
+    `EvieGuidePCKeyStep` (attributes-only status, `importPCConfigurationKey`,
+    the failure kept for the row) and `EvieGuideBrainStep` (Testar conexão on
+    the profile in use, the result kept for that exact profile).
+  - `PermissionGuideRow.Action.Kind` gained `.importPCKey` and
+    `.testConnection`. `EvieModelKeys.importPromptExplanation` is the sentence
+    shown before the import, now shared by Settings and the guide.
+  - Shell: `PCKeyItem` and `BrainConnectionItem` (in `PermissionGuideItem.swift`),
+    appended by `standardItems`; `PermissionGuideViewModel.busyRows` disables a
+    running button with a spinner; the window is 680 pt tall;
+    `AppCoordinator.modelKeySaved(for:)` — called by a save from Settings or the
+    guide — refreshes the readiness cache, drops the Cérebro result and re-reads
+    the guide and the Cérebro tab's key status.
+  - Docs: design doc S7 note (and S2d's "Not done here" marked done),
+    `docs/MACOS_RUNTIME.md` § "First-run guide", `docs/SECURITY.md`, CHANGELOG,
+    PROJECT_STATUS.
+- Verified (M5 24 GB, macOS 27.2, 2026-10-16): an attributes-only
+  `SecItemCopyMatching` (the query `LoginKeychainItems.contains` makes) from a
+  freshly compiled program in neither item's access list answered in 4 ms with
+  no prompt: `errSecSuccess` for `local-ai-3090` / `gateway-api-key` and
+  `errSecItemNotFound` (-25300) for `com.matheusbgodoi.evie.model` / `pc-3090`,
+  which does not exist yet on this Mac. `Scripts/evie-app build`: signed with
+  Evie Dev (E1CDAAB3…4C9E); `codesign --verify --deep --strict` valid and
+  satisfies its designated requirement, `identifier "com.matheusbgodoi.evie"
+  and certificate leaf = H"e1cdaab36b6d3b8b6feb3e7d46ba020120524c9e"`
+  (also checked with `codesign --verify -R=`); `LSMinimumSystemVersion` 26.0.
+  Not installed, not opened.
+- Tests: new suite "Evie permission guide brain rows" (17 with arguments). The
+  in-memory keychain and invalidation recorder in `EvieModelKeysTests.swift`
+  are now internal so this suite shares them; no assertion changed.
+  `swift build` with no warnings; `Scripts/test --filter
+  "EviePermissionGuide|EvieModelKeys|ModelReadiness"` 78 passed; full
+  `Scripts/test` 996 tests in 95 suites passed with 1 known issue. A first full
+  run had one failure, "cancelling the consumer ends the turn without waiting
+  for the server" (`clock.now - started < .seconds(1)` saw 1.37 s under
+  full-suite load); it passed 3 of 3 runs alone and in the second full run.
+  Recorded as a timing-sensitive test, not changed.
+- Open: the manual QA (fresh install shows "Sem chave", "Importar" shows the
+  `local-ai-3090` prompt and turns the row "Salva", "Testar conexão" turns three
+  steps green; grants survive two rebuilds), which needs `Scripts/evie-app
+  install` and the app launched; the two keychain [VERIFY]s from S2d.
+- Next: S4 (screen perception).
+
 ## 2026-10-16 — v2 S3: the Mac brain wakes on demand (LensVLM under mlx_vlm.server)
 
 - Completed: slice S3, ADR 0015 (supersedes ADR 0014's "Waking goes through a

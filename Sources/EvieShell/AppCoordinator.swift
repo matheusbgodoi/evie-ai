@@ -64,11 +64,25 @@ final class AppCoordinator: NSObject {
   /// coordinator does not. Every use is inside an availability check.
   private var transcription: AnyObject?
   private var historyWindowController: ConversationHistoryWindowController?
+  /// The guide's "Cérebro" row. Held here, not only by the guide, so a key
+  /// saved in Settings can drop a test result the new key makes stale.
+  private lazy var guideBrainStep = EvieGuideBrainStep(
+    configuration: { [brainResolver] in brainResolver.configuration },
+    probe: ModelClientFactory.live.makeReadinessProbe()
+  )
   /// One checklist shared by the first-run window and the Settings pane, so a
   /// permission granted in one shows as granted in the other. Lazy because it
   /// asks the coordinator's own `audioCapture` for the microphone.
   private lazy var permissionGuide = PermissionGuideViewModel(
-    items: PermissionGuideViewModel.standardItems(audioCapture: audioCapture),
+    items: PermissionGuideViewModel.standardItems(
+      audioCapture: audioCapture,
+      pcKey: EvieGuidePCKeyStep(
+        keys: .live,
+        configuration: { [brainResolver] in brainResolver.configuration },
+        onKeySaved: { [weak self] profile in self?.modelKeySaved(for: profile) }
+      ),
+      brain: guideBrainStep
+    ),
     store: PermissionGuideStore(
       fileURL: preferencesStore.fileURL
         .deletingLastPathComponent()
@@ -77,6 +91,9 @@ final class AppCoordinator: NSObject {
     isBundled: EvieAudioCapture.isBundled
   )
   private var permissionGuideWindowController: PermissionGuideWindowController?
+  /// The Cérebro tab's model while the settings window exists, so a key
+  /// imported from the guide shows as saved there too.
+  private weak var modelSettings: ModelSettingsViewModel?
   private weak var visibilityMenuItem: NSMenuItem?
 
   override init() {
@@ -728,6 +745,17 @@ extension AppCoordinator {
     permissionGuideWindowController?.present()
   }
 
+  /// A key was saved, from Settings or from the guide. Everything that showed
+  /// the old state reads it again: the readiness cache, so the next turn does
+  /// not wait 30 s to learn the PC now accepts it; the guide's rows; the
+  /// Cérebro tab's key status.
+  private func modelKeySaved(for profile: EvieModelProfile) {
+    Task { [modelReadiness] in await modelReadiness.refresh(profile) }
+    guideBrainStep.forgetResult()
+    permissionGuide.refresh()
+    modelSettings?.refreshKeyStatus()
+  }
+
   @objc fileprivate func openSettings() {
     if settingsWindowController == nil {
       let modelViewModel = ModelSettingsViewModel(
@@ -740,10 +768,11 @@ extension AppCoordinator {
           guard let self else { return }
           viewModel.applyConfiguration(loaded, environment: configurationEnvironment)
         },
-        onKeySaved: { [modelReadiness] profile in
-          Task { await modelReadiness.refresh(profile) }
+        onKeySaved: { [weak self] profile in
+          self?.modelKeySaved(for: profile)
         }
       )
+      modelSettings = modelViewModel
       let preferencesViewModel = EviePreferencesViewModel(
         preferences: preferences,
         store: preferencesStore,

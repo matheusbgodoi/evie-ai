@@ -350,9 +350,11 @@ resets everything, including the microphone and folders.
 
 `Sources/EvieShell/Onboarding/`. A checklist window, "Primeiros passos com a
 Evie", opens at launch until it has been closed once; afterwards the same list is
-Settings › Avançado › Permissões. Rows today: Microfone, Reconhecimento de fala,
+Settings › Avançado › Permissões. Rows: Microfone, Reconhecimento de fala,
 Gravação de tela (with "reabra a Evie" — a running process keeps the answer it
-got at launch), Acessibilidade, and Controlar o teclado e o mouse (Post Events).
+got at launch), Acessibilidade, Controlar o teclado e o mouse (Post Events),
+then Chave do PC and Cérebro, so a first launch sets Evie up without visiting
+Configurações › Cérebro.
 
 - Each row shows its live state with a distinct symbol per state, and one
   button. "Pedir" shows the system prompt; "Abrir Ajustes" opens the right
@@ -374,19 +376,34 @@ got at launch), Acessibilidade, and Controlar o teclado e o mouse (Post Events).
   `EviePermissionGuideTests`. The probes and the window are in the shell and have
   no automated test; see the manual QA below.
 
-**Hook for the two rows that wait on model profiles.** The "Chave do PC" row
-(Importar da configuração do PC: one read of `local-ai-3090` /
-`gateway-api-key`, copied into Evie's own Keychain item, with the explanation of
-the macOS prompt shown before the button) and the "Cérebro" row (Testar conexão:
-PC reachable → key valid → model loaded) depend on model profiles and the
-readiness probe (v2 S2a–S2d). Since S2d both exist in EvieCore —
-`EvieModelKeys.importPCConfigurationKey(into:)` and
-`ModelReadinessProbe.connectionReport(for:)`, used by Configurações › Cérebro —
-so the rows only have to call them. They go in
-`PermissionGuideViewModel.standardItems`, marked `TODO(S7-brain-rows)`, as two
-more `PermissionGuideItem` conformances; the view and the view model need no
-other change. A row whose button is neither a system prompt nor a Settings pane
-adds its own case to `PermissionGuideRow.Action.Kind`.
+**The two brain rows (S7, 2026-10-16).** Their rules and buttons are EvieCore's
+(`Sources/EvieCore/EviePermissionGuide+Brain.swift`, tested in
+`EviePermissionGuideBrainTests`); the shell's `PCKeyItem` and
+`BrainConnectionItem` only put them in the list, and
+`PermissionGuideRow.Action.Kind` gained `.importPCKey` and `.testConnection`.
+
+- **Chave do PC** shows "Salva" / "Sem chave" from an attributes-only query of
+  the PC profile's item (`EvieModelKeys.status(of:)`, never the secret, so it
+  never prompts and runs on every refresh). Its key is the PC profile's even
+  while the Mac brain is in use (`EvieLoadedConfiguration.pcKeyProfile`), since
+  a missing key is the usual reason for that. "Importar" is
+  `EvieModelKeys.importPCConfigurationKey(into:)`, with
+  `EvieModelKeys.importPromptExplanation` — the sentence Settings shows — as
+  the row's hint before it is pressed. A failure (no `local-ai-3090` item, a
+  refused prompt) is shown in the row and the button stays, since a keychain
+  prompt, unlike a privacy one, can be shown again. To paste a key by hand, the
+  row points at Configurações › Cérebro.
+- **Cérebro** runs `ModelReadinessProbe.connectionReport(for:)` on the profile
+  in use and shows the three steps on one line with their times, then the
+  report's summary. An unloaded model counts as set up ("Descarregado" on the
+  PC, "Acorda ao perguntar" on the Mac); no key, a refused key, an unknown model
+  or no answer are marked refused. The result is kept for the exact profile it
+  measured, so a settings save that changes the brain shows "Não testado"
+  again, and the test stays on offer.
+- A key saved from either place (`AppCoordinator.modelKeySaved`) refreshes the
+  readiness cache, drops the Cérebro result, re-reads the guide and the
+  Cérebro tab's key status. While a row's button runs, it is disabled with a
+  spinner (`PermissionGuideViewModel.busyRows`).
 
 **Config seeding (done with S2a, on `v2`):** `Scripts/evie-runtime configure`
 writes schema v2 when the file is missing — the two built-ins, then the Gemma it
@@ -397,7 +414,9 @@ checks the file against `EvieModelProfileSet.builtIn`.
 on the owner's Mac): install, then rebuild and install twice and confirm the
 grants survive; a first run against an empty `~/Library/Application Support/Evie`;
 each row's "Pedir" and "Abrir Ajustes", including that each deep link lands on
-its pane on macOS 27.
+its pane on macOS 27; "Importar" on a fresh install (the prompt names
+`local-ai-3090`, "Permitir" is enough, the row turns "Salva") and then "Testar
+conexão" with three green steps.
 
 ## Phase 2 spikes
 

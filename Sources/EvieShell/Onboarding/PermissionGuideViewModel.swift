@@ -6,6 +6,10 @@ import EvieCore
 @MainActor
 final class PermissionGuideViewModel: ObservableObject {
   @Published private(set) var rows: [PermissionGuideRow] = []
+  /// Rows whose button is still running: a system prompt waiting for an answer,
+  /// the key import waiting on the keychain's, a connection test on the
+  /// network. Their button is disabled until it returns.
+  @Published private(set) var busyRows: Set<PermissionGuideRow.ID> = []
   /// False for a bare `swift build` binary. TCC would attribute every request
   /// to the terminal that launched it, so the guide shows the state but offers
   /// no buttons.
@@ -42,17 +46,17 @@ final class PermissionGuideViewModel: ObservableObject {
   /// The rows the guide shows, in the order it shows them.
   ///
   /// The one place a row is added.
-  static func standardItems(audioCapture: EvieAudioCapture) -> [any PermissionGuideItem] {
-    // TODO(S7-brain-rows): append the "Chave do PC" row and the "Cérebro" row
-    // here. Both exist as EvieCore calls since v2 S2d: the import is
-    // `EvieModelKeys.live.importPCConfigurationKey(into:)` (with the
-    // explanation of the macOS prompt shown before the button, as in
-    // Configurações › Cérebro), and Testar conexão is
-    // `ModelReadinessProbe.connectionReport(for:)`. See docs/MACOS_RUNTIME.md,
-    // "First-run guide".
-    EviePermission.allCases.map { permission in
+  static func standardItems(
+    audioCapture: EvieAudioCapture,
+    pcKey: EvieGuidePCKeyStep,
+    brain: EvieGuideBrainStep
+  ) -> [any PermissionGuideItem] {
+    // The key before the brain: the connection test is only worth running once
+    // there is a key for it to send.
+    let permissions: [any PermissionGuideItem] = EviePermission.allCases.map { permission in
       SystemPermissionItem(permission: permission, audioCapture: audioCapture)
     }
+    return permissions + [PCKeyItem(step: pcKey), BrainConnectionItem(step: brain)]
   }
 
   /// Opens by itself until it has been closed once, and never for a copy that
@@ -71,9 +75,15 @@ final class PermissionGuideViewModel: ObservableObject {
 
   func perform(_ action: PermissionGuideRow.Action, onRow rowID: PermissionGuideRow.ID) async {
     // `rows` is built from `items` in order, so a row's position is its item's.
-    guard isBundled, let index = rows.firstIndex(where: { $0.id == rowID }) else {
+    guard
+      isBundled,
+      !busyRows.contains(rowID),
+      let index = rows.firstIndex(where: { $0.id == rowID })
+    else {
       return
     }
+    busyRows.insert(rowID)
+    defer { busyRows.remove(rowID) }
     if let spent = await items[index].perform(action) {
       record.requested.insert(spent)
       persist()

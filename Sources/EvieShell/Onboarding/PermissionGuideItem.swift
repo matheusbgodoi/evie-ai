@@ -8,9 +8,9 @@ import Speech
 /// One line of the first-run guide: how to read its state, and what its button
 /// does.
 ///
-/// Every row — a system permission today, the gateway key and the brain's
-/// connection test once model profiles exist — conforms to this, so the view
-/// and its model never learn what kind of row they are drawing.
+/// Every row — a system permission, the gateway key, the brain's connection
+/// test — conforms to this, so the view and its model never learn what kind of
+/// row they are drawing.
 @MainActor
 protocol PermissionGuideItem {
   /// The row as it stands now. Called on every refresh, so it must not block
@@ -49,6 +49,9 @@ struct SystemPermissionItem: PermissionGuideItem {
     case .request:
       await request()
       return permission
+    case .importPCKey, .testConnection:
+      // Not a permission row's button.
+      return nil
     }
   }
 
@@ -109,5 +112,43 @@ struct SystemPermissionItem: PermissionGuideItem {
         continuation.resume(returning: status)
       }
     }
+  }
+}
+
+/// The "Chave do PC" row. The rules and the import are EvieCore's
+/// (`EvieGuidePCKeyStep`); this only puts them in the list.
+@MainActor
+struct PCKeyItem: PermissionGuideItem {
+  let step: EvieGuidePCKeyStep
+
+  func row(given record: PermissionGuideRecord) -> PermissionGuideRow {
+    step.row
+  }
+
+  /// The macOS prompt this waits on is the keychain's, not a privacy
+  /// permission's, so nothing is recorded as spent: the import can be tried
+  /// again after a refusal.
+  func perform(_ action: PermissionGuideRow.Action) async -> EviePermission? {
+    if action.kind == .importPCKey {
+      await step.importKey()
+    }
+    return nil
+  }
+}
+
+/// The "Cérebro" row, which runs Testar conexão (`EvieGuideBrainStep`).
+@MainActor
+struct BrainConnectionItem: PermissionGuideItem {
+  let step: EvieGuideBrainStep
+
+  func row(given record: PermissionGuideRecord) -> PermissionGuideRow {
+    step.row
+  }
+
+  func perform(_ action: PermissionGuideRow.Action) async -> EviePermission? {
+    if action.kind == .testConnection {
+      await step.testConnection()
+    }
+    return nil
   }
 }

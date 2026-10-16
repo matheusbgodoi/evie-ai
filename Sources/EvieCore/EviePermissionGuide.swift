@@ -91,7 +91,7 @@ public enum EviePermissionStatus: Sendable, Equatable {
 /// Plain data so the shell can draw every row the same way and the decisions
 /// about what each row offers can be tested here. A row that is not a system
 /// permission — the gateway key, the brain's connection test — is built by its
-/// own factory and drawn by the same view.
+/// own factory (`EviePermissionGuide+Brain.swift`) and drawn by the same view.
 public struct PermissionGuideRow: Identifiable, Sendable, Equatable {
   /// What the row's symbol says. Three distinct shapes, so colour is never the
   /// only signal.
@@ -108,6 +108,11 @@ public struct PermissionGuideRow: Identifiable, Sendable, Equatable {
       /// macOS will not prompt again; only the switch in System Settings can
       /// change the answer.
       case openSettings(URL)
+      /// Copy the PC configuration's key into Evie's own Keychain item. Shows
+      /// the macOS prompt for that item, not a privacy prompt.
+      case importPCKey
+      /// Run Testar conexão on the brain in use. Asks the network, not macOS.
+      case testConnection
     }
 
     public let title: String

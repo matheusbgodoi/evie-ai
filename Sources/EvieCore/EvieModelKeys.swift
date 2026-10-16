@@ -182,6 +182,16 @@ public struct EvieModelKeys: Sendable {
     account: "gateway-api-key"
   )
 
+  /// Said before the import button is pressed, in Configurações › Cérebro and
+  /// in the first-run guide, because the prompt that follows names a keychain
+  /// item, not Evie, and asking for the Mac password out of nowhere reads like
+  /// something gone wrong.
+  public static let importPromptExplanation =
+    "O macOS vai pedir permissão para a Evie ler a chave que a configuração do PC "
+    + "guardou neste Mac (item local-ai-3090 do Keychain), e pode pedir a senha de "
+    + "login do Mac. \"Permitir\" basta: a Evie lê uma vez e guarda a própria cópia, "
+    + "que só ela lê."
+
   /// The login keychain and the process's shared key cache, so a key saved here
   /// replaces the one every client has cached.
   public static let live = EvieModelKeys(

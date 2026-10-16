@@ -6,6 +6,16 @@ All notable changes to Evie are documented here. Dates use `YYYY-MM-DD`.
 
 ### Changed
 
+- **The first-run guide sets up the brain too.** After the five permissions it
+  has "Chave do PC" — "Salva" or "Sem chave", read from the item's attributes
+  so it never prompts, and "Importar", which copies the PC configuration's key
+  (`local-ai-3090`) into Evie's own Keychain item after the same explanation of
+  the macOS prompt that Configurações › Cérebro shows — and "Cérebro", whose
+  "Testar conexão" shows PC alcançável → Chave aceita → Modelo carregado with
+  times. A first launch can end set up without opening Settings. A failed
+  import says why and can be tried again; a key saved here or in Settings
+  refreshes both and the readiness cache.
+
 - **The Mac brain now wakes by itself.** When a turn moves to the Mac (after
   "Acordar o cérebro do Mac?" when the fallback is "Perguntar"), Evie starts
   LensVLM under `mlx_vlm.server` on 127.0.0.1:38480, shows "Acordando o cérebro

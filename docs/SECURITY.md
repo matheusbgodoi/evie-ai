@@ -165,8 +165,9 @@ body and decides where a conversation may go before it sends anything:
 - **Evie keeps her own copy of the PC key (v2 S2d).** The item is
   `com.matheusbgodoi.evie.model` / `pc-3090` in the legacy login keychain,
   labelled "Evie — chave do modelo (ai-node-3090.tail6146ef.ts.net)". It is
-  written from Configurações › Cérebro in one of two ways, and from nowhere
-  else:
+  written from Configurações › Cérebro in one of two ways, or by the same
+  import from the first-run guide's "Chave do PC" row (S7, 2026-10-16), and
+  from nowhere else:
   - **Colar chave.** A `SecureField` that is never filled from the keychain; the
     pane shows only "chave salva ✓" or "sem chave", read from the item's
     attributes, which never prompts. The field is cleared before the write, and
@@ -645,7 +646,16 @@ runs there. Recovery for a grant given to the wrong place:
 
 The first-run guide never prompts by itself. Every system prompt follows a press
 of its row's "Pedir"; a refused permission is only ever offered as a link to its
-pane in System Settings.
+pane in System Settings. The "Chave do PC" row reads only the attributes of
+Evie's item to show "Salva" / "Sem chave" (measured 2026-10-16 on this Mac, M5
+24 GB, macOS 27.2: the same attributes-only query from an unlisted program
+answered in 4 ms with no prompt, for the PC configuration's item too); the
+keychain prompt for `local-ai-3090` follows only a press of "Importar", with the
+same explanation shown before it as in Settings, and a refused prompt saves
+nothing and can be tried again. "Cérebro" runs the read-only readiness probe
+(`GET /health`, `/v1/models`, maybe `/running`), never a POST. A copy that is
+not bundled shows both rows without buttons, so no keychain item is ever created
+for the bare binary.
 
 ## Update and dependency policy
 

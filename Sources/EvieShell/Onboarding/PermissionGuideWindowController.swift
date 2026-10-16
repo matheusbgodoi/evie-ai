@@ -12,7 +12,7 @@ final class PermissionGuideWindowController: NSWindowController, NSWindowDelegat
   init(viewModel: PermissionGuideViewModel) {
     self.viewModel = viewModel
     let window = NSWindow(
-      contentRect: NSRect(x: 0, y: 0, width: 560, height: 560),
+      contentRect: NSRect(x: 0, y: 0, width: 560, height: 680),
       styleMask: [.titled, .closable, .resizable],
       backing: .buffered,
       defer: false
