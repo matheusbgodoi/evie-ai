@@ -1,5 +1,24 @@
 # Work log
 
+## 2026-10-16 — v2 fix: the stream cancellation test asserts what happened, not how fast
+
+- Completed: second v2 review, finding #5. "cancelling the consumer ends the
+  turn without waiting for the server" asserted `clock.now - started < 1 s`
+  against a stub that answered after 1.5 s, and failed about one full-suite
+  run in seven (0.876 s and 1.37 s were seen) with the client behaving
+  correctly. It now uses a new stub scenario, `held-headers`, that answers only
+  after 30 s and logs, per request, whether it answered and whether the client
+  stopped it (checked and logged under one lock). The test cancels once the
+  request is at the stub, then requires that the consumer ended with no
+  completed message, that the stub had not answered, and that the request was
+  stopped on the stub's side. A 1-minute time limit replaces the wall-clock
+  bound as the guard against a hang.
+- Files: `Tests/EvieCoreTests/ModelStreamDecodingTests.swift` only.
+- Checks: `swift build` with no warnings; `Scripts/test --filter
+  ModelStreamDecodingTests` three times: 30 tests passed each time (the
+  cancellation test in 0.029 s).
+- Next: the other second-review fixes in this lane.
+
 ## 2026-10-16 — v2 fix: a per-launch key for the Mac brain (ADR 0017)
 
 - Completed: the queued security finding on `LocalBrainPolicy` (pending #4):

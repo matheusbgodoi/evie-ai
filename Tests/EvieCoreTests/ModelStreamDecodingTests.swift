@@ -162,23 +162,38 @@ struct ModelStreamDecodingTests {
     #expect(error == .firstTokenTimedOut)
   }
 
-  @Test("cancelling the consumer ends the turn without waiting for the server")
+  /// The causal facts, not a wall-clock bound: the consumer's end comes before
+  /// the server has answered at all, and the request reaches the server's
+  /// side as a cancellation. Timing it against the stub's pause failed about
+  /// one run in seven under the parallel full suite (0.876 s and 1.37 s were
+  /// seen against a 1 s bound), with the client behaving correctly.
+  @Test(
+    "cancelling the consumer ends the turn without waiting for the server",
+    .timeLimit(.minutes(1))
+  )
   func cancellation() async throws {
-    let client = makeClient(.slowHeaders)
-    let clock = ContinuousClock()
-    let started = clock.now
+    let client = makeClient(.heldHeaders)
     let task = Task {
       try await collect(client, readiness: .modelCold)
     }
-    try await Task.sleep(for: .milliseconds(100))
+    // Cancelled once the request is at the server, so what is tested is a
+    // request in flight rather than one that was never sent.
+    while ModelStreamStubURLProtocol.requests(containing: client.run).isEmpty {
+      try await Task.sleep(for: .milliseconds(10))
+    }
     task.cancel()
 
     // A cancelled consumer either sees the stream end or a CancellationError;
-    // what it must not do is sit out the 1.5 s the stub takes to answer, or
-    // receive that answer.
+    // what it must not do is wait for the answer the stub holds back, or
+    // receive it.
     let events = (try? await task.value) ?? []
-    #expect(clock.now - started < .seconds(1))
+    #expect(!ModelStreamStubURLProtocol.hasAnswered(containing: client.run))
     #expect(completed(in: events) == nil)
+    // The request itself was cancelled, not left running behind the consumer.
+    while !ModelStreamStubURLProtocol.wasStopped(containing: client.run) {
+      try await Task.sleep(for: .milliseconds(10))
+    }
+    #expect(!ModelStreamStubURLProtocol.hasAnswered(containing: client.run))
   }
 }
 
@@ -465,6 +480,8 @@ private enum ModelStreamStub {
     case serviceUnavailable = "service-unavailable"
     case slowHeaders = "slow-headers"
     case slowFirstToken = "slow-first-token"
+    /// Says nothing until the client stops listening, or for 30 s.
+    case heldHeaders = "held-headers"
     case quotedThinkTag = "quoted-think-tag"
     case reasoningThenTagAnswer = "reasoning-then-tag-answer"
   }
@@ -490,13 +507,26 @@ private enum ModelStreamStub {
 
 /// Answers by the scenario named in the path and keeps a log of what it was
 /// sent. The slow scenarios answer from a background queue after a pause, and
-/// say nothing at all once the client has stopped listening.
+/// say nothing at all once the client has stopped listening. Which requests a
+/// slow scenario answered, and which the client stopped, are logged too.
 private final class ModelStreamStubURLProtocol: URLProtocol, @unchecked Sendable {
   private static let log = Mutex<[String]>([])
+  private static let answeredLog = Mutex<[String]>([])
+  private static let stoppedLog = Mutex<[String]>([])
   private let stopped = Mutex(false)
 
   static func requests(containing marker: String) -> [String] {
     log.withLock { $0.filter { $0.contains(marker) } }
+  }
+
+  /// Whether a slow scenario sent anything for a request under `marker`.
+  static func hasAnswered(containing marker: String) -> Bool {
+    answeredLog.withLock { $0.contains { $0.contains(marker) } }
+  }
+
+  /// Whether the client stopped a request under `marker`.
+  static func wasStopped(containing marker: String) -> Bool {
+    stoppedLog.withLock { $0.contains { $0.contains(marker) } }
   }
 
   override class func canInit(with request: URLRequest) -> Bool {
@@ -626,16 +656,30 @@ private final class ModelStreamStubURLProtocol: URLProtocol, @unchecked Sendable
         $0.client?.urlProtocol($0, didLoad: Data(Stub.shortAnswer.utf8))
         $0.client?.urlProtocolDidFinishLoading($0)
       }
+    case .heldHeaders:
+      later(seconds: 30) { $0.respond(200, Stub.shortAnswer) }
     }
   }
 
   override func stopLoading() {
     stopped.withLock { $0 = true }
+    if let path = request.url?.path {
+      Self.stoppedLog.withLock { $0.append(path) }
+    }
   }
 
   private func later(seconds: Double, _ work: @escaping @Sendable (ModelStreamStubURLProtocol) -> Void) {
     DispatchQueue.global().asyncAfter(deadline: .now() + seconds) { [self] in
-      guard !stopped.withLock({ $0 }) else { return }
+      // Checked and logged under one lock, so an answer is either logged
+      // before a stop is seen or never sent.
+      let answering = stopped.withLock { stopped in
+        guard !stopped else { return false }
+        if let path = request.url?.path {
+          Self.answeredLog.withLock { $0.append(path) }
+        }
+        return true
+      }
+      guard answering else { return }
       work(self)
     }
   }
