@@ -1,5 +1,29 @@
 # Work log
 
+## 2026-10-16 — v2: merge of `v2-packaging` (S7, partial)
+
+- Completed: `git merge --no-ff v2-packaging` into `v2`. `Scripts/evie-app`,
+  `Scripts/evie-runtime`, `AppCoordinator.swift`, the settings views, README,
+  `docs/SECURITY.md`, `docs/MACOS_RUNTIME.md` and the design doc merged by
+  themselves; the merged `configure` is S2a's v2 seeding and `launch` is the
+  branch's hand-over to `evie-app run`.
+  - `CHANGELOG.md` conflicted: the branch's Added, Changed and Fixed items now
+    sit in the matching sections of Unreleased. Its "`LSMinimumSystemVersion` is
+    26.0" item and S8a's identical fix are one entry that says both branches
+    made it.
+  - `docs/PROJECT_STATUS.md` conflicted twice: the "Evie v2 (in progress)"
+    section stays; under "Next recommended action" both v2 notes stay, and the
+    S7 note now says it is merged and that the config seeding came with S2a.
+  - `docs/WORKLOG.md` merged by itself with the S7 entry at the end; it now sits
+    among the v2 entries by commit time.
+- Commands: `swift build` (whole package) succeeded with no warnings; `zsh -n`
+  on both scripts; full `Scripts/test` 844 tests in 84 suites passed, 0
+  failures, 1 skipped (the gated Calendar test). 832 before plus the branch's
+  12.
+- Open, fixed in the next commit: with the PC profile now the default,
+  `evie-runtime launch` still starts the loopback Gemma first, which the
+  default profile never uses.
+
 ## 2026-10-16 — v2: merge of `v2-presence` (S6-core, S6-shell)
 
 - Completed: `git merge --no-ff v2-presence` into `v2`. Code merged without
@@ -299,6 +323,60 @@
   path is exercised only by the stub tests; the Keychain access prompt for
   another program's item is expected, not observed.
 - Next action: S1b (request and stream features).
+
+## 2026-10-16 — v2 S7: a pinned signature, one installed copy, and a permission checklist
+
+- **Signing.** `Scripts/evie-app build` resolves "Evie Dev" in
+  `security find-identity -v -p codesigning`, signs with the pinned SHA-1
+  `E1CDAAB36B6D3B8B6FEB3E7D46BA020120524C9E`, and fails before compiling when that
+  certificate is missing or another one has the name — no ad-hoc fallback.
+  codesign's stderr is no longer discarded. After signing, and again after
+  installing, it asserts `codesign --verify --deep --strict` and that
+  `codesign -d -r-` names `identifier "com.matheusbgodoi.evie"` and
+  `certificate leaf = H"e1cdaab3…"`; `plutil -lint` checks the Info.plist. The
+  first attempt matched `H"…"` against a lower-cased line and failed on a good
+  bundle; it now matches codesign's own lower-case hex.
+- **Info.plist:** `NSScreenCaptureUsageDescription`, and `LSMinimumSystemVersion`
+  26.0 (the same one-line change S8a makes on `v2`).
+- **Install.** `install` verifies, stops a running copy and waits for it, copies
+  with `ditto` to `~/Applications/Evie.app`, verifies again and opens it with
+  Launch Services. `run` opens only the installed copy. `evie-runtime launch`
+  starts the runtime and execs `evie-app run` instead of the bare binary.
+  `install` and `run` were implemented but **not run**, because launching the app
+  raises permission prompts on the owner's Mac.
+- **Why `identity` never worked.** `git log -S-legacy` → `e2cebec`: LibreSSL has
+  no `-legacy`, and both `openssl` calls went to `/dev/null`. Still needed (a new
+  Mac or a lost certificate), and still had a latent fault: it ran the first
+  `openssl` on `PATH`. Measured against throwaway keychains: a Homebrew OpenSSL
+  3.6.4 p12 fails `security import` with "MAC verification failed during PKCS12
+  import"; `/usr/bin/openssl` (LibreSSL 3.3.6) imports. It now uses the absolute
+  path, and prints the new hash with the instruction to change the pin.
+- **First-run guide.** `EvieCore/EviePermissionGuide.swift` (the five
+  permissions, deep links, which button each state offers, the
+  `permission-guide.json` record) and `EvieShell/Onboarding/` (probes, view model,
+  view, window). Opens at launch until closed once; also Settings › Avançado ›
+  Permissões. "Pedir" for a yes-or-no permission is offered once, then "Abrir
+  Ajustes", because macOS shows each prompt once. Rows refresh on app activation.
+  The PC key and Brain rows wait on model profiles: hook `TODO(S7-brain-rows)` in
+  `PermissionGuideViewModel.standardItems`, documented in `docs/MACOS_RUNTIME.md`.
+  The v2 config seeding in `evie-runtime configure` also waits on S2a.
+- Docs: `docs/MACOS_RUNTIME.md` (new "Signing, install and recovery"),
+  `docs/SECURITY.md`, `README.md`, the S7 status note in the v2 design, CHANGELOG,
+  PROJECT_STATUS.
+- Checks (Apple M5, 24 GB, macOS 27.2, Xcode 27.1, Swift 6.4): `swift build` and
+  `swift build -Xswiftc -warnings-as-errors` pass; `Scripts/evie-app build`
+  signs `.build/release/Evie.app`; `codesign --verify --deep --strict` passes and
+  `codesign -d -r-` gives `designated => identifier "com.matheusbgodoi.evie" and
+  certificate leaf = H"e1cdaab36b6d3b8b6feb3e7d46ba020120524c9e"`; a copy of the
+  script with a wrong pin refuses to build. `Scripts/test --filter
+  EviePermissionGuide`: 12 tests, 2 suites, pass (written first, failed to
+  compile before the implementation). Full `Scripts/test`: **640 tests in 67
+  suites, all pass in 1.3 s** — including "Evie mail and calendar scripts", which
+  failed 4 tests in earlier runs; in this environment it passed, so those
+  failures are environment-dependent as the v2 design says, not fixed here.
+- Next: on the owner's Mac, `Scripts/evie-app install`, then the manual QA in
+  `docs/MACOS_RUNTIME.md` § "First-run guide"; after S2a–S2d, add the two rows at
+  the hook and the v2 config seeding.
 
 ## 2026-10-16 — v2 S8b item 1: the osascript tests are opt-in integration tests
 

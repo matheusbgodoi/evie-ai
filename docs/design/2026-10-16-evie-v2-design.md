@@ -992,6 +992,15 @@ Each row shows live status and a "Pedir"/"Abrir Ajustes" button. The guide runs 
 
 **Risk:** recreating the certificate invalidates every grant. Document this.
 
+**Implementation status (2026-10-16, branch `v2-packaging`):** signing, the
+Info.plist keys, `install`/`run`/`launch`, the recovery commands and the guide's
+five permission rows are in, recorded in `docs/MACOS_RUNTIME.md` § "Signing,
+install and recovery". Still open: the **PC key** and **Brain** rows (hook
+`TODO(S7-brain-rows)` in `PermissionGuideViewModel.standardItems`) and the v2
+config seeding, all waiting on S2a–S2d; and the manual QA above. `identity`
+also needed `/usr/bin/openssl` by absolute path (measured: a Homebrew OpenSSL 3
+p12 fails `security import`).
+
 ---
 
 ## S8b: The remaining fixes

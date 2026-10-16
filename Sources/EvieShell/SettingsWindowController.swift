@@ -15,6 +15,7 @@ final class SettingsWindowController: NSWindowController, NSWindowDelegate {
     updater: EvieUpdater,
     wakeListener: EvieWakeListener,
     schedulesViewModel: EvieSchedulesViewModel,
+    permissionGuide: PermissionGuideViewModel,
     preferencesPath: String,
     configurationPath: String
   ) {
@@ -42,6 +43,7 @@ final class SettingsWindowController: NSWindowController, NSWindowDelegate {
         updater: updater,
         wakeListener: wakeListener,
         schedulesViewModel: schedulesViewModel,
+        permissionGuide: permissionGuide,
         preferencesPath: preferencesPath,
         configurationPath: configurationPath
       )

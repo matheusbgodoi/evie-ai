@@ -440,16 +440,22 @@ Four commands, once. Everything lands outside this checkout, in
 Scripts/evie-runtime setup     # fetch and build the model server, download the model
 Scripts/evie-app identity      # a signing identity, so permissions survive rebuilds
 Scripts/evie-app build
-Scripts/evie-app install       # into ~/Applications
+Scripts/evie-app install       # into ~/Applications, then opens it
 ```
 
 **Run `identity` before `build`, not after.** A self-signed certificate is what
 gives the bundle a stable designated requirement, which is what lets macOS prove
-build N+1 is the same code as build N. Without it the bundle is signed ad-hoc,
-every rebuild asks for the microphone again, and — because an update is verified
-against this same certificate — Evie **refuses every update rather than accepting
-any**. `identity` prints one step that cannot be scripted: open Keychain Access
-and mark the certificate as trusted for code signing.
+build N+1 is the same code as build N. `build` signs only with the certificate
+whose SHA-1 is pinned in `Scripts/evie-app`, asserts the designated requirement,
+and fails rather than signing ad-hoc — an ad-hoc bundle asks for every permission
+again after each rebuild and, because an update is verified against this same
+certificate, **refuses every update rather than accepting any**. A certificate
+made by `identity` on another Mac has a different hash; the script says so and
+the pin has to be changed on purpose. macOS asks once for authorisation to trust
+the certificate for code signing.
+
+On first launch a checklist, "Primeiros passos com a Evie", asks for each
+permission with its own button; it stays in Settings › Avançado › Permissões.
 
 This is not a Developer ID. It keeps permissions across rebuilds on this Mac and
 nowhere else, and it does not pass Gatekeeper on another machine.
@@ -463,7 +469,10 @@ Scripts/evie-app run           # Evie herself
 
 **Always launch with `Scripts/evie-app run` or from `~/Applications`, never the
 binary directly.** Running the executable from a terminal makes macOS attribute
-the microphone and folder permissions to the terminal instead of to Evie.
+the microphone and folder permissions to the terminal instead of to Evie. `run`
+opens only the installed copy, and `Scripts/evie-runtime launch` hands over to it.
+If a permission ends up stuck, `tccutil reset ScreenCapture com.matheusbgodoi.evie`
+(or `Accessibility`, `PostEvent`) and ask again from the checklist.
 
 The model runtime is a pinned local inference server holding the primary model,
 about 14.3 GB installed (`docs/adr/0007-local-development-runtime.md`), served

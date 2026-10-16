@@ -455,6 +455,16 @@ done; verified in S2b: `/health` sits at the gateway's origin and needs no key,
 and `/v1/models` reports `loadState`/`active` per alias. Next: S2c (per-turn
 brain resolver and failover), the first consumer of the readiness cache.
 
+**Evie v2, S7 (packaging, install, permissions) — partly done on `v2-packaging`,
+2026-10-16, merged into `v2` the same day.** Signing is pinned to the "Evie Dev"
+certificate's SHA-1 with the designated requirement asserted; `install` opens
+`~/Applications/Evie.app`, `run` opens only that copy and `evie-runtime launch`
+hands over to it; the first-run permission checklist has its five system rows.
+The v2 config seeding came with S2a on `v2`. Open: the PC key and Brain rows,
+which wait on S2d (hook `TODO(S7-brain-rows)`), and the manual QA in
+`docs/MACOS_RUNTIME.md`, which needs the owner to run `Scripts/evie-app install`
+— nothing is installed in `~/Applications` on this Mac today.
+
 Two things, in this order, and they are the two things between here and a release.
 
 **`QA-006` — the human pass. Passed 2026-08-07.** The overlay rebuilt around a

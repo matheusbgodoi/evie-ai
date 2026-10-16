@@ -88,6 +88,14 @@ All notable changes to Evie are documented here. Dates use `YYYY-MM-DD`.
   it yet; screen capture and computer use do, in later commits.
 - `evie-shell --presence-demo` plays every state of the indicator on the main
   display without capturing anything or asking for any permission.
+- **A first-run checklist for permissions.** "Primeiros passos com a Evie" opens
+  on first launch and lists the microphone, speech recognition, Screen Recording,
+  Accessibility and Post Events, each with its live state and one button: "Pedir"
+  while macOS can still show its prompt, "Abrir Ajustes" on the right Privacy &
+  Security pane after that. It never prompts by itself. Closed once, it stays in
+  Settings › Avançado › Permissões. The gateway key and brain rows follow with
+  model profiles.
+- `NSScreenCaptureUsageDescription` in the Info.plist, ahead of screen perception.
 
 ### Changed
 
@@ -125,6 +133,18 @@ All notable changes to Evie are documented here. Dates use `YYYY-MM-DD`.
   `live` instance holds the one keychain cache; the client's initialiser is
   internal to EvieCore. With the shipped loopback default, behaviour is
   unchanged.
+- **`Scripts/evie-app build` signs only with the pinned certificate**
+  (SHA-1 `E1CDAAB3…0524C9E`) and fails instead of signing ad-hoc. It asserts the
+  designated requirement — the bundle identifier and that certificate — and a
+  strict deep verification after signing and after installing, and codesign's
+  errors are no longer discarded. Security: a second certificate named "Evie
+  Dev" can no longer be picked up by name.
+- `Scripts/evie-app install` opens the installed copy after copying it, and
+  `run` opens only `~/Applications/Evie.app`, never the bundle in `.build`.
+  Both wait for a running copy to exit first, so the launch is not swallowed by
+  the instance being replaced.
+- `Scripts/evie-runtime launch` no longer runs the bare binary, which macOS
+  attributes to the terminal; it hands over to `Scripts/evie-app run`.
 
 ### Fixed
 
@@ -139,7 +159,11 @@ All notable changes to Evie are documented here. Dates use `YYYY-MM-DD`.
   `#9577EE` (dark); it now resolves per appearance through
   `NSColor(name:dynamicProvider:)`.
 - **The app bundle declares macOS 26 as its minimum.** `LSMinimumSystemVersion`
-  said 15.0 while the package requires macOS 26.
+  said 15.0 while the package requires macOS 26. (Made on both `v2` and
+  `v2-packaging`; one entry for both.)
+- `Scripts/evie-app identity` used whichever `openssl` came first on `PATH`; with
+  Homebrew's OpenSSL 3 the p12 is refused by `security import`. It now uses
+  `/usr/bin/openssl`.
 
 ### Documented
 

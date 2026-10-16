@@ -491,27 +491,18 @@ function smoke() {
   print "Streaming completion finished with [DONE]."
 }
 
+# Starts the model, then hands Evie herself to `Scripts/evie-app run`.
+#
+# This used to build `evie-shell` and run the bare binary from here, and that
+# is exactly the launch TCC cannot work with: an executable started from a
+# terminal is attributed to the terminal, so the microphone hangs, and Screen
+# Recording or Accessibility granted "to Evie" would land on Terminal instead —
+# which over-authorises everything else that ever runs in it. The bare binary
+# is never run any more; the installed, signed bundle is opened through Launch
+# Services or nothing is.
 function launch() {
   start
-  local shell_binary_directory
-  shell_binary_directory=$(swift build \
-    --package-path "${EVIE_REPOSITORY_DIR}" \
-    -c release \
-    --show-bin-path)
-  local shell_binary="${shell_binary_directory}/evie-shell"
-
-  if [[ ! -x "${shell_binary}" ]] \
-    || find "${EVIE_REPOSITORY_DIR}/Package.swift" "${EVIE_REPOSITORY_DIR}/Sources" \
-      -type f -newer "${shell_binary}" -print -quit | grep -q .
-  then
-    swift build \
-      --package-path "${EVIE_REPOSITORY_DIR}" \
-      -c release \
-      --product evie-shell \
-      -Xswiftc -warnings-as-errors
-  fi
-
-  "${shell_binary}"
+  exec "${EVIE_SCRIPT_DIR}/evie-app" run
 }
 
 if (( $# != 1 )); then
