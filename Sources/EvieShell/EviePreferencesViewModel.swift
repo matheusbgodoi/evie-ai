@@ -184,11 +184,9 @@ final class EviePreferencesViewModel: ObservableObject {
   }
 
   func setComputerUseEnabled(_ enabled: Bool) {
-    apply(
-      successMessage: enabled
-        ? "Modo agente ligado. Cada sessão ainda começa só quando você pede e confirma."
-        : "Modo agente desligado. Ela não controla mais o Mac."
-    ) { $0.computerUseEnabled = enabled }
+    apply(successMessage: ComputerUseCopy.switchMessage(enabled: enabled)) {
+      $0.computerUseEnabled = enabled
+    }
   }
 
   func setWebSearchEnabled(_ enabled: Bool) {

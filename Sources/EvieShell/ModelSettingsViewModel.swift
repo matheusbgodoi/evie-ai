@@ -11,8 +11,6 @@ import Foundation
 /// the pane is showing and runs the pane's buttons.
 @MainActor
 final class ModelSettingsViewModel: ObservableObject {
-  /// Which pane of the Avançado tab is showing.
-  @Published var advancedPane = 0
   /// The brain asked first: the head of the preference order.
   @Published var preferredProfileID: String
   @Published var macFallback: MacFallback

@@ -46,7 +46,9 @@ struct ShortcutSettingsView: View {
   }
 }
 
-private struct ShortcutRow: View {
+/// One shortcut, editable in place. Also drawn alone in Settings › Tela e modo
+/// agente, for the screen-look shortcut.
+struct ShortcutRow: View {
   var action: EvieShortcutAction
   @ObservedObject var viewModel: EviePreferencesViewModel
 

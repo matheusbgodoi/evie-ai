@@ -121,9 +121,10 @@ final class OverlayViewModel: ObservableObject {
   /// which. One closure rather than two because it is one decision about one
   /// message, and two closures is how the sending one ends up called by the code
   /// that meant to draft.
-  var onMailApproved: (
-    @MainActor (EvieMailProposal, Bool) async -> EvieMailReceipt
-  )?
+  var onMailApproved:
+    (
+      @MainActor (EvieMailProposal, Bool) async -> EvieMailReceipt
+    )?
   /// The skills installed right now, asked for per turn so a skill dropped into
   /// the folder works on the next question rather than the next launch.
   var installedSkills: @MainActor () -> [EvieSkill] = { [] }
@@ -193,11 +194,26 @@ final class OverlayViewModel: ObservableObject {
   /// Picks the brain for each turn, before the turn builds anything. Every turn
   /// asks it; nothing here holds a client of its own.
   let brainResolver: EvieBrainResolver
-  /// Where the current turn's brain runs, which the status line and the error
-  /// card name ("· no seu PC", "O cérebro do Mac não respondeu"). Set when a
-  /// turn resolves its brain and again when it fails over; before the first
-  /// turn, the preferred profile's.
-  var answeringLocation: ModelLocation
+  /// The current turn's brain, which the status line, the error card and the
+  /// answer's label name ("· no seu PC", "O cérebro do Mac não respondeu",
+  /// "Qwen 3.8 · no seu PC"). Set when a turn resolves its brain and again
+  /// when it fails over (`adoptAnsweringBrain`); before the first turn, the
+  /// preferred profile.
+  var answeringProfile: EvieModelProfile
+  var answeringLocation: ModelLocation {
+    answeringProfile.location
+  }
+  /// The chip in the input bar: the brain the next question goes to, whether
+  /// it can answer, and whether agent mode is on (`OverlayViewModel+Brain`).
+  @Published var brainChip: EvieBrainChip
+  /// The chip's last refresh, so an older probe answering late cannot
+  /// overwrite a newer one.
+  var brainChipGeneration: UInt64 = 0
+  /// Switches agent mode from the chip's menu. Set by the coordinator, which
+  /// saves the preference; nil leaves the item out.
+  var onSetAgentMode: (@MainActor (Bool) -> Void)?
+  /// Opens Settings on a section, from the chip's menu.
+  var onOpenSettingsSection: (@MainActor (EvieSettingsSection) -> Void)?
   /// The wake question on screen and the turn waiting for its answer.
   var pendingWake: (card: UUID, answer: CheckedContinuation<Bool, Never>)?
   var capabilities: EvieCapabilitySnapshot
@@ -264,7 +280,8 @@ final class OverlayViewModel: ObservableObject {
     capabilities: EvieCapabilitySnapshot = .textOnly
   ) {
     self.brainResolver = brainResolver
-    answeringLocation = brainResolver.configuration.activeProfile.location
+    answeringProfile = brainResolver.configuration.activeProfile
+    brainChip = EvieBrainChip(profile: brainResolver.configuration.activeProfile)
     self.conversationStore = conversationStore
     self.capabilities = capabilities
     conversation = [
@@ -300,12 +317,12 @@ final class OverlayViewModel: ObservableObject {
     activeRequestID != nil
   }
 
-  /// What the interface calls the thing that answers.
+  /// Where the thing that answers listens, for diagnostics only.
   ///
-  /// Evie never shows the model name, the server product, or a host and port:
-  /// they are implementation detail, and a loopback address on screen only
-  /// invites confusion. The raw endpoint stays available for the diagnostics
-  /// section of Settings.
+  /// The overlay names the model and its place ("Qwen 3.8 · PC", from the
+  /// profile) — the owner asked to see which brain answers — but never the
+  /// server product or a host and port: a loopback address on screen only
+  /// invites confusion. The raw endpoint stays in Settings › Avançado.
   var diagnosticEndpointDescription: String {
     let configuration = configuration
     let defaultPort = configuration.endpoint.scheme?.lowercased() == "https" ? 443 : 80
@@ -322,6 +339,7 @@ final class OverlayViewModel: ObservableObject {
   func applyConfiguration(_ loaded: EvieLoadedConfiguration, environment: [String: String]) {
     brainResolver.adopt(loaded, environment: environment)
     secondaryText = "Novos ajustes serão usados na próxima pergunta"
+    refreshBrainChip()
     onLayoutInvalidated?()
   }
 
@@ -352,6 +370,7 @@ final class OverlayViewModel: ObservableObject {
     quickText = ""
     pendingPrompt = nil
     isQuickTextEntryPresented = true
+    refreshBrainChip()
     onLayoutInvalidated?()
   }
 
@@ -387,6 +406,7 @@ final class OverlayViewModel: ObservableObject {
       quickText = ""
       pendingPrompt = nil
       isQuickTextEntryPresented = true
+      refreshBrainChip()
       onLayoutInvalidated?()
       return true
     } catch {
@@ -443,6 +463,9 @@ final class OverlayViewModel: ObservableObject {
     visualState = .ready
     primaryText = "Digite um comando"
     secondaryText = "Tudo acontece neste Mac"
+    // Opening the field is when the chip is looked at: the cached probe is
+    // used while fresh, so this is free most of the time.
+    refreshBrainChip()
     onLayoutInvalidated?()
     return true
   }
@@ -686,7 +709,6 @@ final class OverlayViewModel: ObservableObject {
     onLayoutInvalidated?()
   }
 
-
   /// The microphone is open. This is only ever called after capture actually
   /// started, so the listening indicator can never be shown over a closed
   /// microphone.
@@ -897,7 +919,8 @@ final class OverlayViewModel: ObservableObject {
     if !isCommand, attachmentSlots.isEmpty, offerComputerUse(for: prompt) {
       return
     }
-    let looksAtScreen = !isCommand && (pendingScreen != nil || EvieScreenIntent.isPresent(in: prompt))
+    let looksAtScreen =
+      !isCommand && (pendingScreen != nil || EvieScreenIntent.isPresent(in: prompt))
     let heldScreen = looksAtScreen ? pendingScreen : nil
     if looksAtScreen {
       pendingScreen = nil

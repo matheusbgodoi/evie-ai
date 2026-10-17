@@ -13,6 +13,17 @@ ADRs 0013–0018 record the decisions.
 
 ### Added
 
+- **You can see which brain answers.** A chip in the field where you type shows
+  the brain the next question goes to — "Qwen 3.8 · PC" or "LensVLM · Mac" —
+  with a dot: green ready, a yellow ring asleep or unloaded, a breathing yellow
+  dot while the Mac brain wakes, red when it cannot answer. Click it to pin
+  new conversations to Automático, Sempre o PC or Sempre o Mac, to test the
+  connection, to see the reasoning level, or to switch agent mode. Every
+  answer card names its model and place beside "RESPOSTA" ("Qwen 3.8 · no seu
+  PC").
+- **Agent mode can be switched without opening Settings**: from the brain
+  chip's menu and from "Modo agente" in the menu bar. While it is on, the chip
+  shows an amber "Agente".
 - **Evie can control the Mac when asked** (v2 S5d, ADR 0016). Say or type an
   instruction — "abre o Notas e escreve…", "clica em…", "cola isso no…",
   "digita…" — or choose "Controlar o Mac…" in the menu bar, and an amber card
@@ -123,13 +134,20 @@ ADRs 0013–0018 record the decisions.
   Accessibility and Post Events, each with its live state and one button: "Pedir"
   while macOS can still show its prompt, "Abrir Ajustes" on the right Privacy &
   Security pane after that. It never prompts by itself. Closed once, it stays in
-  Settings › Avançado › Permissões. The gateway key and brain rows follow with
+  Settings › Permissões. The gateway key and brain rows follow with
   model profiles.
 - `NSScreenCaptureUsageDescription` in the Info.plist, ahead of screen perception.
 
 ### Changed
 
 - Agent mode ("Deixar a Evie controlar o Mac") is off by default, including for older preference files; turn it on in Settings.
+- **Settings is a sidebar window**, like System Settings: Geral, Cérebro, Tela
+  e modo agente, Arquivos e pastas, Voz, Atalhos, O que ela sabe, Aparência,
+  Permissões, Avançado. Nothing was removed. The agent-mode switch is the first
+  thing in Tela e modo agente, with one paragraph on what it does and how to
+  stop it, the permissions it needs and the screen-look shortcut; updates moved
+  to Geral, the folders to Arquivos e pastas and the permission list to its own
+  section. The window is resizable, from 780 × 520.
 
 - **Two corrections measured on Gemma now apply only to Gemma.** The reminder
   appended to a question that opens with "em uma frase", "resumidamente"… ("Isso

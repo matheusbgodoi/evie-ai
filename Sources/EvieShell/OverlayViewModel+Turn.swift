@@ -334,7 +334,7 @@ extension OverlayViewModel {
         title: wasAutomatic ? "Feito, sem te perguntar" : "Feito",
         summary: wasAutomatic
           ? report + "\n\nVocê pediu isso na sua mensagem, e a aprovação automática "
-            + "está ligada. Desligue em Configurações › O que ela sabe."
+            + "está ligada. Desligue em \(EvieSettingsSection.filesAndFolders.path)."
           : report,
         isExpanded: true
       )
@@ -1019,7 +1019,7 @@ extension OverlayViewModel {
     guard activeRequestID == requestID, !Task.isCancelled else {
       return
     }
-    answeringLocation = brain.profile.location
+    adoptAnsweringBrain(brain)
     showBrainNotice(brain.notice)
     do {
       try await EvieBrainTurn.run(
@@ -1027,15 +1027,17 @@ extension OverlayViewModel {
         on: brain,
         resolver: brainResolver,
         onSwitch: { next in
-          answeringLocation = next.profile.location
+          adoptAnsweringBrain(next)
           showBrainNotice(next.notice)
         },
         attempt: attempt
       )
+      brainTurnEnded(answered: true)
     } catch is CancellationError {
       finishCancellation(requestID: requestID)
     } catch {
       finishFailure(error, requestID: requestID)
+      brainTurnEnded(answered: false)
     }
   }
 
@@ -1115,6 +1117,7 @@ extension OverlayViewModel {
   /// "Acordando o cérebro do Mac…" on the status line while the Mac brain
   /// starts, cleared when it is up unless something else was said meanwhile.
   func showLocalBrainWaking(_ waking: Bool) {
+    showBrainWaking(waking)
     if waking {
       secondaryText = EvieBrainResolver.wakingStatus
     } else if secondaryText == EvieBrainResolver.wakingStatus {

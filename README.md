@@ -261,8 +261,9 @@ nota nova", "clica em Salvar", "cola isso no Notas" — and an amber card asks
 presses Começar, after a typed request, push-to-talk or a click on her mark;
 the wake word never starts one. It runs on the PC brain only, for at most 15
 minutes and 25 actions, and she looks again after every action. The switch is
-"Deixar a Evie controlar o Mac (modo agente)" in Configurações › Avançado ›
-Controle do Mac, on by default because the owner asked for it
+"Deixar a Evie controlar o Mac" in Configurações › Tela e modo agente, off by
+default since 2026-10-16; the brain chip's menu and "Modo agente" in the menu
+bar flip it too, and the chip shows an amber "Agente" while it is on
 ([ADR 0016](docs/adr/0016-in-process-computer-use-executor-under-agent-mode-grant.md),
 [ADR 0018](docs/adr/0018-agent-mode-switch-on-by-default.md)).
 
@@ -546,7 +547,7 @@ the pin has to be changed on purpose. macOS asks once for authorisation to trust
 the certificate for code signing.
 
 On first launch a checklist, "Primeiros passos com a Evie", asks for each
-permission with its own button; it stays in Settings › Avançado › Permissões.
+permission with its own button; it stays in Settings › Permissões.
 
 The PC brain needs its gateway key once. Configurações › Cérebro takes it pasted,
 or imports it from the PC configuration's keychain item (`local-ai-3090`), and

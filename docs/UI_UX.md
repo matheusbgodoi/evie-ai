@@ -117,6 +117,30 @@ new focused field returns for a follow-up. `Option-Shift-Space` remains a tempor
 secondary text shortcut until the voice phase. Shortcuts are fixed in source for
 the prototype; persistence and conflict preferences belong to `UI-009`.
 
+### The brain chip (2026-10-16)
+
+The owner asked "como eu sei quando é o Qwen e quando é o LLM local do Mac?".
+The input bar (and the voice capsule) carries a small chip, left of the
+paperclip: the brain the next question goes to, named from its profile
+(`EvieModelProfile.chipTitle`: "Qwen 3.8 · PC", "LensVLM · Mac"), and a dot —
+filled green ready, a yellow ring cold (the PC's model unloaded, or the Mac
+brain asleep), a breathing yellow dot while the Mac brain wakes, red with a
+cross unreachable (no key, refused, out), a gray ring not yet probed. The
+tooltip and VoiceOver say the state in words (`EvieBrainChip`). While agent
+mode is on, an amber "Agente" pill sits inside the chip.
+
+Clicking it opens a menu: "Próximas conversas" — Automático (the preference
+order, "PC, depois Mac"), Sempre o PC, Sempre o Mac — then, when the open
+conversation is pinned elsewhere, a note and "Começar nova conversa"; "Testar
+conexão" (the answer goes on the status line); "Raciocínio: …" which opens
+Configurações › Cérebro; "Modo agente (controlar o Mac)" and "Tela e modo
+agente…". The choice goes through `EvieBrainResolver.choose(_:)`, lasts for
+the app session, and never moves a conversation already pinned.
+
+Every answer card names its model and place beside "RESPOSTA", quietly
+("Qwen 3.8 · no seu PC"); a card restored from history does not know it and
+shows nothing.
+
 ### Artifact cards
 
 Results expand above or near the pill as transient glass cards rather than chat
@@ -164,6 +188,20 @@ VS-002 implements the first deliberately opened subset as two native windows:
 Pinned artifacts, workflow/permission/resource management, health, semantic
 memory, and compact active-task tabs remain future `UI-007`/`UI-012` work. The
 history window does not change the transient overlay into the default chat UI.
+
+**Settings since 2026-10-16** is a window in the style of System Settings: a
+`NavigationSplitView` whose sidebar lists `EvieSettingsSection` in this order,
+each on a coloured tile — Geral (what is in use, with a way to each, and
+updates), Cérebro, Tela e modo agente (the "Deixar a Evie controlar o Mac"
+switch first and large, one paragraph on what it does and how to stop it, the
+Screen Recording / Accessibility / input-event rows of the guide, the
+screen-look shortcut), Arquivos e pastas (the folders; the document tools add a
+"Documentos" segment through `FilesAndFoldersSettingsView`'s `documents`
+builder), Voz, Atalhos, O que ela sabe (memory, skills, Mail and Calendar,
+schedules), Aparência, Permissões (the first-run guide) and Avançado
+(diagnostics). The section's name is the window title; the window is
+resizable from 780 × 520 and opens at 860 × 640. Agent mode can also be turned
+on and off from the brain chip's menu and from "Modo agente" in the menu bar.
 
 ## State machine
 

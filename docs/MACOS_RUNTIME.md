@@ -364,7 +364,7 @@ resets everything, including the microphone and folders.
 
 `Sources/EvieShell/Onboarding/`. A checklist window, "Primeiros passos com a
 Evie", opens at launch until it has been closed once; afterwards the same list is
-Settings › Avançado › Permissões. Rows: Microfone, Reconhecimento de fala,
+Settings › Permissões. Rows: Microfone, Reconhecimento de fala,
 Gravação de tela (with "reabra a Evie" — a running process keeps the answer it
 got at launch), Acessibilidade, Controlar o teclado e o mouse (Post Events),
 then Chave do PC and Cérebro, so a first launch sets Evie up without visiting

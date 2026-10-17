@@ -80,6 +80,8 @@ struct CommandCapsule: View {
   var onCancel: (() -> Void)? = nil
   var onOpenDetails: (() -> Void)? = nil
   var onActivateVoice: (() -> Void)? = nil
+  /// The brain, here too: the capsule is the bar while she listens or speaks.
+  var brainChip: BrainChipModel? = nil
 
   @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
@@ -103,6 +105,11 @@ struct CommandCapsule: View {
           .frame(maxWidth: .infinity, alignment: .leading)
 
         HStack(spacing: 5) {
+          if let brainChip {
+            BrainChipView(model: brainChip)
+              .padding(.trailing, 2)
+          }
+
           if let onToggleMute, state == .listening || state == .speaking {
             capsuleButton(
               symbol: isMuted ? "speaker.slash.fill" : "speaker.wave.2.fill",

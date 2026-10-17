@@ -226,7 +226,7 @@ extension OverlayViewModel {
     guard activeRequestID == requestID, !Task.isCancelled else {
       return
     }
-    answeringLocation = brain.profile.location
+    adoptAnsweringBrain(brain)
     guard EvieAgentModeBroker.unavailableReason(on: brain.profile) == nil else {
       finishComputerUse(
         summary: ComputerUseCopy.needsThePC, log: nil, userMessage: userMessage,
@@ -244,11 +244,12 @@ extension OverlayViewModel {
     host.desk.onClose = { [weak self] confirmation in self?.closeConfirmation(confirmation) }
     // The conversation's words, without pictures, so "cola isso no Notas"
     // knows what "isso" is.
-    let messages = conversation.map { message in
-      var plain = message
-      plain.images = nil
-      return plain
-    } + [userMessage]
+    let messages =
+      conversation.map { message in
+        var plain = message
+        plain.images = nil
+        return plain
+      } + [userMessage]
 
     do {
       let outcome = try await EvieAgentLoop(readiness: brain.rung).runComputerUse(

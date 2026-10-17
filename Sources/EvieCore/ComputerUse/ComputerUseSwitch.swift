@@ -33,7 +33,7 @@ public enum ComputerUseSwitch {
       return "O modo agente está desligado nesta execução (EVIE_COMPUTER_USE=0)."
     }
     if !preferences.computerUseEnabled {
-      return "O modo agente está desligado em Configurações › Avançado › Controle do Mac."
+      return "O modo agente está desligado em \(EvieSettingsSection.screenAndAgent.path)."
     }
     return nil
   }

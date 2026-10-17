@@ -48,6 +48,21 @@ struct ModelRequestBodyTests {
     #expect(body["enable_thinking"] == nil)
   }
 
+  @Test("the built-in PC brain asks for a streamed answer with thinking off, typed or spoken")
+  func builtInPCIsFast() throws {
+    let pc = EvieModelProfile.builtInPC
+    for spoken in [false, true] {
+      let options = EvieTurnPlan(profile: pc, readiness: .ready).options(spoken: spoken)
+      let body = try json(
+        request([question], configuration: pc.configuration, options: options))
+
+      #expect(body["stream"] as? Bool == true)
+      let kwargs = try #require(body["chat_template_kwargs"] as? [String: Any])
+      #expect(kwargs["enable_thinking"] as? Bool == false)
+      #expect(body["thinking_budget_tokens"] == nil)
+    }
+  }
+
   @Test("templateKwargs with low thinking sends the effort, no preserved thinking, and a budget")
   func templateKwargsLow() throws {
     var thinking = gateway
@@ -96,7 +111,8 @@ struct ModelRequestBodyTests {
     #expect(body["thinking_budget_tokens"] == nil)
   }
 
-  @Test("topLevel turns off the Mac server's automatic context compaction; other styles send nothing")
+  @Test(
+    "topLevel turns off the Mac server's automatic context compaction; other styles send nothing")
   func topLevelOptsOutOfCompaction() throws {
     var mac = gateway
     mac.thinkingStyle = .topLevel

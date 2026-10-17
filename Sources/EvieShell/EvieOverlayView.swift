@@ -47,7 +47,20 @@ struct EvieOverlayView: View {
       onDismissCommands: { viewModel.dismissCommandMenu() },
       attachments: viewModel.attachmentSlots,
       onRemoveAttachment: { viewModel.removeAttachment(id: $0) },
-      onPasteAttachment: { viewModel.pasteAttachment() }
+      onPasteAttachment: { viewModel.pasteAttachment() },
+      brainChip: brainChip
+    )
+  }
+
+  private var brainChip: BrainChipModel {
+    BrainChipModel(
+      chip: viewModel.brainChip,
+      menu: viewModel.brainMenu,
+      onChoose: { viewModel.chooseBrain($0) },
+      onTestConnection: { viewModel.testBrainConnection() },
+      onNewConversation: { viewModel.startNewConversation() },
+      onSetAgentMode: viewModel.onSetAgentMode.map { set in { set($0) } },
+      onOpenSettings: viewModel.onOpenSettingsSection.map { open in { open($0) } }
     )
   }
 }

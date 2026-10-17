@@ -522,6 +522,13 @@ final class AppCoordinator: NSObject {
       self?.preferences.computerUseConsentGiven ?? false
     }
     viewModel.onComputerUseConsent = { [weak self] in self?.recordComputerUseConsent() }
+    // The brain chip's menu: agent mode on and off without opening Settings,
+    // and Settings opened on the section a line of the menu is about.
+    viewModel.onSetAgentMode = { [weak self] enabled in self?.setAgentMode(enabled) }
+    viewModel.onOpenSettingsSection = { [weak self] section in
+      self?.openSettings(on: section)
+    }
+    viewModel.showAgentMode(isAgentModeOn)
     attachMediaLifecycle()
     buildVaultIndexIfMissing()
 
@@ -640,6 +647,15 @@ extension AppCoordinator {
       title: "Controlar o Mac…", action: #selector(controlTheMac), keyEquivalent: "")
     controlItem.target = self
     menu.addItem(controlItem)
+    // The switch itself, checked while it is on, so the mode can be turned
+    // off from wherever the menu bar is.
+    let agentItem = NSMenuItem(
+      title: "Modo agente", action: #selector(toggleAgentModeFromMenu), keyEquivalent: "")
+    agentItem.target = self
+    agentItem.state = isAgentModeOn ? .on : .off
+    agentItem.isEnabled = !ComputerUseSwitch.forcedOff(
+      environment: ProcessInfo.processInfo.environment)
+    menu.addItem(agentItem)
 
     menu.addItem(.separator())
 
@@ -660,7 +676,9 @@ extension AppCoordinator {
     add(
       to: menu, title: "Parar tudo agora", action: #selector(stopEverythingFromMenu),
       shortcut: .emergencyStop)
-    add(to: menu, title: "Configurações…", action: #selector(openSettings), shortcut: .openSettings)
+    add(
+      to: menu, title: "Configurações…", action: #selector(openSettingsFromMenu),
+      shortcut: .openSettings)
 
     menu.addItem(.separator())
 
@@ -760,6 +778,10 @@ extension AppCoordinator {
     viewModel.askForComputerGoal()
   }
 
+  @objc fileprivate func toggleAgentModeFromMenu() {
+    setAgentMode(!preferences.computerUseEnabled)
+  }
+
   @objc fileprivate func newConversation() {
     viewModel.startNewConversation()
     panelController.showQuickText()
@@ -831,7 +853,12 @@ extension AppCoordinator {
     modelSettings?.refreshKeyStatus()
   }
 
-  @objc fileprivate func openSettings() {
+  @objc fileprivate func openSettingsFromMenu() {
+    openSettings()
+  }
+
+  /// Opens Settings, on `section` when one is given.
+  fileprivate func openSettings(on section: EvieSettingsSection? = nil) {
     if settingsWindowController == nil {
       let modelViewModel = ModelSettingsViewModel(
         loaded: brainResolver.configuration,
@@ -893,7 +920,7 @@ extension AppCoordinator {
         configurationPath: configurationStore.fileURL.path
       )
     }
-    settingsWindowController?.present()
+    settingsWindowController?.present(section: section)
   }
 
   /// Routes a global shortcut to the thing it names.
@@ -1314,6 +1341,32 @@ extension AppCoordinator {
     }
   }
 
+  /// Whether agent mode is in effect: the switch, unless the environment
+  /// forced it off for this launch.
+  fileprivate var isAgentModeOn: Bool {
+    ComputerUseSwitch.isEnabled(
+      preferences: preferences, environment: ProcessInfo.processInfo.environment)
+  }
+
+  /// The agent-mode switch, from the chip's menu or the menu bar: saved, then
+  /// applied like any other preference, and said on the status line — the
+  /// same words Settings uses.
+  fileprivate func setAgentMode(_ enabled: Bool) {
+    guard enabled != preferences.computerUseEnabled else {
+      return
+    }
+    var updated = preferences
+    updated.computerUseEnabled = enabled
+    do {
+      try preferencesStore.save(updated)
+    } catch {
+      viewModel.presentRuntimeError(title: "Não consegui mudar o modo agente", error: error)
+      return
+    }
+    preferencesDidChange(updated)
+    viewModel.presentRuntimeWarning(ComputerUseCopy.switchMessage(enabled: enabled))
+  }
+
   fileprivate func preferencesDidChange(_ updated: EviePreferences) {
     let appearanceChanged = updated.appearance != preferences.appearance
     let shortcutsChanged = updated.shortcuts != preferences.shortcuts
@@ -1333,6 +1386,7 @@ extension AppCoordinator {
     }
     updateWakeListening()
     refreshMenuShortcuts()
+    viewModel.showAgentMode(isAgentModeOn)
     preferencesViewModel?.adopt(updated)
     viewModel.applyCapabilities(
       Self.capabilities(for: updated, hasGrantedFolders: !rootsViewModel.roots.isEmpty)

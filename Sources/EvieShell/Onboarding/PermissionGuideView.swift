@@ -14,16 +14,7 @@ struct PermissionGuideView: View {
   var body: some View {
     Form {
       Section {
-        ForEach(viewModel.rows) { row in
-          PermissionGuideRowView(
-            row: row,
-            showsAction: viewModel.isBundled,
-            isBusy: viewModel.busyRows.contains(row.id),
-            perform: { action in
-              Task { await viewModel.perform(action, onRow: row.id) }
-            }
-          )
-        }
+        PermissionGuideRowsView(viewModel: viewModel)
       } header: {
         Text("O que a Evie precisa")
       } footer: {
@@ -52,7 +43,7 @@ struct PermissionGuideView: View {
         Cada permissão é pedida uma vez pelo macOS. Se você recusar, o botão \
         passa a abrir a página certa dos Ajustes, onde dá para mudar de ideia. \
         A chave e o cérebro também ficam em Configurações › Cérebro, e esta \
-        lista em Configurações › Avançado › Permissões.
+        lista em Configurações › Permissões.
         """
       )
       .font(.footnote)
@@ -68,6 +59,28 @@ struct PermissionGuideView: View {
       .font(.footnote)
       .symbolRenderingMode(.hierarchical)
       .foregroundStyle(.orange)
+    }
+  }
+}
+
+/// The guide's rows, or only some of them, for a section of any Form:
+/// Settings › Tela e modo agente shows the three grants agent mode needs, with
+/// the same buttons, beside its switch.
+struct PermissionGuideRowsView: View {
+  @ObservedObject var viewModel: PermissionGuideViewModel
+  /// Row ids to show (`EviePermission.rawValue` for a permission); nil for all.
+  var only: Set<String>? = nil
+
+  var body: some View {
+    ForEach(viewModel.rows.filter { only?.contains($0.id) ?? true }) { row in
+      PermissionGuideRowView(
+        row: row,
+        showsAction: viewModel.isBundled,
+        isBusy: viewModel.busyRows.contains(row.id),
+        perform: { action in
+          Task { await viewModel.perform(action, onRow: row.id) }
+        }
+      )
     }
   }
 }

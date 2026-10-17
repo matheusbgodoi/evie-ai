@@ -50,6 +50,7 @@ struct OverlayRootView: View {
   var attachments: [EvieAttachmentSlot] = []
   var onRemoveAttachment: ((UUID) -> Void)? = nil
   var onPasteAttachment: (() -> Bool)? = nil
+  var brainChip: BrainChipModel? = nil
 
   @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
@@ -201,7 +202,8 @@ struct OverlayRootView: View {
         onDismissCommands: onDismissCommands,
         attachments: attachments,
         onRemoveAttachment: onRemoveAttachment,
-        onPasteAttachment: onPasteAttachment
+        onPasteAttachment: onPasteAttachment,
+        brainChip: brainChip
       )
       .transition(.move(edge: .bottom).combined(with: .opacity))
     } else {
@@ -216,7 +218,8 @@ struct OverlayRootView: View {
         onToggleMute: onToggleMute,
         onCancel: onCancel,
         onOpenDetails: onOpenDetails,
-        onActivateVoice: onActivateVoice
+        onActivateVoice: onActivateVoice,
+        brainChip: brainChip
       )
       .transition(.opacity)
     }

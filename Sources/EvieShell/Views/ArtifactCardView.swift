@@ -141,6 +141,10 @@ struct ArtifactCardModel: Identifiable, Hashable {
   }
   var detail: String? = nil
   var source: String? = nil
+  /// Which model wrote it and where: "Qwen 3.8 · no seu PC". Set when the
+  /// turn resolves its brain; nil for a card restored from history, which
+  /// does not record one.
+  var brainLabel: String? = nil
   var isExpanded = false
   /// True between asking and the first words of the answer.
   ///
@@ -239,7 +243,6 @@ struct ArtifactCardView: View {
     .frame(height: readingBoxHeight)
   }
 
-
   var body: some View {
     GlassSurface(
       cornerRadius: 20,
@@ -288,10 +291,7 @@ struct ArtifactCardView: View {
 
       VStack(alignment: .leading, spacing: 1) {
         if artifact.isExpanded {
-          Text(artifact.kind.title.uppercased())
-            .font(.system(size: 9, weight: .bold))
-            .foregroundStyle(artifact.kind.tint)
-            .tracking(0.75)
+          kindLine
         }
 
         if artifact.isLoading {
@@ -318,6 +318,25 @@ struct ArtifactCardView: View {
 
       if onDismiss != nil {
         iconButton(symbol: "xmark", label: "Fechar", action: { onDismiss?() })
+      }
+    }
+  }
+
+  /// "RESPOSTA" and, beside it, the brain that wrote it — quiet, in the same
+  /// small caps line, so it is there when looked for and never competes with
+  /// the answer.
+  private var kindLine: some View {
+    HStack(spacing: 5) {
+      Text(artifact.kind.title.uppercased())
+        .font(.system(size: 9, weight: .bold))
+        .foregroundStyle(artifact.kind.tint)
+        .tracking(0.75)
+      if let brainLabel = artifact.brainLabel {
+        Text(brainLabel)
+          .font(.system(size: 9.5, weight: .medium))
+          .foregroundStyle(.tertiary)
+          .lineLimit(1)
+          .accessibilityLabel("Respondido por \(brainLabel)")
       }
     }
   }
@@ -489,7 +508,6 @@ struct ArtifactCardView: View {
     }
   }
 }
-
 
 /// Three dots that travel while she is thinking.
 ///

@@ -66,6 +66,13 @@ public struct EvieBrainWakeQuestion: Sendable, Equatable {
 /// preferred brain the cache already knows cannot answer fails with the reason
 /// instead of being sent there. A profile the environment chose is never
 /// moved: someone asked for it by name.
+///
+/// **A choice** from the overlay's brain chip (`choose(_:)`) narrows the
+/// preference order to one place for every conversation not yet pinned —
+/// "Sempre o PC" is the order without the Mac. It is made after launch, by the
+/// person, so it wins over the environment's profile; the conversation on
+/// screen keeps its pin. Choosing the Mac is the consent to wake it, so
+/// nothing is asked. In memory, for the app session, like the pins.
 @MainActor
 public final class EvieBrainResolver {
   /// The profiles in use and the preferred one, with environment overrides.
@@ -86,6 +93,8 @@ public final class EvieBrainResolver {
   private let localBrain: any LocalBrainStarting
   private let makeClient: @Sendable (EvieModelProfile) -> any AgentClient
   private var pins: [UUID: String] = [:]
+  /// The chip's choice; `.automatic` is the preference order as saved.
+  public private(set) var choice: EvieBrainChoice = .automatic
   private var wakeAccepted = false
   /// Conversations whose current turn was answered "Agora não".
   private var wakeDeclined: Set<UUID> = []
@@ -135,12 +144,60 @@ public final class EvieBrainResolver {
     pins[conversation]
   }
 
+  /// Where a conversation with no pin yet would start, known without the
+  /// network.
+  public var newConversationProfile: EvieModelProfile {
+    preferredProfile
+  }
+
+  /// The profile a conversation is pinned to, with its current values.
+  public func pinnedProfile(for conversation: UUID) -> EvieModelProfile? {
+    pins[conversation].flatMap(profile(id:))
+  }
+
+  /// Narrows where conversations without a pin start. A place with no
+  /// profile cannot be chosen (`canChoose(_:)`); asking for one changes
+  /// nothing.
+  public func choose(_ choice: EvieBrainChoice) {
+    guard canChoose(choice) else {
+      return
+    }
+    self.choice = choice
+  }
+
+  /// Whether some profile runs where `choice` points.
+  public func canChoose(_ choice: EvieBrainChoice) -> Bool {
+    choice.location == nil || !profiles(allowedBy: choice).isEmpty
+  }
+
+  /// The brain the conversation's next turn goes to and what is known about
+  /// it now: the key store, then the cached probe (which probes when stale).
+  /// For the chip, which must never wait on more than the probe does.
+  public func status(for conversation: UUID) async -> (
+    profile: EvieModelProfile, rung: ReadinessRung
+  ) {
+    let profile = expectedProfile(for: conversation)
+    return (profile, await rung(of: profile))
+  }
+
+  /// `status(for:)` after a fresh probe, whatever the cache held: the chip's
+  /// "Testar conexão".
+  public func checkConnection(for conversation: UUID) async -> (
+    profile: EvieModelProfile, rung: ReadinessRung
+  ) {
+    let profile = expectedProfile(for: conversation)
+    if await selector.offlineRung(for: profile) == nil {
+      await readiness.refresh(profile)
+    }
+    return (profile, await rung(of: profile))
+  }
+
   /// The brain a conversation's next turn most likely runs on — its pin, or
   /// the preferred profile — known without the network. A screen capture is
   /// cut for it before the turn resolves, because the capture must show the
   /// screen as it was when asked, not after a probe or a wake.
   public func expectedProfile(for conversation: UUID) -> EvieModelProfile {
-    pins[conversation].flatMap(profile(id:)) ?? configuration.activeProfile
+    pins[conversation].flatMap(profile(id:)) ?? preferredProfile
   }
 
   /// A turn on the conversation ended. When it ran on the Mac brain, the
@@ -159,7 +216,7 @@ public final class EvieBrainResolver {
     if let pinned = pins[conversation].flatMap(profile(id:)) {
       return await prepare(pinned, rung: await rung(of: pinned), for: conversation)
     }
-    let preferred = configuration.activeProfile
+    let preferred = preferredProfile
     let preferredRung = await rung(of: preferred)
     if !preferredRung.isAnswerable, mayMove {
       if let moved = await move(conversation, from: preferred, because: preferredRung) {
@@ -186,14 +243,37 @@ public final class EvieBrainResolver {
     guard error.allowsFailover, mayMove else {
       return nil
     }
-    let failed = pins[conversation].flatMap(profile(id:)) ?? configuration.activeProfile
+    let failed = pins[conversation].flatMap(profile(id:)) ?? preferredProfile
     // Whatever the cache said about it was just proved wrong.
     await readiness.refresh(failed)
     return await move(conversation, from: failed, because: EvieBrainCopy.reason(for: error))
   }
 
+  /// A chosen place moves only within itself, so neither the environment nor
+  /// `macFallback` — which is about moving to the Mac — stops it.
   private var mayMove: Bool {
-    !environmentChoseProfile && configuration.profiles.macFallback != .off
+    choice != .automatic
+      || (!environmentChoseProfile && configuration.profiles.macFallback != .off)
+  }
+
+  /// Where a conversation without a pin starts: the loader's profile, or under
+  /// a choice the first profile of the narrowed order.
+  private var preferredProfile: EvieModelProfile {
+    guard choice != .automatic else {
+      return configuration.activeProfile
+    }
+    return profiles(allowedBy: choice).first ?? configuration.activeProfile
+  }
+
+  /// The preference order narrowed to `choice`, followed by any profile in
+  /// that place the order does not name (a migrated `custom`), so a place with
+  /// a profile can always be chosen.
+  private func profiles(allowedBy choice: EvieBrainChoice) -> [EvieModelProfile] {
+    let set = configuration.profiles
+    let ordered = set.preferenceOrder.compactMap(profile(id:))
+    let unordered = set.profiles.filter { !set.preferenceOrder.contains($0.id) }
+      .compactMap { profile(id: $0.id) }
+    return (ordered + unordered).filter(choice.allows)
   }
 
   /// The first profile after `failed` in the preference order that can answer,
@@ -204,7 +284,8 @@ public final class EvieBrainResolver {
     because reason: ReadinessRung
   ) async -> ResolvedBrain? {
     for id in configuration.profiles.preferenceOrder where id != failed.id {
-      guard let candidate = profile(id: id), await selector.offlineRung(for: candidate) == nil
+      guard let candidate = profile(id: id), choice.allows(candidate),
+        await selector.offlineRung(for: candidate) == nil
       else {
         continue
       }
@@ -233,8 +314,8 @@ public final class EvieBrainResolver {
   /// Asked only to wake: a brain on this Mac that already answers costs nothing
   /// more, and the PC is never "woken".
   private func needsConsent(toWake candidate: EvieModelProfile, rung: ReadinessRung) -> Bool {
-    configuration.profiles.macFallback == .ask && !wakeAccepted && candidate.startsOnDemand
-      && rung != .ready
+    choice != .alwaysMac && configuration.profiles.macFallback == .ask && !wakeAccepted
+      && candidate.startsOnDemand && rung != .ready
   }
 
   /// Makes sure a Mac brain is the configured server and is serving — starting
@@ -280,7 +361,9 @@ public final class EvieBrainResolver {
 
   /// A brain whose every request fails with `message`, sending nothing, and
   /// with nothing pinned to it.
-  private func unavailable(_ profile: EvieModelProfile, rung: ReadinessRung, because message: String)
+  private func unavailable(
+    _ profile: EvieModelProfile, rung: ReadinessRung, because message: String
+  )
     -> ResolvedBrain
   {
     ResolvedBrain(

@@ -1,5 +1,68 @@
 # Work log
 
+## 2026-10-16 — the brain on screen, Settings as a sidebar, agent mode in reach
+
+- Occasion: the owner installed the app and asked (1) how to tell the PC's Qwen
+  from the Mac's model, (2) how to turn agent mode on or off — the sidebar did
+  not please him and the switch was buried in Avançado › Controle do Mac — and
+  (3) for quick answers.
+- Completed:
+  - **Brain chip** in the input bar and the voice capsule (`BrainChipView`,
+    `OverlayViewModel+Brain`): "Qwen 3.8 · PC" / "LensVLM · Mac" and a dot for
+    checking / ready / cold / waking / unreachable; amber "Agente" pill while
+    agent mode is on. Its menu: Automático / Sempre o PC / Sempre o Mac for new
+    conversations, a note plus "Começar nova conversa" when the open one is
+    pinned elsewhere, Testar conexão, "Raciocínio: …" (opens Cérebro), the
+    agent-mode toggle and "Tela e modo agente…".
+  - EvieCore (`EvieBrainChip.swift`): `displayModelName` (derived from the
+    served id), `chipTitle`, `answerLabel`, `ModelLocation.shortName` /
+    `answerPlace`, `EvieBrainChoice`, `EvieBrainChipState`, `EvieBrainChip`,
+    `EvieBrainMenu`. `EvieBrainResolver` gained `choose(_:)`, `canChoose`,
+    `status(for:)`, `checkConnection(for:)`, `pinnedProfile(for:)` and
+    `newConversationProfile`; a choice narrows the preference order to one
+    place (no move to the Mac under Sempre o PC, no wake card under Sempre o
+    Mac, wins over `EVIE_MODEL_PROFILE`, never re-pins an open conversation).
+  - Answer cards carry `brainLabel` ("Qwen 3.8 · no seu PC") beside "RESPOSTA";
+    `answeringLocation` became `answeringProfile` (location derived).
+  - **Settings** rebuilt as a `NavigationSplitView` sidebar
+    (`EvieSettingsSection`, `SettingsSplitView`, `SettingsSidebar`,
+    `SettingsNavigation`, `GeneralSettingsView`, `FilesAndFoldersSettingsView`
+    with a `documents` builder as the extension point for the v2-files work,
+    `ScreenAndAgentSettingsView` replacing `ComputerUseSettingsView`);
+    `PermissionGuideRowsView` and `ShortcutRow` shared; `UpdateSettingsView` is
+    now a Section; `advancedPane` removed. The window is full-size-content with
+    a unified toolbar, title from the section, min 780 × 520, default 860 × 640,
+    and an old saved frame below the minimum grows once to the default.
+  - Agent mode from the chip's menu and the menu bar ("Modo agente", checked),
+    both through `AppCoordinator.setAgentMode`; `ComputerUseCopy.switchMessage`
+    and `settingsExplanation(stopShortcut:)`; copy that pointed at old panes now
+    uses `EvieSettingsSection.path`.
+  - Speed, confirmed and not changed: the built-in PC profile sends
+    `stream: true` and `enable_thinking: false` for chat and voice (new test);
+    deltas reach the card as they arrive on both routes. **Found:** the
+    installed `~/Library/Application Support/Evie/config.json` (21:51) has
+    `default_reasoning: xhigh` on both profiles — every answer thinks at
+    Máximo. Left alone; reported, and visible in the chip's menu.
+- Files: `EvieBrainChip.swift`, `EvieSettingsSection.swift`,
+  `ComputerUse/ComputerUseSettingsCopy.swift`, `EvieBrainResolver.swift`,
+  `ComputerUseStart.swift`, `ComputerUseSwitch.swift`, `EvieMemory.swift`;
+  shell views and models listed above, `AppCoordinator.swift`,
+  `SettingsWindowController.swift`, `PermissionGuideView.swift`;
+  tests `EvieBrainChipTests.swift`, `EvieSettingsSectionTests.swift`,
+  `ModelRequestBodyTests.swift`; README, CHANGELOG, PROJECT_STATUS, UI_UX,
+  SECURITY, MACOS_RUNTIME, the v2 design doc ("After install").
+- Checks: `swift build` (no warnings); `Scripts/test --filter
+  "EvieBrainChipTests|EvieBrainResolverChoiceTests|EvieBrainResolverTests"`;
+  full `Scripts/test`: 1377 tests in 123 suites passed, 1 known issue (1351
+  before). Views were drawn offscreen and looked at in light and dark (see the
+  next entry); the app was not launched.
+- Owner to check by hand (offscreen drawing cannot show these): the chip's menu
+  opens from the non-activating overlay and its ticks follow the choice;
+  Testar conexão's line; the sidebar's width (~220 pt) and selected row in a
+  real window; that an old settings frame grows to 860 × 640; "Modo agente" in
+  the menu bar flips the chip's "Agente".
+- Next: reinstall, the owner's check above, and his call on the reasoning level.
+
 ## 2026-10-16 — agent mode ships off
 
 - Completed: the "Deixar a Evie controlar o Mac (modo agente)" switch now defaults

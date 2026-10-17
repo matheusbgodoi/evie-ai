@@ -249,7 +249,9 @@ public enum ComputerUseStopCommand {
     "para", "pare", "parar", "chega", "stop", "cancela", "cancele", "cancelar", "interrompe",
     "interrompa",
   ]
-  static let fillers: Set<String> = ["evie", "ei", "pode", "agora", "ja", "tudo", "ai", "isso", "ok"]
+  static let fillers: Set<String> = [
+    "evie", "ei", "pode", "agora", "ja", "tudo", "ai", "isso", "ok",
+  ]
 
   public static func isStop(_ text: String) -> Bool {
     let words = ComputerActionPolicy.fold(text)
@@ -269,7 +271,7 @@ public enum ComputerUseCopy {
     + "com segurança. Quando o PC estiver de volta, peça de novo."
   public static let switchedOff =
     "O controle do Mac está desligado. Ligue “Deixar a Evie controlar o Mac” em "
-    + "Configurações › Avançado › Controle do Mac e peça de novo."
+    + "\(EvieSettingsSection.screenAndAgent.path) e peça de novo."
   public static let notByWakeWord =
     "Não começo a controlar o Mac pela palavra de ativação: o microfone também ouve vídeos, "
     + "chamadas e outras pessoas. Segure o atalho de falar, ou escreva o pedido."

@@ -9,7 +9,7 @@ Evie v2 is specified in `docs/design/2026-10-16-evie-v2-design.md`, whose
 its order — S8a, S1a–S1b, S2a–S2d, S3, S4, S5a–S5d, S6-core, S6-shell, S7,
 S8b — is implemented on branch `v2` (2026-10-16), with the review and
 queued-security fixes listed in the WORKLOG. Full `Scripts/test` on 2026-10-16
-(M5 24 GB, macOS 27.2, Xcode 27.1): 1351 tests in 120 suites passed, 1 known
+(M5 24 GB, macOS 27.2, Xcode 27.1): 1377 tests in 123 suites passed, 1 known
 issue. ADRs 0013–0018 record the durable decisions.
 
 ### What is done
@@ -32,9 +32,17 @@ issue. ADRs 0013–0018 record the durable decisions.
   violet glow: 1024 px for the PC (first token ~26 s, the projector runs on the
   PC's CPU), 1280 px for the Mac (3–6 s). One picture per PC request; a picture,
   or text read off one, never rides with tools or auto-approves a change.
-- **Agent mode.** "Deixar a Evie controlar o Mac (modo agente)" (Configurações ›
-  Avançado › Controle do Mac, on by default, ADR 0018; `EVIE_COMPUTER_USE=0`
-  forces it off). A session starts only from a typed request, push-to-talk or a
+- **Which brain answers, on screen.** A chip in the input bar names the brain
+  the next question goes to ("Qwen 3.8 · PC", "LensVLM · Mac") with a dot for
+  ready, cold or waking, and unreachable; its menu pins Automático, Sempre o PC
+  or Sempre o Mac for new conversations (through `EvieBrainResolver.choose`),
+  tests the connection and switches agent mode. Every answer card names its
+  model and place ("Qwen 3.8 · no seu PC").
+- **Agent mode.** "Deixar a Evie controlar o Mac" (Configurações › Tela e modo
+  agente, off by default since 2026-10-16; ADR 0018's switch;
+  `EVIE_COMPUTER_USE=0` forces it off), also on the brain chip's menu and as
+  "Modo agente" in the menu bar; the chip shows an amber "Agente" while it is
+  on. Settings is a sidebar window in the style of System Settings. A session starts only from a typed request, push-to-talk or a
   click — never the wake word — through a card a hand must press, and runs on
   the PC only, for at most 15 minutes and 25 actions (ADR 0016, amending 0009).
   Code refuses the denied apps (System Settings, Keychain Access, terminals,
@@ -72,6 +80,15 @@ None of these could be done without the installed app and a person at the Mac
   overlay absent; ⌥⇧O; the Screen Recording card; the Mac profile; every
   indicator state on the internal and an external display, over a full-screen
   app, with Reduce Motion, and the CPU budget in a release build.
+- **Brain chip and Settings (2026-10-16):** see the WORKLOG entry "the brain
+  on screen, Settings as a sidebar" for the list — the chip's menu opening from
+  the non-activating overlay, its ticks, the sidebar's width and selection in a
+  real window, and the old 660 × 580 saved frame growing to 860 × 640.
+- **Speed:** the installed `config.json` (written 2026-10-16 21:51) sets
+  `default_reasoning` to `xhigh` for both brains, so every answer thinks at
+  "Máximo" before its first word; the built-in is off. The chip's menu shows
+  "Raciocínio: Máximo…" and opens Configurações › Cérebro, where the owner can
+  set it back to Desligado. Evie did not change the file.
 - **Agent mode (S5d):** eval cases 26–28 — the Notas script, "copia esse
   parágrafo", Esc and the mouse pause, a real password field, Mail's Send,
   Spotlight + "Terminal" + Return, and Raycast / Alfred panels where installed;
@@ -116,9 +133,9 @@ could see them, without reading any secret:
   estimate, the scroll direction with natural scrolling, the 300 ms settle in
   every app, the `.screenSaver` level over full-screen apps.
 
-**Next action:** the Fix phase (11b–11d and the timing test), then the owner's
-manual QA above in the installed app, starting with `Scripts/evie-app install`
-and the first-run guide.
+**Next action:** reinstall (`Scripts/evie-app install`) so the owner gets the
+brain chip and the new Settings, check them by hand as listed above, and decide
+the reasoning level; then the Fix phase (11b–11d and the timing test).
 
 ## Repository hygiene
 

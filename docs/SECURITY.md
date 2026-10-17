@@ -305,9 +305,10 @@ The rules exist in `EvieCore` since S5a (2026-10-16), the observer since S5b,
 the executor since S5c, and since S5d the session card, the confirmation card,
 the takeover monitor and the kill switches put them in the app.
 
-- **Available behind a switch that comes on** (ADR 0018): "Deixar a Evie
-  controlar o Mac (modo agente)" in Configurações › Avançado › Controle do Mac,
-  on by default at the owner's request; `EVIE_COMPUTER_USE=0` forces it off for
+- **Available behind a switch** (ADR 0018): "Deixar a Evie controlar o Mac"
+  in Configurações › Tela e modo agente (also the brain chip's menu and "Modo
+  agente" in the menu bar), off by default since 2026-10-16 (it shipped on at
+  the owner's request first); `EVIE_COMPUTER_USE=0` forces it off for
   a launch, and nothing in the environment forces it on. The switch never
   starts a session — the rules below do the protecting, not an opt-in.
 
