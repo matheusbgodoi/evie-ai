@@ -88,7 +88,16 @@ public struct EvieScopedFileReader: Sendable {
     case isADirectory(String)
     case notText(String)
     case rootUnavailable(String)
+    /// A document larger than `maximumDocumentBytes`. Refused whole rather
+    /// than truncated: half a PDF or half a zip is not half a document, it is a
+    /// corrupt one.
+    case tooLarge(String)
   }
+
+  /// Most bytes a document read takes in, for formats whose text has to be
+  /// extracted (PDF, Word, RTF). Sixteen megabytes holds a long thesis with
+  /// figures, and keeps one question from pulling a scanned book into memory.
+  public static let maximumDocumentBytes = 16 * 1_024 * 1_024
 
   /// Names that stay unreadable even inside a folder the user granted.
   ///
@@ -115,17 +124,37 @@ public struct EvieScopedFileReader: Sendable {
     "pem", "key", "p12", "pfx", "jks", "keystore", "keychain", "kdbx", "asc", "gpg",
   ]
 
+  /// Whether a path component is withheld.
+  ///
+  /// Compared folded, never as written. APFS is case-insensitive and
+  /// normalisation-insensitive by default, so `.SSH`, `.Env` and `LIBRARY` open
+  /// the very folders the list names; a case-sensitive comparison let every one
+  /// of them through. Both sides are folded for case, width and diacritics after
+  /// canonical composition — which also refuses a few names APFS would treat as
+  /// different (`Lìbrary`), a failure in the safe direction.
   public static func isDenied(_ name: String) -> Bool {
-    if deniedNames.contains(name) {
+    let folded = foldedName(name)
+    if foldedDeniedNames.contains(folded) {
       return true
     }
     // `.env.local`, `.env.production`, and friends.
-    if name.hasPrefix(".env") {
+    if folded.hasPrefix(".env") {
       return true
     }
-    let extensionName = (name as NSString).pathExtension.lowercased()
-    return !extensionName.isEmpty && deniedExtensions.contains(extensionName)
+    let extensionName = (folded as NSString).pathExtension
+    return !extensionName.isEmpty && foldedDeniedExtensions.contains(extensionName)
   }
+
+  /// A name as the denylist compares it.
+  static func foldedName(_ name: String) -> String {
+    name.precomposedStringWithCanonicalMapping.folding(
+      options: [.caseInsensitive, .diacriticInsensitive, .widthInsensitive],
+      locale: nil
+    )
+  }
+
+  private static let foldedDeniedNames = Set(deniedNames.map(foldedName))
+  private static let foldedDeniedExtensions = Set(deniedExtensions.map(foldedName))
 
   // MARK: - Listing
 
@@ -186,6 +215,83 @@ public struct EvieScopedFileReader: Sendable {
   // MARK: - Reading
 
   public func read(root: URL, relativePath: String) throws -> EvieFileExcerpt {
+    let opened = try openRegularFile(root: root, relativePath: relativePath)
+    defer { close(opened.descriptor) }
+
+    let data = Self.readBytes(from: opened.descriptor, limit: min(opened.byteSize, maximumReadBytes))
+    if Self.looksBinary(data) {
+      throw ReaderError.notText(relativePath)
+    }
+    guard let text = String(data: data, encoding: .utf8) else {
+      throw ReaderError.notText(relativePath)
+    }
+
+    return EvieFileExcerpt(
+      relativePath: relativePath,
+      text: text,
+      byteSize: opened.byteSize,
+      isTruncated: opened.byteSize > data.count
+    )
+  }
+
+  /// The whole file as bytes, for a document whose text has to be extracted
+  /// rather than read: a PDF, a Word file, an RTF.
+  ///
+  /// Opened through exactly the same containment as `read`, so a document is no
+  /// door out of the folder that a text file is not. There is no binary check —
+  /// these formats are binary — and so no truncation either: a file over the
+  /// ceiling is refused.
+  public func readData(
+    root: URL,
+    relativePath: String,
+    maximumBytes: Int = EvieScopedFileReader.maximumDocumentBytes
+  ) throws -> Data {
+    let opened = try openRegularFile(root: root, relativePath: relativePath)
+    defer { close(opened.descriptor) }
+    guard opened.byteSize <= maximumBytes else {
+      throw ReaderError.tooLarge(relativePath)
+    }
+    return Self.readBytes(from: opened.descriptor, limit: opened.byteSize)
+  }
+
+  /// What a path is, without reading it: a folder or a file, its size, and
+  /// whether it is marked executable.
+  ///
+  /// Asked through the contained descriptor and `fstat`, never `stat` on the
+  /// path, so the thing described is the thing a later step would reach.
+  public func status(root: URL, relativePath: String) throws -> EvieItemStatus {
+    let components = try Self.components(of: relativePath)
+    let rootDescriptor = try Self.openRoot(root)
+    defer { close(rootDescriptor) }
+
+    let descriptor = try Self.openContained(
+      rootDescriptor: rootDescriptor,
+      components: components,
+      relativePath: relativePath,
+      flags: O_RDONLY
+    )
+    defer { close(descriptor) }
+
+    var status = stat()
+    guard fstat(descriptor, &status) == 0 else {
+      throw ReaderError.notReadable(relativePath)
+    }
+    let type = status.st_mode & S_IFMT
+    guard type == S_IFDIR || type == S_IFREG else {
+      throw ReaderError.notReadable(relativePath)
+    }
+    return EvieItemStatus(
+      isDirectory: type == S_IFDIR,
+      byteSize: Int(status.st_size),
+      isExecutable: type == S_IFREG && (status.st_mode & (S_IXUSR | S_IXGRP | S_IXOTH)) != 0
+    )
+  }
+
+  /// Opens a regular file inside the root and reports its size.
+  private func openRegularFile(
+    root: URL,
+    relativePath: String
+  ) throws -> (descriptor: Int32, byteSize: Int) {
     let components = try Self.components(of: relativePath)
     guard !components.isEmpty else {
       throw ReaderError.isADirectory(relativePath)
@@ -199,23 +305,26 @@ public struct EvieScopedFileReader: Sendable {
       relativePath: relativePath,
       flags: O_RDONLY
     )
-    defer { close(descriptor) }
 
     // `fstat` on the descriptor, never `stat` on the path: what was checked has
     // to be what was opened.
     var status = stat()
     guard fstat(descriptor, &status) == 0 else {
+      close(descriptor)
       throw ReaderError.notReadable(relativePath)
     }
     guard (status.st_mode & S_IFMT) != S_IFDIR else {
+      close(descriptor)
       throw ReaderError.isADirectory(relativePath)
     }
     guard (status.st_mode & S_IFMT) == S_IFREG else {
+      close(descriptor)
       throw ReaderError.notReadable(relativePath)
     }
+    return (descriptor, Int(status.st_size))
+  }
 
-    let byteSize = Int(status.st_size)
-    let limit = min(byteSize, maximumReadBytes)
+  private static func readBytes(from descriptor: Int32, limit: Int) -> Data {
     var buffer = [UInt8](repeating: 0, count: max(limit, 1))
     var total = 0
     while total < limit {
@@ -227,21 +336,21 @@ public struct EvieScopedFileReader: Sendable {
       }
       total += read
     }
-    let data = Data(buffer.prefix(total))
+    return Data(buffer.prefix(total))
+  }
+}
 
-    if Self.looksBinary(data) {
-      throw ReaderError.notText(relativePath)
-    }
-    guard let text = String(data: data, encoding: .utf8) else {
-      throw ReaderError.notText(relativePath)
-    }
+/// What `EvieScopedFileReader.status` found at a path.
+public struct EvieItemStatus: Hashable, Sendable {
+  public var isDirectory: Bool
+  public var byteSize: Int
+  /// Any execute bit set on a regular file.
+  public var isExecutable: Bool
 
-    return EvieFileExcerpt(
-      relativePath: relativePath,
-      text: text,
-      byteSize: byteSize,
-      isTruncated: byteSize > total
-    )
+  public init(isDirectory: Bool, byteSize: Int, isExecutable: Bool) {
+    self.isDirectory = isDirectory
+    self.byteSize = byteSize
+    self.isExecutable = isExecutable
   }
 }
 
@@ -373,6 +482,8 @@ extension EvieScopedFileReader.ReaderError: LocalizedError {
       "\(path) não é texto."
     case .rootUnavailable(let name):
       "A pasta \(name) não está mais acessível."
+    case .tooLarge(let path):
+      "\(path) é grande demais para eu abrir."
     }
   }
 }

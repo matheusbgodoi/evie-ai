@@ -333,9 +333,35 @@ stored reference text, against 0.5–1.4 s for the rest (`docs/VOICE.md`).
 ### Reading your Mac
 
 Authorise a folder and she can list it, search it by name, search inside the
-text, and read what is in it. If you use Obsidian, your vault is offered
-directly. Everything she can reach is on this pane, and nothing she cannot reach
-is.
+text, and read what is in it — PDFs, Word, RTF and text files included. If you
+use Obsidian, your vault is offered directly. Everything she can reach is on this
+pane, and nothing she cannot reach is.
+
+**Mesa, Documentos and Downloads are one click away.** Ask "o que tem na minha
+mesa?" or "analisa a pasta Downloads" before granting anything and a card asks
+"Permitir que a Evie leia sua Mesa"; press Permitir and macOS asks its own
+question once for that folder. They are never granted silently — the same
+suggestions sit in the first-run guide and in Configurações › Pastas, beside the
+iCloud Obsidian vault. "Analisa a pasta" gets an overview counted by code: how
+many files of each kind, how much space, the newest and the oldest, some names
+and the opening of a few documents (`analyze_folder`, `docs/FILESYSTEM.md`).
+
+**She writes documents, and you press Salvar.** "Escreve um relatório e salva em
+Documentos", "salva isso na minha mesa como resumo.docx": she writes the text and
+a card shows the file name, where it lands and the opening, with **Salvar** and
+**Salvar e abrir**. Formats are `.md`, `.txt`, `.rtf`, `.docx` (the system's own
+Word writer) and `.pdf`. She only ever creates a new file — a name already taken
+becomes "resumo (2).docx" — and nothing is written before the click. An opt-in
+switch, "Salvar direto quando eu pedir explicitamente", skips the click only when
+*your own message* asks to save, for a new file in a folder already granted;
+overwriting, moving and the Trash are never covered, and text from a document, a
+page or the screen never counts as you asking
+([ADR 0019](docs/adr/0019-saving-a-new-document-when-asked.md)).
+
+**She opens and shows files.** "Abre o resumo.pdf" opens it in its default app;
+"mostra no Finder" selects it there. Only documents open — apps, scripts,
+installers, disk images, Terminal files and web pages are refused — and only
+inside authorised folders; each one is a line in the conversation.
 
 ![The Pastas settings, showing authorised folders and the file-change switches](docs/images/settings-pastas.png)
 

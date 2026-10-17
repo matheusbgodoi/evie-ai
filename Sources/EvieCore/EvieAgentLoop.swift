@@ -48,6 +48,16 @@ public struct EvieAgentLoop: Sendable {
   /// (`ModelFamily.misspellsSearchTerms`); grounding, which searches with the
   /// person's own words, retries on every family.
   public var modelFamily: ModelFamily
+  /// Whether she may offer a new document (`propose_document`). The shell's
+  /// own turns only: a schedule or a plan never writes.
+  public var offersDocuments: Bool
+  /// Whether the person switched on "Salvar direto quando eu pedir
+  /// explicitamente" and their own message asked to save (ADR 0019). It only
+  /// changes what the tool result tells the model; saving is the shell's.
+  public var savesDocumentsDirectly: Bool
+  /// Opens a file or shows it in the Finder. Absent means `open_file` and
+  /// `reveal_in_finder` are not declared.
+  public var opener: (any EvieFileOpening)?
 
   public init(
     toolbox: EvieFileToolbox = EvieFileToolbox(),
@@ -58,7 +68,10 @@ public struct EvieAgentLoop: Sendable {
     maximumIterations: Int = EvieAgentLoop.maximumIterations,
     offersTools: Bool = true,
     readiness: ReadinessRung? = nil,
-    modelFamily: ModelFamily = .unknown
+    modelFamily: ModelFamily = .unknown,
+    offersDocuments: Bool = false,
+    savesDocumentsDirectly: Bool = false,
+    opener: (any EvieFileOpening)? = nil
   ) {
     self.toolbox = toolbox
     self.web = web
@@ -69,6 +82,9 @@ public struct EvieAgentLoop: Sendable {
     self.offersTools = offersTools
     self.readiness = readiness
     self.modelFamily = modelFamily
+    self.offersDocuments = offersDocuments
+    self.savesDocumentsDirectly = savesDocumentsDirectly
+    self.opener = opener
   }
 
   /// What the turn produced.
@@ -99,6 +115,14 @@ public struct EvieAgentLoop: Sendable {
     /// Messages she wrote. Nothing has been sent, and nothing can be: the loop
     /// holds a reader, and sending lives behind a protocol it was never given.
     public var mailProposals: [EvieMailProposal] = []
+    /// Documents she wrote. Nothing is on disk: each one is a card, or — only
+    /// under ADR 0019's narrow policy — a save the shell performs and reports.
+    public var documentProposals: [EvieDocumentProposal] = []
+    /// Well-known folders a tool named before they were granted, for the shell
+    /// to offer as one-click cards. Nothing has been granted.
+    public var rootRequests: [EvieSuggestedRoot] = []
+    /// Files she opened or showed in the Finder, for the transcript.
+    public var fileActions: [EvieFileAction] = []
   }
 
   /// Runs the turn.
@@ -138,6 +162,9 @@ public struct EvieAgentLoop: Sendable {
     var skillProposals: [EvieSkill] = []
     var eventProposals: [EvieCalendarEventProposal] = []
     var mailProposals: [EvieMailProposal] = []
+    var documentProposals: [EvieDocumentProposal] = []
+    var rootRequests: [EvieSuggestedRoot] = []
+    var fileActions: [EvieFileAction] = []
     var toolNames: [String] = []
     var readAddresses: [String] = []
     // Memory is offered alongside the file tools, and is the only one of them
@@ -169,6 +196,36 @@ public struct EvieAgentLoop: Sendable {
     }
     if offersChanges, !roots.isEmpty {
       tools.append(EvieChangeTool.definition)
+    }
+    if offersDocuments {
+      tools.append(EvieDocumentTool.definition)
+    }
+    if opener != nil {
+      tools += EvieOpenTool.definitions
+    }
+
+    // Every way out of the loop reports the same things.
+    func outcome(_ answer: String, exhausted: Bool) -> Outcome {
+      var result = Outcome(
+        appended: appended,
+        answer: answer,
+        toolCallCount: toolCallCount,
+        exhausted: exhausted,
+        memoryProposals: memoryProposals,
+        provenance: .from(
+          toolCalls: toolNames,
+          readAddresses: readAddresses,
+          readAttachment: carriesAttachment
+        ),
+        changeProposals: changeProposals,
+        skillProposals: skillProposals,
+        eventProposals: eventProposals,
+        mailProposals: mailProposals
+      )
+      result.documentProposals = documentProposals
+      result.rootRequests = rootRequests
+      result.fileActions = fileActions
+      return result
     }
 
     // Looked up before the model is asked anything, so the order the user asked
@@ -291,42 +348,12 @@ public struct EvieAgentLoop: Sendable {
           emit: emit
         )
         appended.append(closing.message)
-        return Outcome(
-          appended: appended,
-          answer: closing.message.content,
-          toolCallCount: toolCallCount,
-          exhausted: closing.message.content.isEmpty,
-          memoryProposals: memoryProposals,
-          provenance: .from(
-            toolCalls: toolNames,
-            readAddresses: readAddresses,
-            readAttachment: carriesAttachment
-          ),
-          changeProposals: changeProposals,
-          skillProposals: skillProposals,
-          eventProposals: eventProposals,
-          mailProposals: mailProposals
-        )
+        return outcome(closing.message.content, exhausted: closing.message.content.isEmpty)
       }
 
       guard let calls = step.message.toolCalls, !calls.isEmpty else {
         appended.append(step.message)
-        return Outcome(
-          appended: appended,
-          answer: step.message.content,
-          toolCallCount: toolCallCount,
-          exhausted: false,
-          memoryProposals: memoryProposals,
-          provenance: .from(
-            toolCalls: toolNames,
-            readAddresses: readAddresses,
-            readAttachment: carriesAttachment
-          ),
-          changeProposals: changeProposals,
-          skillProposals: skillProposals,
-          eventProposals: eventProposals,
-          mailProposals: mailProposals
-        )
+        return outcome(step.message.content, exhausted: false)
       }
 
       conversation.append(step.message)
@@ -385,6 +412,19 @@ public struct EvieAgentLoop: Sendable {
           if let proposal {
             changeProposals.append(proposal)
           }
+        } else if offersDocuments, call.name == EvieDocumentTool.name {
+          let (outcome, proposal) = recordDocument(call, roots: roots)
+          result = outcome
+          if let proposal {
+            documentProposals.append(proposal)
+          }
+        } else if let opener, EvieOpenTool(rawValue: call.name) != nil {
+          let (outcome, action) = await EvieOpenTool.run(
+            call, roots: roots, toolbox: toolbox, opener: opener)
+          result = outcome
+          if let action {
+            fileActions.append(action)
+          }
         } else if call.name == EvieCalculatorTool.name {
           result = EvieCalculatorTool.execute(call)
         } else if call.name == EvieSkillTool.name {
@@ -419,6 +459,13 @@ public struct EvieAgentLoop: Sendable {
             correctingNearMisses: modelFamily.misspellsSearchTerms
           )
         }
+        // A well-known folder named before it was granted becomes a card in
+        // the shell, whichever tool named it.
+        if let requested = toolbox.requestedSuggestion(in: call, roots: roots),
+          !rootRequests.contains(requested)
+        {
+          rootRequests.append(requested)
+        }
         toolCallCount += 1
         conversation.append(result.message)
         appended.append(result.message)
@@ -437,22 +484,7 @@ public struct EvieAgentLoop: Sendable {
       }
     }
 
-    return Outcome(
-      appended: appended,
-      answer: "",
-      toolCallCount: toolCallCount,
-      exhausted: true,
-      memoryProposals: memoryProposals,
-      provenance: .from(
-            toolCalls: toolNames,
-            readAddresses: readAddresses,
-            readAttachment: carriesAttachment
-          ),
-      changeProposals: changeProposals,
-      skillProposals: skillProposals,
-      eventProposals: eventProposals,
-      mailProposals: mailProposals
-    )
+    return outcome("", exhausted: true)
   }
 }
 
@@ -604,12 +636,21 @@ extension EvieAgentLoop {
       return "Lendo suas anotações…"
     case .fileInfo:
       return "Conferindo os detalhes…"
+    case .analyzeFolder:
+      return "Analisando a pasta…"
     case nil:
       if call.name == EvieMemoryTool.name {
         return "Anotando uma coisa para te perguntar…"
       }
       if call.name == EvieChangeTool.name {
         return "Preparando uma sugestão para você aprovar…"
+      }
+      if call.name == EvieDocumentTool.name {
+        return "Escrevendo o documento para você conferir…"
+      }
+      if let path = arguments["path"], let tool = EvieOpenTool(rawValue: call.name) {
+        let name = path.isEmpty ? "a pasta" : (path as NSString).lastPathComponent
+        return tool == .open ? "Abrindo \(name)…" : "Mostrando \(name) no Finder…"
       }
       if call.name == EvieSkillTool.name {
         return "Escrevendo um jeito de fazer isso da próxima vez…"
@@ -1014,5 +1055,66 @@ extension EvieAgentLoop {
         se quiser, mencione que sugeriu guardar.
         """
     )
+  }
+}
+
+extension EvieAgentLoop {
+  /// Reads a `propose_document` call into a proposal and tells the model, in
+  /// words it cannot misread, that nothing has been saved.
+  fileprivate func recordDocument(
+    _ call: EvieToolCall,
+    roots: [EvieFileRoot]
+  ) -> (EvieToolResult, EvieDocumentProposal?) {
+    func answer(_ text: String, failed: Bool = false) -> EvieToolResult {
+      EvieToolResult(callID: call.id, name: call.name, content: text, isFailure: failed)
+    }
+    let proposal: EvieDocumentProposal
+    switch EvieDocumentTool.proposal(from: call) {
+    case .failure(let reason):
+      return (answer(reason.message, failed: true), nil)
+    case .success(let made):
+      proposal = made
+    }
+
+    switch EvieSuggestedRoot.lookup(proposal.destination, in: roots, home: toolbox.home) {
+    case .granted(let root):
+      let place = proposal.place(rootName: root.displayName)
+      if savesDocumentsDirectly {
+        return (
+          answer(
+            """
+            Ele pediu para salvar e a opção de salvar direto está ligada: \
+            "\(proposal.fileName())" vai ser gravado em \(place) assim que você \
+            responder, como arquivo novo, e um aviso na tela confirma. Diga em uma \
+            frase onde ele vai ficar.
+            """), proposal
+        )
+      }
+      return (
+        answer(
+          """
+          Documento "\(proposal.fileName())" preparado para \(place). NADA foi salvo: \
+          o Matheus vê um cartão com Salvar e Salvar e abrir. Diga que o documento \
+          está na tela esperando; nunca diga que já salvou.
+          """), proposal
+      )
+    case .notGranted(let suggestion):
+      return (
+        answer(
+          """
+          Documento preparado, mas \(suggestion.displayName) ainda não está \
+          autorizada. Aparece um cartão para ele permitir com um clique e, depois, \
+          o cartão do documento. NADA foi salvo. Diga isso em uma frase.
+          """), proposal
+      )
+    case .unknown:
+      return (
+        answer(
+          """
+          Não existe o destino \(proposal.destination). Use mesa, documentos, \
+          downloads ou um identificador de list_roots.
+          """, failed: true), nil
+      )
+    }
   }
 }

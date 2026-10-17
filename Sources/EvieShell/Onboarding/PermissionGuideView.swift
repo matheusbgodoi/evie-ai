@@ -9,6 +9,9 @@ import SwiftUI
 /// closes it, the pane does not.
 struct PermissionGuideView: View {
   @ObservedObject var viewModel: PermissionGuideViewModel
+  /// The well-known folders, offered on first launch. Absent in Settings,
+  /// where the folders pane has its own copy of the same section.
+  var folders: EvieRootsViewModel?
   var onDone: (() -> Void)?
 
   var body: some View {
@@ -19,6 +22,10 @@ struct PermissionGuideView: View {
         Text("O que a Evie precisa")
       } footer: {
         footer
+      }
+
+      if let folders {
+        SuggestedFoldersSection(viewModel: folders)
       }
 
       if let onDone {

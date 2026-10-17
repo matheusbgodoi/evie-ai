@@ -253,6 +253,12 @@ final class AppCoordinator: NSObject {
     viewModel.isMailAndCalendarEnabled = { [weak self] in
       self?.preferences.mailAndCalendarEnabled ?? false
     }
+    viewModel.grantSuggestedRoot = { [rootsViewModel] suggestion in
+      rootsViewModel.grantSuggested(suggestion)
+    }
+    viewModel.savesDocumentsWhenAsked = { [weak self] in
+      self?.preferences.savesDocumentsWhenAsked ?? false
+    }
     viewModel.fileChangePolicy = { [weak self] in
       guard let self else { return (false, false) }
       return (preferences.fileChangesEnabled, preferences.autoApproveChanges)
@@ -347,6 +353,14 @@ final class AppCoordinator: NSObject {
       preferencesDidChange(updated)
       try? preferencesStore.save(updated)
     }
+    rootsViewModel.savesDocumentsWhenAsked = preferences.savesDocumentsWhenAsked
+    rootsViewModel.onDocumentPolicyChanged = { [weak self] savesWhenAsked in
+      guard let self else { return }
+      var updated = preferences
+      updated.savesDocumentsWhenAsked = savesWhenAsked
+      preferencesDidChange(updated)
+      try? preferencesStore.save(updated)
+    }
     rootsViewModel.onChange = { [weak self] roots in
       guard let self else { return }
       viewModel.applyCapabilities(
@@ -372,6 +386,9 @@ final class AppCoordinator: NSObject {
     // offer to look, and the moment a folder is authorised she must know she
     // can. Claiming either wrongly is the fastest way to make her useless.
     capabilities.readsLocalFiles = hasGrantedFolders
+    // The shell's own turns always offer documents, opening and the folders a
+    // click away (ADR 0019); the schedule runner builds its own snapshot.
+    capabilities.worksWithDocuments = true
     // Declared unconditionally: the tool is always offered, so the persona may
     // always tell her to use it.
     capabilities.calculates = true
@@ -836,7 +853,8 @@ extension AppCoordinator {
   fileprivate func openPermissionGuide() {
     if permissionGuideWindowController == nil {
       permissionGuideWindowController = PermissionGuideWindowController(
-        viewModel: permissionGuide
+        viewModel: permissionGuide,
+        folders: rootsViewModel
       )
     }
     permissionGuideWindowController?.present()

@@ -33,6 +33,10 @@ public struct EvieCapabilitySnapshot: Hashable, Sendable {
   /// the prompt must describe that and name no function: a model told to call
   /// `search_content` that was declared nothing writes the call out as text.
   public var usesTools: Bool
+  /// Whether this turn may write a new document (`propose_document`), open a
+  /// file or show it in the Finder, and offer the well-known folders that are
+  /// not granted yet. The shell's own turns only; a schedule or a plan never.
+  public var worksWithDocuments: Bool
 
   public init(
     listensToSpeech: Bool = false,
@@ -45,7 +49,8 @@ public struct EvieCapabilitySnapshot: Hashable, Sendable {
     calculates: Bool = false,
     readsMailAndCalendar: Bool = false,
     whereItRuns: ModelLocation = .thisMac,
-    usesTools: Bool = true
+    usesTools: Bool = true,
+    worksWithDocuments: Bool = false
   ) {
     self.listensToSpeech = listensToSpeech
     self.speaksAnswers = speaksAnswers
@@ -58,6 +63,7 @@ public struct EvieCapabilitySnapshot: Hashable, Sendable {
     self.readsMailAndCalendar = readsMailAndCalendar
     self.whereItRuns = whereItRuns
     self.usesTools = usesTools
+    self.worksWithDocuments = worksWithDocuments
   }
 
   public static let textOnly = EvieCapabilitySnapshot()
@@ -290,8 +296,28 @@ extension EviePersona {
           + "Se o que ele procura não estiver nas pastas autorizadas, diga isso "
           + "em vez de supor o conteúdo."
       )
+    } else if capabilities.worksWithDocuments, capabilities.usesTools {
+      // Nothing granted yet, and that is a click away rather than a missing
+      // capability. Said so she reaches for the card instead of refusing.
+      available.append(
+        "Ainda não há pasta autorizada. Se \(creatorPreferredName) pedir algo na Mesa, em "
+          + "Documentos ou em Downloads, chame list_roots e use o apelido (mesa, documentos, "
+          + "downloads) como root_id: aparece um cartão para ele permitir com um clique."
+      )
     } else {
       unavailable.append("abrir pastas e arquivos do Mac")
+    }
+
+    if capabilities.worksWithDocuments, capabilities.usesTools {
+      available.append(
+        "Para escrever um documento para ele — resumo, relatório, trabalho, lista — chame "
+          + "propose_document (md, txt, rtf, docx ou pdf; Word é docx) com o texto inteiro "
+          + "em Markdown e o destino mesa, documentos, downloads ou uma pasta autorizada. "
+          + "Nada é salvo até ele apertar Salvar no cartão, então nunca diga que já salvou; "
+          + "um arquivo que já existe nunca é substituído. Para \"o que tem na pasta\" use "
+          + "analyze_folder; para abrir um arquivo no app padrão, open_file; para mostrar "
+          + "no Finder, reveal_in_finder."
+      )
     }
 
     if capabilities.readsImagesAndDocuments {

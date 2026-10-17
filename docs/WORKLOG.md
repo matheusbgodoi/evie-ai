@@ -4374,3 +4374,157 @@ nobody but the owner can fetch it.**
   only the handful of words that could be within one edit of it and keeps no text
   at all. Correctness unchanged; the successful-search path measured 64 s before
   and after.
+
+## 2026-10-16 — folders: suggestions, analyze_folder, documents in read_file
+
+- Branch `v2-files` (worktree `evie-ai-files`, from `v2` at `b97686a`). The
+  owner wants Evie to work like a command-line agent for everyday computer
+  tasks — "salvar algo na minha mesa, analisar uma pasta, ver as coisas do meu
+  PC" — inside the existing authority model. This is the read half.
+- `EvieSuggestedRoot`: Mesa, Documentos, Downloads and the iCloud Obsidian vault
+  as fixed suggestions with aliases usable as `root_id`; a granted home folder
+  reaches the first three through a narrowed view and never the vault under
+  `Library`. `EvieFileToolbox.home` (default `nil`) switches aliases on.
+- `analyze_folder` (`EvieFolderAnalyzer`): counts by kind, sizes, newest and
+  oldest, a sample of names and document extracts, bounded at 3 levels, 4,000
+  entries and 8 extracts.
+- `read_file` now returns the text of PDF, DOCX, DOC, RTF and ODT through
+  `EvieDocumentText` and the new `EvieScopedFileReader.readData` (16 MiB,
+  refused whole when larger). `ReaderError.tooLarge` added.
+- The card that grants a suggestion is in the shell, in a later commit on this
+  branch; `docs/FILESYSTEM.md` describes the whole design.
+- Checks: `swift build` clean; `Scripts/test --filter
+  'EvieSuggestedRootTests|EvieFolderAnalysisTests|EvieFileToolboxDocumentTests|EvieFileToolboxTests|EvieScopedFileReader'`
+  — 67 tests passed. Fixtures live under the temporary directory; a stand-in
+  home is a fresh folder, never the real Desktop.
+
+## 2026-10-16 — documents: propose_document, rendering, new-file-only creation
+
+- `EvieDocumentProposal` / `EvieDocumentTool` (`propose_document`), with format
+  inference from the title, subfolder validation and fifteen-minute expiry.
+- `EvieDocumentRenderer`: `.md`, `.txt`, `.rtf` and `.docx` through
+  `NSAttributedString` (`.officeOpenXML`), `.pdf` through Core Text on A4.
+- `EvieDocumentCreator`: `O_CREAT | O_EXCL` beneath a root descriptor, "nome
+  (2).ext" on a clash, missing subfolders created with `mkdirat`.
+- `EvieDocumentIntent`: the person's own "salva / salve / grava / cria um
+  arquivo", negation-aware, for the opt-in direct save (ADR 0019, shell commit).
+- Verified the Word file outside the tests: `unzip -l` shows
+  `[Content_Types].xml`, `word/document.xml`, `docProps/*`; Python's `zipfile`
+  test passes and every XML part parses; `file` says "Microsoft Word 2007+";
+  `textutil -info` reads the title. Word and Pages were not launched.
+- Checks: `swift build` clean; `Scripts/test --filter
+  'EvieDocumentProposalTests|EvieDocumentIntentTests|EvieDocumentCreatorTests'`
+  — 16 tests passed.
+
+## 2026-10-16 — security: fold the denylist for case and normalisation
+
+- Finding (reported by the reviewing agent): `EvieScopedFileReader.isDenied`
+  compared path components case-sensitively, and APFS is case- and
+  normalisation-insensitive by default, so `.SSH/x`, `.Env.local` and `LIBRARY`
+  reached what the denylist exists to withhold — on the read path, in
+  `EvieFileWriter`, and in the new document creator's subfolder check.
+- Fix: both the list and the component are folded (NFC, then case, width and
+  diacritic folding) inside `isDenied` itself, so every caller benefits; the
+  `.env` prefix check uses the folded name. Diacritic folding also refuses a few
+  names APFS would treat as distinct (`Lìbrary`) — accepted, safe direction.
+- Regression tests: `.SSH`, `.Env.local`, `LIBRARY`, `Servidor.PEM` and the
+  decomposed `Li` + U+0300 `brary` are denied by name; `.SSH/x` is refused on
+  disk by `read` and `readData`; `propose_document` refuses those subfolders and
+  `EvieDocumentCreator` writes nothing into `.SSH`.
+- Checks: `swift build` clean; `Scripts/test --filter
+  'EvieScopedFileReader|EvieDocument|EvieFileWriter|EvieFileToolbox|EvieFolder|EvieSuggested|EviePersona|EvieBrainTurn'`
+  — 149 tests passed.
+
+## 2026-10-16 — loop: documents, open/reveal, folder requests, file routing
+
+- `EvieAgentLoop` gains `offersDocuments`, `savesDocumentsDirectly` and
+  `opener`; `Outcome` gains `documentProposals`, `rootRequests` and
+  `fileActions`. The four exits now build their outcome in one nested function.
+- `EvieOpenTool` (`open_file`, `reveal_in_finder`) behind `EvieFileOpening`,
+  refusing executables, scripts, `.app`, `.command`, `.sh`, `.pkg`, `.dmg`,
+  `.terminal` and paths outside the roots.
+- `EvieFileIntent` and `EvieTurnPlan.route(asksAboutFiles:)`;
+  `EvieTurnPlan.savesDocumentsDirectly`.
+- `EvieCapabilitySnapshot.worksWithDocuments` and the persona lines for it:
+  folders a click away, `propose_document` ("nunca diga que já salvou"),
+  `analyze_folder`, `open_file`, `reveal_in_finder`.
+- Checks: `swift build` clean; `Scripts/test --filter
+  'EvieAgentLoop|EvieFileRouting|EvieOpenTool|EvieFileToolbox|EviePersona|EvieBrainTurn'`
+  — 111 tests passed, including the five routing requests.
+
+## 2026-10-16 — security: open_file from an allowlist
+
+- Finding (reported by the reviewing agent): `EvieOpenTool` refused executables
+  by an extension denylist, which always misses some launcher type (`.saver`,
+  `.xpc`, `.prefPane`, the next one).
+- Fix: `isOpenableDocument` admits only `documentExtensions`, or a `UTType`
+  that conforms to `public.content` and not to executable, bundle, package,
+  application, script, shell script, Unix executable, app extension, plug-in or
+  preference pane; the old list stays as a second fence. Any directory —
+  folder, bundle or package — is reveal-only. HTML and SVG are refused too,
+  since a browser runs their scripts.
+- Regression tests: `.terminal`, `.workflow`, `.scpt`, a `.bundle` directory
+  and a plain folder are refused by `open_file` on disk and revealed by
+  `reveal_in_finder`; a plain `.pdf` (any case) opens; `.saver`, `.xpc`, `.jar`
+  and an unknown extension are not openable.
+- Checks: `swift build` clean; `Scripts/test --filter
+  'EvieOpenTool|EvieAgentLoopFile'` — 15 tests passed.
+
+## 2026-10-16 — security: no open-ended fallback in open_file
+
+- Finding (reported by the reviewing agent): the `conforms(to: .content)`
+  fallback admitted HTML, XHTML, SVG, XML and web archives, which open in a
+  browser that runs their script.
+- Fix: the fallback is limited to `.pdf`, `.image`, `.audiovisualContent` and
+  `.plainText`, and still excludes executable, bundle, package, application,
+  script and now source code, HTML, XML, web archive and SVG types;
+  `webExtensions` (html, htm, xhtml, svg, xml, webarchive, mht…) are refused
+  before any type lookup. SVG needed both, since `UTType` calls it an image.
+- Regression tests: `.html`, `.HTM`, `.svg`, `.webarchive`, `.xml`, `.xhtml`
+  are refused by `open_file` and revealed by `reveal_in_finder`; `.sh` and
+  `.swift` are not openable through the plain-text fallback; `.jp2` is, through
+  the image one.
+- Checks: `Scripts/test --filter 'EvieOpenTool|EvieAgentLoopFile'` — 16 tests
+  passed.
+
+## 2026-10-16 — shell: folder cards, document cards, direct save, settings hook
+
+- `OverlayViewModel+Documents.swift`: `presentFileOutcome` turns a loop's
+  `documentProposals`, `rootRequests` and `fileActions` (plus folders the
+  person's own message mentions) into cards — "Permitir que a Evie leia sua
+  Mesa" (Permitir), "Salvar resumo.docx" (Salvar, Salvar e abrir), "Salvei…"
+  (Abrir, Mostrar no Finder), "Abri…". A document for an ungranted folder is
+  held until Permitir, then shown as a card, never saved directly. Closing a
+  card is a no. `EvieWorkspaceOpener` is the `NSWorkspace` side of
+  `EvieFileOpening`.
+- Hooks kept small for the Settings redesign merge: three stored properties in
+  `OverlayViewModel`, one line each in `performArtifactAction`,
+  `dismissArtifact` and `finishLoop`; two fields on `PreparedTurn`; the loop in
+  `answer` gets the home folder, documents and the opener.
+- `EviePreferences.savesDocumentsWhenAsked` (`saves_documents_when_asked`, off);
+  `EvieRootsViewModel` gains the switch, `suggestedRoots` and
+  `grantSuggested` (lists the folder once off the main thread so the macOS
+  prompt appears at the press); `add(_:displayName:)`.
+- `Views/DocumentSettingsSection.swift`: `SuggestedFoldersSection` and
+  `DocumentSettingsSection`, embedded in `RootsSettingsView` with one line;
+  `PermissionGuideView` shows the suggestions on first launch
+  (`folders:` passed only by the guide window). Copy that said she "nunca
+  escreve" corrected.
+- `AppCoordinator`: `worksWithDocuments` on, the grant and policy callbacks.
+- ADR 0019 (amends 0009 narrowly); `SECURITY.md`, `FILESYSTEM.md`, README
+  "What she does", CHANGELOG, PROJECT_STATUS updated.
+- Checks: `swift build` (whole package) with no warnings; full `Scripts/test`
+  — 1414 tests in 129 suites passed, 1 known issue (the existing Mail one); base
+  was 1351. Not run: the installed app (the owner is using it), so the cards,
+  the TCC prompts and Word/Pages opening the `.docx` are manual QA owed.
+- Next: merge `v2-files` into `v2` after the Settings sidebar lands, moving the
+  one-line `DocumentSettingsSection` embed into "Arquivos e pastas"; then the
+  manual QA in PROJECT_STATUS.
+
+## 2026-10-16 — evals: file routing and the manual files run
+
+- `evals/README.md` cases 29 (`files-routing-001`, code, passed —
+  `EvieFileRoutingTests`) and 30 (`files-agent-manual-001`, the installed-app
+  run owed: grant card and macOS prompt, Salvar and "nome (2)", the `.docx` in
+  Word and Pages, direct save on and off with a PDF on screen, open and refuse),
+  and a row in the v2 checklist table. Documentation only; no code changed.

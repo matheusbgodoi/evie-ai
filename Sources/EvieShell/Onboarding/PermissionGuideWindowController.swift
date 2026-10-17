@@ -9,7 +9,7 @@ import SwiftUI
 final class PermissionGuideWindowController: NSWindowController, NSWindowDelegate {
   private let viewModel: PermissionGuideViewModel
 
-  init(viewModel: PermissionGuideViewModel) {
+  init(viewModel: PermissionGuideViewModel, folders: EvieRootsViewModel? = nil) {
     self.viewModel = viewModel
     let window = NSWindow(
       contentRect: NSRect(x: 0, y: 0, width: 560, height: 680),
@@ -21,7 +21,7 @@ final class PermissionGuideWindowController: NSWindowController, NSWindowDelegat
     window.isReleasedWhenClosed = false
     super.init(window: window)
     window.contentViewController = NSHostingController(
-      rootView: PermissionGuideView(viewModel: viewModel) { [weak self] in
+      rootView: PermissionGuideView(viewModel: viewModel, folders: folders) { [weak self] in
         self?.close()
       }
     )

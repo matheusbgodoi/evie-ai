@@ -65,7 +65,8 @@ public struct EviePreferencesStore: Sendable {
       webSearchEnabled: document.webSearchEnabled ?? false,
       mailAndCalendarEnabled: document.mailAndCalendarEnabled ?? false,
       computerUseEnabled: document.computerUseEnabled ?? false,
-      computerUseConsentGiven: document.computerUseConsentGiven ?? false
+      computerUseConsentGiven: document.computerUseConsentGiven ?? false,
+      savesDocumentsWhenAsked: document.savesDocumentsWhenAsked ?? false
     )
 
     do {
@@ -100,7 +101,8 @@ public struct EviePreferencesStore: Sendable {
       webSearchEnabled: preferences.webSearchEnabled,
       mailAndCalendarEnabled: preferences.mailAndCalendarEnabled,
       computerUseEnabled: preferences.computerUseEnabled,
-      computerUseConsentGiven: preferences.computerUseConsentGiven
+      computerUseConsentGiven: preferences.computerUseConsentGiven,
+      savesDocumentsWhenAsked: preferences.savesDocumentsWhenAsked
     )
     let encoder = JSONEncoder()
     encoder.outputFormatting = [.prettyPrinted, .sortedKeys, .withoutEscapingSlashes]
@@ -170,6 +172,7 @@ extension EviePreferencesStore {
       case mailAndCalendarEnabled = "mail_and_calendar_enabled"
       case computerUseEnabled = "computer_use_enabled"
       case computerUseConsentGiven = "computer_use_consent_given"
+      case savesDocumentsWhenAsked = "saves_documents_when_asked"
     }
 
     let schemaVersion: Int
@@ -188,5 +191,7 @@ extension EviePreferencesStore {
     let computerUseEnabled: Bool?
     /// Absent before S5d (2026-10-16): the consent was never given.
     let computerUseConsentGiven: Bool?
+    /// Absent before ADR 0019 (2026-10-16): off.
+    let savesDocumentsWhenAsked: Bool?
   }
 }

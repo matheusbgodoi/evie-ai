@@ -11,6 +11,23 @@ policy and a hand-pressed card; and a screen indicator shows every look and
 action. The design document is `docs/design/2026-10-16-evie-v2-design.md`;
 ADRs 0013–0018 record the decisions.
 
+### Security
+
+- **The file denylist compares names the way the disk does.** APFS is
+  case-insensitive and normalisation-insensitive by default, so `.SSH`, `.Env`
+  and `LIBRARY` opened the folders the denylist names while the comparison was
+  case-sensitive. `EvieScopedFileReader.isDenied` now folds case, width and
+  diacritics after canonical composition on both sides, and the `.env` prefix
+  check with them; the reader, the file writer, the document creator and every
+  other caller inherit it.
+- **`open_file` opens from an allowlist.** The first version refused launcher
+  types by extension, and such a list always misses the next one. It now opens
+  only known document extensions, or for an unlisted extension a PDF, image,
+  audio/video or plain-text type that is none of executable, bundle, package,
+  application, script, source code or web content. HTML, SVG, XML and web
+  archives — which `public.content` admitted, and a browser would run — are
+  reveal-only, as are folders, bundles and packages.
+
 ### Added
 
 - **You can see which brain answers.** A chip in the field where you type shows
@@ -24,6 +41,21 @@ ADRs 0013–0018 record the decisions.
 - **Agent mode can be switched without opening Settings**: from the brain
   chip's menu and from "Modo agente" in the menu bar. While it is on, the chip
   shows an amber "Agente".
+- **Files and documents, like an everyday command-line agent** (branch
+  `v2-files`, ADR 0019). Mesa, Documentos, Downloads and the iCloud Obsidian
+  vault are offered as one-click cards — "Permitir que a Evie leia sua Mesa" —
+  when you ask about them, in the first-run guide and in Configurações › Pastas;
+  never granted silently, and macOS asks once per folder. `analyze_folder`
+  gives a counted overview of a folder (kinds, sizes, newest and oldest, names,
+  the opening of a few documents); `read_file` reads PDF, Word, RTF and ODT.
+  `propose_document` writes a new `.md`, `.txt`, `.rtf`, `.docx` or `.pdf` and
+  shows a card with Salvar and Salvar e abrir; a taken name becomes "nome
+  (2).ext" and nothing is ever overwritten. The opt-in "Salvar direto quando eu
+  pedir explicitamente" (off) skips the click only for a new file your own
+  message asked to save. `open_file` opens documents in their default app and
+  `reveal_in_finder` shows a file, both inside authorised folders and on the
+  transcript. File requests — "o que tem na minha mesa?", "analisa a pasta
+  Downloads" — reach the tools even with nothing granted.
 - **Evie can control the Mac when asked** (v2 S5d, ADR 0016). Say or type an
   instruction — "abre o Notas e escreve…", "clica em…", "cola isso no…",
   "digita…" — or choose "Controlar o Mac…" in the menu bar, and an amber card
