@@ -60,18 +60,24 @@ public struct EvieTurnPlan: Sendable, Equatable {
   /// with the person's own question. The computer-use loop (S5) is the one
   /// exception, under its own policy and confirmations, and does not come
   /// through here.
+  ///
+  /// `asksAboutFiles` (`EvieFileIntent`) sends a question about the disk to the
+  /// tools even when no folder is granted yet: "o que tem na minha mesa?" has
+  /// to reach `list_roots` and the card that offers the Desktop, and answered
+  /// without tools it could only be told she cannot look.
   public func route(
     hasRoots: Bool,
     searchesTheWeb: Bool,
     readsMailAndCalendar: Bool,
     looksAtScreen: Bool = false,
-    carriesPicture: Bool = false
+    carriesPicture: Bool = false,
+    asksAboutFiles: Bool = false
   ) -> Route {
     if looksAtScreen {
       return .directStream
     }
     if profile.capabilities.tools, !carriesPicture {
-      return hasRoots || searchesTheWeb || readsMailAndCalendar
+      return hasRoots || searchesTheWeb || readsMailAndCalendar || asksAboutFiles
         ? .agentLoop(offersTools: true) : .directStream
     }
     return hasRoots || searchesTheWeb ? .agentLoop(offersTools: false) : .directStream
@@ -90,6 +96,14 @@ public struct EvieTurnPlan: Sendable, Equatable {
   /// the person turned that on, asked for a change, and no picture is in the
   /// request — the screen's text cannot be what approves a change.
   public static func autoApprovesChanges(_ requested: Bool, carriesPicture: Bool) -> Bool {
+    requested && !carriesPicture
+  }
+
+  /// Whether a new document may be saved without its card being clicked
+  /// (ADR 0019): the person switched "Salvar direto quando eu pedir
+  /// explicitamente" on, their own message asked to save, and no picture is in
+  /// the request — text on the screen never counts as asking.
+  public static func savesDocumentsDirectly(_ requested: Bool, carriesPicture: Bool) -> Bool {
     requested && !carriesPicture
   }
 

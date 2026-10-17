@@ -320,3 +320,38 @@ press. `content` is Markdown.
 - **Bounded.** 200,000 characters of content, 100 characters of name, and a card
   good for fifteen minutes — the ADR 0009 ceiling. A new file destroys nothing,
   so it gets longer than a move's two minutes.
+
+## Opening and revealing — implemented 2026-10-16
+
+`open_file(root_id, path)` opens a file in a granted folder with its default app
+and `reveal_in_finder(root_id, path)` selects it in the Finder. They are the two
+actions the model may take without a card, because neither changes a file
+(ADR 0019). `EvieOpenTool` holds them to three limits:
+
+- **Inside a granted folder.** The path goes through
+  `EvieScopedFileReader.status` (`openat`, `O_RESOLVE_BENEATH`,
+  `O_NOFOLLOW_ANY`, `fstat`) before anything is asked of the system.
+- **Nothing that runs.** `open_file` refuses apps, scripts, installers, disk
+  images, `.command`, `.sh`, `.pkg`, `.dmg`, `.terminal`, workflows,
+  configuration profiles and web shortcuts by extension, and any file with an
+  execute bit that is not a known document — a PDF copied from a USB stick with
+  every bit set still opens. Revealing runs nothing, so it is held only to the
+  first limit.
+- **On the record.** A status line while it happens ("Abrindo resumo.pdf…") and
+  a line in the transcript after (`EvieAgentLoop.Outcome.fileActions`).
+
+The loop holds only `EvieFileOpening`; `NSWorkspace` lives in the shell. Tests
+use a recording opener and never open anything. One gap is accepted and
+recorded: the check and the `NSWorkspace` call are two steps, so a component
+swapped for a symlink between them is not caught. For an action that changes
+nothing and refuses executables, that race is not worth a descriptor-passing
+API Launch Services does not have.
+
+## Routing a file request
+
+`EvieFileIntent` recognises a question about the disk — a folder, a document,
+a file name with an extension, Mesa, Documentos or Downloads, or a request to
+save — and `EvieTurnPlan.route(asksAboutFiles:)` sends it to the tool-using
+loop even when no folder is granted, so "o que tem na minha mesa?" reaches
+`list_roots` and the card. A picture in the request still keeps the turn
+tool-less. `EvieFileRoutingTests` holds the five requests the owner named.

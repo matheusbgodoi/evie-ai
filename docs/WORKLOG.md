@@ -4338,3 +4338,20 @@ nobody but the owner can fetch it.**
 - Checks: `swift build` clean; `Scripts/test --filter
   'EvieScopedFileReader|EvieDocument|EvieFileWriter|EvieFileToolbox|EvieFolder|EvieSuggested|EviePersona|EvieBrainTurn'`
   — 149 tests passed.
+
+## 2026-10-16 — loop: documents, open/reveal, folder requests, file routing
+
+- `EvieAgentLoop` gains `offersDocuments`, `savesDocumentsDirectly` and
+  `opener`; `Outcome` gains `documentProposals`, `rootRequests` and
+  `fileActions`. The four exits now build their outcome in one nested function.
+- `EvieOpenTool` (`open_file`, `reveal_in_finder`) behind `EvieFileOpening`,
+  refusing executables, scripts, `.app`, `.command`, `.sh`, `.pkg`, `.dmg`,
+  `.terminal` and paths outside the roots.
+- `EvieFileIntent` and `EvieTurnPlan.route(asksAboutFiles:)`;
+  `EvieTurnPlan.savesDocumentsDirectly`.
+- `EvieCapabilitySnapshot.worksWithDocuments` and the persona lines for it:
+  folders a click away, `propose_document` ("nunca diga que já salvou"),
+  `analyze_folder`, `open_file`, `reveal_in_finder`.
+- Checks: `swift build` clean; `Scripts/test --filter
+  'EvieAgentLoop|EvieFileRouting|EvieOpenTool|EvieFileToolbox|EviePersona|EvieBrainTurn'`
+  — 111 tests passed, including the five routing requests.

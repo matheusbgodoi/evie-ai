@@ -510,7 +510,7 @@ extension EvieFileToolbox {
   }
 
   /// Reader failures, said in a way that tells the model what to do next.
-  fileprivate static func describe(
+  static func describe(
     _ error: EvieScopedFileReader.ReaderError,
     in root: EvieFileRoot
   ) -> String {
@@ -576,7 +576,7 @@ extension EvieFileToolbox {
   }
 
   /// The model writes `/Downloads/x`, `./x`, and `x` for the same thing.
-  fileprivate func normalise(_ path: String) -> String {
+  func normalise(_ path: String) -> String {
     var trimmed = path.trimmingCharacters(in: .whitespacesAndNewlines)
     while trimmed.hasPrefix("./") {
       trimmed.removeFirst(2)
@@ -590,7 +590,7 @@ extension EvieFileToolbox {
     return trimmed
   }
 
-  fileprivate func label(root: EvieFileRoot, path: String) -> String {
+  func label(root: EvieFileRoot, path: String) -> String {
     let normalised = normalise(path)
     return normalised.isEmpty ? root.displayName : "\(root.displayName)/\(normalised)"
   }
