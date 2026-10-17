@@ -2,19 +2,20 @@
 
 Last updated: 2026-10-17
 
-## Final integrated v2 candidate — 2026-10-17
+## Integrated Evie 2.0.0 — 2026-10-17
 
 Source integration is in the isolated `v2-research` worktree. The final candidate
 combines brain controls, research, native voice/public URL Shortcuts, visual identity,
 context compaction and the executor/network/persistence corrections. The exact
 continuation anchor remains
 [EVIE_RESEARCH_DELIVERY](implementation/EVIE_RESEARCH_DELIVERY.md).
-The signed candidate is installed locally. The public source is a release
-candidate; source publication does not assert that a final release or the latest
-live PC checks have completed. The remaining live PC gate requires the owner
-to authorize the legitimate macOS Keychain prompt.
+The signed 2.0.0 bundle is installed locally. All implementation and local
+validation gates below passed, including fresh authorized real-PC compaction,
+deterministic entry and autonomous planning in the final installed bundle.
+Release publication and downloaded-asset verification are recorded separately
+in the persistent delivery ledger; source publication alone is not that evidence.
 
-### Calendar Automation correction — 2026-10-17
+### Calendar Automation correction checkpoint7 — 2026-10-17
 
 The owner-reported no-op permission button is fixed and installed. Closed targets
 show **Aplicativo fechado**; one explicit click opens Calendar in the background
@@ -29,8 +30,8 @@ Release build: 39.23 s. Installed executable SHA256:
 New local ZIP: 6,134,711 bytes, SHA256
 `34320d27cf2307cd794415f135bcfefdbd3737c507e54f0336cac643d07fb9fb`;
 unpacked strict signature and installed executable equality passed.
-Source review, strict formatting and documentation links passed. Fresh public CI
-for this correction remains a publication gate; no final release is claimed.
+Source review, strict formatting and documentation links passed. Public CI for this correction passed all three jobs in
+[run 39037863984](https://github.com/matheusbgodoi/evie-ai/actions/runs/39037863984).
 See [Automation validation](AUTOMATION_PERMISSION_VALIDATION.md).
 
 ### Context and current contracts
@@ -109,81 +110,56 @@ See [Automation validation](AUTOMATION_PERMISSION_VALIDATION.md).
   and no OCR errors for the private patterns held only in memory. The final
   snapshot, reachable ancestry and signed artifact are checked separately.
 
-### Final validation gates and measured scope
+### Final validation and measured scope
 
-- **Public main checkpoint:** `086c0e58f74062f8881152234f89521fda40f936` is
-  published on main. Its automatic [CI run39007942714](https://github.com/matheusbgodoi/evie-ai/actions/runs/39007942714) passed all three
-  jobs: 1,501 + 55 = 1,556 cases in 7.123 s + 13.512 s, settings, clipboard and
-  voice harnesses, full shell (84.05 s), capture-driver compilation and docs.
-  The v2.0.0 tag/release remains uncut pending the owner-authorized live PC gate.
-
-- **Current hosted gate passed:** [run 39007625804](https://github.com/matheusbgodoi/evie-ai/actions/runs/39007625804) on public
-  source `ba17474d11a29aa346377fd75a12dc8ec5712f20`, all three jobs successful.
-  Core executed **1,501 + 55 = 1,556 tests** in 9.659 s + 15.292 s, with the same
-  intentional known Mail fixture. Settings persistence/responsive Keychain,
-  68-chord clipboard guards and the fifteen production-method voice cases
-  passed. Xcode 27 compiled the complete shell in 38.90 s and the actual capture
-  driver compiled. Documentation passed. The reporting commit changes docs only;
-  it does not change the qualified production code, tests or scripts.
-
-- Prior failed hosted run [39006928959](https://github.com/matheusbgodoi/evie-ai/actions/runs/39006928959)
-  passed documentation and strict shell/capture-driver compilation but failed
-  parallel Core timing fixtures. Earlier CI success below is a dated checkpoint.
-  Fixture cleanup and disjoint timing-resource phases are being qualified under
-  [ADR 0030](adr/0030-isolated-deadline-test-resources.md); deadlines and assertions
-  stay unchanged. No release is claimed from a failed hosted gate.
-- Corrected fixture causal result: abandoned cleanup previously started twenty
-  workers for 3.021 s; the current fixture starts zero and waits for all workers
-  to finish. Ten focused TTS tests passed in 2.795 s. New full-package plan passed
-  **1,501 + 55 = 1,556 tests**, in 6.421 s and 10.662 s respectively, with the same
-  intentional Mail fixture. All previous named-test starts were preserved once,
-  plus the new regression. Fresh hosted qualification is still required.
-
-- Current exact-source full-suite result: **1,555 tests in 147 suites passed
-  (14.241 s), with one intentional known timeout-injection issue**. Five new
-  native URL parser tests passed after reproduced failures. The exact coordinator
-  voice harness passed fifteen cases and two causal negative controls; the actual
-  capture controller passed immediate revocation and single-use lifecycle cases.
-- Installed candidate5 normal app, 30.004-second idle sample on M5/24 GiB,
-  macOS 27.2, AC: **1.254% of one CPU core, 97.31 MiB footprint** (97.78 MiB
-  lifetime peak). Separate native wake diagnostic, 30 seconds per armed phase:
-  **1.87% ungated / 1.76% gated**, 17 MiB diagnostic-process footprint, both
-  actually armed. These are process metrics, not total speech-daemon cost or
-  battery-life estimates. Shared GPU 9–36%, mean 16.2%, thermal nominal over
-  29 samples; other apps contribute. Watts unavailable on AC without privileges.
-  Full conditions in [RESOURCE_BUDGET](RESOURCE_BUDGET.md).
-- Prior candidate5 [hosted delivery CI](https://github.com/matheusbgodoi/evie-ai/actions/runs/39003951363):
-  all three jobs passed. The qualified macOS 26 runtime executed every one of
-  the 1,550 tests in 146 suites (12.009 s, same intentional known issue), plus
-  settings and clipboard guard harnesses. Full shell compiled with Xcode 27,
-  warnings as errors (40.80 s). See [ADR 0028](adr/0028-runtime-qualified-core-ci.md).
-- LensVLM qualification: completed at 131,072 tokens with the measured controls
-  above; the final full-suite run covers the synchronized source defaults.
-- Candidate5: release compilation 36.20 s, pinned signature verified and
-  installed. Native direct-call intent diagnostics passed, but actual system
-  dispatch later failed because the local identity lacks a TeamIdentifier.
-  Discovery/direct calls are not a system-invocation pass. Actual native
-  voice/transcription, wake lifecycle, all seven permission rows and synthetic
-  public web passed.
-  The real ten-minute local-model unload passed: color/OCR correct, idle exit
-  after 624.756 s, process ESRCH and port free. Final PC
-  context/research diagnostics await the owner's legitimate Keychain approval;
-  public main/tag/release completion is not claimed at this checkpoint.
-- Current candidate6: release compilation 17.91 s; installed executable SHA256
-  `129d1878a0e0b948a35c26ee9e7b25ad989c0152b7102ab875fa57391a34cb7a`.
-  Strict signature and all four bundle-file privacy checks passed. Fresh installed
-  checks confirmed public-URL registration without stale direct-intent metadata,
-  AVFoundation synthesis/SpeechAnalyzer and wake arm/disarm cancellation.
-  Actual three canonical Shortcuts completed exit0: open UI, exact dynamic
-  accented/ampersand/emoji draft without submission, and capture review/cancel
-  without a screenshot. Original ten workflows were preserved. Updated hosted
-  CI and owner-authorized PC diagnostics remain separate gates. After the
-  Shortcuts editors closed, a fresh 30.002-second normal-app sample measured
-  1.389% of one core and 96.39 MiB footprint (98.89 MiB lifetime peak), without
-  a new model request; the legitimate Keychain prompt remained untouched.
-- Publication must use the sanitized tree parented by existing public main,
-  excluding private local v2 ancestors. Runtime endpoints remain outside git
-  and the bundle. Final tree/artifact/ancestry scan results belong in the ledger.
+- Public correction `3c97075d6544827370149fb4998183a43a4b8fce` passed all three
+  [CI jobs](https://github.com/matheusbgodoi/evie-ai/actions/runs/39037863984):
+  **1,501 + 55 = 1,556 tests**, 13.282 s + 17.030 s, with the intentional known
+  Mail timeout fixture. Settings/Keychain responsiveness, 68 clipboard chords,
+  fifteen voice cases, nine Automation cases with causal controls, strict shell
+  (43.17 s), capture-driver compilation and documentation passed. The final
+  subsequent diagnostic-only readiness change awaits its own public CI; Core,
+  runtime policy and all limits remain unchanged.
+- Final installed bundle8: release compilation **19.73 s**, stable pinned signing,
+  executable SHA256 `318d41287f1a32aa2b0f7a073d371d914160c7109f1591e2e09558d85096a305`.
+  ZIP **6,135,642 bytes**, SHA256
+  `aad6ef9f4b5c9ed5e1547c966871b720e918059e97b4ebfe6dac365b0e107c2e`.
+  Unpacked strict signature and equality with installed executable passed;
+  bundle privacy scan found zero private matches across four files.
+- Fresh installed real-PC compaction **18.874 s**: **46,247 → 15,371 characters**
+  in the 32,768-character test budget; current question and synthetic Aurora/blue
+  fact preserved, second request reused the summary. No personal history was used.
+- Fresh installed deterministic form **15.155 s**, visual inference **11.660 s**,
+  four actions. Autonomous planning **121.781 s**, three actions and five
+  observations, `finish(success)`. Both independently confirmed field68,
+  optionB68 and the isolated clipboard. Zero confirmations approved or general
+  clipboard writes; own fixture terminated and previous focus restored.
+- The first autonomous run failed before inference (0.294 s) because the fixture
+  JSON preceded WindowServer visibility. Initial readiness now requires the same
+  frontmost PID/bundle and visible normal window inside the existing three-second
+  deadline. Source review and nine isolated predicate checks passed. A separate
+  earlier overlapping-point refusal was preserved; no ownership guard was relaxed.
+  See [research methods](RESEARCH_VALIDATION.md).
+- Calendar Automation UI: existing consent, initially closed target, one explicit
+  button click launched it inactive and showed Permitido. Nine controlled real
+  item/complete-guide cases cover denied/error/cache/bulk branches; no TCC reset,
+  message, event, account or credential was read by those checks.
+- Final normal bundle8, zero overlay/windows/tasks/security prompts, PC ready:
+  **30.005 s**, **0.3043 CPU-s**, **1.014% of one core**, **108.47 MiB footprint**,
+  187.31 MiB lifetime peak. Native voice defaults remain on; no model request
+  during this window. Shared services/battery watts are outside this measurement.
+- Earlier unchanged-runtime evidence retains its original measurement scope:
+  candidate6 normal **96.39 MiB / 1.389% of one CPU core** over30 s; native voice
+  2.65755 s audio /0.371845 s synthesis; actual three canonical Shortcuts exit0,
+  exact Unicode draft and capture-review cancel, original ten workflows preserved.
+  Candidate5 real Lens idle exit **624.756 s**, process gone and port free; local
+  context131072 qualified with the measured controls above. See
+  [resource conditions](RESOURCE_BUDGET.md), [native Apple](NATIVE_APPLE.md) and
+  [model qualification](MODEL_TUNING.md). No battery-watt or universal latency claim.
+- Publication uses only a sanitized tree parented by public history. Runtime
+  endpoints/credentials stay outside git and the bundle; private v2 ancestors
+  remain local. The original v2 worktree is clean and untouched. Final publication
+  references, privacy scans and downloaded-asset proof belong in the delivery ledger.
 
 ## Historical checkpoints before the integrated 2026-10-17 delivery
 

@@ -28,6 +28,19 @@ Ajustes nem pede permissões. É necessário modo agente habilitado. Não use o
 atalho enquanto o diagnóstico executa e mantenha a fixture na frente. O
 resultado fica em `~/Library/Logs/Evie/research-validation.log`.
 
+Antes de iniciar, oculte as janelas da instância normal da Evie ou encerre-a
+normalmente, preservando sua configuração. Uma segunda instância com overlay
+ou escuta ativa pode disputar foco e microfone. O script não a encerra por você
+e não força o fechamento de outros aplicativos; reabra a Evie ao terminar.
+
+O JSON inicial não comprova que o WindowServer já publicou a janela: a fixture
+o escreve logo depois de `makeKeyAndOrderFront`. Na mesma espera existente de
+três segundos, o diagnóstico exige nonce/PID válidos, fixture em primeiro plano
+e janela normal visível com área positiva pelo `ComputerScreenLocator`. O
+observador real recebe o mesmo locator. Não há aumento de prazo, retries,
+captura antecipada ou relaxamento dos guardas de foco; a espera pelo estado
+final continua inalterada.
+
 Para executar o método opcional com planejamento do agente:
 
 ```zsh
@@ -112,11 +125,26 @@ mesmo número. O oráculo só avalia esse estado final e nunca é fornecido ao
 planejador. A limpeza revoga o mesmo grant, encerra somente a fixture lançada
 pelo diagnóstico e restaura o foco.
 
-**Estado do novo método em 2026-10-17:** fonte e documentação adicionados;
-execução real com o PC ainda não registrada neste checkpoint, enquanto a
-autorização legítima do Chaveiro aguarda o proprietário. Os resultados antigos
-abaixo são do método padrão e não demonstram planejamento autônomo. O relatório
-novo só poderá ser marcado como aprovado depois de executar o bundle integrado.
+**Validação real em 2026-10-17:** o bundle integrado instalado8, com assinatura
+estável, passou pelo PC configurado. O modelo terminou com `finish(success)`;
+foram três ações e cinco observações, zero confirmações pedidas/aprovadas e zero
+escritas no clipboard geral. O JSON independente confirmou campo `68`, seleção
+`B) 68` e igualdade com o clipboard isolado. Inferência/laço: **121,381 s**;
+total: **121,781 s**. A fixture própria terminou e o foco anterior foi restaurado.
+Isso comprova esse caso sintético, sem garantir acerto ou latência de todo site.
+No mesmo bundle8, o método padrão também passou: **15,155 s** no total,
+**11,660 s** de inferência, quatro ações, campo/alternativa/clipboard confirmados,
+fixture encerrada e foco restaurado. Nenhum clique de envio foi realizado.
+
+Antes da correção de prontidão, o mesmo diagnóstico falhou em **0,294 s**, sem
+chegar ao modelo, por ausência momentânea da janela no WindowServer. A espera
+agora exige a janela real dentro dos mesmos três segundos. O método padrão no
+bundle7 passou em **13,598 s**, com resposta visual em **9,953 s**, quatro ações
+e confirmação independente de campo, alternativa e clipboard. Uma execução
+anterior foi recusada por ponto coberto; após retirar a instância normal com
+rascunho vazio, o ensaio isolado passou. O log anterior não distingue outra
+janela da pill clicável do diagnóstico, por isso a causa geométrica exata não é
+alegada como comprovada. Nenhuma guarda de propriedade/foco foi relaxada.
 
 ## Regressão isolada da guarda de colagem
 

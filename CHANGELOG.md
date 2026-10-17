@@ -4,7 +4,14 @@ All notable changes to Evie are documented here. Dates use `YYYY-MM-DD`.
 
 ## [Unreleased]
 
-### Final integration candidate — 2026-10-17
+## [2.0.0] - 2026-10-17
+
+### Final integration — 2026-10-17
+
+- Final installed real-PC compaction, deterministic field/radio entry and
+  autonomous model-planned form execution passed independent readback. The
+  isolated diagnostic now awaits WindowServer readiness inside its existing
+  deadline, preserving all executor guards and final-state checks.
 
 - Automation permission buttons now open a closed Mail/Calendar target before
   requesting consent, keep the UI responsive and report launch/probe failures.

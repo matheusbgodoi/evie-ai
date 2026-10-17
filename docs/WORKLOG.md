@@ -1,5 +1,35 @@
 # Work log
 
+## 2026-10-17 — complete final installed PC gates and fixture readiness
+
+- Public correction3c97075 passed all three CI jobs in run39037863984, including
+  all1,556 cases and the nine new Automation cases with two causal controls.
+- Fresh PC compaction proved authorized credential access; no password field was
+  read or filled. No prerequisite is inferred from a disappearing security alert.
+- Standard fixture initially refused an overlapped point. Safely stopped the
+  normal Evie only after checking empty draft character count/no active task;
+  isolated run passed. Did not exempt other processes or weaken ownership guards.
+- First model-planned run failed0.294 s before inference because state.json did
+  not establish WindowServer readiness. The diagnostic now waits for same-PID/
+  bundle frontmost and a normal visible nonempty frame in the SAME3 s initial
+  wait. Final-state check, all policies, retries and deadlines remain unchanged.
+  Independent review, strict formatting and nine isolated predicate checks passed.
+- Built signed bundle8 in19.73 s, installed and ran ALL three real PC gates:
+  compaction18.874 s (46247→15371, same question/fact/cache), standard15.155 s
+  (four actions), autonomous121.781 s (three actions/five observations/success).
+  Both form runs confirmed68/B68/named clipboard; no submit/general clipboard or
+  auto-approved confirmation. Own fixture ended and prior focus restored.
+- Regenerated8 archive and verified unpacked strict signature and equality with
+  installed executable; zero private matches in bundle. Exact hashes in status.
+  Normal app reopened; actual AX confirmed Automatic/PC ready and agent available.
+  Empty overlay hidden safely. Fresh30.005 s kernel sample:1.014% one core,
+  108.47 MiB footprint,187.31 MiB lifetime peak; no inference during sample.
+  Publication proof follows in the delivery ledger. Personal calibration remains an owner-run product feature,
+  not a falsely enrolled identity. Optional private Siri services are not used.
+- Next: final privacy-scanned public snapshot/main CI, tag/release/upload and
+  independent downloaded-asset signature/hash check. Preserve original worktree.
+
+
 ## 2026-10-17 — fix and install Calendar Automation permission button
 
 - Reproduced the installed UI bug: closed Calendar was labeled never requested;

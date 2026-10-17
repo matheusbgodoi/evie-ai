@@ -4,36 +4,52 @@ Updated: 2026-10-17 (America/Sao_Paulo). This file is the continuation anchor.
 
 ## Current continuation snapshot — supersedes historical entries below
 
-**CURRENT — Calendar permission fix installed and actually verified:**
-- Private HEAD before commit: 9bf7fea; public delivery parent c62d5c2 only;
-  public main 086c0e5. Never publish private v2 ancestry.
-- New AutomationPermissionItem opens target only on explicit request, probes on
-  serial queue, caches rows, shows closed/denied/error states; generation guards.
-  VM batch awaits prepareForRequest so pending targets are not skipped.
-- Nine controlled real-item/complete-VM cases and two causal controls PASS.
-  Settings retry also reproduced RED before clearing the old error on success.
-  Reviewer final PASS; strict lint, docs links and diff check PASS.
-- Full Scripts/test 1556 PASS (26.965 s + 11.711 s) before last two Shell fixes;
-  exact production debug4 PASS4.21 s and release7 PASS39.23 s.
-- Signed candidate7 INSTALLED. Actual UI agent: Calendar initially closed, shows
-  Aplicativo fechado / Permitir; one click opens Calendar background (inactive),
-  row Permitido. Same Evie PID5769; no event/account/credential/TCC read/reset.
-  Agent restoring only its own Calendar/Settings state. Draft was empty before
-  install (character count only), no action in flight. Signed6 backed up.
-- Installed executable SHA256:
-  59660ad1559e98b3946b1e5d11174cd8815a4eefb63107f971dd015763c645ff.
-- Regenerated ZIP7 6134711 bytes SHA256:
-  34320d27cf2307cd794415f135bcfefdbd3737c507e54f0336cac643d07fb9fb.
-  Unpacked strict signature/equality PASS. Old ZIP6 replaced, do not report6.
-- Next: docs/private commit; sanitized public commit parent c62 ONLY, tree and
-  history scan, push delivery/main FF, fresh automatic CI including new harness.
-- SecurityAgent process absent after app reopen7; this alone DOES NOT establish
-  owner authorization. After UI restore run fresh LS context diagnostic to prove
-  real authorized PC or expose legitimate prompt. Never bypass or fill password.
-  Then deterministic + real-agent fixture, fix if needed, final public release
-  only after actual gates. No final tag/release created. Global objective active.
+**CURRENT — all implementation/live checks passed; release publication next:**
 
-**AUTHORITATIVE CURRENT HANDOFF — 2026-10-17:**
+- Private checkpoint b614de7, now uncommitted diagnostic-readiness/final-doc changes.
+  Public main and delivery `3c97075d6544827370149fb4998183a43a4b8fce`.
+  CI39037863984 ALL3 PASS: 1556 cases13.282 s+17.030 s; shell43.17 s;
+  settings/clipboard/voice15/Automation9+two controls/capture compile/docs.
+- Final signed bundle8 INSTALLED, normal PID7794. Release8 build19.73 s.
+  Executable SHA318d41287f1a32aa2b0f7a073d371d914160c7109f1591e2e09558d85096a305.
+  ZIP6135642 bytes SHAaad6ef9f4b5c9ed5e1547c966871b720e918059e97b4ebfe6dac365b0e107c2e.
+  Unpacked strict signature/equality PASS, bundle4files0private.
+- ALL FINAL PC GATES8 PASS via LaunchServices, no credential/password read:
+  context18.874 s,46247→15371/32768budget, samequestion/fact/cachereuse;
+  standard15.155 s (11.660 s inference),4actions; actualagent121.781 s,
+  3actions/5observations/finish(success). Both independent field68/optionB68/
+  isolated clipboard exact, zero general clipboard/autoapproval/submit;
+  own fixture terminated and focus restored. Owner Keychain gate IS RESOLVED
+  by actual successful real model use; older pending snapshots below superseded.
+- Actual final UI: Qwen3.8 PC pronto, Automatic selected, agent enabled;
+  draft empty by count, no active task/fixture/security prompt/Settings. Agent
+  hid empty overlay safely; normal app remains open, zero windows for idle30s.
+- Calendar fix actual7 closed→Aplicativo fechado→one Permitir→target background
+  →Permitido; no events/accounts/TCC reset. New cached class/dedicated queue,
+  generation/coalescing, failures and bulk status readiness covered by9cases.
+- Standard first run refused overlapped point; isolated rerun passed with
+  guards intact. Agent first run failed0.294 s before inference due initial
+  JSON before CGWindowList readiness. Minimal diagnostic waits samePID/bundle
+  front+visible normal frame in SAME3s wait. Independent review/9predicatechecks
+  pass; no production guard/runtimepolicy/timeouts/retries altered.
+- Full local1556 PASS26.965 s+11.711 s before lateShell-only fixes; exact
+  final release compiles and actual paths pass as above. Native voice/Shortcuts/
+  Lens context and10min idle evidence remain dated unchanged-runtime checkpoints.
+- Final idle8 sample PASS30.005 s,0.3043 CPU-s,1.014% onecore,108.47 MiB
+  footprint,187.31 MiB lifetimepeak. No model call, zero windows, PCready,
+  nativevoice defaults preserved. Not battery-watt/sharedservice attribution.
+- NEXT: docs/privacy/linkchecks; privatecommit and sanitized
+  public snapshot parent3c ONLY (exact same tree, no private v2 ancestry), scan
+  history; pushdelivery+mainFF; await fresh CI for diagnostic source; tagv2.0.0,
+  publish ZIP+SHA/release notes, redownload/unpack/verifyhash+strictsignature+
+  installed-equality, record public proof. No final release created YET.
+- Original v2 main worktree remains clean and untouched. All agents idle;
+  no running diagnostic/model/measurement task. Global objective continues; no owner
+  action outstanding. Never claim universal accuracy, latency or zero bugs.
+
+## Historical continuation snapshots — superseded by the current block
+
+**Earlier handoff — 2026-10-17:**
 
 - PUBLIC MAIN is now `086c0e58f74062f8881152234f89521fda40f936`, source/docs
   candidate, and its automatic CI39007942714 passed ALL3 jobs. Core1501+55=1556,

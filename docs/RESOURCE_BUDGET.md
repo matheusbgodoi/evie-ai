@@ -27,6 +27,22 @@ separate. The Lens client, worker lifecycle and idle
 policy were unchanged; the resource and 632.480-second actual unload evidence
 below retain candidate 5's hash and measurement scope.
 
+### Final bundle8 normal app — 2026-10-17
+
+Executable SHA256 `318d41287f1a32aa2b0f7a073d371d914160c7109f1591e2e09558d85096a305`.
+After all three final installed PC diagnostics passed, the normal app was reopened.
+Actual AX showed Qwen/PC ready, Automatic selected and agent available. The draft
+was empty by character count; no task, fixture, capture review, Settings window
+or security prompt remained. The empty overlay was hidden safely. Enabled native
+voice defaults stayed configured; no model request started during the sample.
+
+On the same M5/24 GiB/macOS27.2/AC setup, a fresh **30.005-second** kernel sample
+measured **0.3043 CPU-seconds**, **1.014% of one core**, **108.47 MiB physical
+footprint** and **187.31 MiB lifetime peak**. Peak includes earlier work in that
+normal process and is not a steady-state allocation. The sample does not assign
+shared speech-daemon costs or establish battery watts/autonomy. Earlier Lens
+unload and voice measurements below keep their own executable/date scope.
+
 ### Candidate 6 normal app
 
 After all three real Shortcuts completed, editors were closed and the normal
