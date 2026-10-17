@@ -1,5 +1,29 @@
 # Work log
 
+## 2026-10-16 — `--ui-snapshots`: the new views, looked at without the app
+
+- Completed: `evie-shell --ui-snapshots <pasta>` (`EvieDiagnostics+UISnapshots`,
+  registered) draws the input bar in each chip state (ready, agent mode on,
+  cold Mac, waking Mac, unreachable PC, not yet probed) and the voice capsule,
+  an answer card with its brain label, Settings on Tela e modo agente, Geral and
+  Arquivos e pastas at 860 × 640 and at the 780 × 520 minimum, and the sidebar's
+  list alone — each in light and dark, into windows that are never ordered in,
+  over models built in a temporary folder (no preference, grant, key or
+  permission of the person is read or written; the update pane may ask GitHub
+  for the latest release, as Settings does). ARCHITECTURE's tables name the new
+  types; UI_UX says what the snapshots cannot show.
+- Found while looking: `Capsule().strokeBorder` and a continuous rounded
+  rectangle both show a darker hairline where the 22 pt chip's ends are
+  tangent to the pixel grid — anti-aliasing, visible only zoomed; the chip uses
+  the continuous shape. macOS 26's floating sidebar (`NSGlassEffectView`) and
+  the selected row's material are composited by the window server, so the
+  offscreen sidebar is clipped and 144 pt wide; its list drawn alone is
+  correct. The real sidebar's width and selection stay on the owner's list.
+- Checks: `swift build` (no warnings); the diagnostic run from `.build` against
+  the scratchpad (12 + 2 PNGs, looked at in light and dark); full
+  `Scripts/test`: 1377 tests in 123 suites passed, 1 known issue.
+- Next: as in the previous entry.
+
 ## 2026-10-16 — the brain on screen, Settings as a sidebar, agent mode in reach
 
 - Occasion: the owner installed the app and asked (1) how to tell the PC's Qwen

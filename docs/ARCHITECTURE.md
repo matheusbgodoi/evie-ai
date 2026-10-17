@@ -221,7 +221,7 @@ system frameworks, and every process Evie starts.
 | Computer use (`ComputerUse/`, ADR 0016) | `EvieAgentModeBroker` (grant, proposals, commits), `ComputerActionPolicy`, `ComputerUseBudget`, `ComputerAction`, `ComputerToolDefinitions`, `ObservationFormatter`; observing (S5b): `ComputerObserver` and its protocols, `AccessibilitySnapshotBuilder`, `ComputerObservationDiff`, `AccessibilityTrust`; the loop: `EvieAgentLoop.runComputerUse`, `ComputerUseSession`, `ComputerUseTranscript`; acting (S5c): `ComputerExecutor` and its protocols, `ComputerTyping`, `ComputerKeyCodes`, `ClipboardSession`, `ComputerAppCatalog`, `ComputerUseSwitch`; starting and controls (S5d): `ComputerUseStart` (`ComputerUseIntent`, `ComputerUseRequestOrigin`, `ComputerUseStopCommand`, `ComputerUseCopy`), `EvieSyntheticInput`, `ComputerUserPress`, `ComputerConfirmationDesk`, `ComputerUsePause`, `ComputerTakeoverRule`, `ComputerActionLog` |
 | Voice | `EvieTTS`, `OmniVoiceBatchTTSAdapter`, `EvieSpeechGate`, `EvieSilenceTrim`, `EvieWakePhrase`, `EvieWakeGate` |
 | Settings and release | `EvieConfiguration`, `EvieConfigurationLoader`, `EvieConfigurationStore`, `EviePreferences`, `EviePreferencesStore`, `EvieShortcut`, `EvieRelease` |
-| Presentation-adjacent | `EvieOverlayGeometry`, `EvieThinkingWave` |
+| Presentation-adjacent | `EvieOverlayGeometry`, `EvieThinkingWave`, `EvieBrainChip` (the chip's words, dot and menu, `EvieBrainChoice`), `EvieSettingsSection` (the settings sidebar) |
 | Process | `SecureProcessRunner` |
 
 `EvieShell`, by what it owns:
@@ -229,13 +229,13 @@ system frameworks, and every process Evie starts.
 | Area | Types |
 |---|---|
 | Composition and windows | `EvieShellApp`, `AppCoordinator`, `EvieReadinessRefresher`, `OverlayPanelController`, `SettingsWindowController`, `ConversationHistoryWindowController`, `GlobalHotKeyController` |
-| Overlay state | `OverlayViewModel` plus `+Turn`, `+History`, `+Plan`, `+Search`; `OverlayChromeModel` |
+| Overlay state | `OverlayViewModel` plus `+Turn`, `+History`, `+Plan`, `+Search`, `+Brain` (the brain chip); `OverlayChromeModel` |
 | Other view models | `ConversationHistoryViewModel`, `EviePreferencesViewModel`, `ModelSettingsViewModel`, `EvieRootsViewModel`, `EvieMemoryViewModel`, `EvieSkillsViewModel`, `EvieVoiceLibraryViewModel` |
 | Audio | `EvieAudioCapture`, `EvieLevelMeter`, `EvieSpeechTranscription`, `EvieSpeechOutput`, `EvieOmniVoiceClient`, `EvieVoiceEngineLauncher`, `EvieWakeListener` |
 | Reading the world | `EvieVaultIndex`, `EvieVisionDescriber`, `EvieDocumentAttachment`, `EvieMediaStore`, `EvieWebClient`, `EvieSkillStore`, `EvieMailCalendarClient` |
-| Computer use (`ComputerUse/`) | `AccessibilitySnapshotter` (`AXTree`), `AccessibilityPermission`, `ComputerScreenLocator` (and `ScreenPresence` as the observing and acting indicator), `ComputerObserveCheck` (`--cu-observe`); acting (S5c): `MacComputerActor` (wires `ComputerExecutor`), `SyntheticInput`, `AccessibilityActions`, `FocusCoordinator`, `AppLauncher` and `InstalledApps`, `SystemPasteboard`, `ComputerSelfTest` (`--cu-selftest`); `Views/ComputerUseSettingsView`; the session (S5d): `ComputerUseHost` (broker, executor, pause, desk, monitor, the grant's clock), `TakeoverMonitor`, `OverlayViewModel+ComputerUse` (the cards and the session turn), `Views/ComputerUseCardViews` (`HandPressCatcher`, the thumbnail) |
+| Computer use (`ComputerUse/`) | `AccessibilitySnapshotter` (`AXTree`), `AccessibilityPermission`, `ComputerScreenLocator` (and `ScreenPresence` as the observing and acting indicator), `ComputerObserveCheck` (`--cu-observe`); acting (S5c): `MacComputerActor` (wires `ComputerExecutor`), `SyntheticInput`, `AccessibilityActions`, `FocusCoordinator`, `AppLauncher` and `InstalledApps`, `SystemPasteboard`, `ComputerSelfTest` (`--cu-selftest`); `Views/ScreenAndAgentSettingsView`; the session (S5d): `ComputerUseHost` (broker, executor, pause, desk, monitor, the grant's clock), `TakeoverMonitor`, `OverlayViewModel+ComputerUse` (the cards and the session turn), `Views/ComputerUseCardViews` (`HandPressCatcher`, the thumbnail) |
 | Schedules | `EvieLaunchAgents`, `EvieScheduleStore`, `EvieScheduleRunner`, `EvieScheduleLock`, `EvieScheduleNotifier`, `EvieSchedulesViewModel` |
-| Diagnostics | `EvieDiagnostic`, `EvieDiagnosticRegistry`, `EvieDiagnostics` plus its five subject files |
+| Diagnostics | `EvieDiagnostic`, `EvieDiagnosticRegistry`, `EvieDiagnostics` plus its subject files (`+UISnapshots`: `--ui-snapshots <pasta>` draws the brain chip, an answer card and Settings offscreen to PNG) |
 | Updating | `EvieUpdater`, `EvieBundleSignature` |
 | Views | `Views/`, plus `EvieOverlayView`, `QuickTextEntryView`, `ConversationHistoryView` |
 
@@ -451,7 +451,10 @@ or a 502 is rebuilt for the next profile and retried once (`EvieBrainTurn`), and
 the conversation is re-pinned. Every move follows the Mac-fallback choice: off
 never moves, automatic moves, ask asks before waking the Mac brain ("O PC está
 fora. Acordar o cérebro do Mac? (~10 s, ~8 GB de memória)") and a yes holds for
-the session. A profile chosen by the environment is never moved. Waking a
+the session. A profile chosen by the environment is never moved. The overlay's
+brain chip can narrow the order to one place for new conversations
+(`EvieBrainResolver.choose(_:)`: Sempre o PC never moves to the Mac, Sempre o
+Mac wakes it without asking); a pinned conversation is not moved. Waking a
 `.localOnDemand` profile goes through `LocalBrainStarting`, implemented by
 `EvieLocalBrainLauncher` since v2 S3 (ADR 0015): it starts `mlx_vlm.server` on
 127.0.0.1:38480 with `LocalBrainPolicy`'s argv and offline environment, refuses a

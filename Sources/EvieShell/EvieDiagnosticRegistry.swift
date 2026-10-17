@@ -401,6 +401,18 @@ enum EvieDiagnosticRegistry {
       await ComputerSelfTest.run()
     },
 
+    // Draws the brain chip, an answer card and the settings window into
+    // windows that are never shown, so a change to them can be looked at
+    // without launching the app or touching the screen.
+    EvieDiagnostic.terminating(
+      flag: "--ui-snapshots",
+      usage: "--ui-snapshots <pasta>",
+      summary: "desenha o chip do cérebro, um cartão e os ajustes fora da tela, em PNG",
+      requiredArguments: 1
+    ) { arguments in
+      await EvieDiagnostics.uiSnapshots(directory: arguments.value())
+    },
+
     // Acted on by the coordinator once the application is up, not here — the
     // window it opens needs the running app. Listed so `--help` is the whole
     // truth about what the shell answers to.
@@ -414,7 +426,9 @@ enum EvieDiagnosticRegistry {
   ///
   /// Entries with no runner are skipped rather than matched, so a flag handled
   /// elsewhere in the application cannot swallow the launch.
-  static func match(_ arguments: [String]) -> (diagnostic: EvieDiagnostic, arguments: EvieDiagnosticArguments)? {
+  static func match(_ arguments: [String]) -> (
+    diagnostic: EvieDiagnostic, arguments: EvieDiagnosticArguments
+  )? {
     for diagnostic in all where diagnostic.run != nil {
       guard let index = arguments.firstIndex(of: diagnostic.flag),
         index + diagnostic.requiredArguments < arguments.count
@@ -434,11 +448,12 @@ enum EvieDiagnosticRegistry {
       "  " + diagnostic.usage.padding(toLength: width, withPad: " ", startingAt: 0)
         + "  " + diagnostic.summary
     }
-    return ([
-      "evie-shell — verificações que este projeto faz em si mesmo",
-      "",
-      "Uso: evie-shell <flag> [argumentos]",
-      "",
-    ] + lines).joined(separator: "\n")
+    return
+      ([
+        "evie-shell — verificações que este projeto faz em si mesmo",
+        "",
+        "Uso: evie-shell <flag> [argumentos]",
+        "",
+      ] + lines).joined(separator: "\n")
   }
 }

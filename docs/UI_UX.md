@@ -203,6 +203,13 @@ schedules), Aparência, Permissões (the first-run guide) and Avançado
 resizable from 780 × 520 and opens at 860 × 640. Agent mode can also be turned
 on and off from the brain chip's menu and from "Modo agente" in the menu bar.
 
+To look at the chip, an answer card and Settings without launching the app,
+`evie-shell --ui-snapshots <pasta>` draws them into windows that are never
+shown, in light and dark, over models built from scratch in a temporary folder.
+macOS 26's floating sidebar and every behind-window material are composited by
+the window server, so they come out flat or missing there; the sidebar's list is
+drawn alone as well for that reason.
+
 ## State machine
 
 ```text
