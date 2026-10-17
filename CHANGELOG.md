@@ -22,9 +22,11 @@ ADRs 0013–0018 record the decisions.
   other caller inherit it.
 - **`open_file` opens from an allowlist.** The first version refused launcher
   types by extension, and such a list always misses the next one. It now opens
-  only known document extensions or types that conform to `public.content` and
-  to none of executable, bundle, package, application or script; folders,
-  bundles and packages can be revealed in the Finder but never opened.
+  only known document extensions, or for an unlisted extension a PDF, image,
+  audio/video or plain-text type that is none of executable, bundle, package,
+  application, script, source code or web content. HTML, SVG, XML and web
+  archives — which `public.content` admitted, and a browser would run — are
+  reveal-only, as are folders, bundles and packages.
 
 ### Added
 

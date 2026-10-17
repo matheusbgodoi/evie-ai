@@ -4373,3 +4373,20 @@ nobody but the owner can fetch it.**
   and an unknown extension are not openable.
 - Checks: `swift build` clean; `Scripts/test --filter
   'EvieOpenTool|EvieAgentLoopFile'` — 15 tests passed.
+
+## 2026-10-16 — security: no open-ended fallback in open_file
+
+- Finding (reported by the reviewing agent): the `conforms(to: .content)`
+  fallback admitted HTML, XHTML, SVG, XML and web archives, which open in a
+  browser that runs their script.
+- Fix: the fallback is limited to `.pdf`, `.image`, `.audiovisualContent` and
+  `.plainText`, and still excludes executable, bundle, package, application,
+  script and now source code, HTML, XML, web archive and SVG types;
+  `webExtensions` (html, htm, xhtml, svg, xml, webarchive, mht…) are refused
+  before any type lookup. SVG needed both, since `UTType` calls it an image.
+- Regression tests: `.html`, `.HTM`, `.svg`, `.webarchive`, `.xml`, `.xhtml`
+  are refused by `open_file` and revealed by `reveal_in_finder`; `.sh` and
+  `.swift` are not openable through the plain-text fallback; `.jp2` is, through
+  the image one.
+- Checks: `Scripts/test --filter 'EvieOpenTool|EvieAgentLoopFile'` — 16 tests
+  passed.

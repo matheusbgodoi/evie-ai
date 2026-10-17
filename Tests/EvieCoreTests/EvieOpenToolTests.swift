@@ -98,6 +98,28 @@ struct EvieOpenToolTests {
     #expect(!revealed.isFailure)
   }
 
+  /// A browser runs the script in these, and `public.content` admitted them.
+  @Test(
+    "web documents are never opened, only revealed",
+    arguments: ["pagina.html", "pagina.HTM", "desenho.svg", "salvo.webarchive", "feed.xml", "a.xhtml"]
+  )
+  func webDocumentsRefused(_ name: String) async throws {
+    let plain = EvieItemStatus(isDirectory: false, byteSize: 1, isExecutable: false)
+    #expect(EvieOpenTool.refusal(forName: name, status: plain) != nil, "\(name)")
+
+    let (root, toolbox) = try fixture()
+    try FileFixtures.write("<script>alert(1)</script>", to: root.url.appendingPathComponent(name))
+    let opener = RecordingOpener()
+    let (opened, _) = await EvieOpenTool.run(
+      call(.open, name), roots: [root], toolbox: toolbox, opener: opener)
+    let (revealed, _) = await EvieOpenTool.run(
+      call(.reveal, name), roots: [root], toolbox: toolbox, opener: opener)
+
+    #expect(opened.isFailure)
+    #expect(!revealed.isFailure)
+    #expect(await opener.opened.isEmpty)
+  }
+
   @Test("a plain PDF, and content the system knows, open; an unknown extension does not")
   func allowlistAdmits() {
     let plain = EvieItemStatus(isDirectory: false, byteSize: 1, isExecutable: false)
@@ -109,6 +131,10 @@ struct EvieOpenToolTests {
     #expect(!EvieOpenTool.isOpenableDocument("tela.saver"))
     #expect(!EvieOpenTool.isOpenableDocument("servico.xpc"))
     #expect(!EvieOpenTool.isOpenableDocument("biblioteca.jar"))
+    #expect(!EvieOpenTool.isOpenableDocument("script.sh"))
+    #expect(!EvieOpenTool.isOpenableDocument("codigo.swift"))
+    // Through the narrow fallback: an image type not in the explicit list.
+    #expect(EvieOpenTool.isOpenableDocument("foto.jp2"))
   }
 
   @Test("every listed kind that runs or installs is refused by name")

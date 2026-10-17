@@ -47,9 +47,10 @@ public struct EvieFileAction: Hashable, Sendable {
 ///   reader (`openat`, `O_RESOLVE_BENEATH`, `O_NOFOLLOW_ANY`) before anything is
 ///   opened.
 /// - **Only documents.** `open_file` opens a regular file whose kind is on an
-///   allowlist — the known document extensions, or a type that conforms to
-///   `public.content` and to none of executable, bundle, package, application
-///   or script — and nothing else. A list of what to refuse always misses the
+///   allowlist — the known document extensions, or a PDF, image, audio, video
+///   or plain-text type that is none of executable, bundle, package,
+///   application, script, source code or web content — and nothing else. Web
+///   documents (HTML, SVG, XML, web archives) are reveal-only. A list of what to refuse always misses the
 ///   next launcher type (`.terminal`, `.workflow`, `.saver`, `.xpc`…), and a
 ///   sentence in a PDF must not be able to run anything. Folders, bundles and
 ///   packages are never opened, only revealed; a file with an execute bit that
@@ -107,7 +108,15 @@ public enum EvieOpenTool: String, CaseIterable, Sendable {
     "py", "rb", "pl", "php", "js", "jar", "exe", "msi", "bat", "cmd", "ps1", "vbs",
     "prefpane", "saver", "kext", "plugin", "bundle", "framework", "appex", "xpc", "webloc",
     "inetloc", "url", "fileloc", "mobileconfig", "configprofile", "provisionprofile",
-    "safariextz", "html", "htm", "svg",
+    "safariextz",
+  ]
+
+  /// Web documents: a browser runs the script inside them, so they are never
+  /// opened — only revealed. SVG is an image to `UTType` and still a web page
+  /// to Safari, which is why the image fallback below cannot admit it.
+  public static let webExtensions: Set<String> = [
+    "html", "htm", "xhtml", "xht", "shtml", "svg", "svgz", "xml", "xsl", "xslt",
+    "webarchive", "mht", "mhtml", "php", "asp", "aspx", "jsp",
   ]
 
   /// The documents `open_file` opens by extension. Files copied from a Windows
@@ -121,23 +130,34 @@ public enum EvieOpenTool: String, CaseIterable, Sendable {
     "aiff",
   ]
 
+  /// The only types the fallback admits, for an extension not listed above:
+  /// a PDF, an image, audio or video, plain text.
+  static let admittedTypes: [UTType] = [.pdf, .image, .audiovisualContent, .plainText]
+
   /// Types that disqualify a file whatever else it conforms to.
   static let disqualifyingTypes: [UTType] = [
     .executable, .bundle, .package, .application, .script, .shellScript, .unixExecutable,
     .applicationBundle, .applicationExtension, .pluginBundle, .systemPreferencesPane,
+    .html, .xml, .webArchive, .svg, .sourceCode,
   ]
 
   /// Whether a regular file's type is one `open_file` may open: a known
-  /// document, or content that is none of the disqualifying types.
+  /// document, or — for an extension not listed — a PDF, image, audio, video or
+  /// plain-text type that is none of the disqualifying ones. There is no
+  /// open-ended fallback: `public.content` admits HTML, SVG and web archives,
+  /// which a browser would run.
   public static func isOpenableDocument(_ name: String) -> Bool {
     let extensionName = (name as NSString).pathExtension.lowercased()
-    guard !extensionName.isEmpty, !refusedExtensions.contains(extensionName) else {
+    guard !extensionName.isEmpty, !refusedExtensions.contains(extensionName),
+      !webExtensions.contains(extensionName)
+    else {
       return false
     }
     if documentExtensions.contains(extensionName) {
       return true
     }
-    guard let type = UTType(filenameExtension: extensionName), type.conforms(to: .content)
+    guard let type = UTType(filenameExtension: extensionName),
+      admittedTypes.contains(where: { type.conforms(to: $0) })
     else {
       return false
     }

@@ -333,9 +333,12 @@ actions the model may take without a card, because neither changes a file
   `O_NOFOLLOW_ANY`, `fstat`) before anything is asked of the system.
 - **Only documents.** `open_file` works from an allowlist, not a denylist: it
   opens a regular file whose extension is a known document (PDF, Word, text,
-  spreadsheets, presentations, images, audio, video), or whose `UTType`
-  conforms to `public.content` and to none of executable, bundle, package,
-  application or script. Behind that a fixed list still refuses the launcher
+  spreadsheets, presentations, images, audio, video), or — for an extension not
+  listed — whose `UTType` is a PDF, image, audio/video or plain text and none of
+  executable, bundle, package, application, script, source code or web content.
+  There is no open-ended `public.content` fallback: HTML, XHTML, SVG, XML and
+  web archives conform to it and a browser would run their script, so web
+  documents are reveal-only. Behind that a fixed list still refuses the launcher
   types by name (`.app`, `.command`, `.sh`, `.pkg`, `.dmg`, `.terminal`,
   `.workflow`, `.scpt`, `.jar`, `.saver`, `.xpc`, profiles, web shortcuts…).
   Folders, bundles and packages are never opened, only revealed. A file with an
