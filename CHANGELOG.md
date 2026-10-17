@@ -11,6 +11,16 @@ policy and a hand-pressed card; and a screen indicator shows every look and
 action. The design document is `docs/design/2026-10-16-evie-v2-design.md`;
 ADRs 0013–0018 record the decisions.
 
+### Security
+
+- **The file denylist compares names the way the disk does.** APFS is
+  case-insensitive and normalisation-insensitive by default, so `.SSH`, `.Env`
+  and `LIBRARY` opened the folders the denylist names while the comparison was
+  case-sensitive. `EvieScopedFileReader.isDenied` now folds case, width and
+  diacritics after canonical composition on both sides, and the `.env` prefix
+  check with them; the reader, the file writer, the document creator and every
+  other caller inherit it.
+
 ### Added
 
 - **Evie can control the Mac when asked** (v2 S5d, ADR 0016). Say or type an

@@ -124,17 +124,37 @@ public struct EvieScopedFileReader: Sendable {
     "pem", "key", "p12", "pfx", "jks", "keystore", "keychain", "kdbx", "asc", "gpg",
   ]
 
+  /// Whether a path component is withheld.
+  ///
+  /// Compared folded, never as written. APFS is case-insensitive and
+  /// normalisation-insensitive by default, so `.SSH`, `.Env` and `LIBRARY` open
+  /// the very folders the list names; a case-sensitive comparison let every one
+  /// of them through. Both sides are folded for case, width and diacritics after
+  /// canonical composition — which also refuses a few names APFS would treat as
+  /// different (`Lìbrary`), a failure in the safe direction.
   public static func isDenied(_ name: String) -> Bool {
-    if deniedNames.contains(name) {
+    let folded = foldedName(name)
+    if foldedDeniedNames.contains(folded) {
       return true
     }
     // `.env.local`, `.env.production`, and friends.
-    if name.hasPrefix(".env") {
+    if folded.hasPrefix(".env") {
       return true
     }
-    let extensionName = (name as NSString).pathExtension.lowercased()
-    return !extensionName.isEmpty && deniedExtensions.contains(extensionName)
+    let extensionName = (folded as NSString).pathExtension
+    return !extensionName.isEmpty && foldedDeniedExtensions.contains(extensionName)
   }
+
+  /// A name as the denylist compares it.
+  static func foldedName(_ name: String) -> String {
+    name.precomposedStringWithCanonicalMapping.folding(
+      options: [.caseInsensitive, .diacriticInsensitive, .widthInsensitive],
+      locale: nil
+    )
+  }
+
+  private static let foldedDeniedNames = Set(deniedNames.map(foldedName))
+  private static let foldedDeniedExtensions = Set(deniedExtensions.map(foldedName))
 
   // MARK: - Listing
 

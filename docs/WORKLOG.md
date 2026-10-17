@@ -4319,3 +4319,22 @@ nobody but the owner can fetch it.**
 - Checks: `swift build` clean; `Scripts/test --filter
   'EvieDocumentProposalTests|EvieDocumentIntentTests|EvieDocumentCreatorTests'`
   — 16 tests passed.
+
+## 2026-10-16 — security: fold the denylist for case and normalisation
+
+- Finding (reported by the reviewing agent): `EvieScopedFileReader.isDenied`
+  compared path components case-sensitively, and APFS is case- and
+  normalisation-insensitive by default, so `.SSH/x`, `.Env.local` and `LIBRARY`
+  reached what the denylist exists to withhold — on the read path, in
+  `EvieFileWriter`, and in the new document creator's subfolder check.
+- Fix: both the list and the component are folded (NFC, then case, width and
+  diacritic folding) inside `isDenied` itself, so every caller benefits; the
+  `.env` prefix check uses the folded name. Diacritic folding also refuses a few
+  names APFS would treat as distinct (`Lìbrary`) — accepted, safe direction.
+- Regression tests: `.SSH`, `.Env.local`, `LIBRARY`, `Servidor.PEM` and the
+  decomposed `Li` + U+0300 `brary` are denied by name; `.SSH/x` is refused on
+  disk by `read` and `readData`; `propose_document` refuses those subfolders and
+  `EvieDocumentCreator` writes nothing into `.SSH`.
+- Checks: `swift build` clean; `Scripts/test --filter
+  'EvieScopedFileReader|EvieDocument|EvieFileWriter|EvieFileToolbox|EvieFolder|EvieSuggested|EviePersona|EvieBrainTurn'`
+  — 149 tests passed.

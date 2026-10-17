@@ -68,6 +68,35 @@ struct EvieDocumentProposalTests {
         == .invalidSubfolder(".ssh"))
   }
 
+  /// APFS treats these as the denied folders themselves.
+  @Test("a subfolder that is a denied name in another case or spelling is refused")
+  func foldedSubfolders() {
+    for subfolder in [".SSH/x", ".Env.local", "LIBRARY/Mail", "Li\u{0300}brary"] {
+      #expect(
+        EvieDocumentTool.normalisedSubfolder(subfolder) == .failure(.invalidSubfolder(subfolder)),
+        "\(subfolder) deveria ser recusada"
+      )
+    }
+  }
+
+  @Test("a document is never written into a differently cased denied folder")
+  func creatorRefusesFoldedNames() throws {
+    let root = EvieFileRoot(
+      id: "r1", displayName: "Mesa", path: try FileFixtures.directory("folded").path)
+    try FileManager.default.createDirectory(
+      at: root.url.appendingPathComponent(".ssh"), withIntermediateDirectories: true)
+    let proposal = EvieDocumentProposal(
+      title: "authorized_keys", format: .text, destination: "r1", subfolder: ".SSH",
+      markdown: "x")
+
+    #expect(throws: EvieDocumentCreator.CreateError.self) {
+      try EvieDocumentCreator().create(proposal, in: root)
+    }
+    #expect(
+      try FileManager.default.contentsOfDirectory(atPath: root.url.appendingPathComponent(".ssh").path)
+        .isEmpty)
+  }
+
   @Test("a title becomes a safe file name, never empty and never hidden")
   func fileNames() {
     func name(_ title: String, _ format: EvieDocumentFormat = .pdf) -> String {
