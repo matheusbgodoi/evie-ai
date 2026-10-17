@@ -4424,3 +4424,11 @@ nobody but the owner can fetch it.**
 - Next: merge `v2-files` into `v2` after the Settings sidebar lands, moving the
   one-line `DocumentSettingsSection` embed into "Arquivos e pastas"; then the
   manual QA in PROJECT_STATUS.
+
+## 2026-10-16 — evals: file routing and the manual files run
+
+- `evals/README.md` cases 29 (`files-routing-001`, code, passed —
+  `EvieFileRoutingTests`) and 30 (`files-agent-manual-001`, the installed-app
+  run owed: grant card and macOS prompt, Salvar and "nome (2)", the `.docx` in
+  Word and Pages, direct save on and off with a PDF on screen, open and refuse),
+  and a row in the v2 checklist table. Documentation only; no code changed.
