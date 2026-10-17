@@ -2,10 +2,11 @@ import Foundation
 
 /// A macOS privacy permission the first-run guide asks for.
 ///
-/// Five, not six. Input Monitoring joins the list only if the computer-use
-/// takeover monitor turns out to need a listen-only event tap; NSEvent monitors
-/// do not, and asking for a permission nothing uses is how a checklist teaches
-/// people to click "Permitir" without reading.
+/// Five, not six. Input Monitoring is not one: the computer-use takeover
+/// monitor uses `NSEvent` monitors, which the 0xE71E tag was measured to reach
+/// (2026-10-16), so it needs no listen-only event tap — and asking for a
+/// permission nothing uses is how a checklist teaches people to click
+/// "Permitir" without reading.
 public enum EviePermission: String, CaseIterable, Codable, Sendable {
   case microphone
   case speechRecognition = "speech_recognition"

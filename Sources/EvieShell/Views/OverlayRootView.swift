@@ -33,6 +33,8 @@ struct OverlayRootView: View {
   var onLoadEarlierTurns: (() -> Void)? = nil
   var onDismissArtifact: ((UUID) -> Void)? = nil
   var onArtifactAction: ((UUID, ArtifactActionModel) -> Void)? = nil
+  /// A press on a card button only a hand may press, with how it was made.
+  var onArtifactHandAction: ((UUID, ArtifactActionModel, ComputerUserPress) -> Void)? = nil
   var quickText: Binding<String>? = nil
   var onSubmitQuickText: (() -> Void)? = nil
   var onCancelQuickText: (() -> Void)? = nil
@@ -279,6 +281,9 @@ struct OverlayRootView: View {
             },
             onAction: onArtifactAction.map { handler in
               { action in handler(artifact.id, action) }
+            },
+            onHandAction: onArtifactHandAction.map { handler in
+              { action, press in handler(artifact.id, action, press) }
             },
             readingHeight: chrome.readingHeights[artifact.id],
             onReadingHeightChanged: { chrome.setReadingHeight($0, for: artifact.id) }

@@ -1,3 +1,4 @@
+import CoreGraphics
 import Foundation
 
 /// Everything one computer-use session runs with, beside the model.
@@ -14,9 +15,16 @@ public struct ComputerUseSession {
   /// The picture's longer edge for the brain that reads it.
   public let imageLongEdge: Int
   /// Asks the person about one action and returns their answer. A yes counts
-  /// only as a click on the card's button (S5d), which is why the broker is
-  /// told `.button`. Without a card nothing that needs asking is done.
-  public var confirm: ((ComputerConfirmation) async -> Bool)?
+  /// only as a click on the card's button (`ComputerConfirmationDesk`), which
+  /// is why the broker is told `.button`. Without a card nothing that needs
+  /// asking is done.
+  public var confirm: ((ComputerConfirmationRequest) async -> Bool)?
+  /// Set while the person has the Mac back (the takeover monitor); the loop
+  /// waits on it before looking and before acting, and looks again before
+  /// acting when a pause came after its newest observation.
+  public var pause: ComputerUsePause?
+  /// Where each action's account goes, for the card at the end.
+  public var log: ComputerActionLog?
   /// The broker's clock, for the pause it requires between two actions.
   public var now: () -> Date
   public var sleep: (TimeInterval) async throws -> Void
@@ -28,7 +36,7 @@ public struct ComputerUseSession {
     executor: (any EvieComputerActing)? = nil,
     convention: CoordinateConvention,
     imageLongEdge: Int,
-    confirm: ((ComputerConfirmation) async -> Bool)? = nil,
+    confirm: ((ComputerConfirmationRequest) async -> Bool)? = nil,
     now: @escaping () -> Date = Date.init,
     sleep: @escaping (TimeInterval) async throws -> Void = { try await Task.sleep(for: .seconds($0)) }
   ) {
@@ -53,11 +61,15 @@ extension ComputerUseSession {
     computer: any EvieComputerActing,
     convention: CoordinateConvention,
     imageLongEdge: Int,
-    confirm: ((ComputerConfirmation) async -> Bool)? = nil
+    confirm: ((ComputerConfirmationRequest) async -> Bool)? = nil,
+    pause: ComputerUsePause? = nil,
+    log: ComputerActionLog? = nil
   ) {
     self.init(
       broker: broker, grant: grant, observer: computer, executor: computer,
       convention: convention, imageLongEdge: imageLongEdge, confirm: confirm)
+    self.pause = pause
+    self.log = log
   }
 }
 
@@ -106,6 +118,11 @@ public enum ComputerUsePrompt {
       senhas.
       """
   }
+
+  /// The answer to an action planned before the person took the Mac back.
+  public static let handedBack =
+    "O Matheus usou o Mac depois da última observação, então não fiz essa ação: a tela "
+    + "pode ter mudado. Veja esta observação nova antes de agir."
 }
 
 extension EvieAgentLoop {
@@ -161,6 +178,10 @@ private struct ComputerUseRun {
   var transcript: ComputerUseTranscript
   let readiness: ReadinessRung?
   var latest: ComputerObservation?
+  /// The newest observation that carried a picture, for the card's thumbnail.
+  var latestPicture: ComputerObservation?
+  /// `ComputerUsePause.count` when `latest` was taken.
+  var pausesSeen = 0
   var target: ComputerToolRequest.LookTarget = .screen
   var observations = 0
   var actions = 0
@@ -277,16 +298,24 @@ private struct ComputerUseRun {
       }
     }
 
+    if try await lookAgainAfterPause(answering: call) {
+      return nil
+    }
     var clearance = broker.authorize(
       action, grant: grant, observation: observation, live: await session.observer.liveState())
     if case .needsConfirmation(let question) = clearance {
-      let approved = await session.confirm?(question) ?? false
+      let request = ComputerConfirmationRequest(
+        confirmation: question, picture: latestPicture?.image,
+        mark: Self.mark(of: action, in: observation, on: latestPicture))
+      let approved = await session.confirm?(request) ?? false
+      try Task.checkCancellation()
       guard approved else {
         transcript.appendResult(
           callID: call.id, name: call.name,
           content: "O Matheus não confirmou (usuário recusou): \(question.text) "
             + "Não tente de novo do mesmo jeito.",
           isFailure: true)
+        session.log?.record(.declined, question.text)
         return nil
       }
       clearance = broker.approve(question, grant: grant, gesture: .button)
@@ -298,11 +327,17 @@ private struct ComputerUseRun {
       commit = issued
     case .refused(let reason):
       transcript.appendResult(callID: call.id, name: call.name, content: reason, isFailure: true)
+      session.log?.record(.refused, reason)
       return nil
     case .needsConfirmation:
       transcript.appendResult(
         callID: call.id, name: call.name,
         content: "Essa ação ainda precisa de confirmação; olhe a tela de novo.", isFailure: true)
+      return nil
+    }
+    // A commit not carried out is void at the next observation, so the one
+    // this takes voids it.
+    if try await lookAgainAfterPause(answering: call) {
       return nil
     }
 
@@ -322,6 +357,7 @@ private struct ComputerUseRun {
     let diff = ComputerObservationDiff(from: observation, to: listed)
     let settled = Self.settle(result, by: diff)
     broker.record(settled, grant: grant)
+    session.log?.record(Self.logKind(of: settled), Self.logLine(for: action, settled))
     var newest = listed
     var lead = settled.detail + "\n"
     if diff.needsPixels {
@@ -357,19 +393,99 @@ private struct ComputerUseRun {
   }
 
   private mutating func observe(withImage: Bool) async throws -> ComputerObservation {
-    let observation = try await session.observer.observe(
-      ComputerObservationRequest(
-        target: target,
-        withImage: withImage,
-        step: actions + 1,
-        maxLongEdge: session.imageLongEdge
-      ))
+    let request = ComputerObservationRequest(
+      target: target,
+      withImage: withImage,
+      step: actions + 1,
+      maxLongEdge: session.imageLongEdge
+    )
+    let observation: ComputerObservation
+    while true {
+      try await session.pause?.waitWhilePaused()
+      do {
+        observation = try await session.observer.observe(request)
+        break
+      } catch let error as EvieScreenLookError
+        where (error == .presencePaused || error == .indicatorNotShown)
+        && session.pause?.isPaused == true
+      {
+        // He took over between the wait and the glow: wait for Continuar
+        // and look then.
+        continue
+      }
+    }
     observations += 1
     guard session.broker.register(observation, grant: session.grant) else {
       throw ComputerUseStop.sessionEnded
     }
     latest = observation
+    pausesSeen = session.pause?.count ?? 0
+    if observation.image != nil {
+      latestPicture = observation
+    }
     return observation
+  }
+
+  /// Waits out a pause, then: when the person had the Mac back since the
+  /// newest observation, observes again with a picture and answers `call`
+  /// with it, and returns true — the action was planned on a screen that may
+  /// no longer be there.
+  private mutating func lookAgainAfterPause(answering call: EvieToolCall) async throws -> Bool {
+    guard let pause = session.pause else {
+      return false
+    }
+    try await pause.waitWhilePaused()
+    guard pause.count != pausesSeen else {
+      return false
+    }
+    let observation = try await observe(withImage: true)
+    transcript.append(
+      entry(for: observation, carrier: carrier(of: call), lead: ComputerUsePrompt.handedBack + "\n"))
+    return true
+  }
+
+  /// Where the action lands on the newest picture, as fractions of it, for
+  /// the confirmation card's reticle.
+  static func mark(
+    of action: ComputerAction,
+    in observation: ComputerObservation,
+    on picture: ComputerObservation?
+  ) -> CGRect? {
+    guard let picture, let target = action.targets.first else {
+      return nil
+    }
+    let global: CGRect
+    if case .element(_, let index) = target, let element = observation.element(index: index) {
+      global = ComputerExecutor.globalRect(ofBox: element.box0to1000, in: observation.frame)
+    } else if let point = ComputerActionPolicy.globalPoint(of: target, in: observation) {
+      global = CGRect(x: point.x - 12, y: point.y - 12, width: 24, height: 24)
+    } else {
+      return nil
+    }
+    guard let box = picture.frame.normalizedBox(forGlobalCG: global) else {
+      return nil
+    }
+    let extent = CGFloat(ScreenGeometry.normalizedGridExtent)
+    return CGRect(
+      x: box.minX / extent, y: box.minY / extent,
+      width: box.width / extent, height: box.height / extent)
+  }
+
+  static func logKind(of result: ActionResult) -> ComputerActionLog.Entry.Kind {
+    switch result.outcome {
+    case .changed, .carriedOut: .done
+    case .noChange: .noChange
+    case .failed: .failed
+    }
+  }
+
+  /// The executor's account, except the clipboard's text, which stays out of
+  /// the card.
+  static func logLine(for action: ComputerAction, _ result: ActionResult) -> String {
+    if case .readClipboard = action, result.outcome != .failed {
+      return "Li o texto da área de transferência."
+    }
+    return result.detail
   }
 
   private func entry(

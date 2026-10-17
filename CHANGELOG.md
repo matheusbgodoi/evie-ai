@@ -283,6 +283,23 @@ All notable changes to Evie are documented here. Dates use `YYYY-MM-DD`.
 
 ### Added
 
+- **Evie can control the Mac when asked** (v2 S5d, ADR 0016). Say or type an
+  instruction — "abre o Notas e escreve…", "clica em…", "cola isso no…",
+  "digita…" — or choose "Controlar o Mac…" in the menu bar, and an amber card
+  asks to start a session with your words as the goal; the first one explains
+  what a session does and that text on the screen trying to give orders is
+  reduced by the code's rules, not eliminated. Nothing starts until you click
+  Começar. Requests heard after the wake word or in a call never start one, and
+  on the Mac brain Evie says "Controlar o Mac precisa do PC". Before a risky
+  step an amber card shows the screen with the target marked and Fazer / Pular;
+  only a click answers it — Evie's own clicks and the keyboard never do.
+  Touching the mouse or keyboard pauses the session (Continuar or Parar, a stop
+  after 60 s); Parar, Esc, ⌥⇧Esc, "para" and the 15-minute limit stop it, give
+  the front back to the app you were in, and leave a card listing what was
+  done. That list, the pictures and Evie's summary are never saved.
+- **Permissions: no Input Monitoring.** The takeover check uses `NSEvent`
+  monitors, which were measured to receive Evie's 0xE71E tag, so the
+  first-run guide still asks for five permissions.
 - **Computer use can act on the Mac** (v2 S5c, ADR 0016). The executor clicks,
   types, presses keys, scrolls, drags, opens apps and uses the clipboard for a
   session's committed actions — still nothing in the app starts a session (the

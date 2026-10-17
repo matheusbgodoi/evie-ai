@@ -421,6 +421,21 @@ struct EviePreferencesStoreTests {
     #expect(relaunched.preferences == preferences)
   }
 
+  @Test("the agent-mode consent starts unseen, and once given survives a relaunch")
+  func computerUseConsentPersists() throws {
+    #expect(!EviePreferences().computerUseConsentGiven)
+    let fileURL = temporaryFileURL()
+    var preferences = EviePreferences()
+    preferences.computerUseConsentGiven = true
+
+    try EviePreferencesStore(fileURL: fileURL).save(preferences)
+    let relaunched = EviePreferencesStore(fileURL: fileURL).loadWithDiagnostics()
+
+    #expect(relaunched.failure == nil)
+    #expect(relaunched.preferences.computerUseConsentGiven)
+    #expect(relaunched.preferences == preferences)
+  }
+
   @Test("a file written before the agent-mode switch existed reads it as on")
   func computerUseSwitchDefaultsOnInOlderFiles() throws {
     let fileURL = temporaryFileURL()

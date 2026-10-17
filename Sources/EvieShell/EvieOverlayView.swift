@@ -26,6 +26,9 @@ struct EvieOverlayView: View {
       onArtifactAction: { id, action in
         viewModel.performArtifactAction(id, action: action)
       },
+      onArtifactHandAction: { id, action, press in
+        viewModel.performArtifactPress(id, action: action, press: press)
+      },
       quickText: viewModel.isQuickTextEntryPresented ? $viewModel.quickText : nil,
       onSubmitQuickText: viewModel.isQuickTextEntryPresented
         ? { viewModel.submitTypedText() }

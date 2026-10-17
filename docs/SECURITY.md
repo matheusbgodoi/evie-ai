@@ -295,9 +295,9 @@ dropped), but those two copies exist on disk.
 
 ### Computer use (v2 S5, ADR 0016)
 
-The rules exist in `EvieCore` since S5a (2026-10-16), the observer since S5b
-and the executor since S5c; nothing in the app starts a session until S5d's
-card, and `evie-shell --cu-selftest` is the only thing that acts today.
+The rules exist in `EvieCore` since S5a (2026-10-16), the observer since S5b,
+the executor since S5c, and since S5d the session card, the confirmation card,
+the takeover monitor and the kill switches put them in the app.
 
 - **Available behind a switch that comes on** (ADR 0018): "Deixar a Evie
   controlar o Mac (modo agente)" in Configurações › Avançado › Controle do Mac,
@@ -309,6 +309,23 @@ card, and `evie-shell --cu-selftest` is the only thing that acts today.
   (at most 15 minutes) for push-to-talk or a click, never for the wake word,
   which the microphone can hear from anyone. Without the active grant the
   computer-use tools are not declared at all.
+- **Starting (S5d).** A request becomes a session card only when his own
+  message is an instruction to act ("abre o Notas e escreve…", "clica em…",
+  `ComputerUseIntent`) or followed "Controlar o Mac…" in the menu, and only
+  when it was typed, said with push-to-talk or after a click on the mark: a
+  request after the wake word or in call mode gets "Não começo a controlar o
+  Mac pela palavra de ativação…" and nothing else. The Mac brain gets
+  "Controlar o Mac precisa do PC". The session begins only on Começar clicked
+  by a hand; the first card is a one-time consent that says injection from the
+  screen is reduced by these rules, not eliminated. The permissions are asked
+  then, never at launch or mid-session.
+- **Answers only from a hand (S5d).** The session card's and the confirmation
+  card's buttons are AppKit views that read the event behind the click and
+  never take the keyboard: a click Evie posted (tagged 0xE71E) and any key
+  answer nothing, and only an untagged click says yes (`ComputerUserPress`,
+  `ComputerConfirmationDesk`). `AXPress` can say no but not yes, since any
+  process with the Accessibility grant can send one. Evie's executor cannot
+  reach her own windows anyway (refused by the policy).
 - **Every action is an ADR 0009 proposal**, bound to the session (plan id),
   the observation it was read from (revision) and the grant's expiry, and
   committed only through the 0009 factory: under ADR 0016's policy when nothing
@@ -372,13 +389,27 @@ card, and `evie-shell --cu-selftest` is the only thing that acts today.
   opened and a document it made), captures no pixels, and discards its document
   without saving. It approves its own two confirmations (⌘W and the discard
   button): running it is the gesture for exactly those steps.
+- **Takeover and stopping (S5d).** While a session runs, two `NSEvent`
+  monitors (global and local; they can neither change nor swallow input) watch
+  for input Evie did not post — verified 2026-10-16 that the 0xE71E tag reaches
+  them, so no event tap and no Input Monitoring grant. The person's input
+  pauses the session (Continuar, Parar, a stop after 60 s); an action planned
+  before the pause is not carried out, and the screen is observed again. The
+  monitors stop with the session. Parar, Esc, ⌥⇧Esc, the overlay's cancel,
+  "para" said or typed, and the grant's end all revoke the grant first, then
+  cancel the session's task, then take the indicator down and give the front
+  back to the app he was in.
+- **What is kept.** The end card shows the model's summary and a numbered log
+  of what was done, both in memory only; the conversation saves his request and
+  one line of Evie's own, never the log, the summary, the clipboard's text or a
+  picture.
 - **What remains.** Injection can still waste a session inside allowed apps, and
   the accessibility tree covers the front app only (a grid point on the Dock or
   a menu-bar extra is now refused rather than judged by the front app's rules).
   The policy findings queued from the S5a review — chords that open a launcher
   other than ⌘Space, Return in messaging apps, opening files from the Finder —
-  are for the Fix phase. This is mitigation, not proof; the one-time consent
-  sheet (S5d) says so.
+  are for the Fix phase. This is mitigation, not proof, and the one-time
+  consent says so.
 
 ### Conversation history
 

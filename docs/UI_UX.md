@@ -282,6 +282,30 @@ opening her off screen.
   picture is not saved. A follow-up in the same conversation still sees the last
   capture.
 
+### Controlling the Mac (v2 S5d)
+
+- **Asking.** In his own words — "abre o Notas e escreve…", "clica em
+  Salvar", "cola isso no Notas", "digita…" — typed, said with push-to-talk or
+  after a click on the mark; or "Controlar o Mac…" in the menu bar, after which
+  the next request is the goal ("Diga ou escreva o que fazer no Mac"). After
+  the wake word or in a call Evie says she does not start a session that way.
+  On the Mac brain: "Controlar o Mac precisa do PC…".
+- **The session card.** Amber, "Controlar o Mac?", his goal quoted, the terms
+  (15 minutes or 25 actions; Esc, ⌥⇧Esc, Parar or "para" stop; touching the
+  mouse or keyboard pauses), Começar and Agora não. The first time it is the
+  consent instead, and Começar reads "Entendi, começar".
+- **Confirmations.** An amber card with the policy's question as its title, a
+  thumbnail of the newest screen with amber corner brackets on the target, and
+  Fazer / Pular. The buttons take a click only — no Tab, Space or Return
+  reaches them — and the pill keeps showing what Evie is about to do.
+- **Pausing and stopping.** Moving the mouse or pressing a key pauses: the
+  pill turns gray with Continuar and Parar, and stops by itself after 60 s.
+  Any stop leaves the overlay up with the end card.
+- **The end card.** "O que eu fiz no Mac": how it ended in one line, then a
+  numbered list ("1. Apertei “Nova Nota”.", "2. Você pulou: …", "3. Não fiz:
+  …"). It is not saved; the conversation keeps the request and one line saying
+  how the session ended.
+
 ### Screen presence rules
 
 `ScreenPresenceMachine` in `EvieCore` enforces the indicator's promise in code and covers it with tests. Its behaviour is described in `docs/design/2026-10-16-evie-v2-design.md` § S6:

@@ -50,13 +50,16 @@ final class ScreenPresence {
   /// input is never mistaken for the user taking over, and her own clicks
   /// can never press the pill's buttons. The synthetic-input executor (S5c)
   /// stamps this same value.
-  static let syntheticEventTag: Int64 = 0xE71E
+  static let syntheticEventTag: Int64 = EvieSyntheticInput.tag
 
   /// Called the moment the user stops Evie — Parar, Esc, or a pause running
   /// out — and always before any of the indicator's exit animation runs.
   var onStop: (() -> Void)?
   /// Called when the user presses Continuar on the paused pill.
   var onResume: (() -> Void)?
+  /// Called when the pause is drawn: the user took over, and the session
+  /// must wait for Continuar or Parar.
+  var onPause: (() -> Void)?
   /// Shown beside the status ("no PC", "no Mac"), when known.
   var brainLocation: String?
   /// The agent's action budget, for "passo 3/25".
@@ -273,6 +276,14 @@ final class ScreenPresence {
     Task { await perform(machine.handle(.stop, at: clock.now)) }
   }
 
+  /// The session was stopped somewhere else — the emergency shortcut, "para",
+  /// the grant running out — and its work is already cancelled: the
+  /// indicator comes down as a stop (a pause included, with its Continuar),
+  /// without reporting the stop back through `onStop`.
+  func endStoppedSession() {
+    Task { await perform(machine.handle(.stop, at: clock.now), reportsStop: false) }
+  }
+
   private func takeover(reason: String) {
     pausedReason = reason
     Task { await perform(machine.handle(.takeover, at: clock.now)) }
@@ -309,7 +320,7 @@ final class ScreenPresence {
 
   // MARK: - Carrying out the machine's effects
 
-  private func perform(_ effects: [ScreenPresenceMachine.Effect]) async {
+  private func perform(_ effects: [ScreenPresenceMachine.Effect], reportsStop: Bool = true) async {
     for effect in effects {
       switch effect {
       case .render(let phase, let id):
@@ -329,9 +340,12 @@ final class ScreenPresence {
         // while paused — the work was cut short, and the exit says so.
         exitOutcome = .stopped
         cursorTravel?.cancel()
-        onStop?()
+        if reportsStop {
+          onStop?()
+        }
       case .renderPaused(let autoStopAt):
         renderPaused()
+        onPause?()
         pauseTimer?.cancel()
         pauseTimer = schedule(at: autoStopAt) { $0.machine.handle(.pauseExpired, at: $0.clock.now) }
       }

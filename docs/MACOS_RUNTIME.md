@@ -255,9 +255,12 @@ Permissions Evie holds or asks for, all attached to the signed bundle at
 - Accessibility and Post Events, for computer use (v2 S5). Neither has an
   Info.plist key, so the first-run guide is where they are explained.
 
-Input Monitoring is not asked for. It joins the guide only if the computer-use
-takeover monitor (v2 S5d) turns out to need a listen-only event tap; NSEvent
-monitors do not. Full Disk Access is not a requirement.
+Input Monitoring is not asked for. The computer-use takeover monitor (v2 S5d)
+uses `NSEvent` monitors, which do not need it: verified 2026-10-16 (M5 24 GB,
+macOS 27.2) that the 0xE71E tag on an event posted at `.cghidEventTap` reaches a
+global `NSEvent` monitor intact, so no listen-only event tap is needed. A global
+monitor sees key events only with Accessibility, which a session needs anyway.
+Full Disk Access is not a requirement.
 
 ## Signing, install and recovery
 

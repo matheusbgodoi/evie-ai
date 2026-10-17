@@ -97,8 +97,20 @@ final class AppCoordinator: NSObject {
   private lazy var screenCapture = ScreenCaptureService()
   private lazy var screenPermission = ScreenPermission(guide: permissionGuide)
   /// The app the person was in when the overlay opened, which an agent
-  /// session (S5d) acts in and hands the front back to when it ends.
+  /// session acts in and hands the front back to when it is stopped.
   private let focusCoordinator = FocusCoordinator()
+  private lazy var accessibilityPermission = AccessibilityPermission(guide: permissionGuide)
+  /// Agent mode's parts: the session's broker and executor, the pause, the
+  /// confirmation desk, the takeover monitor and the grant's clock.
+  private lazy var computerUse = ComputerUseHost(
+    presence: screenPresence,
+    focus: focusCoordinator,
+    screenPermission: screenPermission,
+    accessibility: accessibilityPermission,
+    preferences: { [weak self] in
+      self?.preferences ?? EviePreferences(computerUseEnabled: false)
+    }
+  )
   /// The Cérebro tab's model while the settings window exists, so a key
   /// imported from the guide shows as saved there too.
   private weak var modelSettings: ModelSettingsViewModel?
@@ -413,7 +425,7 @@ final class AppCoordinator: NSObject {
       // Resetting the visuals is not done here: `onSpeakingChanged` covers both
       // ways speaking can end, and this one only covers running out.
       if isInCall {
-        startListening()
+        startListening(origin: .callMode)
       }
     }
     viewModel.onAnswerReady = { [weak self] answer in
@@ -466,7 +478,7 @@ final class AppCoordinator: NSObject {
       // Called by name, so the answer follows the way the question was asked:
       // she comes, she opens the microphone, and she speaks the reply.
       panelController.showQuickText()
-      startListening()
+      startListening(origin: .wakeWord)
     }
 
     do {
@@ -498,6 +510,18 @@ final class AppCoordinator: NSObject {
     screenPresence.onStop = { [weak self] in
       self?.stopEverything()
     }
+    // Agent mode: the pill's pause and Continuar hold and release the loop,
+    // the grant's end stops it, and "para" is Parar.
+    let computerUse = computerUse
+    viewModel.computerUse = computerUse
+    screenPresence.onPause = { [weak computerUse] in computerUse?.presencePaused() }
+    screenPresence.onResume = { [weak computerUse] in computerUse?.presenceResumed() }
+    computerUse.onExpired = { [weak self] in self?.stopComputerUseSession() }
+    viewModel.onStopRequested = { [weak self] in self?.stopEverything() }
+    viewModel.computerUseConsentGiven = { [weak self] in
+      self?.preferences.computerUseConsentGiven ?? false
+    }
+    viewModel.onComputerUseConsent = { [weak self] in self?.recordComputerUseConsent() }
     attachMediaLifecycle()
     buildVaultIndexIfMissing()
 
@@ -610,6 +634,12 @@ extension AppCoordinator {
     add(
       to: menu, title: "Olhar a tela", action: #selector(lookAtScreen),
       shortcut: .lookAtScreen)
+    // A button to start a session, beside push-to-talk: no shortcut, so a
+    // key can never begin one by itself.
+    let controlItem = NSMenuItem(
+      title: "Controlar o Mac…", action: #selector(controlTheMac), keyEquivalent: "")
+    controlItem.target = self
+    menu.addItem(controlItem)
 
     menu.addItem(.separator())
 
@@ -721,6 +751,13 @@ extension AppCoordinator {
   @objc fileprivate func lookAtScreen() {
     openQuickText()
     viewModel.captureScreenForNextQuestion()
+  }
+
+  /// The next request, said or typed, becomes a session goal; its card
+  /// still needs a click on Começar.
+  @objc fileprivate func controlTheMac() {
+    openQuickText()
+    viewModel.askForComputerGoal()
   }
 
   @objc fileprivate func newConversation() {
@@ -877,7 +914,7 @@ extension AppCoordinator {
       openSettings()
     case (.pushToTalk, .pressed):
       isHoldingToTalk = true
-      startListening()
+      startListening(origin: .pushToTalk)
     case (.pushToTalk, .released):
       guard isHoldingToTalk else {
         break
@@ -920,7 +957,7 @@ extension AppCoordinator {
     isInCall = true
     chrome.setCallMode(true)
     viewModel.presentCallSurface()
-    startListening()
+    startListening(origin: .callMode)
   }
 
   fileprivate func leaveCall() {
@@ -940,7 +977,7 @@ extension AppCoordinator {
     if audioCapture.isCapturing {
       stopListening()
     } else {
-      startListening()
+      startListening(origin: .clickedMark)
     }
   }
 
@@ -1026,10 +1063,14 @@ extension AppCoordinator {
     return .system(identifier: firstVisible?.id)
   }
 
-  fileprivate func startListening() {
+  /// Opens the microphone. `origin` is how it was opened, which decides
+  /// whether what is heard may start an agent-mode session: push-to-talk
+  /// and a click may, the wake word and a call may not.
+  fileprivate func startListening(origin: ComputerUseRequestOrigin) {
     guard !audioCapture.isCapturing else {
       return
     }
+    viewModel.spokenOrigin = origin
     // Only one thing may hold the microphone. Arming and a real turn are the
     // same device, and two owners is a hang inside coreaudiod rather than an
     // error anybody could act on.
@@ -1115,6 +1156,9 @@ extension AppCoordinator {
   /// Once audio exists this also closes the microphone and cuts playback; the
   /// shortcut is registered now so the reflex is already in the user's hands.
   fileprivate func stopEverything() {
+    // A session first: the grant is revoked and its task cancelled before
+    // anything else here, or any indicator, moves.
+    let stoppedSession = stopComputerUseSession()
     isHoldingToTalk = false
     if isInCall {
       isInCall = false
@@ -1126,9 +1170,45 @@ extension AppCoordinator {
     Task { @MainActor [weak self] in
       await self?.cancelTranscription()
     }
+    guard !stoppedSession else {
+      // The overlay stays: its card shows what the session did.
+      updateToggleMenuTitle()
+      return
+    }
     viewModel.cancelCurrentInteraction()
     panelController.hide()
     updateToggleMenuTitle()
+  }
+
+  /// Stops an agent session, if one runs — Parar, Esc, ⌥⇧Esc, "para", or the
+  /// grant running out — and gives the front back to the app the person was
+  /// in. Returns whether one ran.
+  @discardableResult
+  fileprivate func stopComputerUseSession() -> Bool {
+    guard viewModel.stopComputerUse() else {
+      return false
+    }
+    Task { @MainActor [weak self] in
+      guard let self else { return }
+      await focusCoordinator.restore()
+      panelController.showPassive()
+      updateToggleMenuTitle()
+    }
+    return true
+  }
+
+  /// The first session's Começar accepted the consent on its card.
+  fileprivate func recordComputerUseConsent() {
+    var updated = preferences
+    updated.computerUseConsentGiven = true
+    do {
+      try preferencesStore.save(updated)
+    } catch {
+      // Not saved: the consent is shown again next launch, which is the safe
+      // way to fail.
+      viewModel.presentRuntimeWarning("Não consegui guardar o seu aceite do modo agente.")
+    }
+    preferencesDidChange(updated)
   }
 
   /// The shortcut does what the mark does, and switches the mode on first if it

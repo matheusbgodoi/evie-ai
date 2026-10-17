@@ -239,6 +239,21 @@ final class OverlayViewModel: ObservableObject {
   /// that cannot see it; kept so a retry on another brain does not read the
   /// screen twice.
   var screenFallbackText: (imageID: UUID, text: String?)?
+  /// Agent mode on this Mac: the parts a session runs with. Set by the
+  /// coordinator; `nil` in a build that cannot act.
+  var computerUse: ComputerUseHost?
+  /// How the next spoken question reached Evie, set by the coordinator when
+  /// the microphone opens: only push-to-talk or a click may start a session.
+  var spokenOrigin: ComputerUseRequestOrigin = .clickedMark
+  /// "Controlar o Mac…" was chosen: the next request is a session goal.
+  var asksForComputerGoal = false
+  /// The session card on screen, and the goal its Começar would start.
+  var pendingSession: (card: UUID, goal: String)?
+  /// Whether the one-time consent was accepted, and recording that it was.
+  var computerUseConsentGiven: @MainActor () -> Bool = { false }
+  var onComputerUseConsent: (@MainActor () -> Void)?
+  /// "Para", said or typed while a session runs: the same as Parar.
+  var onStopRequested: (@MainActor () -> Void)?
   /// Ceiling on how much document text one turn may carry, so a long PDF cannot
   /// silently push the actual question out of the model's context.
   static let attachmentCharacterLimit = 20_000
@@ -848,6 +863,12 @@ final class OverlayViewModel: ObservableObject {
     if prompt.isEmpty, pendingScreen != nil {
       prompt = "O que tem na minha tela?"
     }
+    // "Para" while Evie acts on the Mac stops her, said or typed.
+    if computerUse?.isRunning == true, ComputerUseStopCommand.isStop(prompt) {
+      quickText = ""
+      onStopRequested?()
+      return
+    }
     guard !prompt.isEmpty, !hasActiveRequest else {
       NSSound.beep()
       return
@@ -871,6 +892,11 @@ final class OverlayViewModel: ObservableObject {
       EvieVaultSearchCommand.query(in: prompt) != nil
       || EvieWebCommand.question(in: prompt) != nil
       || EviePlanCommand.question(in: prompt) != nil
+    // An instruction to act on the Mac becomes the session card, or the
+    // reason there can be none; no model is asked.
+    if !isCommand, attachmentSlots.isEmpty, offerComputerUse(for: prompt) {
+      return
+    }
     let looksAtScreen = !isCommand && (pendingScreen != nil || EvieScreenIntent.isPresent(in: prompt))
     let heldScreen = looksAtScreen ? pendingScreen : nil
     if looksAtScreen {
@@ -1062,6 +1088,16 @@ final class OverlayViewModel: ObservableObject {
     guard activeRequestID != nil else {
       return
     }
+    // A session is stopped as Parar stops it: the grant first, and its end
+    // card keeps the log of what was done.
+    if computerUse?.isRunning == true {
+      if let onStopRequested {
+        onStopRequested()
+      } else {
+        stopComputerUse()
+      }
+      return
+    }
 
     activeRequestID = nil
     requestTask?.cancel()
@@ -1112,6 +1148,8 @@ final class OverlayViewModel: ObservableObject {
     // Closing the wake question is a no; leaving the turn waiting on a card
     // that is gone would hang it.
     settleWake(id, accepted: false)
+    // Closing a confirmation is a no; closing the session card starts nothing.
+    dismissComputerUseCard(id)
     artifacts.removeAll { $0.id == id }
     onLayoutInvalidated?()
   }

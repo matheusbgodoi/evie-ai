@@ -185,6 +185,8 @@ final class StubComputer: EvieComputerActing {
   var onPerform: (ComputerAction) -> Void = { _ in }
   private(set) var requests: [ComputerObservationRequest] = []
   private(set) var performed: [ComputerAction] = []
+  /// Observations and actions in the order they happened.
+  private(set) var journal: [String] = []
   private(set) var refusals: [String] = []
   private(set) var endedSucceeded: Bool?
   var live: ((ComputerObservation?) -> ComputerLiveState)?
@@ -197,6 +199,7 @@ final class StubComputer: EvieComputerActing {
   /// Each observation gets a new id, `obs-<n>`, and a picture when asked.
   func observe(_ request: ComputerObservationRequest) async throws -> ComputerObservation {
     requests.append(request)
+    journal.append(request.withImage ? "observe picture" : "observe list")
     let screen = screens.count > 1 ? screens.removeFirst() : screens[0]
     let observation = ComputerObservation(
       id: "obs-\(requests.count)",
@@ -238,6 +241,7 @@ final class StubComputer: EvieComputerActing {
       throw error
     }
     performed.append(action)
+    journal.append("act")
     onPerform(action)
     return result
   }

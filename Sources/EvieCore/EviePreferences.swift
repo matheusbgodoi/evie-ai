@@ -49,6 +49,11 @@ public struct EviePreferences: Codable, Hashable, Sendable {
   /// the kill switches of ADR 0016. Off means no session can begin at all.
   /// `EVIE_COMPUTER_USE=0` forces it off (`ComputerUseSwitch`).
   public var computerUseEnabled: Bool
+  /// Whether the one-time consent for agent mode was accepted: the first
+  /// session's card explains what a session does and that on-screen
+  /// injection is mitigated by code policy, not eliminated, and its Começar
+  /// is the acceptance. Off by default; nothing but that click sets it.
+  public var computerUseConsentGiven: Bool
 
   public init(
     appearance: EvieAppearancePreferences = EvieAppearancePreferences(),
@@ -58,7 +63,8 @@ public struct EviePreferences: Codable, Hashable, Sendable {
     autoApproveChanges: Bool = false,
     webSearchEnabled: Bool = false,
     mailAndCalendarEnabled: Bool = false,
-    computerUseEnabled: Bool = true
+    computerUseEnabled: Bool = true,
+    computerUseConsentGiven: Bool = false
   ) {
     self.appearance = appearance
     self.shortcuts = shortcuts
@@ -68,6 +74,7 @@ public struct EviePreferences: Codable, Hashable, Sendable {
     self.webSearchEnabled = webSearchEnabled
     self.mailAndCalendarEnabled = mailAndCalendarEnabled
     self.computerUseEnabled = computerUseEnabled
+    self.computerUseConsentGiven = computerUseConsentGiven
   }
 
   /// Written out by hand rather than left to `convertFromSnakeCase`, for the
@@ -83,6 +90,7 @@ public struct EviePreferences: Codable, Hashable, Sendable {
     case webSearchEnabled = "web_search_enabled"
     case mailAndCalendarEnabled = "mail_and_calendar_enabled"
     case computerUseEnabled = "computer_use_enabled"
+    case computerUseConsentGiven = "computer_use_consent_given"
   }
 
   /// Every field optional, for the same reason as the sections below: a missing
@@ -108,6 +116,8 @@ public struct EviePreferences: Codable, Hashable, Sendable {
       try container.decodeIfPresent(Bool.self, forKey: .mailAndCalendarEnabled) ?? false
     computerUseEnabled =
       try container.decodeIfPresent(Bool.self, forKey: .computerUseEnabled) ?? true
+    computerUseConsentGiven =
+      try container.decodeIfPresent(Bool.self, forKey: .computerUseConsentGiven) ?? false
   }
 
   /// Turning changes off must also clear the bypass, or the file keeps a switch

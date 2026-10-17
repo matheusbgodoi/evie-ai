@@ -1,5 +1,67 @@
 # Work log
 
+## 2026-10-16 — v2 S5d: the cards, takeover and kill switches
+
+- Completed: slice S5d of the v2 spec; agent mode now starts from the app.
+  - `Sources/EvieCore/ComputerUse/ComputerUseStart.swift`: `ComputerUseStart
+    .offer` (none / propose / explain), `ComputerUseIntent` (instructions in his
+    words, head of the sentence, each verb with its screen object; installed
+    apps from the catalog), `ComputerUseRequestOrigin` (wake word and call mode
+    never start a session), `ComputerUseStopCommand` ("para" as a whole
+    utterance), `ComputerUseCopy` (including the one-time consent).
+  - `ComputerUseControls.swift`: `EvieSyntheticInput.tag`, `ComputerUserPress`
+    (only an untagged click approves; `AXPress` may decline; keys never),
+    `ComputerConfirmationRequest` (question, newest picture, target mark),
+    `ComputerConfirmationDesk`, `ComputerUsePause`, `ComputerTakeoverRule`,
+    `ComputerActionLog`.
+  - The loop: `confirm` takes a `ComputerConfirmationRequest`; the session
+    gained `pause` and `log`; waits out a pause before observing and acting,
+    retakes an observation the paused presence refused, re-observes instead of
+    acting on a pre-pause plan (`ComputerUsePrompt.handedBack`), logs each
+    action, decline and refusal.
+  - `EviePreferences.computerUseConsentGiven` (`computer_use_consent_given`).
+  - Shell: `ComputerUse/ComputerUseHost.swift`, `ComputerUse/TakeoverMonitor
+    .swift`, `OverlayViewModel+ComputerUse.swift`, `Views/ComputerUseCardViews
+    .swift` (`HandPressCatcher`, the thumbnail with its reticle); `ArtifactKind
+    .computer`, `ArtifactActionModel.needsHand`, `ArtifactCardModel.thumbnail`;
+    `ScreenPresence.onPause` and `endStoppedSession()`; `AppCoordinator`: the
+    microphone's origin, "Controlar o Mac…" in the menu, `stopComputerUseSession`
+    at the head of `stopEverything` (revoke, cancel, indicator, focus back),
+    the consent saved.
+- Measured 2026-10-16 (M5 24 GB, macOS 27.2), the [VERIFY] on `eventSourceUserData`:
+  a throwaway probe in the scratchpad posted one mouse move tagged 0xE71E at
+  the pointer's current position (no displacement; the Mac had been idle
+  ~10 min, `HIDIdleTime`) at `.cghidEventTap`. Global `NSEvent` monitor:
+  `userData=0xe71e`; listen-only `CGEventTap`: `0xe71e`; local monitor: not
+  reached (needs Evie active); its own window ordered in under the pointer
+  gave two `mouseEntered` with user data 0. Hence `NSEvent` monitors, no tap,
+  no Input Monitoring row, and entered/exited and still-pointer events ignored.
+- Tests (40 new, Swift Testing, no network): "Computer use start" (13),
+  "Computer use controls" (17), "Computer use loop" (+9: observe → act →
+  observe, Pular → "usuário recusou", a tagged click on the card ignored, the
+  card's picture and mark, a stop mid-dwell posts nothing, the Terminal
+  injection page refused, the log, a pause before acting, an observation
+  refused while paused), "Evie preferences" (+1). Mac-local offers no act mode
+  (start tests). Two mutations checked by hand and reverted: letting a tagged
+  click approve fails three tests, dropping the post-confirmation pause check
+  fails one.
+- Docs: design doc "S5d as implemented", `docs/SECURITY.md` § Computer use,
+  `docs/ARCHITECTURE.md`, `docs/UI_UX.md` § Controlling the Mac,
+  `docs/MACOS_RUNTIME.md` (Input Monitoring), `evals/README.md` (cases 22–23),
+  CHANGELOG, PROJECT_STATUS.
+- Checks: `swift build` with no warnings; `Scripts/test --filter
+  "ComputerUseStartTests|ComputerUseControlsTests|ComputerUseLoopTests|ComputerExecutorTests"`
+  (86 passed), then with the preferences and broker suites added (149 in 10
+  suites passed); full `Scripts/test`, twice: 1323 tests in 119 suites passed,
+  1 known issue (up from 1283 in 117).
+- Open: the manual QA in the installed app (the Notas script, "copia esse
+  parágrafo", Esc, the mouse pausing, a password field, Mail's Send, Spotlight
+  + Return) — the app was not launched; the local monitor live; a VoiceOver
+  user cannot say yes (Fazer refuses `AXPress` on purpose); a commit voided by
+  a pause still counts toward the 25 actions.
+- Next: S8b, then the Fix phase (queued policy findings #9, #10, #11's Finder
+  half; the known flaky stream timing test).
+
 ## 2026-10-16 — v2 S5c: the input executor (ADR 0018)
 
 - Completed: slice S5c of the v2 spec. Nothing in the app starts a session yet

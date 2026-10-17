@@ -87,7 +87,26 @@ on by default (Avançado › Controle do Mac; `EVIE_COMPUTER_USE=0` forces it of
 exact read-back, closed without saving, focus and clipboard restored) after
 fixing two defects it found: Evie's click-through glow panels counted as her
 windows (every click refused), and a sheet answering the hit test for its
-buttons. 57 new tests. Next: S5d (the session card, takeover, kill switches).
+buttons. 57 new tests.
+
+**S5d is done (2026-10-16):** agent mode reaches the app. A typed request, or one
+said with push-to-talk or after a click on the mark, that is an instruction to
+act ("abre o Notas e escreve…", "clica em…", "cola isso no…", "digita…";
+`ComputerUseIntent`) — or any request after "Controlar o Mac…" in the menu —
+shows an amber session card with the goal; the wake word and call mode never
+do, and the Mac brain says "Controlar o Mac precisa do PC". Começar, clicked by
+a hand, asks the session's permissions and begins it; the first card is the
+one-time consent (injection mitigated by code policy, not eliminated). The
+confirmation card shows the newest picture with the target marked and Fazer /
+Pular, AppKit buttons that ignore Evie's tagged clicks and every key. Untagged
+input pauses the session through `NSEvent` monitors (the tag was verified to
+reach them, so no Input Monitoring); Parar, Esc, ⌥⇧Esc, the overlay's cancel,
+"para" and the grant's end revoke first, cancel the task, take the indicator
+down and give the front back. The end card shows an in-memory log. 40 new
+tests (1323 in 119 suites). Not done: the manual QA in the installed app
+(the Notas script, Esc, mouse pause, password field, Mail's Send, Spotlight +
+Return), which needs a person at the Mac. Next: S8b and the Fix phase (queued
+policy findings #9, #10, #11's Finder half).
 
 Next for this area after S5b: S5
 drives observing, `lookAt`, `willClick`/`didClick` and typing, posts every
@@ -560,8 +579,8 @@ conversation itself. Still owed for S3: the in-app status line and ask card
 LensVLM tool-call eval (tools stay off). The first-run guide's key and brain
 rows (S7) are done (2026-10-16). S4 (screen perception) is done (2026-10-16; see
 "Evie v2" above). S5a (the pure computer-use core in `EvieCore`, ADR 0016) and
-S5b (observe-only) and S5c (the input executor, ADR 0018) are done
-(2026-10-16). Next: S5d (the confirmation card, takeover, kill switches).
+S5b (observe-only), S5c (the input executor, ADR 0018) and S5d (the cards,
+takeover and kill switches) are done (2026-10-16). Next: S8b and the Fix phase.
 
 **Evie v2, S7 (packaging, install, permissions) — partly done on `v2-packaging`,
 2026-10-16, merged into `v2` the same day.** Signing is pinned to the "Evie Dev"
