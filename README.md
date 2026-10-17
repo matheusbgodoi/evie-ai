@@ -72,13 +72,17 @@ may lose details, and estimated tokens remain labeled as estimates. See
 [current release gates](docs/PROJECT_STATUS.md).
 
 The signed 2.0.0 bundle is installed on the target Mac. All **1,556 behavioral
-tests** and all three [hosted CI jobs](https://github.com/matheusbgodoi/evie-ai/actions/runs/39037863984)
+tests** and all three [hosted CI jobs](https://github.com/matheusbgodoi/evie-ai/actions/runs/39038692619)
 passed, including the real permission-guide state machine. In the installed final
 bundle, real-PC compaction preserved the question and synthetic fact; both
 field/radio diagnostics passed, including autonomous model planning with
 independent readback. The Calendar permission button was also verified in the
 real UI: closed target → one click → background launch → authorized.
-[Release notes](docs/releases/2.0.0.md) record timing, resource evidence and scope.
+[Evie 2.0.0](https://github.com/matheusbgodoi/evie-ai/releases/tag/v2.0.0) is
+published with the signed ZIP, checksums and validation report. Downloaded files
+were verified byte for byte, including the pinned signature and equality with
+the installed executable. [Release notes](docs/releases/2.0.0.md) record timing,
+resource evidence and scope.
 Reproducible real-boundary regressions also cover
 [settings persistence](docs/MODEL_SETTINGS_VALIDATION.md),
 [Automation permission requests](docs/AUTOMATION_PERMISSION_VALIDATION.md) and

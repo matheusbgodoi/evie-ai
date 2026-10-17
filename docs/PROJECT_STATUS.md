@@ -12,8 +12,11 @@ continuation anchor remains
 The signed 2.0.0 bundle is installed locally. All implementation and local
 validation gates below passed, including fresh authorized real-PC compaction,
 deterministic entry and autonomous planning in the final installed bundle.
-Release publication and downloaded-asset verification are recorded separately
-in the persistent delivery ledger; source publication alone is not that evidence.
+[Release 2.0.0](https://github.com/matheusbgodoi/evie-ai/releases/tag/v2.0.0)
+is published from public source24266c3. All three downloaded assets matched the
+qualified originals; checksums, strict pinned signature and installed executable
+equality passed. [Machine-readable proof](releases/2.0.0-verification.json) and
+the persistent delivery ledger record the actual publication boundary.
 
 ### Calendar Automation correction checkpoint7 — 2026-10-17
 
@@ -112,14 +115,13 @@ See [Automation validation](AUTOMATION_PERMISSION_VALIDATION.md).
 
 ### Final validation and measured scope
 
-- Public correction `3c97075d6544827370149fb4998183a43a4b8fce` passed all three
-  [CI jobs](https://github.com/matheusbgodoi/evie-ai/actions/runs/39037863984):
-  **1,501 + 55 = 1,556 tests**, 13.282 s + 17.030 s, with the intentional known
+- Released public source `24266c36f900e746229875b6c28fad2a5e067dd0` passed all
+  three [final CI jobs](https://github.com/matheusbgodoi/evie-ai/actions/runs/39038692619):
+  **1,501 + 55 = 1,556 tests**, 9.082 s +14.314 s, with the intentional known
   Mail timeout fixture. Settings/Keychain responsiveness, 68 clipboard chords,
   fifteen voice cases, nine Automation cases with causal controls, strict shell
-  (43.17 s), capture-driver compilation and documentation passed. The final
-  subsequent diagnostic-only readiness change awaits its own public CI; Core,
-  runtime policy and all limits remain unchanged.
+  (44.29 s), capture-driver compilation and documentation all passed. This
+  includes the final diagnostic readiness change; no code gate remains open.
 - Final installed bundle8: release compilation **19.73 s**, stable pinned signing,
   executable SHA256 `318d41287f1a32aa2b0f7a073d371d914160c7109f1591e2e09558d85096a305`.
   ZIP **6,135,642 bytes**, SHA256

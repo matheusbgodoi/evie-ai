@@ -1,5 +1,27 @@
 # Work log
 
+## 2026-10-17 — publish and independently verify Evie 2.0.0
+
+- Final public source24266c3 / private checkpoint562e138 have identical trees,
+  with only public ancestry in the published line. CI39038692619 passed all
+  three jobs:1,556 tests9.082 s+14.314 s, all settings/clipboard/voice/Automation
+  harnesses, strict shell44.29 s, actual capture-driver compilation and docs.
+- Created annotated v2.0.0 pointing ONLY at public24266c3, pushed that exact tag,
+  and published the signed ZIP, SHA256SUMS and sanitized VALIDATION.json. No
+  private branch/tag/ancestor was pushed. Release is public and not a draft.
+- Downloaded all three assets again. All are byte-identical to their qualified
+  originals; both checksums pass. Unpacked app passes deep/strict verification
+  with the pinned certificate, version2.0.0 and equality with installed executable.
+  Privacy scan of that actual downloaded bundle found zero private matches.
+- Added machine-readable publication proof, final CI links and reconciled the
+  current status/task/continuation blocks. Code and installed archive unchanged
+  by this reporting commit. Local documentation links and privacy checks pass.
+- All requested implementation and verification work is complete. The normal
+  app remains installed/running with PC ready and configured enabled capabilities;
+  the original v2 worktree is clean and untouched. Future work starts from the
+  completed-release ledger rather than the superseded historical gate lists.
+
+
 ## 2026-10-17 — complete final installed PC gates and fixture readiness
 
 - Public correction3c97075 passed all three CI jobs in run39037863984, including

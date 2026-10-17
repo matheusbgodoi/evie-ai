@@ -12,8 +12,9 @@ completed IDs are never renamed or reused.
 The historical VS/phase registry below retains its task IDs and original scopes.
 The active delivery is tracked in
 [EVIE_RESEARCH_DELIVERY](EVIE_RESEARCH_DELIVERY.md); this checkpoint reconciles
-source completion with the remaining final-evidence gates without declaring a
-release from implementation alone.
+source completion with measured final evidence. Release2.0.0 is published and
+its downloaded assets verified; historical backlog scopes below are not new
+requirements of this completed delivery.
 
 | Scope | State at this checkpoint | Evidence / gate |
 | --- | --- | --- |
@@ -23,9 +24,9 @@ release from implementation alone.
 | Context budget and automatic compaction | DONE; final installed real-PC synthetic probe passed | [Context](../CONVERSATION_CONTEXT.md), ADR 0026; PC 200,704 tokens |
 | LensVLM context qualification | Passed at 131,072 tokens; client/runtime synchronized | 127,527 input + 38 output tokens, 5/5 target items, 2.4 GiB minimum sampled free and 13.8 GiB MLX-reported peak memory in 392.31 s; [model tuning](../MODEL_TUNING.md) |
 | Local model/memory reconfiguration and pinned public web | Implemented; real process/HTTP/MLX and curl boundaries passed | [Launcher](../LOCAL_BRAIN_VALIDATION.md), [web](../WEB_SEARCH.md), ADR 0027 |
-| Final source freeze, full suite and signed bundle | M5 and hosted full 1,556 cases passed in two resource phases; all three correction CI jobs passed in run39037863984; final signed bundle8 installed; diagnostic-only readiness update reviewed | [PROJECT_STATUS](../PROJECT_STATUS.md), [ADR 0028](../adr/0028-runtime-qualified-core-ci.md) |
+| Final source freeze, full suite and signed bundle | M5 and hosted full 1,556 cases passed in two resource phases; all three final source CI jobs passed in run39038692619; final signed bundle8 installed and all real PC gates passed | [PROJECT_STATUS](../PROJECT_STATUS.md), [ADR 0028](../adr/0028-runtime-qualified-core-ci.md) |
 | Calendar permission UI | DONE; closed target → one click → background launch → authorized; nine controlled cases and two causal controls | [Automation](../AUTOMATION_PERMISSION_VALIDATION.md) |
-| Resources and sanitized release | Idle/wake/thermal, real Lens unload and three native Shortcuts passed; all final live-PC gates passed; sanitized archive/signature ready for tag/release publication | [Resource method](../RESOURCE_BUDGET.md); root ledger owns final ancestry/artifact/release claims |
+| Resources and sanitized release | Idle/wake/thermal, real Lens unload and three native Shortcuts passed; all final live-PC gates passed; public2.0.0 tag/release and redownloaded archive/signature/equality verified | [Resource method](../RESOURCE_BUDGET.md); root ledger owns final ancestry/artifact/release claims |
 
 ## Status vocabulary
 
