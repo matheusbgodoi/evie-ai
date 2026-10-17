@@ -20,6 +20,10 @@ protocol PermissionGuideItem {
   func refreshStatus()
   func observeRowChanges(_ onChange: @escaping @MainActor () -> Void)
 
+  /// Explicit batch requests wait for asynchronous status before selecting an
+  /// action. Rendering never waits or initiates a permission request.
+  func prepareForRequest() async
+
   /// Runs the row's button.
   ///
   /// - Returns: the permission whose one system prompt this just used, so the
@@ -31,6 +35,7 @@ protocol PermissionGuideItem {
 extension PermissionGuideItem {
   func refreshStatus() {}
   func observeRowChanges(_ onChange: @escaping @MainActor () -> Void) {}
+  func prepareForRequest() async {}
 }
 
 /// A row for one macOS privacy permission.

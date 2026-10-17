@@ -1,0 +1,102 @@
+#!/bin/zsh
+set -euo pipefail
+readonly repository="${0:A:h:h}"
+readonly core_build="${EVIE_CORE_BUILD_DIR:-${repository}/.build/debug}"
+if [[ "${core_build}" != /* || ! -d "${core_build}" ]]; then
+  print -u2 -- "EVIE_CORE_BUILD_DIR must name an existing absolute debug product directory."
+  exit 1
+fi
+readonly scratch="$(mktemp -d "${TMPDIR:-/tmp}/evie-automation-permission-validation.XXXXXX")"
+trap 'rm -rf "${scratch}"' EXIT
+
+python3 - "${repository}" "${scratch}" <<'PY'
+from pathlib import Path
+import sys
+
+repository, scratch = map(Path, sys.argv[1:])
+guide = (repository / 'Sources/EvieShell/Onboarding/PermissionGuideItem.swift').read_text()
+boundary = '/// A row for one macOS privacy permission.'
+if guide.count(boundary) != 1:
+    raise SystemExit('Permission-guide protocol boundary changed; review the extraction.')
+(scratch / 'PermissionGuideProtocol.swift').write_text(guide.split(boundary, 1)[0])
+source = (repository / 'Sources/EvieShell/Onboarding/AutomationPermissionItem.swift').read_text()
+if source.count('private var refreshTask: Task<Void, Never>?') != 1:
+    raise SystemExit('Automation refresh-task boundary changed; review the validation bridge.')
+bridge = '''
+// Test-only access to await the actual old task after request revocation. No
+// production state is modified and no sleep guesses when a task has finished.
+@MainActor
+extension AutomationPermissionItem {
+  func validationRefreshTask() -> Task<Void, Never>? { refreshTask }
+}
+'''
+(scratch / 'ProductionAutomationPermission.swift').write_text(source + bridge)
+call = '        try await openTarget()'
+if source.count(call) != 1:
+    raise SystemExit('Automation target-opening boundary changed; review the regression control.')
+# Omitting only the launch operation must fail the same behavioral assertion.
+# The explicitly throwing no-op keeps catch reachable under warnings-as-errors;
+# a compilation failure is never treated as a successful regression control.
+control = source.replace(call, '        try await validationOmittedOpenTarget()')
+control += '\n@MainActor private func validationOmittedOpenTarget() async throws {}\n'
+(scratch / 'RegressiveAutomationPermission.swift').write_text(control + bridge)
+view_model = (repository / 'Sources/EvieShell/Onboarding/PermissionGuideViewModel.swift').read_text()
+(scratch / 'ProductionPermissionGuideVM.swift').write_text(view_model)
+prepare = '      await item.prepareForRequest()'
+if view_model.count(prepare) != 1:
+    raise SystemExit('Bulk request preparation boundary changed; review the regression control.')
+(scratch / 'UnpreparedPermissionGuideVM.swift').write_text(
+    view_model.replace(prepare, '      // control: omitted asynchronous status preparation'))
+
+PY
+
+typeset -a core_link_arguments core_objects
+if [[ -f "${core_build}/EvieCore.o" ]]; then
+  core_link_arguments=(-I "${core_build}" "${core_build}/EvieCore.o")
+elif [[ -f "${core_build}/libEvieCore.a" ]]; then
+  core_link_arguments=(-I "${core_build}" -L "${core_build}" -lEvieCore)
+else
+  core_objects=("${core_build}"/EvieCore.build/*.o(N))
+  if (( ${#core_objects} == 0 )); then
+    print -u2 -- "Build the debug package with Scripts/test before this validation."
+    exit 1
+  fi
+  core_link_arguments=(-I "${core_build}/Modules" "${core_objects[@]}")
+fi
+for variant in Production Regressive Unprepared; do
+  native_item="${scratch}/ProductionAutomationPermission.swift"
+  native_vm="${scratch}/ProductionPermissionGuideVM.swift"
+  if [[ "${variant}" == Regressive ]]; then
+    native_item="${scratch}/RegressiveAutomationPermission.swift"
+  elif [[ "${variant}" == Unprepared ]]; then
+    native_vm="${scratch}/UnpreparedPermissionGuideVM.swift"
+  fi
+  xcrun swiftc -parse-as-library -swift-version 6 -warnings-as-errors \
+    "${core_link_arguments[@]}" \
+    "${scratch}/PermissionGuideProtocol.swift" \
+    "${native_item}" "${native_vm}" \
+    "${repository}/evals/fixtures/AutomationPermissionValidation.swift" \
+    -o "${scratch}/${variant}"
+done
+python3 - "${scratch}" <<'PY'
+from pathlib import Path
+import subprocess
+import sys
+
+scratch = Path(sys.argv[1])
+control = subprocess.run([str(scratch / 'Regressive')], capture_output=True, text=True, timeout=30)
+expected = 'closed target was requested before opening'
+if control.returncode != 1 or expected not in control.stdout + control.stderr:
+    raise SystemExit('Automation control did not fail for the expected missing-target-launch bug.')
+print('RED: omitting the actual target launch prevents permission; detected as expected.')
+bulk = subprocess.run([str(scratch / 'Unprepared')], capture_output=True, text=True, timeout=30)
+if bulk.returncode != 1 or 'bulk request skipped asynchronous status preparation' not in bulk.stdout + bulk.stderr:
+    raise SystemExit('Bulk request control did not detect the incomplete status snapshot.')
+print('RED: omitting real guide status preparation skips a closed target; detected as expected.')
+
+actual = subprocess.run([str(scratch / 'Production')], capture_output=True, text=True, timeout=30)
+sys.stdout.write(actual.stdout)
+sys.stderr.write(actual.stderr)
+if actual.returncode != 0:
+    raise SystemExit(actual.returncode)
+PY

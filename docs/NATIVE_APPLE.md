@@ -85,6 +85,13 @@ Calendário quando os aplicativos de destino estavam abertos. Um código de alvo
 fechado não deve ser interpretado como consentimento negado. Nenhuma mensagem ou
 evento foi consultado para conceder essas permissões.
 
+No guia, **Aplicativo fechado** significa que o macOS não conseguiu consultar o
+alvo, e não que o consentimento foi negado. **Permitir** abre Mail/Calendário em
+segundo plano antes de pedir/verificar a autorização. O pedido roda fora do ator
+principal; a interface mostra progresso, negativa e falhas de abertura. O modo
+explícito de pedidos em lote também aguarda o estado atualizado de cada item.
+Método e limites: [validação da Automação](AUTOMATION_PERMISSION_VALIDATION.md).
+
 O pedido legítimo do Chaveiro para a credencial do modelo é separado. Somente o
 proprietário pode digitar sua senha diretamente no diálogo do macOS; a Evie não
 lê nem substitui essa senha. Os atalhos de abertura e rascunho não enviam a
