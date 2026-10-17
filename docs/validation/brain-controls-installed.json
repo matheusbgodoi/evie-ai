@@ -1,0 +1,58 @@
+{
+  "validatedAt": "2026-10-17",
+  "installedExecutableSHA256": "6267efd7e34e3140c3bf43eda703cf670fd42fa12e5a6ca4c6154a26d0e36324",
+  "method": "Public AXUIElementCopyAttributeValue; actions resolved by stable AXIdentifier; exact owned-window captures only",
+  "semanticControls": {
+    "evie-brain-controls": "Cérebro e controles da Evie",
+    "evie-brain-choice-automatic": "Automático · PC, depois Mac",
+    "evie-brain-choice-alwaysPC": "Sempre o PC · Qwen 3.8",
+    "evie-brain-choice-alwaysMac": "Sempre o Mac · LensVLM"
+  },
+  "labelAttributes": [
+    "AXDescription",
+    "AXAttributedDescription"
+  ],
+  "systemEventsPlainStringLabelsReliable": false,
+  "selectionPersistence": [
+    "automatic",
+    "alwaysMac",
+    "alwaysPC"
+  ],
+  "finalState": {
+    "brainChoice": "alwaysPC",
+    "pcReasoning": "off",
+    "macReasoning": "off",
+    "agentEnabled": true,
+    "webEnabled": true
+  },
+  "visualReview": {
+    "popoverWidthPoints": 330,
+    "contentWidthPoints": 294,
+    "insetPoints": 18,
+    "clippedText": false,
+    "brainOutlineGold": true,
+    "agentWebSwitchesActiveBlue": true
+  },
+  "modelRequestsSubmitted": false,
+  "screenCaptureScope": "Evie-owned windows only; no desktop or SecurityAgent capture",
+  "integratedSnapshots": {
+    "expected": 18,
+    "produced": 18,
+    "processExitCode": 0,
+    "finalReviewed": [
+      "brain-controls-light.png",
+      "brain-controls-dark.png"
+    ]
+  },
+  "cleanup": {
+    "normalAppRunning": true,
+    "diagnosticExited": true,
+    "normalAppVisibleWindows": 0,
+    "popoverClosed": true,
+    "overlayHidden": true
+  },
+  "limits": [
+    "Does not prove model inference or agent planning; those are separate diagnostics.",
+    "Synthetic inactive fixture colors are not used to validate active control colors."
+  ]
+}

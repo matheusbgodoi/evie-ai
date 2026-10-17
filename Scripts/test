@@ -30,16 +30,33 @@ elif [[ -f "${xcode_testing_plugin}" ]]; then
   )
 fi
 
-# `--core-only` builds just the test target and its dependency, then runs the
-# suite without letting SwiftPM rebuild the package.
-#
-# Legacy opt-in for a macOS 26 core-only developer build. Current CI uses the
-# xcode-27 runner and the normal full-package path. A single-target build may
-# not produce the package-level xctest bundle on full Xcode installations.
+# The minimum-runtime runner must build a real test bundle without compiling
+# EvieShell's macOS-27 SDK surface. All Core sources/tests are the same live tree;
+# the links also preserve repository-relative fixture paths derived from #filePath.
 if [[ "${1:-}" == "--core-only" ]]; then
   shift
-  swift build --target EvieCoreTests "${swift_test_arguments[@]}"
-  exec swift test --skip-build "${swift_test_arguments[@]}" "$@"
+  readonly repository="${0:A:h:h}"
+  readonly core_package="${repository}/.build/core-test-package"
+  readonly core_products="${repository}/.build/core-test-products"
+  mkdir -p "${core_package}"
+  for directory in Sources Tests Scripts config evals; do
+    ln -sfn "${repository}/${directory}" "${core_package}/${directory}"
+  done
+  cat > "${core_package}/Package.swift" <<'MANIFEST'
+// swift-tools-version: 6.0
+import PackageDescription
+let package = Package(
+  name: "Evie",
+  platforms: [.macOS("26.0")],
+  products: [.library(name: "EvieCore", targets: ["EvieCore"])],
+  targets: [
+    .target(name: "EvieCore"),
+    .testTarget(name: "EvieCoreTests", dependencies: ["EvieCore"]),
+  ]
+)
+MANIFEST
+  exec swift test --package-path "${core_package}" --scratch-path "${core_products}" \
+    "${swift_test_arguments[@]}" "$@"
 fi
 
 exec swift test "${swift_test_arguments[@]}" "$@"

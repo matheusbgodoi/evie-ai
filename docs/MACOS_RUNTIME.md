@@ -600,3 +600,37 @@ accepted through the guide's own request and the OS's Evie→Mail alert. Existin
 Calendar/Speech grants required no new prompt. Calendar was closed normally
 after that audit to restore the original test-host precondition; no privileges
 were granted to the terminal and no mailbox or calendar content was inspected.
+
+
+## Qualified hosted test runtime
+
+The CPU-only alternative above is a tested product route, not a workaround
+claim for every hosted image. Follow-up diagnostics found that the hosted
+macOS 27.0.1/Xcode 27.0 image fails all six accurate OCR routes, including public
+VN revisions and explicit CPU selection in fresh processes. The same synthetic
+probe on hosted macOS 26.6.2/Xcode 26.6 passed all six: three lines, five target
+strings and minimum confidence 1; modern CPU took 1.772 seconds. See the
+[actual matrix run](https://github.com/matheusbgodoi/evie-ai/actions/runs/39003345095)
+and [ADR 0028](adr/0028-runtime-qualified-core-ci.md). Diagnostic job success
+only confirms a report was produced; inspect per-route JSON to judge OCR.
+
+`Scripts/test --core-only` now creates a complete test package with the current
+Core sources and every Core test, without forcing macOS-27-only Shell SDK APIs
+through the minimum-runtime compiler. Its ignored package links Sources,
+Tests, Scripts, config and evals to the current checkout, preserving fixture
+paths. It builds a real test bundle and uses `.build/core-test-products` for
+products. Caller arguments and the existing warnings-as-errors, testing macro
+plugin and runtime paths remain unchanged; CI uses no test filter or exclusion.
+The default `Scripts/test` still builds/tests the full package.
+
+The real local isolated run passed 1,550 tests in 146 suites in 26.530 seconds,
+with one intentional timeout-injection known issue. The standalone settings VM
+and research guard then passed using
+`EVIE_CORE_BUILD_DIR="$PWD/.build/core-test-products/debug"`. That optional
+absolute directory is supported by `Scripts/model-settings-validation`,
+`Scripts/research-guard-validation` and `Scripts/local-brain-validation`;
+without it their existing `.build/debug` module/object selection is unchanged.
+Hosted CI now tests every Core behavior on the qualified 26 runtime, compiles
+the complete Shell on 27 and leaves documentation checks intact. The default
+full-package suite and signed-app diagnostics on the target M5/macOS 27.2 remain
+separate release gates. No legacy or fast OCR production downgrade was adopted.

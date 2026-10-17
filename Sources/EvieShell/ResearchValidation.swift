@@ -104,7 +104,9 @@ enum ResearchValidation {
         agentPlansActions
         ? ResearchModeController.agentGoal(
           "Na janela Evie Research Fixture, resolva a questão visível; no campo informe apenas "
-            + "o número, sem letra, e selecione a alternativa correspondente.")
+            + "o número, sem letra, e selecione a alternativa correspondente. "
+            + "Preencha usando type pela Acessibilidade: o clipboard deste ensaio é isolado, "
+            + "paste e atalhos de colar estão indisponíveis.")
         : "Na Evie Research Fixture, resolva a questão, copie o resultado, preencha o campo e selecione a alternativa."
       guard
         let grant = broker.begin(
@@ -228,6 +230,23 @@ enum ResearchValidation {
     report(passed ? "RESULTADO: passou" : "RESULTADO: falhou")
   }
 
+  static func isolatedClipboardRefusal(for action: ComputerAction) -> ActionResult? {
+    let readsGeneralClipboard: Bool
+    switch action {
+    case .paste:
+      readsGeneralClipboard = true
+    case .pressKeys(let chord):
+      readsGeneralClipboard = chord.key == "v" && chord.modifiers.contains(.command)
+    default:
+      readsGeneralClipboard = false
+    }
+    guard readsGeneralClipboard else { return nil }
+    return ActionResult(
+      outcome: .failed,
+      detail: "Colar está indisponível neste ensaio: o clipboard é isolado. "
+        + "Use type para preencher o campo pela Acessibilidade.")
+  }
+
   private struct State: Decodable {
     let nonce: String
     let pid: Int32
@@ -309,6 +328,12 @@ enum ResearchValidation {
 
     func perform(_ action: ComputerAction, commit: CapabilityCommit) async throws -> ActionResult {
       try ensureFixture()
+      if let refusal = ResearchValidation.isolatedClipboardRefusal(for: action) {
+        // The loop counts every returned action result, including failures.
+        // Never delegate a paste: macOS would read the person's general board.
+        actions += 1
+        return refusal
+      }
       let result = try await executor.perform(action, commit: commit)
       actions += 1
       try ensureFixture()

@@ -214,6 +214,12 @@ extension SecureProcessRunner {
 }
 
 private final class RunningProcess: @unchecked Sendable {
+  // Safety deadlines must not wait behind lower-priority global work while
+  // inference is saturating user-initiated queues. These callbacks only signal;
+  // blocking stdin writes and waitpid stay on the separate worker queue.
+  private static let deadlineQueue = DispatchQueue(
+    label: "com.matheusbgodoi.evie.process-deadlines", qos: .userInitiated)
+
   enum StopReason {
     case cancelled
     case inputWriteFailed
@@ -238,7 +244,7 @@ private final class RunningProcess: @unchecked Sendable {
   }
 
   func scheduleTimeout(after timeout: TimeInterval) {
-    DispatchQueue.global(qos: .utility).asyncAfter(deadline: .now() + timeout) { [weak self] in
+    Self.deadlineQueue.asyncAfter(deadline: .now() + timeout) { [weak self] in
       self?.requestStop(.timedOut)
     }
   }
@@ -253,7 +259,7 @@ private final class RunningProcess: @unchecked Sendable {
     lock.unlock()
 
     signalProcessGroup(SIGTERM)
-    DispatchQueue.global(qos: .utility).asyncAfter(
+    Self.deadlineQueue.asyncAfter(
       deadline: .now() + terminationGracePeriod
     ) { [weak self] in
       guard let self else { return }

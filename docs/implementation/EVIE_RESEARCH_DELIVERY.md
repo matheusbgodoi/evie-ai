@@ -630,3 +630,115 @@ Immediate queue after native stylefreeze:
 - Nextprivatecommit/publicsnapshot on parent8923... totriggerhostedCIcorrected
   candidate; no tag/release/mainclaimyet. AllremainingPCintegration stillneeds
   ownerpassword directlyinlegitimateSecurityAgentalert (pendingasyncanswer).
+
+
+## Latest continuation — exact hosted runtime boundary established
+
+- PrivateHEAD **fdb4fb0e917a50a60ddb89fe0252beb5334b84bd**; public delivery
+  branch **v2-public-research** at **107fd5a90228b7f26ada941841eda936bdea718f**,
+  parent8923..., no privateancestry. Lastpublichistory1232blobs0privatepatterns.
+  Mainstilloriginala46da7a; NOtag/releasecreated. PrivateMainworktreev2untouched.
+- Installedcandidate4 signedbuild38.42s,3+3metadata,stableDR,6artifactfiles0private;
+  executable **6267efd7e34e3140c3bf43eda703cf670fd42fa12e5a6ca4c6154a26d0e36324**.
+  UIfullyPASS actualAXnames/identifiers/readbackandpixels; Auto→Mac→PCpersisted,
+ 330pxpopover294inner/18paddingnocut,goldbrain30px/blueswitches, finalPC/off/
+  agenton/webon. ActualpublicAXAPI showed names; previousAppleScript missing
+  plainstringattributes DIDNOTproveoldVoiceOvernamesmissing (methodcorrected).
+  18ownedUICapturesproduced; 2currentbrainimagesreplaced, originalslegacy retained;
+  docs/validation/brain-controls-installed.json, installed-brain-controls.png.
+  NormalPID86931openhidden, UIidle/free. Enhancedvoicenativeunchanged.
+- LaunchServices-only installedTCCaudit candidate4:5coreallgranted/Mail0,
+  Calendar-600becauseCLOSED; earlierfreshLSCalendarOPEN0 andnormalguiderow7allowed.
+  Do notinterpretCLIinheritedresponsibleTCCorclosedtargetasmissingApppermission.
+- A candidate4zip was prepared as proof ONLY (stale afterpendingtimerguardchanges):
+  .build/release-artifacts/v2.0.0/Evie.app.zip 6124230bytes
+  sha256d9bc35fd71aacb79d2d73347a6cdbb6122b3ee582ba6a97777caa0c44a7d42a9,
+  unzipstrictsignature+installedbinaryequal. MUSTREPLACE afterbuild5; neverrelease
+  thisstalezipaccidentally. No releaseassetsuploaded.
+- Guardreviewfound diagnostic-onlyimplicitgeneralclipboardread: namedboard
+  .paste/CmdVwouldreadOSgeneralboard. ResearchValidation.Run.perform NOW refuses
+  .paste/anymodifierCmd+V BEFOREdelegate, countsfailedattempts, instructstype/AX;
+  typeforcedaccessibilitynofallback. NO real--agenttesthasrunyet (authpending),
+  so no exposureoccurred. Productionexecutor/policyUNCHANGED. Script
+  Scripts/research-guard-validation +evals/fixtures/ResearchGuardValidation.swift
+  compileEXACThelperfromsource+Core;68chordcases/aliases+paste/type/write/AXroute
+  PASS, zeroOSclipboard/UI/network; wiringreviewmanual. NewCIstepaddedbyroot.
+- HosteddeliveryCI2 **39002570779** failed: NLfixedPASS; evenmodernCPU OCR
+  e5rtcompiler11; TTSparentSIGTERMreceiptactual3.728272792s >2, othermissing.
+  Thusconsumer-onlyhypothesiswasinsufficient. Logs
+  /tmp/evie-candidate2-ci-failure.log. No assertionsskipped/relaxed.
+- TTSproductionrealcausality NOWfixed byvalidationagent (SOURCEFROZEN):20finite
+  globaluserInitiatedCPUworkers3s madeutilitytimer0.5fire3.009954625s, dedicated
+  serialuserInitiated0.501880958s SAMErun. RealrunnerregressionRED handler
+ 3.0404745s (/tmp/evie-tts-deadline-red.log)→GREEN afterONLY10linequeuechange
+  SecureProcessRunner TERM+KILL deadlines; blockingIO/waitpid/locks/reap unchanged.
+  Final9TTS testsPASS3.150s /tmp/evie-tts-deadline-final.log, same0.5/0.05/<2
+  limits; lateconsumerhandshakewaitschild.pidbeforeobservingreceipt. Thisisreal
+  urgencyQoSfix, not timerincrease. DocsTTS_PROCESS_VALIDATIONreconciled.
+- OCRinvestigation produced publicdiagnosticbranch **vision-ocr-probe** ONLYpublic
+  parents. Rootprivatehelper /tmp/evie-publish-vision-probe.py usesTEMPINDEX to
+  mapactual .github/workflows/vision-ocr-probe.yml onto ci.yml ONLYonprobebranch,
+  becauseexistingregisteredCIworkflowcanbedispatchedbeforedefaultmainknowsnew
+  workflow. DeliverynormalCIisNOTthisminiworkflow. DO NOTmergeprobebranchmain!
+  Currentdiagnosticcommit **e447da433bd18aaeb028c60d9967f7cbed992035**, parent
+ 5f26dbd→79b8779→107fd(public). History1237blobs0privatematches.
+- Publicruntimediagnosticruns(executedjobgreenmeansREPORTONLY, NOTOCRsuccess):
+ 39003039668 sameprocess4routesallfailed27;39003234386 SIXFRESHPROCESSESallfailed27
+  includingpublicdeprecatedusesCPUOnlyflag(actualwarningvisibleONLYprobecompile,
+  mainWerrorunchanged), eliminatesfirstfailurecontamination/globalCPUflagtheories.
+  **39003345095** exact6routesMATRIXmacos26/xcode27: ALL6PASSon26 (3lines,confidence1,
+  all5syntheticaccent/currencyfacts), modernCPU1.771965s; ALL6failon27.0.1 VM
+  modern e5rt11/legacyGenericObjCnilError. Log
+  /tmp/evie-vision-vm-matrix-probe.log; officialrunURLsourceavailable.
+- Xcode27runnerimagebaseis27.0.1;26runner26.6.2(defaultXcode26.6) hasno27SDK
+  installed, thoughAppleofficialXcode27supports26.6+. NativepublicRCA doesNOT
+  adoptlegacyOCR/fastmode/warningbypass inproduct. ActualM5mac27.2 OCRallasserts
+  passing modernautomatic+CPU. FallbackmodernCPUfeaturestillvalidM5tested.
+- APPROVED CI matrixcorrection: ALLCorebehavioraltests onminimumsupportedmacOS26,
+  sameassertionsNOFILTERS/NOSKIPS; fullShellcompileXcode27; actualM5mac27fullsuite
+  andinstallednativequalificationbefore release. Rootalreadyediteddeliveryci.yml
+  jobmacos26 buildCore+Scripts/test --core-only+VM/guardstandalones with
+  EVIE_CORE_BUILD_DIR=.build/core-test-products/debug; xcode27jobShellbuildonly;
+  docjobunchanged. ThisMOVES alltests to provenruntime, doesnotomitOCRtest.
+- Nativeagent CURRENTowns Scripts/test --core-only fix: generatedminimalpackage
+  in .build/core-test-package withactualSource/Test/Scripts/config/evalssymlinks,
+  scratch .build/core-test-products, sameplugins/rpaths/Werror/allargs, genuine
+  xctestbundlenotoldbuildtarget--skipbuild. LocalalltestscompilingNOW; default
+  Scripts/testfullpackageunchanged.3standalones modelsettings/researchguard/local
+  brain acceptoptionalabsoluteEVIE_CORE_BUILD_DIR(default.build/debug).
+  NativeownsdocsMACOS_RUNTIME/READMECIsectionandADR**0028**reserved+index.
+  Waitnativefreeze/source+alltestcounts beforebuild5/fullrootM5suite/commit.
+- RootstillMUST finish: nativeisolatedsuite+scriptfreeze; fullphysicaldefault
+  Scripts/test afterlatestdeadlinefix+guard, strictstyle/script/doc/privacychecks;
+  privatecommit3/publicsnapshotparent107fd ONLY, pushdeliverycandidate+dispatch
+  actualnew3jobCI(provealltests26+bothstandalones), signedbuild5/install/rescan.
+  UIcomponentalreadyactual4PASSsameUIcodesourceunchanged; latest--agentguard,
+  deadlineproduction+runtimehashneednewbundle. Finalenergy/wake/native/brain
+  --idle10min andPCcontext/researchdeterministic+--agent AFTERownerKeychaingrant.
+  Userasyncpasswordrequest STILLUNANSWERED. NeverbypassOS/readpassword orfake
+  enrollment. Codeworkcontinues; no finalpartialdelivery.
+
+
+### Continuation — full-suite freeze after runtime/deadline correction
+
+- Native isolated Core full package PASS: 1550 tests / 146 suites / 26.530 s,
+  one intentional known Mail timeout issue; both standalone settings/guard
+  harnesses passed with the absolute isolated Core directory. Source frozen.
+- Root default full-package suite PASS: 1550 / 146 / 26.794 s, same intentional
+  issue; `/tmp/evie-final-default-fullsuite.log`, exec63144 exit0. Standalone
+  default products validation started exec34952; signed build5 exec73163,
+  `/tmp/evie-final-build5.log`. No additional source edits before build completes.
+- Updated current status/release draft/CHANGELOG/WORKLOG with these actual counts
+  and runtime qualification. Energy and publication still pending, not claimed.
+- Existing owner Keychain async question remains unanswered. Do not bypass it.
+
+- Build5 completed, release compile36.20s; metadata3intents/3shortcuts, pinned
+  signature verified strict/deep; artifact6files0private. Installed/open via
+  Scripts/evie-app install; both build/installed executable SHA256:
+  99620b81b290e74f18c9945d37e390fe94d82e0420869eff520b821e3aa31997.
+  Logs `/tmp/evie-final-build5.log`, `/tmp/evie-final-install5.log`.
+- Default-products standalone settings3scenarios and research guard68chords
+  bothPASS (`/tmp/evie-final-default-settings.log`, `...-guard.log`). Strict
+  swift-format4changedSwifts, zsh4scripts, doclinks0missing, diffcheckPASS.
+- Native_apple NOWowns all OS/mic/model diagnostics and RESOURCE_BUDGET/native
+  finalmeasure docs; root onlygit/CI/docs. No concurrentrootUI/worker/use.

@@ -39,7 +39,7 @@ publication or a release has already occurred.
 - The local launcher reuses only compatible model/memory options and reconciles
   changed options on next use. Web DNS/redirects are pinned to public addresses
   separately from the private model transport. Current decisions are ADRs
-  **0020–0027**; earlier records below are historical where they differ.
+  **0020–0028**; earlier records below are historical where they differ.
 
 ### Executed evidence, with scope
 
@@ -88,7 +88,7 @@ publication or a release has already occurred.
 
 ### Draft final gates — replace with executed evidence before publishing
 
-- Final full-suite result: **1,549 tests in 146 suites passed (24.818 s), with one intentional known timeout-injection issue**.
+- Final full-suite result: **1,550 tests in 146 suites passed (26.794 s), with one intentional known timeout-injection issue**.
 - Final resource/energy measurements, including conditions: **VALOR_FINAL_A_INSERIR**.
 - LensVLM qualification: completed at 131,072 tokens with the measured controls
   above; the final full-suite run covers the synchronized source defaults.

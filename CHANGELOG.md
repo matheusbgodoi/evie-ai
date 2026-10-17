@@ -6,6 +6,16 @@ All notable changes to Evie are documented here. Dates use `YYYY-MM-DD`.
 
 ### Final integration candidate — 2026-10-17
 
+- Dedicated process-deadline queue preserves actual TERM/KILL deadlines under
+  shared CPU contention; the real process-group regression reproduced the old
+  delay before passing with the same timing limits.
+- All 1,550 behavioral tests run on the qualified macOS 26 CI runtime; the full
+  shell compiles on Xcode 27. The complete suite also passed on the target M5
+  with macOS 27.2. Accurate OCR assertions are unchanged; ADR 0028 records the
+  measured hosted macOS 27.0.1 Vision failure and six-route comparison.
+- The isolated research diagnostic refuses general-clipboard paste actions and
+  uses Accessibility typing; a standalone guard harness checks 68 key chords.
+
 - Operational PC context set to 200,704 tokens and LensVLM qualified at
   131,072 tokens on the target Mac, synchronized with runtime KV capacity.
   The synthetic 127,527-input/38-output run retrieved 5/5 target items with

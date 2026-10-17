@@ -29,9 +29,11 @@ The installed-candidate voice check now selects public **Luciana Aprimorada**:
 10 usable Brazilian voices, one enhanced, verified with actual synthesis and
 recognition. That improves the available voice catalog without claiming access
 to Siri's private voices. Permission indicators remain based on real OS state:
-the inspected Automation page already allowed Calendar, while Mail still needed
-its own request. These are checkpoint observations; final release and grant
-results belong in [PROJECT_STATUS](PROJECT_STATUS.md), with detailed voice
+the earlier Automation-page inspection was only a checkpoint. Subsequent
+legitimate system requests allowed Mail and Calendar. An actual Calendar
+Automation audit succeeds with Calendar running; the closed-app `-600` result
+does not by itself mean consent was denied. Final release and grant results
+belong in [PROJECT_STATUS](PROJECT_STATUS.md), with detailed voice
 [evidence](NATIVE_VOICE.md).
 
 ## CLUI CC research
@@ -168,11 +170,12 @@ Enabling agent mode permits requested sessions; it does not continuously act.
 
 The icon-only brain button has the spoken label “Cérebro e controles da Evie”
 and stable identifier `evie-brain-controls`. Each model option supplies its full
-spoken title, selection trait and `evie-brain-choice-<choice>` identifier. The
-installed UI check must resolve these controls semantically rather than by
-their position; an older candidate exposed only the SF Symbol identifier and
-unnamed model buttons. This accessibility correction requires the rebuilt
-candidate's AX check before it is reported as verified.
+spoken title, selection trait and `evie-brain-choice-<choice>` identifier.
+The installed candidate was checked on 2026-10-17 through these identifiers,
+without positional button selection. The public AX API returned the expected
+`AXDescription` and `AXAttributedDescription` for all four controls. System
+Events did not expose those names as plain-string attributes on this macOS;
+that scripting limitation alone does not prove a missing VoiceOver label.
 
 The popover keeps a 330-point viewport with 18-point readable insets. Its
 content width is constrained separately from the scroll view: the native
@@ -187,8 +190,13 @@ On 2026-10-17 a standalone Swift 6 build using the real `BrainControlsView`
 and synthetic model data passed warnings-as-errors. Its visible owned-window
 [layout capture](images/apple-visual/brain-controls-context-fixed.png) shows
 normal and compacting controls with complete insets, wrapped captions and
-unclipped token limits. This checks layout; the installed popover and AX labels
-are checked separately after packaging.
+unclipped token limits. The subsequently installed candidate's
+[actual popover](images/apple-visual/installed-brain-controls.png) also passed:
+complete side insets and captions, the small gold brain button, active agent/web
+switches, off reasoning and PC selection. Semantic model actions switched
+Automatic → Mac → PC and persisted each choice. The final state was restored
+to PC, reasoning off and agent/web enabled; no model request was made by this
+control test. See [validation evidence](validation/brain-controls-installed.json).
 
 Every answer card names its model and place beside "RESPOSTA", quietly
 ("Qwen 3.8 · no seu PC"); a card restored from history does not know it and
@@ -256,12 +264,14 @@ schedules), Aparência, Permissões (the first-run guide) and Avançado
 resizable from 780 × 520 and opens at 860 × 640. Agent mode can also be turned
 on and off from the brain chip's menu and from "Modo agente" in the menu bar.
 
-To look at the chip, an answer card and Settings without launching the app,
-`evie-shell --ui-snapshots <pasta>` draws them into windows that are never
-shown, in light and dark, over models built from scratch in a temporary folder.
-macOS 26's floating sidebar and every behind-window material are composited by
-the window server, so they come out flat or missing there; the sidebar's list is
-drawn alone as well for that reason.
+`evie-shell --ui-snapshots <pasta>` launches an isolated diagnostic with synthetic
+models and temporary stores. It displays temporary owned windows in light and
+dark appearances and captures each exact window through ScreenCaptureKit,
+using its own opaque backdrop for vibrancy. It preflights the existing screen
+capture grant and refuses if unavailable. The earlier offscreen bitmap method
+could omit compositor-owned content and is not accepted as native-glass QA.
+The floating sidebar's list is also rendered separately so its contents can be
+inspected independently of the window-server chrome.
 
 ## State machine
 

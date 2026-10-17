@@ -1,6 +1,11 @@
 #!/bin/zsh
 set -euo pipefail
 readonly repository="${0:A:h:h}"
+readonly core_build="${EVIE_CORE_BUILD_DIR:-${repository}/.build/debug}"
+if [[ "${core_build}" != /* || ! -d "${core_build}" ]]; then
+  print -u2 -- "EVIE_CORE_BUILD_DIR must name an existing absolute debug product directory."
+  exit 1
+fi
 readonly scratch="$(mktemp -d "${TMPDIR:-/tmp}/evie-brain-validation.XXXXXX")"
 # The executable cleans every process it launches before this directory is removed.
 trap 'python3 -c '\''import pathlib,shutil,sys; p=pathlib.Path(sys.argv[1]); shutil.rmtree(p)'\'' "${scratch}"' EXIT
@@ -18,17 +23,17 @@ output.write_text(head + '\n' + Path(sys.argv[2]).read_text())
 os.chmod(output, 0o700)
 PY
 typeset -a core_link_arguments core_objects
-if [[ -f "${repository}/.build/debug/EvieCore.o" ]]; then
-  core_link_arguments=(-I "${repository}/.build/debug" "${repository}/.build/debug/EvieCore.o")
-elif [[ -f "${repository}/.build/debug/libEvieCore.a" ]]; then
-  core_link_arguments=(-I "${repository}/.build/debug" -L "${repository}/.build/debug" -lEvieCore)
+if [[ -f "${core_build}/EvieCore.o" ]]; then
+  core_link_arguments=(-I "${core_build}" "${core_build}/EvieCore.o")
+elif [[ -f "${core_build}/libEvieCore.a" ]]; then
+  core_link_arguments=(-I "${core_build}" -L "${core_build}" -lEvieCore)
 else
-  core_objects=("${repository}"/.build/debug/EvieCore.build/*.o(N))
+  core_objects=("${core_build}"/EvieCore.build/*.o(N))
   if (( ${#core_objects} == 0 )); then
     print -u2 -- "Build the debug package with Scripts/test before this validation."
     exit 1
   fi
-  core_link_arguments=(-I "${repository}/.build/debug/Modules" "${core_objects[@]}")
+  core_link_arguments=(-I "${core_build}/Modules" "${core_objects[@]}")
 fi
 xcrun swiftc -parse-as-library -swift-version 6 -warnings-as-errors \
   "${core_link_arguments[@]}" \

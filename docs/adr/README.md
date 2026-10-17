@@ -33,3 +33,4 @@ supersede rather than silently rewrite them when the decision changes.
 | [0025](0025-native-voice-and-explicit-wake-calibration.md) | Native voice and five-phrase wake calibration | Accepted |
 | [0026](0026-adaptive-conversation-context-and-compaction.md) | Adaptive context and automatic compaction | Accepted; amends 0014/0015/0021 |
 | [0027](0027-pinned-public-web-transport.md) | Pinned public web transport | Accepted |
+| [0028](0028-runtime-qualified-core-ci.md) | Runtime-qualified complete Core tests and shell compilation | Accepted |

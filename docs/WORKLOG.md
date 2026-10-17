@@ -1,5 +1,28 @@
 # Work log
 
+## 2026-10-17 — process deadlines and qualified CI runtime
+
+- Reproduced an actual SIGTERM receipt delayed to 3.040 s under finite shared
+  CPU contention. Moved only process safety timers to a dedicated user-initiated
+  queue; all nine TTS regressions passed with unchanged limits (3.150 s).
+- Kept every OCR assertion and compared six public accurate OCR routes in fresh
+  processes: all passed on hosted macOS 26.6.2 and failed on hosted macOS 27.0.1.
+  ADR 0028 moves all Core tests to the qualified minimum runtime and retains
+  strict Xcode 27 full-shell compilation plus target-M5 full-suite qualification.
+- Replaced the old incomplete core-only bundle path with a minimal generated
+  package linked to all real sources/tests/fixtures. Isolated full suite:
+  1,550 tests / 146 suites, 26.530 s. Default M5 full-package suite: the same
+  1,550 / 146, 26.794 s. Both have one intentional known timeout-injection issue.
+- Settings view-model/JSON and isolated clipboard guards passed against the
+  isolated Core products. The latter compiles the exact production diagnostic
+  helper, checking paste and 68 chord variants without personal clipboard use.
+- Signed candidate5 compiled in 36.20 s, generated three intents/shortcuts, passed
+  strict signature and six-file artifact privacy checks, and was installed/opened.
+  Hosted delivery CI, resource measurements and final PC diagnostics remain
+  separate gates in progress. PC access
+  awaits the owner's authorization in the legitimate macOS Keychain prompt.
+
+
 ## 2026-10-17 — hosted CI portability and final UI inspection
 
 - The first sanitized public candidate reached hosted CI: macOS 26 core and
@@ -22,7 +45,10 @@
   known timeout-injection issue; the settings view-model harness passed again.
 - Real installed UI showed model Auto/Mac/PC persistence, exact context/output
   budgets and working Settings while a legitimate Keychain prompt was pending.
-  Inspection then found clipped popover content and missing semantic button names.
+  Inspection found clipped popover content and fragile control discovery by
+  the SF Symbol identifier. A later direct AX probe verified explicit names and
+  identifiers; the earlier AppleScript probe alone could not establish whether
+  VoiceOver names were absent.
   Constrained the content inside the existing 330-point viewport, used a small
   segmented control, wrapped captions and supplied explicit labels/identifiers.
   A visible synthetic production-view preview passed; final installed verification

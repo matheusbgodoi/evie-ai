@@ -1,0 +1,48 @@
+#!/bin/zsh
+set -euo pipefail
+readonly repository="${0:A:h:h}"
+readonly core_build="${EVIE_CORE_BUILD_DIR:-${repository}/.build/debug}"
+if [[ "${core_build}" != /* || ! -d "${core_build}" ]]; then
+  print -u2 -- "EVIE_CORE_BUILD_DIR must name an existing absolute debug product directory."
+  exit 1
+fi
+readonly scratch="$(mktemp -d "${TMPDIR:-/tmp}/evie-research-guard.XXXXXX")"
+trap 'rm -rf "${scratch}"' EXIT
+
+# Compile the diagnostic's exact helper, rather than a second implementation.
+# SwiftPM is deliberately not invoked; build the debug Core once beforehand.
+/usr/bin/python3 - "${repository}/Sources/EvieShell/ResearchValidation.swift" \
+  "${scratch}/ResearchValidationGuard.swift" <<'PY'
+from pathlib import Path
+import sys
+
+source = Path(sys.argv[1]).read_text()
+start = "  static func isolatedClipboardRefusal("
+end = "\n  private struct State:"
+if source.count(start) != 1 or source.count(end) != 1:
+    raise SystemExit("Diagnostic helper boundary changed; review the extraction before running.")
+helper = source.split(start, 1)[1].split(end, 1)[0]
+Path(sys.argv[2]).write_text(
+    "import EvieCore\n@MainActor\nenum ResearchValidation {\n" + start + helper + "\n}\n"
+)
+PY
+
+typeset -a core_link_arguments core_objects
+if [[ -f "${core_build}/EvieCore.o" ]]; then
+  core_link_arguments=(-I "${core_build}" "${core_build}/EvieCore.o")
+elif [[ -f "${core_build}/libEvieCore.a" ]]; then
+  core_link_arguments=(-I "${core_build}" -L "${core_build}" -lEvieCore)
+else
+  core_objects=("${core_build}"/EvieCore.build/*.o(N))
+  if (( ${#core_objects} == 0 )); then
+    print -u2 -- "Build the debug package with Scripts/test before this validation."
+    exit 1
+  fi
+  core_link_arguments=(-I "${core_build}/Modules" "${core_objects[@]}")
+fi
+xcrun swiftc -parse-as-library -swift-version 6 -warnings-as-errors \
+  "${core_link_arguments[@]}" \
+  "${scratch}/ResearchValidationGuard.swift" \
+  "${repository}/evals/fixtures/ResearchGuardValidation.swift" \
+  -o "${scratch}/validate"
+"${scratch}/validate"
