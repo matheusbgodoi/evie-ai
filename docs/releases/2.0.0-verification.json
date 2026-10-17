@@ -1,0 +1,28 @@
+{
+  "release": "https://github.com/matheusbgodoi/evie-ai/releases/tag/v2.0.0",
+  "sourceCommit": "24266c36f900e746229875b6c28fad2a5e067dd0",
+  "downloadedFiles": 3,
+  "byteIdenticalToQualifiedFiles": true,
+  "checksumsPassed": true,
+  "strictPinnedSignaturePassed": true,
+  "installedExecutableEqual": true,
+  "unpackedPrivateMatches": 0,
+  "archiveSHA256": "aad6ef9f4b5c9ed5e1547c966871b720e918059e97b4ebfe6dac365b0e107c2e",
+  "date": "2026-10-17",
+  "ciRun": 39038692619,
+  "executableSHA256": "318d41287f1a32aa2b0f7a073d371d914160c7109f1591e2e09558d85096a305",
+  "assets": [
+    {
+      "name": "Evie.app.zip",
+      "bytes": 6135642
+    },
+    {
+      "name": "SHA256SUMS",
+      "bytes": 161
+    },
+    {
+      "name": "VALIDATION.json",
+      "bytes": 2988
+    }
+  ]
+}

@@ -4,48 +4,55 @@ Updated: 2026-10-17 (America/Sao_Paulo). This file is the continuation anchor.
 
 ## Current continuation snapshot — supersedes historical entries below
 
-**CURRENT — all implementation/live checks passed; release publication next:**
+**COMPLETE — Evie 2.0.0 published, installed and independently verified:**
 
-- Private checkpoint b614de7, now uncommitted diagnostic-readiness/final-doc changes.
-  Public main and delivery `3c97075d6544827370149fb4998183a43a4b8fce`.
-  CI39037863984 ALL3 PASS: 1556 cases13.282 s+17.030 s; shell43.17 s;
-  settings/clipboard/voice15/Automation9+two controls/capture compile/docs.
-- Final signed bundle8 INSTALLED, normal PID7794. Release8 build19.73 s.
+- Release: https://github.com/matheusbgodoi/evie-ai/releases/tag/v2.0.0
+  Annotated tag v2.0.0 resolves to PUBLIC24266c36f900e746229875b6c28fad2a5e067dd0.
+  Private source checkpoint562e138d0b08968dc9ded09638c4506c8cc9263a has the
+  exact same tree; private v2 ancestry excluded. This following docs checkpoint
+  reports publication without altering the released source/binary.
+- Final source CI39038692619 ALL3 PASS:1556 cases9.082 s+14.314 s,
+  settings/clipboard68chords/voice15/Automation9+two causal controls,
+  strict shell44.29 s/capture-driver compilation/docs. No implementation,
+  live-PC, publication or credential gate remains outstanding.
+- Final signed bundle8 installed and normal app running. Actual final AX:
+  Qwen3.8 PC ready, Automatic selected, agent available; empty draft by count,
+  no action/fixture/security prompt/Settings. UI hidden only for idle measurement.
+  Native voice and requested capability defaults remain configured on.
+- ALL real installed PC checks PASS:context18.874 s,46247→15371 characters in
+  budget32768, current question/fact/cache retained; standard15.155 s,4actions;
+  autonomous121.781 s,3actions/5observations/finish(success). Both independently
+  confirmed68/B68/named clipboard, no submit/general clipboard/autoapproval.
+  Own fixture ended and previous focus restored. Keychain boundary legitimately
+  succeeded; no password/credential field read or filled.
+- Calendar actual UI7:closed→Aplicativo fechado→one Permitir→background target
+  →Permitido. Same production permission code in8. Existing consent, no events/
+  accounts/TCC reset. Async queue/cached rows/error/retry/bulk/stale safeguards
+  covered by nine real item/VM cases and two causal regression controls.
+- Initial overlapping-point refusal preserved; isolated test then passed. Initial
+  agent readiness failure0.294 s beforemodel corrected only in diagnostic: same
+  frontmost PID/bundle and visible normal frame in SAME3s wait. No guard, timeout
+  or retries loosened. Independent review and actual final method pass.
+- Normal idle8 sample30.005 s:0.3043CPU-s,1.014% onecore,108.47MiB footprint,
+  187.31MiB lifetimepeak. No inference/overlay during sample. Shared native speech
+  services and battery watts not attributed. Earlier Lens131072/ten-minute unload,
+  voice and three real Shortcuts keep their original dated measurement scope.
+- Published assets:Evie.app.zip6135642 bytes,SHA256SUMS,VALIDATION.json.
+  ZIP SHAaad6ef9f4b5c9ed5e1547c966871b720e918059e97b4ebfe6dac365b0e107c2e.
   Executable SHA318d41287f1a32aa2b0f7a073d371d914160c7109f1591e2e09558d85096a305.
-  ZIP6135642 bytes SHAaad6ef9f4b5c9ed5e1547c966871b720e918059e97b4ebfe6dac365b0e107c2e.
-  Unpacked strict signature/equality PASS, bundle4files0private.
-- ALL FINAL PC GATES8 PASS via LaunchServices, no credential/password read:
-  context18.874 s,46247→15371/32768budget, samequestion/fact/cachereuse;
-  standard15.155 s (11.660 s inference),4actions; actualagent121.781 s,
-  3actions/5observations/finish(success). Both independent field68/optionB68/
-  isolated clipboard exact, zero general clipboard/autoapproval/submit;
-  own fixture terminated and focus restored. Owner Keychain gate IS RESOLVED
-  by actual successful real model use; older pending snapshots below superseded.
-- Actual final UI: Qwen3.8 PC pronto, Automatic selected, agent enabled;
-  draft empty by count, no active task/fixture/security prompt/Settings. Agent
-  hid empty overlay safely; normal app remains open, zero windows for idle30s.
-- Calendar fix actual7 closed→Aplicativo fechado→one Permitir→target background
-  →Permitido; no events/accounts/TCC reset. New cached class/dedicated queue,
-  generation/coalescing, failures and bulk status readiness covered by9cases.
-- Standard first run refused overlapped point; isolated rerun passed with
-  guards intact. Agent first run failed0.294 s before inference due initial
-  JSON before CGWindowList readiness. Minimal diagnostic waits samePID/bundle
-  front+visible normal frame in SAME3s wait. Independent review/9predicatechecks
-  pass; no production guard/runtimepolicy/timeouts/retries altered.
-- Full local1556 PASS26.965 s+11.711 s before lateShell-only fixes; exact
-  final release compiles and actual paths pass as above. Native voice/Shortcuts/
-  Lens context and10min idle evidence remain dated unchanged-runtime checkpoints.
-- Final idle8 sample PASS30.005 s,0.3043 CPU-s,1.014% onecore,108.47 MiB
-  footprint,187.31 MiB lifetimepeak. No model call, zero windows, PCready,
-  nativevoice defaults preserved. Not battery-watt/sharedservice attribution.
-- NEXT: docs/privacy/linkchecks; privatecommit and sanitized
-  public snapshot parent3c ONLY (exact same tree, no private v2 ancestry), scan
-  history; pushdelivery+mainFF; await fresh CI for diagnostic source; tagv2.0.0,
-  publish ZIP+SHA/release notes, redownload/unpack/verifyhash+strictsignature+
-  installed-equality, record public proof. No final release created YET.
-- Original v2 main worktree remains clean and untouched. All agents idle;
-  no running diagnostic/model/measurement task. Global objective continues; no owner
-  action outstanding. Never claim universal accuracy, latency or zero bugs.
+  ALL THREE downloaded files byte-identical; checksums/strict pinned signature/
+  version/installed executable equality PASS; downloaded bundle0private matches.
+  Proof:docs/releases/2.0.0-verification.json. No private local runtime config,
+  owner network identity, voice recordings or personal data published.
+- Original ~/Developer/evie-ai v2 clean and untouched. All agents idle, no running
+  diagnostic/fixture/model qualification job. No owner action required for this
+  delivery. Personal five-call voice calibration is available as a product setup
+  flow, not a falsely enrolled owner identity. Public native APIs used; private
+  Siri enrollment/voices/backend are not claimed. No universal accuracy, latency,
+  battery-autonomy or zero-bug guarantee.
+- Next action: none for this delivery. Apply future user changes in an isolated
+  worktree, preserve private configuration and publish only sanitized ancestry.
+  Historical pending lists below MUST NOT reactivate completed work.
 
 ## Historical continuation snapshots — superseded by the current block
 
