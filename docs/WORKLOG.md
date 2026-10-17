@@ -1,5 +1,37 @@
 # Work log
 
+## 2026-10-16 — v2 S8b items 2 and 3: the model family decides the Gemma corrections
+
+- Completed:
+  - `ModelFamily.needsBrevityReminder` (`EvieBrevityPreamble.swift`) and
+    `ModelFamily.misspellsSearchTerms` (`EvieNearestTerm.swift`), true for
+    `.gemma` only; `EvieBrevityPreamble.annotated(_:for:)`.
+  - `EvieTurnPlan.question(_:askedAt:)` builds the question the brain receives
+    (timestamp, words as typed, the reminder only for Gemma); the shell's
+    `conversationPrefix` uses it instead of annotating for every brain.
+  - `EvieFileToolbox.execute(_:roots:correctingNearMisses:)` (default true) and
+    `EvieAgentLoop.modelFamily` (default `.unknown`): a model's `search_content`
+    call retries a near miss only for Gemma; grounding and the vault retriever,
+    which search with the person's words, keep the retry on every family
+    (deviation from the spec's wording, reasoned in the design doc). Every
+    production `EvieAgentLoop` that can search passes its profile's family: the
+    turn, `/plano`, `/web`, the schedule runner and the diagnostics (which also
+    annotate by the loaded profile's family). The computer-use loop has no
+    search tool and keeps the default.
+  - Copy: `ModelLocation.processedLine` replaces "Processado localmente".
+- Tests: new suite "Model family prompt shape" (6: the reminder per family, the
+  question per family including both built-ins, an ordinary question unchanged,
+  skill guidance as `<system-context>` for every family's profile with the
+  persona's bytes unchanged, the person's search keeping the retry, the flags);
+  "Evie agent loop" +1 (Gemma's misspelt term retried, Qwen's and an unknown
+  family's not); "Evie brain settings" +2 expectations. They did not compile
+  before the change. No existing assertion changed.
+- Docs: design doc (S8b items 2–3, as implemented), `docs/RAG.md`, CHANGELOG.
+- Checks: `swift build` (no warnings); `Scripts/test --filter
+  "ModelFamilyPromptTests|EvieBrainSettingsTests|EvieNearMissRetrievalTests|EvieFileToolboxTests|EvieAgentLoopTests|ModelRequestBodyTests|EvieTurnPicturesTests"`
+  (134 tests in 7 suites passed).
+- Next: the eval cases of the cross-slice checklist, then the docs' final state.
+
 ## 2026-10-16 — v2 Fix phase: launchers, Return, the Finder and a point's owner (queued findings #9–#11)
 
 - Completed (policy half of #11; the executor's 11b–11d stay queued):

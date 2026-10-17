@@ -44,7 +44,8 @@ enum EvieScheduleRunner {
 
     let preferences = EviePreferencesStore().load()
     let roots = EvieRootRegistry().load()
-    let configuration = EvieConfigurationLoader().loadWithDiagnostics().loaded.configuration
+    let loaded = EvieConfigurationLoader().loadWithDiagnostics().loaded
+    let configuration = loaded.configuration
 
     // The same rule the coordinator applies when the overlay opens: a capability
     // is claimed only where its code path is actually wired. The two that a
@@ -77,7 +78,8 @@ enum EvieScheduleRunner {
         vault: nil,
         // Nothing a schedule does may change a file. A change is approved by
         // somebody looking at a card, and at eight in the morning nobody is.
-        offersChanges: false
+        offersChanges: false,
+        modelFamily: loaded.activeProfile.family
       ).run(
         messages: messages,
         roots: roots,

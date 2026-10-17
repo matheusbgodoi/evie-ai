@@ -152,7 +152,8 @@ extension OverlayViewModel {
       vault: roots.isEmpty ? nil : retrieveFromVault,
       offersChanges: false,
       offersTools: plan.profile.capabilities.tools,
-      readiness: plan.readiness
+      readiness: plan.readiness,
+      modelFamily: plan.profile.family
     ).run(
       messages: [ChatMessage(role: .user, content: prompt)],
       roots: roots,

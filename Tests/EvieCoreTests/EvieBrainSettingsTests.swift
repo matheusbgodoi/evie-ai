@@ -37,6 +37,8 @@ struct EvieBrainSettingsTests {
     #expect(ModelLocation.thisMac.statusTag == "somente neste Mac")
     #expect(ModelLocation.yourPC.noAnswer == "O PC não respondeu")
     #expect(ModelLocation.thisMac.noAnswer == "O cérebro do Mac não respondeu")
+    #expect(ModelLocation.yourPC.processedLine == "Processado no seu PC")
+    #expect(ModelLocation.thisMac.processedLine == "Processado somente neste Mac")
     #expect(
       ModelLocation.yourPC.failureRecovery
         == "O PC não respondeu. Abra Configurações › Cérebro e use Testar conexão."

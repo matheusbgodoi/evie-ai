@@ -721,6 +721,56 @@ struct EvieAgentLoopTests {
   }
 }
 
+// MARK: - The model family
+
+extension EvieAgentLoopTests {
+  @Test("only Gemma's misspelt search term is retried with the word the notes hold")
+  func modelSearchTermCorrectionIsGemmaOnly() async throws {
+    let directory = try Self.familyNotes()
+    defer { try? FileManager.default.removeItem(at: directory) }
+    let root = EvieFileRoot(id: "r1", displayName: "Obsidian", path: directory.path)
+
+    for family in [ModelFamily.gemma, .qwen, .unknown] {
+      let client = ScriptedClient(turns: [
+        .tools([
+          EvieToolCall(
+            id: "c1",
+            name: "search_content",
+            argumentsJSON: #"{"root_id":"r1","query":"cluumed"}"#
+          )
+        ]),
+        .text("Ok."),
+      ])
+      // A question the grounding step does not look up, so the only search is
+      // the model's own.
+      let outcome = try await EvieAgentLoop(modelFamily: family).run(
+        messages: [ChatMessage(role: .user, content: "oi")],
+        roots: [root],
+        client: client,
+        emit: { _ in }
+      )
+
+      let result = try #require(outcome.appended.first { $0.role == .tool }?.content)
+      if family == .gemma {
+        #expect(result.contains("mas achei \"cluemed\""), "\(family): \(result)")
+      } else {
+        #expect(result.contains("Não achei \"cluumed\""), "\(family): \(result)")
+        #expect(!result.contains("mas achei"), "\(family): \(result)")
+      }
+    }
+  }
+
+  /// A note that names the company the way it is spelt.
+  fileprivate static func familyNotes() throws -> URL {
+    let directory = FileManager.default.temporaryDirectory
+      .appendingPathComponent("evie-loop-family-\(UUID().uuidString)", isDirectory: true)
+    try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+    try Data("A Cluemed é o cofre de saúde do paciente.\n".utf8)
+      .write(to: directory.appendingPathComponent("cluemed.md"))
+    return directory
+  }
+}
+
 // MARK: - Doubles
 
 /// A client that replays a fixed script, and records what it was offered.

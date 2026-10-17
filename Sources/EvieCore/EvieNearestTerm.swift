@@ -123,3 +123,17 @@ public enum EvieNearestTerm {
     return true
   }
 }
+
+extension ModelFamily {
+  /// Whether a search term this family's model wrote is given
+  /// `EvieNearestTerm`'s one near-miss retry.
+  ///
+  /// Gemma only: it is the model measured turning `cluemed` into `cluumed`.
+  /// This covers only the terms a model writes, in a `search_content` call.
+  /// The person's own words — the question grounding searches with, and the
+  /// vault retrieval — keep the retry whatever the family, since the model
+  /// never touched them and a person mistypes a name as easily on any brain.
+  public var misspellsSearchTerms: Bool {
+    self == .gemma
+  }
+}

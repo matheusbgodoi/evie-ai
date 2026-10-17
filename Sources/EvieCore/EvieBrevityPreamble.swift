@@ -81,4 +81,24 @@ public enum EvieBrevityPreamble {
     }
     return question + "\n\n" + reminder
   }
+
+  /// The question as a model of `family` should receive it: `annotated` for
+  /// the family the defect was measured on, the question as typed for every
+  /// other.
+  public static func annotated(_ question: String, for family: ModelFamily) -> String {
+    family.needsBrevityReminder ? annotated(question) : question
+  }
+}
+
+extension ModelFamily {
+  /// Whether a question that opens by asking for a short answer gets
+  /// `EvieBrevityPreamble`'s reminder.
+  ///
+  /// Gemma only, the model the table above was measured on. Nobody has shown
+  /// that qwen-daily or LensVLM skip their lookups when asked to be brief, and
+  /// on them the reminder would be an instruction answering a defect they were
+  /// never seen to have.
+  public var needsBrevityReminder: Bool {
+    self == .gemma
+  }
 }

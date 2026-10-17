@@ -183,7 +183,17 @@ public struct EvieFileToolbox: Sendable {
   /// Never throws. A failure the model can read — a wrong identifier, a file that
   /// is not there — is worth more than an exception, because the model can
   /// correct itself from a sentence and cannot from silence.
-  public func execute(_ call: EvieToolCall, roots: [EvieFileRoot]) -> EvieToolResult {
+  ///
+  /// - Parameter correctingNearMisses: whether a `search_content` term that
+  ///   matches nothing gets one retry with the nearest word the files hold
+  ///   (`EvieNearestTerm`). On for the person's own words; for a term the model
+  ///   wrote, only when its family is known to misspell them
+  ///   (`ModelFamily.misspellsSearchTerms`).
+  public func execute(
+    _ call: EvieToolCall,
+    roots: [EvieFileRoot],
+    correctingNearMisses: Bool = true
+  ) -> EvieToolResult {
     guard let tool = ToolName(rawValue: call.name) else {
       return failure(call, "Não existe uma ferramenta chamada \(call.name).")
     }
@@ -212,7 +222,11 @@ public struct EvieFileToolbox: Sendable {
       }
     case .searchContent:
       return withRoot(call, arguments: arguments, roots: roots) { root in
-        try searchContent(root: root, query: arguments["query"] ?? "")
+        try searchContent(
+          root: root,
+          query: arguments["query"] ?? "",
+          correctingNearMisses: correctingNearMisses
+        )
       }
     case .fileInfo:
       return withRoot(call, arguments: arguments, roots: roots) { root in
@@ -485,16 +499,23 @@ extension EvieFileToolbox {
   /// Bounded in every direction that can run away, and it says so when it stops
   /// early — a search that silently gave up looks exactly like a search that
   /// found nothing.
-  fileprivate func searchContent(root: EvieFileRoot, query: String) throws -> String {
+  fileprivate func searchContent(
+    root: EvieFileRoot,
+    query: String,
+    correctingNearMisses: Bool
+  ) throws -> String {
     let needle = Self.fold(query)
     guard needle.count >= 2 else {
       return "Preciso de pelo menos duas letras para procurar."
     }
     let found = try scan(root: root, needle: needle, query: query)
-    if found.matches.isEmpty, let near = EvieNearestTerm.best(of: found.nearMisses) {
+    if correctingNearMisses, found.matches.isEmpty,
+      let near = EvieNearestTerm.best(of: found.nearMisses)
+    {
       // The term does not appear and something one letter away does. See
-      // `EvieNearestTerm`: this is not a hypothetical typo, it is what the model
-      // sends when it is asked about `cluemed`.
+      // `EvieNearestTerm`: this is not a hypothetical typo, it is what Gemma
+      // sends when it is asked about `cluemed`, and what a person types in a
+      // hurry.
       let retry = try scan(root: root, needle: near, query: near)
       if !retry.matches.isEmpty {
         return render(retry, query: near, corrected: query, root: root)

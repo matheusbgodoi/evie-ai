@@ -238,7 +238,7 @@ extension OverlayViewModel {
       if let usage = interactionState.usage {
         secondaryText = "\(usage.totalTokens) tokens · \(answeringLocation.statusTag)"
       } else {
-        secondaryText = "Processado localmente"
+        secondaryText = answeringLocation.processedLine
       }
       activeRequestID = nil
       activeArtifactID = nil
@@ -877,7 +877,7 @@ extension OverlayViewModel {
     // at, which is both true and what keeps the prefix stable.
     let asked = ChatMessage(
       role: .user,
-      content: "[\(Self.timestamp())] \(EvieBrevityPreamble.annotated(userMessage.content))"
+      content: plan.question(userMessage.content, askedAt: Self.timestamp())
     )
 
     // Evidence goes immediately before the question so the model reads the
@@ -1091,7 +1091,8 @@ extension OverlayViewModel {
         vault: retrieveFromVault,
         offersChanges: turn.offersChanges,
         offersTools: offersTools,
-        readiness: plan.readiness
+        readiness: plan.readiness,
+        modelFamily: plan.profile.family
       ).run(
         messages: requestMessages,
         roots: turn.roots,

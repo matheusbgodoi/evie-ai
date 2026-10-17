@@ -265,3 +265,12 @@ because a correction nobody is told about is its own kind of wrong answer.
 It costs a second scan when it fires. End to end on the vault this took the turn
 from 45 s to about 105 s, which also bought an extra `read_file`: the 45 s
 version was the one that gave up.
+
+**Since v2 (2026-10-16), by family.** The defect was measured on Gemma, and the
+default brain is now qwen-daily on the PC. A term *the model wrote* — a
+`search_content` call — gets the retry only when the profile's family is
+`.gemma` (`ModelFamily.misspellsSearchTerms`, passed to the toolbox by
+`EvieAgentLoop.modelFamily`). The person's own words keep it on every family:
+the grounding scan and `EvieVaultRetriever.retrieve` search with the question as
+typed, which no model has touched, and a person mistypes a name as easily
+whichever brain answers.

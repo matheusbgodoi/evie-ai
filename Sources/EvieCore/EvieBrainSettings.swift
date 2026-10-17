@@ -25,6 +25,15 @@ extension ModelLocation {
     }
   }
 
+  /// The status line under an answer when the server reported no usage. It
+  /// was "Processado localmente" whichever brain had answered.
+  public var processedLine: String {
+    switch self {
+    case .yourPC: "Processado no seu PC"
+    case .thisMac: "Processado somente neste Mac"
+    }
+  }
+
   /// Who did not answer, when a turn fails.
   public var noAnswer: String {
     switch self {

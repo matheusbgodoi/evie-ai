@@ -43,6 +43,11 @@ public struct EvieAgentLoop: Sendable {
   /// The brain's readiness when the turn was resolved, carried into every
   /// step's options so the deadlines match it.
   public var readiness: ReadinessRung?
+  /// The brain's lineage, from its profile. It decides whether a search term
+  /// the model wrote is retried with the nearest word the notes hold
+  /// (`ModelFamily.misspellsSearchTerms`); grounding, which searches with the
+  /// person's own words, retries on every family.
+  public var modelFamily: ModelFamily
 
   public init(
     toolbox: EvieFileToolbox = EvieFileToolbox(),
@@ -52,7 +57,8 @@ public struct EvieAgentLoop: Sendable {
     offersChanges: Bool = false,
     maximumIterations: Int = EvieAgentLoop.maximumIterations,
     offersTools: Bool = true,
-    readiness: ReadinessRung? = nil
+    readiness: ReadinessRung? = nil,
+    modelFamily: ModelFamily = .unknown
   ) {
     self.toolbox = toolbox
     self.web = web
@@ -62,6 +68,7 @@ public struct EvieAgentLoop: Sendable {
     self.maximumIterations = maximumIterations
     self.offersTools = offersTools
     self.readiness = readiness
+    self.modelFamily = modelFamily
   }
 
   /// What the turn produced.
@@ -406,7 +413,11 @@ public struct EvieAgentLoop: Sendable {
             memoryProposals.append(fact)
           }
         } else {
-          result = toolbox.execute(call, roots: roots)
+          result = toolbox.execute(
+            call,
+            roots: roots,
+            correctingNearMisses: modelFamily.misspellsSearchTerms
+          )
         }
         toolCallCount += 1
         conversation.append(result.message)

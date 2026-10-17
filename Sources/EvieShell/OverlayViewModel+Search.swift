@@ -99,7 +99,8 @@ extension OverlayViewModel {
       vault: nil,
       offersChanges: false,
       offersTools: offersTools,
-      readiness: plan.readiness
+      readiness: plan.readiness,
+      modelFamily: plan.profile.family
     )
     .run(
       messages: messages,

@@ -126,6 +126,13 @@ public struct EvieTurnPlan: Sendable, Equatable {
     return options
   }
 
+  /// The question as this brain receives it: the moment it was asked, then the
+  /// words as typed — with `EvieBrevityPreamble`'s reminder only when the
+  /// profile's family is the one that needs it.
+  public func question(_ typed: String, askedAt timestamp: String) -> String {
+    "[\(timestamp)] \(EvieBrevityPreamble.annotated(typed, for: profile.family))"
+  }
+
   /// `history` (system prompt first) trimmed to the budget, oldest turns first,
   /// followed by `tail` — the messages this turn adds. Only the newest message
   /// with pictures keeps them, and none does when the profile does not take

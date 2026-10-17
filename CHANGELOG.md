@@ -6,6 +6,15 @@ All notable changes to Evie are documented here. Dates use `YYYY-MM-DD`.
 
 ### Changed
 
+- **Two corrections measured on Gemma now apply only to Gemma.** The reminder
+  appended to a question that opens with "em uma frase", "resumidamente"… ("Isso
+  diz o tamanho da resposta, não se você deve procurar…") and the retry of a
+  search term the model misspelt (`cluumed` for `cluemed`) were written for the
+  Gemma that used to answer; qwen-daily on the PC and LensVLM on the Mac now
+  get the question as typed and their own search terms as written. A search with
+  the person's own words still tries the nearest word in the notes on every
+  brain. An answer whose server reports no usage now says "Processado no seu
+  PC" or "Processado somente neste Mac" instead of "Processado localmente".
 - **Security: agent mode asks before Return almost everywhere, before
   launcher shortcuts and before opening files in the Finder, and judges a click
   by the window it lands on.** Return (or a typed line break) now asks first in

@@ -29,10 +29,10 @@ extension EvieDiagnostics {
     // for seven minutes while the model worked.
     setvbuf(stdout, nil, _IOLBF, 0)
 
-    let client = ModelClientFactory.live.makeClient(
-      configuration: EvieConfigurationLoader().loadWithDiagnostics().loaded.configuration
-    )
-    let loop = EvieAgentLoop(web: nil, vault: nil, offersChanges: false)
+    let profile = EvieConfigurationLoader().loadWithDiagnostics().loaded.activeProfile
+    let client = ModelClientFactory.live.makeClient(configuration: profile.configuration)
+    let loop = EvieAgentLoop(
+      web: nil, vault: nil, offersChanges: false, modelFamily: profile.family)
 
     func ask(_ prompt: String) async -> String {
       (try? await loop.run(
@@ -96,9 +96,10 @@ extension EvieDiagnostics {
     let roots = [
       EvieFileRoot(id: "test0001", displayName: "Pasta de teste", path: directory.path)
     ]
-    let configuration = EvieConfigurationLoader().loadWithDiagnostics().loaded.configuration
+    let profile = EvieConfigurationLoader().loadWithDiagnostics().loaded.activeProfile
+    let configuration = profile.configuration
     let client = ModelClientFactory.live.makeClient(configuration: configuration)
-    let loop = EvieAgentLoop()
+    let loop = EvieAgentLoop(modelFamily: profile.family)
 
     var capabilities = EvieCapabilitySnapshot.textOnly
     capabilities.readsLocalFiles = true
@@ -119,7 +120,10 @@ extension EvieDiagnostics {
         let outcome = try await loop.run(
           messages: [
             ChatMessage(role: .system, content: persona),
-            ChatMessage(role: .user, content: EvieBrevityPreamble.annotated(question)),
+            ChatMessage(
+              role: .user,
+              content: EvieBrevityPreamble.annotated(question, for: profile.family)
+            ),
           ],
           roots: roots,
           client: client,
@@ -167,17 +171,21 @@ extension EvieDiagnostics {
     ]
     var capabilities = EvieCapabilitySnapshot.textOnly
     capabilities.readsLocalFiles = true
-    let configuration = EvieConfigurationLoader().loadWithDiagnostics().loaded.configuration
+    let profile = EvieConfigurationLoader().loadWithDiagnostics().loaded.activeProfile
+    let configuration = profile.configuration
 
     let started = Date()
     do {
-      let outcome = try await EvieAgentLoop().run(
+      let outcome = try await EvieAgentLoop(modelFamily: profile.family).run(
         messages: [
           ChatMessage(
             role: .system,
             content: EviePersona.evie.systemPrompt(capabilities: capabilities)
           ),
-          ChatMessage(role: .user, content: EvieBrevityPreamble.annotated(question)),
+          ChatMessage(
+            role: .user,
+            content: EvieBrevityPreamble.annotated(question, for: profile.family)
+          ),
         ],
         roots: roots,
         client: ModelClientFactory.live.makeClient(configuration: configuration),
@@ -211,17 +219,21 @@ extension EvieDiagnostics {
   static func webQuestion(_ question: String) async {
     var capabilities = EvieCapabilitySnapshot.textOnly
     capabilities.searchesTheWeb = true
-    let configuration = EvieConfigurationLoader().loadWithDiagnostics().loaded.configuration
+    let profile = EvieConfigurationLoader().loadWithDiagnostics().loaded.activeProfile
+    let configuration = profile.configuration
     let started = Date()
 
     do {
-      let outcome = try await EvieAgentLoop(web: EvieWebClient()).run(
+      let outcome = try await EvieAgentLoop(web: EvieWebClient(), modelFamily: profile.family).run(
         messages: [
           ChatMessage(
             role: .system,
             content: EviePersona.evie.systemPrompt(capabilities: capabilities)
           ),
-          ChatMessage(role: .user, content: EvieBrevityPreamble.annotated(question)),
+          ChatMessage(
+            role: .user,
+            content: EvieBrevityPreamble.annotated(question, for: profile.family)
+          ),
         ],
         roots: [],
         client: ModelClientFactory.live.makeClient(configuration: configuration),
@@ -359,17 +371,21 @@ extension EvieDiagnostics {
     print("")
 
     let capabilities = EvieCapabilitySnapshot.textOnly
-    let configuration = EvieConfigurationLoader().loadWithDiagnostics().loaded.configuration
+    let profile = EvieConfigurationLoader().loadWithDiagnostics().loaded.activeProfile
+    let configuration = profile.configuration
     let started = Date()
     do {
-      let outcome = try await EvieAgentLoop().run(
+      let outcome = try await EvieAgentLoop(modelFamily: profile.family).run(
         messages: [
           ChatMessage(
             role: .system,
             content: EviePersona.evie.systemPrompt(capabilities: capabilities)
           ),
           ChatMessage(role: .system, content: guidance),
-          ChatMessage(role: .user, content: EvieBrevityPreamble.annotated(question)),
+          ChatMessage(
+            role: .user,
+            content: EvieBrevityPreamble.annotated(question, for: profile.family)
+          ),
         ],
         roots: [],
         client: ModelClientFactory.live.makeClient(configuration: configuration),
