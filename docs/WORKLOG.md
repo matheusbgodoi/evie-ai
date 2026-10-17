@@ -1,5 +1,30 @@
 # Work log
 
+## 2026-10-16 — v2 Fix phase: document fences against Unicode tricks (queued findings #6, #7)
+
+- Completed: `EvieUntrustedText.neutralized` (`Sources/EvieCore/EvieDocumentReader.swift`)
+  NFKC-folds the text, drops format characters (Cf: zero-width spaces and
+  joiners, bidi controls, soft hyphens) and variation selectors, lets a
+  combining mark on a bracket go with it, and counts bracket lookalikes by how
+  many brackets they look like (`‹ 〈 ⟨ ❮` one, `« 《 ≪` two, `⋘` three).
+  `EvieUntrustedText.singleLine` (moved from `ComputerScreenText.sanitized`,
+  which now calls it) keeps the file name and the warnings, above the fence, on
+  one line capped at 300 characters; a described picture's name too
+  (`EvieTurnPictures.fallbackEvidence`).
+- Not done, by choice: a per-request nonce in the document markers (the
+  finding's alternative); the markers are part of the replayed, byte-stable
+  prompt and named by tests, and the screen fence already has one. The
+  tool-result fence (`EvieTool.swift`) is still unneutralised, as before.
+- Tests: "Evie document evidence" +4 (14 cases: ZWSP, variation selectors,
+  joiners and bidi controls, combining marks, full-width with ZWSP; eight
+  lookalike forms; guillemets survive; a file name with a newline and an
+  instruction). All failed before the change (22 issues) and pass after.
+- Docs: `docs/VISION.md` § How an observation reaches the model, design doc
+  (S4 and S5a notes), CHANGELOG.
+- Checks: `swift build` (no warnings); `Scripts/test --filter
+  "EvieDocumentEvidenceTests|EvieTurnPicturesTests|ObservationFormatterTests|ComputerActionPolicyTests|ComputerObservationDiffTests|ComputerExecutorTests|ClipboardSessionTests"`
+  (114 tests in 7 suites passed).
+
 ## 2026-10-16 — v2 S5d: the cards, takeover and kill switches
 
 - Completed: slice S5d of the v2 spec; agent mode now starts from the app.

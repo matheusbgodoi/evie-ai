@@ -65,7 +65,8 @@ public struct EvieTurnPictures: Sendable {
     }
     var evidence = ""
     if !seen.isEmpty {
-      let described = seen.map { "\($0.name): \($0.description)" }.joined(separator: "\n")
+      let described = seen.map { "\(EvieUntrustedText.singleLine($0.name)): \($0.description)" }
+        .joined(separator: "\n")
       evidence += """
         <<<O QUE A EVIE VIU NA IMAGEM — descrição, não texto extraído>>>
         \(descriptionNote)

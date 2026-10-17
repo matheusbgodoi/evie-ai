@@ -5,46 +5,13 @@ import Foundation
 /// title — made safe to put on one line of an observation or a confirmation.
 ///
 /// Apps and web pages write these strings, so they are cleaned before anything
-/// else reads them: compatibility forms are folded (NFKC turns "＜" into "<"
-/// first, so it is caught below), invisible format characters, variation
-/// selectors and stray combining marks are dropped, every line break and
-/// control becomes a space, angle brackets become "‹"/"›" and straight quotes
-/// "”", whitespace is collapsed and the length capped. What is left cannot
+/// else reads them, by the one-line cleaning the document headers use too
+/// (`EvieUntrustedText.singleLine`): folded, invisible characters dropped, on
+/// one line, angle brackets and quotes replaced, capped. What is left cannot
 /// start a new line, close a quote or write a tag.
 public enum ComputerScreenText {
   public static func sanitized(_ text: String, limit: Int) -> String {
-    var cleaned = String.UnicodeScalarView()
-    var lastWasSpace = true
-    for scalar in text.precomposedStringWithCompatibilityMapping.unicodeScalars {
-      let replacement: Unicode.Scalar?
-      switch scalar.properties.generalCategory {
-      case .format, .nonspacingMark, .enclosingMark, .unassigned, .privateUse, .surrogate:
-        replacement = nil
-      case .control, .lineSeparator, .paragraphSeparator, .spaceSeparator:
-        replacement = " "
-      default:
-        switch scalar {
-        case "<": replacement = "‹"
-        case ">": replacement = "›"
-        case "\"": replacement = "”"
-        default: replacement = scalar
-        }
-      }
-      guard let replacement else {
-        continue
-      }
-      let isSpace = replacement == " "
-      if isSpace && lastWasSpace {
-        continue
-      }
-      cleaned.append(replacement)
-      lastWasSpace = isSpace
-    }
-    var result = String(cleaned).trimmingCharacters(in: .whitespaces)
-    if result.count > limit {
-      result = String(result.prefix(max(0, limit - 1))).trimmingCharacters(in: .whitespaces) + "…"
-    }
-    return result
+    EvieUntrustedText.singleLine(text, limit: limit)
   }
 }
 

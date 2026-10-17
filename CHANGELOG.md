@@ -6,6 +6,13 @@ All notable changes to Evie are documented here. Dates use `YYYY-MM-DD`.
 
 ### Changed
 
+- **Security: invisible or lookalike characters no longer open a way out of
+  Evie's fences.** A document or a screen read on a brain without vision could
+  still write a closing marker that the model would read as one: brackets split
+  by zero-width spaces, variation selectors or combining marks, or drawn with
+  lookalikes ("〈〈〈", "⋘"). Those runs are now neutralised like plain `<<<`, and
+  a file's name and warnings, which sit above the fence, are kept to one capped
+  line, so a name with a line break cannot start a line of Evie's.
 - **Computer use no longer takes the whole screen for Evie's own window.** The
   observation listed Evie's full-display, click-through glow panels among her
   windows, so every click of a session would have been refused as "uma janela
