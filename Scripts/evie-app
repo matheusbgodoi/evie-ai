@@ -15,7 +15,7 @@ set -euo pipefail
 readonly EVIE_BUNDLE_ID="com.matheusbgodoi.evie"
 readonly EVIE_APP_NAME="Evie"
 readonly EVIE_EXECUTABLE="evie-shell"
-readonly EVIE_SHORT_VERSION="1.0.2"
+readonly EVIE_SHORT_VERSION="2.0.0"
 readonly EVIE_SIGNING_IDENTITY_NAME="Evie Dev"
 # The one certificate every TCC grant and every update check on this Mac is tied
 # to, by SHA-1 rather than by name. A name is not an identity: a second
@@ -37,7 +37,7 @@ readonly EVIE_INSTALLED_APP="${EVIE_INSTALL_DIR}/${EVIE_APP_NAME}.app"
 # and `EvieModelKeys.pcConfigurationItem`.
 readonly EVIE_MODEL_KEY_SERVICE="com.matheusbgodoi.evie.model"
 readonly EVIE_MODEL_KEY_ACCOUNT="pc-3090"
-readonly EVIE_MODEL_KEY_HOST="ai-node-3090.tail6146ef.ts.net"
+readonly EVIE_MODEL_KEY_HOST="models.example.invalid"
 readonly PC_CONFIGURATION_KEY_SERVICE="local-ai-3090"
 readonly PC_CONFIGURATION_KEY_ACCOUNT="gateway-api-key"
 
@@ -180,6 +180,10 @@ function build() {
   write_info_plist
   plutil -lint -s "${EVIE_APP_DIR}/Contents/Info.plist"
 
+  # SwiftPM does not extract App Intents metadata. The system discovers our
+  # native Shortcuts actions from this signed resource, not from Swift types.
+  "${EVIE_SCRIPT_DIR}/evie-native-metadata" "${EVIE_APP_DIR}"
+
   # No sandbox and no hardened runtime, on purpose: reading the accessibility
   # tree and posting input events both need the sandbox off, and nothing here
   # needs the hardened runtime's protections to obtain a grant.
@@ -227,7 +231,7 @@ function write_info_plist() {
   <key>NSHumanReadableCopyright</key>
   <string>Uso pessoal de Matheus Barboza de Godoi.</string>
   <key>NSMicrophoneUsageDescription</key>
-  <string>A Evie abre o microfone só quando você aciona a fala, e o áudio não sai deste Mac.</string>
+  <string>A Evie usa o microfone para ouvir a palavra de ativação quando essa opção está ligada e transcrever sua fala neste Mac. O áudio não é enviado ao cérebro nem guardado por padrão.</string>
   <key>NSSpeechRecognitionUsageDescription</key>
   <string>A Evie transcreve sua fala localmente, neste Mac.</string>
   <key>NSScreenCaptureUsageDescription</key>
@@ -385,11 +389,6 @@ function install_app() {
   print "Installed ${EVIE_INSTALLED_APP}"
 
   open_installed
-  print ""
-  print "If a permission is stuck, reset it and ask again from the guide:"
-  print "  tccutil reset ScreenCapture ${EVIE_BUNDLE_ID}"
-  print "  tccutil reset Accessibility ${EVIE_BUNDLE_ID}"
-  print "  tccutil reset PostEvent ${EVIE_BUNDLE_ID}"
 }
 
 function run_app() {

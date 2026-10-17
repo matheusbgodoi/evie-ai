@@ -26,6 +26,10 @@ extension PermissionGuideRow {
       switch (status, importFailure) {
       case (nil, _):
         (.satisfied, "Não usada", nil, nil)
+      case (.checking, nil):
+        (.pending, "Verificando…", "Aguardando a resposta do Keychain do macOS.", nil)
+      case (.checking, let failure?):
+        (.refused, "Não importada", failure, importKey)
       case (.saved, _):
         (.satisfied, "Salva", nil, nil)
       case (.missing, nil):
@@ -150,6 +154,8 @@ public final class EvieGuidePCKeyStep {
   private let configuration: @MainActor () -> EvieLoadedConfiguration
   private let onKeySaved: @MainActor (EvieModelProfile) -> Void
   private var importFailure: String?
+  private let statusRefresh: EvieModelKeyStatusRefresh
+  public var onStatusChanged: (@MainActor () -> Void)?
 
   /// - Parameters:
   ///   - configuration: the profiles as Evie uses them now, read on every
@@ -165,14 +171,26 @@ public final class EvieGuidePCKeyStep {
     self.keys = keys
     self.configuration = configuration
     self.onKeySaved = onKeySaved
+    statusRefresh = EvieModelKeyStatusRefresh(keys: keys)
+    statusRefresh.onChange = { [weak self] in self?.onStatusChanged?() }
   }
 
-  /// Never prompts: the status reads the item's attributes, not its secret.
+  /// Rendering only reads cached attributes. The OS query runs on the bounded
+  /// background worker, even if another Keychain prompt is blocking it.
   public var row: PermissionGuideRow {
-    guard let reference = configuration().pcKeyProfile?.credential else {
-      return .pcKey(status: nil, importFailure: nil)
-    }
-    return .pcKey(status: keys.status(of: reference), importFailure: importFailure)
+    let references = statusReferences
+    statusRefresh.refresh(references, force: false)
+    return .pcKey(
+      status: references.isEmpty
+        ? nil : statusRefresh.statuses[PermissionGuideRow.pcKeyID] ?? .checking,
+      importFailure: importFailure)
+  }
+
+  public func refreshStatus() { statusRefresh.refresh(statusReferences) }
+
+  private var statusReferences: [String: CredentialReference] {
+    guard let reference = configuration().pcKeyProfile?.credential else { return [:] }
+    return [PermissionGuideRow.pcKeyID: reference]
   }
 
   /// One read of the PC configuration's item, which waits for the macOS
@@ -184,6 +202,7 @@ public final class EvieGuidePCKeyStep {
     do {
       try await keys.importPCConfigurationKey(into: reference)
       importFailure = nil
+      refreshStatus()
       onKeySaved(profile)
     } catch {
       // `EvieModelKeyError` messages never carry what was read or typed.

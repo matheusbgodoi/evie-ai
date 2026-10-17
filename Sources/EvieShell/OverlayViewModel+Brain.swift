@@ -15,6 +15,7 @@ extension OverlayViewModel {
     let conversation = activeConversationID
     let expected = brainResolver.expectedProfile(for: conversation)
     if expected != brainChip.profile {
+      contextUsageDescription = nil
       // The name changes at once; the dot waits for the probe.
       brainChip.profile = expected
       brainChip.rung = nil
@@ -31,6 +32,7 @@ extension OverlayViewModel {
   /// "Testar conexão": probes the chip's brain again and says what it found
   /// on the status line.
   func testBrainConnection() {
+    guard !hasActiveRequest, !isResearchBusy() else { return }
     let conversation = activeConversationID
     brainChip.rung = nil
     brainChipGeneration &+= 1
@@ -41,6 +43,7 @@ extension OverlayViewModel {
       guard applyBrainStatus(status, generation: generation, conversation: conversation) else {
         return
       }
+      guard !hasActiveRequest, !isResearchBusy() else { return }
       primaryText = "Testar conexão"
       secondaryText = brainChip.connectionSummary
       onLayoutInvalidated?()
@@ -59,9 +62,20 @@ extension OverlayViewModel {
 
   /// A choice from the chip's menu, for every conversation not yet pinned.
   func chooseBrain(_ choice: EvieBrainChoice) {
+    guard !hasActiveRequest, !isResearchBusy() else {
+      presentRuntimeWarning("Pare a tarefa atual antes de trocar o cérebro.")
+      return
+    }
     // The menu's ticks come from the resolver, which publishes nothing.
+    do {
+      try onBrainChoiceChanged?(choice)
+    } catch {
+      presentRuntimeError(title: "Não consegui guardar a escolha do cérebro", error: error)
+      return
+    }
     objectWillChange.send()
-    brainResolver.choose(choice)
+    brainResolver.choose(choice, for: activeConversationID)
+    contextUsageDescription = nil
     refreshBrainChip()
   }
 
@@ -76,6 +90,7 @@ extension OverlayViewModel {
   /// The turn's brain, once resolved or failed over to: the status line's
   /// place, the chip, and the label on the answer being written.
   func adoptAnsweringBrain(_ brain: ResolvedBrain) {
+    if answeringProfile.id != brain.profile.id { contextUsageDescription = nil }
     answeringProfile = brain.profile
     brainChip.profile = brain.profile
     brainChip.rung = brain.rung

@@ -162,6 +162,21 @@ struct ModelStreamDecodingTests {
     #expect(error == .firstTokenTimedOut)
   }
 
+  @Test(
+    "large inputs reserve prefill time in the actual streamed request and watchdog",
+    arguments: [false, true])
+  func largeInputStreamAllowsPrefill(waitAfterHeaders: Bool) async throws {
+    let stub = makeClient(waitAfterHeaders ? .slowFirstToken : .slowHeaders)
+    let question = ChatMessage(role: .user, content: String(repeating: "x", count: 40_000))
+    var events: [EvieInteractionEvent] = []
+    for try await event in stub.client.stream(
+      messages: [question], tools: [], options: TurnOptions(reasoning: .off, readiness: .ready))
+    {
+      events.append(event)
+    }
+    #expect(completed(in: events)?.message.content == "Oi")
+  }
+
   /// The causal facts, not a wall-clock bound: the consumer's end comes before
   /// the server has answered at all, and the request reaches the server's
   /// side as a cancellation. Timing it against the stub's pause failed about
@@ -214,7 +229,8 @@ struct ModelDeadlinePolicyTests {
       configuration: configuration
     )
 
-    #expect(text == ModelTurnDeadlines(idleGap: 120, headers: .seconds(60), firstToken: .seconds(60)))
+    #expect(
+      text == ModelTurnDeadlines(idleGap: 120, headers: .seconds(60), firstToken: .seconds(60)))
     #expect(
       image == ModelTurnDeadlines(idleGap: 120, headers: .seconds(120), firstToken: .seconds(120))
     )
@@ -228,7 +244,8 @@ struct ModelDeadlinePolicyTests {
       configuration: configuration
     )
 
-    #expect(cold == ModelTurnDeadlines(idleGap: 600, headers: .seconds(600), firstToken: .seconds(60)))
+    #expect(
+      cold == ModelTurnDeadlines(idleGap: 600, headers: .seconds(600), firstToken: .seconds(60)))
   }
 
   @Test("an unprobed model keeps the configured request timeout everywhere")
@@ -668,7 +685,9 @@ private final class ModelStreamStubURLProtocol: URLProtocol, @unchecked Sendable
     }
   }
 
-  private func later(seconds: Double, _ work: @escaping @Sendable (ModelStreamStubURLProtocol) -> Void) {
+  private func later(
+    seconds: Double, _ work: @escaping @Sendable (ModelStreamStubURLProtocol) -> Void
+  ) {
     DispatchQueue.global().asyncAfter(deadline: .now() + seconds) { [self] in
       // Checked and logged under one lock, so an answer is either logged
       // before a stop is seen or never sent.

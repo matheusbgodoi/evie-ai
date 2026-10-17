@@ -254,6 +254,9 @@ final class EvieWakeListener: ObservableObject {
   private var recogniser: AnyObject?
   private var recycleTask: Task<Void, Never>?
   private var phrases = ""
+  private var armingGeneration = UUID()
+  private var enrollment: EvieWakeEnrollment?
+  private var enrolledSettledCharacters = 0
 
   var isSupported: Bool {
     if #available(macOS 26, *) {
@@ -266,17 +269,19 @@ final class EvieWakeListener: ObservableObject {
   ///
   /// Safe to call when already armed with the same phrases; re-arming with
   /// different ones restarts cleanly rather than running two recognisers.
-  func arm(phrases configured: String) async {
+  func arm(phrases configured: String, enrollment: EvieWakeEnrollment? = nil) async {
     guard !EvieWakePhrase.phrases(in: configured).isEmpty else {
       failure =
         "A frase precisa de pelo menos \(EvieWakePhrase.minimumPhraseCharacters) letras."
       return
     }
-    if isArmed, configured == phrases {
+    if isArmed, configured == phrases, self.enrollment == enrollment {
       return
     }
     disarm()
     phrases = configured
+    self.enrollment = enrollment
+    let generation = armingGeneration
 
     guard #available(macOS 26, *), EvieSpeechTranscription.isSupported else {
       failure = "Este Mac não faz reconhecimento de fala para pt-BR."
@@ -284,23 +289,34 @@ final class EvieWakeListener: ObservableObject {
     }
 
     do {
-      try await startCycle()
+      try await startCycle(generation: generation)
+      try checkCycle(generation)
       isArmed = true
       failure = nil
       recycleTask = Task { @MainActor [weak self] in
         while !Task.isCancelled {
           try? await Task.sleep(for: Self.recycleInterval)
-          guard !Task.isCancelled, let self, isArmed else {
+          guard !Task.isCancelled, let self, isArmed, armingGeneration == generation else {
             return
           }
           // Replaced rather than reset: the transcript, its allocation, and
           // everything heard so far all go with it.
-          try? await restartCycle()
+          do {
+            try await restartCycle(generation: generation)
+          } catch {
+            guard armingGeneration == generation else { return }
+            disarm()
+            if !(error is CancellationError) { failure = error.localizedDescription }
+            return
+          }
         }
       }
     } catch {
+      guard armingGeneration == generation else { return }
       disarm()
-      failure = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
+      if !(error is CancellationError) {
+        failure = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
+      }
     }
   }
 
@@ -310,6 +326,7 @@ final class EvieWakeListener: ObservableObject {
   /// only caller that matters is about to open it for a real turn, and handing it
   /// over a task hop later means two owners for that gap.
   func disarm() {
+    armingGeneration = UUID()
     recycleTask?.cancel()
     recycleTask = nil
     capture?.stop()
@@ -317,6 +334,7 @@ final class EvieWakeListener: ObservableObject {
     sink = nil
     isArmed = false
     lastHeard = ""
+    enrolledSettledCharacters = 0
 
     guard #available(macOS 26, *), let recogniser = recogniser as? EvieSpeechTranscription
     else {
@@ -328,37 +346,54 @@ final class EvieWakeListener: ObservableObject {
   }
 
   @available(macOS 26, *)
-  private func startCycle() async throws {
+  private func startCycle(generation: UUID) async throws {
     let capture = EvieAudioCapture()
-    let format = try await capture.prepareInputFormat()
     let recogniser = EvieSpeechTranscription()
-    let pump = try await recogniser.start(inputFormat: format)
+    do {
+      let format = try await capture.prepareInputFormat()
+      try checkCycle(generation)
+      let pump = try await recogniser.start(inputFormat: format)
+      try checkCycle(generation)
 
-    recogniser.onTranscriptChanged = { [weak self] settled, volatile in
-      self?.consider(settled: settled, volatile: volatile)
+      recogniser.onTranscriptChanged = { [weak self] settled, volatile in
+        guard let self, armingGeneration == generation, isArmed else { return }
+        consider(settled: settled, volatile: volatile)
+      }
+
+      // The gate goes between the microphone and the recogniser, not around the
+      // microphone: the tap stays open and keeps costing what it costs, and what
+      // stops during silence is the expensive half. If the format is one the gate
+      // cannot meter, the recogniser is fed everything, exactly as before.
+      let gate =
+        gatesRecogniser
+        ? EvieWakeAudioSink(
+          format: format,
+          pump: pump,
+          noiseFloorDecibels: EvieAudioCapture.noiseFloorDecibels
+        )
+        : nil
+
+      // No `onLevels`, and that omission is the feature. Nothing about the
+      // overlay may suggest she is listening, because from the person's point of
+      // view she is not — she is waiting to be called.
+      try checkCycle(generation)
+      try await capture.start(sink: gate ?? pump)
+      try checkCycle(generation)
+
+      self.capture = capture
+      self.recogniser = recogniser
+      sink = gate
+      enrolledSettledCharacters = 0
+    } catch {
+      capture.stop()
+      await recogniser.cancel()
+      throw error
     }
+  }
 
-    // The gate goes between the microphone and the recogniser, not around the
-    // microphone: the tap stays open and keeps costing what it costs, and what
-    // stops during silence is the expensive half. If the format is one the gate
-    // cannot meter, the recogniser is fed everything, exactly as before.
-    let gate =
-      gatesRecogniser
-      ? EvieWakeAudioSink(
-        format: format,
-        pump: pump,
-        noiseFloorDecibels: EvieAudioCapture.noiseFloorDecibels
-      )
-      : nil
-    sink = gate
-
-    // No `onLevels`, and that omission is the feature. Nothing about the
-    // overlay may suggest she is listening, because from the person's point of
-    // view she is not — she is waiting to be called.
-    try await capture.start(sink: gate ?? pump)
-
-    self.capture = capture
-    self.recogniser = recogniser
+  private func checkCycle(_ generation: UUID) throws {
+    try Task.checkCancellation()
+    guard armingGeneration == generation else { throw CancellationError() }
   }
 
   /// What the gate did while armed, for `--wake-cost-check`. Nil when the
@@ -369,16 +404,19 @@ final class EvieWakeListener: ObservableObject {
   }
 
   @available(macOS 26, *)
-  private func restartCycle() async throws {
+  private func restartCycle(generation: UUID) async throws {
+    try checkCycle(generation)
     capture?.stop()
     capture = nil
     sink = nil
-    if let previous = recogniser as? EvieSpeechTranscription {
-      await previous.cancel()
-    }
+    let previous = recogniser as? EvieSpeechTranscription
     recogniser = nil
+    if let previous {
+      await previous.cancel()
+      try checkCycle(generation)
+    }
     lastHeard = ""
-    try await startCycle()
+    try await startCycle(generation: generation)
   }
 
   /// Compares what was heard against the phrase, and keeps nothing else.
@@ -389,8 +427,15 @@ final class EvieWakeListener: ObservableObject {
     // reason at all.
     lastHeard = String(heard.suffix(Self.retainedCharacters))
 
-    guard EvieWakePhrase.matches(lastHeard, phrases: phrases) else {
-      return
+    if let enrollment {
+      // Learned short aliases are accepted only after a final result, and only
+      // for the newly settled utterance. Partial guesses can change “eu vi”
+      // into “Evi” briefly; they are not stable wake evidence.
+      let newFinal = String(settled.dropFirst(min(enrolledSettledCharacters, settled.count)))
+      enrolledSettledCharacters = settled.count
+      guard enrollment.matches(newFinal) else { return }
+    } else {
+      guard EvieWakePhrase.matches(lastHeard, phrases: phrases) else { return }
     }
     // Disarmed *before* the callback, so the microphone Evie is about to open
     // for the real turn is not the second one open at the time.

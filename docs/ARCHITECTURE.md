@@ -1,12 +1,89 @@
-# System architecture
+# Current delivery architecture — 2026-10-17
 
-Status: the target architecture below is still the target. What is built is the
-native shell with a direct loopback client, an agent loop with read-only tools and
-three proposing writers — one for files, one for calendar events, one for
-outgoing mail, none of which performs anything — retrieval, voice in both
-directions, vision through the
-system daemon, typed commands, and a self-update path. The `evied` supervisor does
-not exist; the application composition root is doing its job for now.
+Research sessions ([ADR 0020](adr/0020-expiring-research-shortcut-sessions.md)),
+current-conversation brain selection (0021), enabled capabilities with real TCC
+requests (0022), generated public AppIntents metadata (0023), local provider
+configuration/private release history (0024), native voice calibration (0025),
+[adaptive context and compaction (0026)](adr/0026-adaptive-conversation-context-and-compaction.md)
+and [pinned public web transport (0027)](adr/0027-pinned-public-web-transport.md)
+amend the historical target below. The application composition root remains
+`AppCoordinator`; no `evied` supervisor or additional resident model service was
+introduced. PC inference is external, the Mac brain and optional clone worker
+remain on demand, and native STT/TTS use public OS services.
+
+## Current conversation and model boundary
+
+`EvieBrainResolver` resolves each turn, including an explicit model change within
+the same conversation. `EvieTurnPlan` reserves output/framing before preparing
+the input budget. The PC operational context is 200,704 tokens. LensVLM's
+qualified operational context is 131,072 tokens on both client and local runtime,
+with eight-bit KV, prefill step 512, a 256 MiB allocator cache limit and a
+900-second profile timeout. The synthetic 127,527-token input plus 38-token
+output retrieved five of five target items; minimum sampled free memory was
+2.4 GiB and MLX-reported peak memory 13.8 GiB over 392.31 seconds. The architectural 262,144
+ceiling is not the operating setting. Conditions and limits belong in
+[MODEL_TUNING](MODEL_TUNING.md).
+
+`OverlayViewModel.conversationPrefix` normalizes picture replay, waits for pending
+context resets and calls its per-view-model `EvieConversationCompaction` actor.
+Older messages are summarized near the budget threshold; the full visible
+conversation is never replaced. The current tail remains intact. The four-entry
+in-memory summary cache is bound to conversation/profile/model/budget and a
+fingerprint including visual provenance. Request/conversation IDs and task
+cancellation reject stale progress/results. A visual source stays visual-derived
+through summarization, so compaction cannot restore tool or auto-approval access.
+See [context contract and real-model evidence](CONVERSATION_CONTEXT.md).
+
+`ModelClientFactory.live` trusts only HTTPS hosts saved in the external local
+configuration and credentials bound to that exact host. Saving a key persists
+only the captured endpoint and credential reference into the latest file; drafts
+are rebased field by field to preserve current unsaved edits. Runtime settings
+are not bundled. `EvieLocalBrainLauncher` separates process identity (safe stop)
+from exact model/KV/prefill/cache compatibility (safe reuse), authenticates health,
+and reconciles configuration on next use. The optional allocator bootstrap uses
+public `mlx.core.set_cache_limit` before the unmodified CLI, with one sequence.
+Real boundaries are documented in [settings validation](MODEL_SETTINGS_VALIDATION.md)
+and [launcher validation](LOCAL_BRAIN_VALIDATION.md).
+
+## Current capture and web boundaries
+
+Research isolates capture-only clipboard inference from answer entry/selection;
+both have revocable consent leases. No continuous research capture is added.
+The public web fetcher validates all DNS addresses before every connection and
+redirect, pins approved addresses, bounds decoded streaming bytes/time, and
+runs without browser cookies, persistent cache or inherited proxies. This
+boundary is separate from explicitly configured private model servers. Page
+content is data and cannot authorize another action or network destination.
+
+## Integration freeze and evidence
+
+This is the final integration candidate's source contract. Full-suite execution,
+adopted-runtime signed artifact checks, resource measurements,
+installation and sanitized publication are separate gates. Their current status
+is [PROJECT_STATUS](PROJECT_STATUS.md); pending gates are not completed by this
+architecture description.
+
+# Historical target architecture
+
+The sections below preserve the original target and earlier vertical-slice
+boundaries for traceability. Statements about missing executors, loopback-only
+models or a future supervisor are historical, superseded by the current delivery
+architecture and ADRs above. They do not describe the final integrated v2 runtime.
+
+## Research shortcut sessions (2026-10-16)
+
+`EvieResearchSession` holds a transient objective, destination and 15-minute
+consent lease; it serializes runs and refuses expired or revoked deliveries.
+`ResearchModeController` owns its consent window, cancellation, expiry timer and
+bounded in-memory measurements. Two configurable actions use the existing
+shortcut recorder and persistence. Clipboard turns use `EvieResearchAnswer`
+with one image and no tools/history. Control turns reuse `ComputerUseHost`, with
+`researchShortcut` as a start-only gesture and a grant deadline capped by the
+research lease. Chat/voice/capture submissions cannot race research. Sleep and
+user-session deactivation stop it. No worker or continuous capture is added.
+The selected brain is pinned for each consent session, then resolved afresh
+when the next session is armed. See [ADR 0020](adr/0020-expiring-research-shortcut-sessions.md)
+and [research methods](RESEARCH_MODE.md).
 
 ## Design principles
 
@@ -89,7 +166,7 @@ no-credential clauses are superseded by
 [ADR 0013](adr/0013-authenticated-tailnet-model-transport.md). Before any request
 `ModelTransportPolicy` allows plain `http` only to loopback, and any other host
 only over `https`, on an exact allowlist (by default the PC gateway
-`ai-node-3090.tail6146ef.ts.net`), with a credential bound to that host. The
+`models.example.invalid`), with a credential bound to that host. The
 bearer token is read from the login keychain through a `CredentialReference` held
 in the configuration, is attached only over `https` to its bound host, and every
 redirect is refused so the header cannot follow one. The client still never
@@ -452,9 +529,11 @@ the conversation is re-pinned. Every move follows the Mac-fallback choice: off
 never moves, automatic moves, ask asks before waking the Mac brain ("O PC está
 fora. Acordar o cérebro do Mac? (~10 s, ~8 GB de memória)") and a yes holds for
 the session. A profile chosen by the environment is never moved. The overlay's
-brain chip can narrow the order to one place for new conversations
+brain control can narrow the order to one place
 (`EvieBrainResolver.choose(_:)`: Sempre o PC never moves to the Mac, Sempre o
-Mac wakes it without asking); a pinned conversation is not moved. Waking a
+Mac wakes it without asking). An explicit popover selection saves first and
+releases the current conversation pin for its next reply (ADR 0021); other pins
+and historical answer labels remain unchanged. Waking a
 `.localOnDemand` profile goes through `LocalBrainStarting`, implemented by
 `EvieLocalBrainLauncher` since v2 S3 (ADR 0015): it starts `mlx_vlm.server` on
 127.0.0.1:38480 with `LocalBrainPolicy`'s argv and offline environment, refuses a

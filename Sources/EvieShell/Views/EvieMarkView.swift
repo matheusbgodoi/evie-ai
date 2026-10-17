@@ -16,7 +16,7 @@ enum EvieVoiceTint {
   )
   /// The same violet as the screen presence glow (`EviePalette.violet`).
   static let output = Color(nsColor: EviePalette.violet)
-  static let idle = Color.indigo
+  static let idle = Color(nsColor: EviePalette.violet)
 
   static func color(for direction: WaveformDirection?) -> Color {
     switch direction {
@@ -33,9 +33,6 @@ enum EvieVoiceTint {
 /// larger size. At thirty points the sparkle is simply the better mark: it is a
 /// vector, so it stays crisp, and the system animates it for free.
 struct EvieMarkView: View {
-  /// One half-cycle of the breathing motion.
-  private static let breathPeriod: TimeInterval = 2.6
-
   var state: EvieVisualState
   var waveformSamples: [CGFloat] = []
   var diameter: CGFloat = 30
@@ -55,7 +52,8 @@ struct EvieMarkView: View {
   }
 
   private var isMoving: Bool {
-    isAnimating && !reduceMotion
+    isAnimating && !reduceMotion && state != .ready && state != .completed
+      && state != .awaitingApproval && state != .error
   }
 
   var body: some View {

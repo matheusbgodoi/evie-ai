@@ -52,6 +52,9 @@ final class EvieLocalBrainLauncher: LocalBrainStarting {
   private let policy: LocalBrainPolicy
   private let shutdown: LocalBrainShutdown
   private let keyFile: LocalBrainKeyFile
+  private let storageDirectory: URL
+  private var pidFileURL: URL { storageDirectory.appendingPathComponent("brain.pid") }
+  private var logFileURL: URL { storageDirectory.appendingPathComponent("brain.log") }
   private let healthSession: URLSession
   /// The server this launcher spawned. Keeping the `Process` keeps its exit
   /// observable and its pid ours until it is reaped.
@@ -74,11 +77,13 @@ final class EvieLocalBrainLauncher: LocalBrainStarting {
   init(
     policy: LocalBrainPolicy = .standard,
     shutdown: LocalBrainShutdown = .standard,
-    keyFile: LocalBrainKeyFile = .standard
+    keyFile: LocalBrainKeyFile = .standard,
+    storageDirectory: URL = EvieLocalBrainLauncher.runtimeDirectory
   ) {
     self.policy = policy
     self.shutdown = shutdown
     self.keyFile = keyFile
+    self.storageDirectory = storageDirectory
     let configuration = URLSessionConfiguration.ephemeral
     configuration.timeoutIntervalForRequest = 3
     configuration.urlCache = nil
@@ -111,6 +116,7 @@ final class EvieLocalBrainLauncher: LocalBrainStarting {
       throw LocalBrainLaunchError.portHeld(port: runtime.port)
     }
     try await confirmKey(of: listener, runtime: runtime)
+    guard Self.servesProfile(listener, runtime: runtime, model: profile.model) else { return nil }
     adopt(listener, runtime: runtime)
     return runtime.endpoint
   }
@@ -174,7 +180,7 @@ final class EvieLocalBrainLauncher: LocalBrainStarting {
   /// that names a live server — left by a crash, or started by the script — is
   /// taken over, so the idle timer stops it if nothing uses it.
   func reconcilePIDFile(for profiles: EvieModelProfileSet) {
-    guard let pid = Self.recordedPID() else {
+    guard let pid = recordedPID() else {
       return
     }
     let runtimes = profiles.profiles.compactMap { profile -> LocalRuntime? in
@@ -183,7 +189,7 @@ final class EvieLocalBrainLauncher: LocalBrainStarting {
     guard let runtime = runtimes.first(where: { Self.isServer(pid, runtime: $0) }),
       EvieProcessInspector.listens(pid, onPort: runtime.port)
     else {
-      try? FileManager.default.removeItem(at: Self.pidURL)
+      try? FileManager.default.removeItem(at: pidFileURL)
       keyFile.remove()
       return
     }
@@ -193,6 +199,12 @@ final class EvieLocalBrainLauncher: LocalBrainStarting {
   // MARK: - Starting
 
   private func bringUp(_ profile: EvieModelProfile, runtime: LocalRuntime) async throws -> URL {
+    // Reconfigure only when a turn actually needs the new runtime. A Settings
+    // save or background readiness probe must not interrupt a running reply.
+    if let managed, managed.runtime != runtime {
+      await stop()
+      try Task.checkCancellation()
+    }
     if let listener = EvieProcessInspector.listeningPID(onPort: runtime.port) {
       // Something already holds the port: only the configured server is
       // waited for (it may still be loading), anything else is refused.
@@ -205,8 +217,18 @@ final class EvieLocalBrainLauncher: LocalBrainStarting {
       }
       try await waitUntilHealthy(runtime: runtime, pid: listener, key: key)
       try await confirmKey(of: listener, runtime: runtime)
+      if Self.servesProfile(listener, runtime: runtime, model: profile.model) {
+        adopt(listener, runtime: runtime)
+        return runtime.endpoint
+      }
+      // An authenticated Evie server with old context/model options is ours
+      // to restart; a foreign listener above is never signalled.
       adopt(listener, runtime: runtime)
-      return runtime.endpoint
+      await stop()
+      try Task.checkCancellation()
+      guard EvieProcessInspector.listeningPID(onPort: runtime.port) == nil else {
+        throw LocalBrainLaunchError.portHeld(port: runtime.port)
+      }
     }
     guard FileManager.default.isExecutableFile(atPath: runtime.executable) else {
       throw LocalBrainLaunchError.notInstalled(executable: runtime.executable)
@@ -255,24 +277,38 @@ final class EvieLocalBrainLauncher: LocalBrainStarting {
     let manager = FileManager.default
     do {
       try manager.createDirectory(
-        at: Self.runtimeDirectory,
+        at: storageDirectory,
         withIntermediateDirectories: true,
         attributes: [.posixPermissions: 0o700]
       )
     } catch {
       throw LocalBrainLaunchError.couldNotLaunch(error.localizedDescription)
     }
-    let log = try Self.openLog()
+    let log = try openLog()
     defer { try? log.close() }
+    let head: String
+    if runtime.metalCacheLimitMB != nil {
+      let handle = try FileHandle(forReadingFrom: URL(fileURLWithPath: runtime.executable))
+      defer { try? handle.close() }
+      head = String(decoding: try handle.read(upToCount: 512) ?? Data(), as: UTF8.self)
+    } else {
+      head = ""
+    }
+    guard let executable = LocalBrainPolicy.launchExecutable(runtime, scriptHead: head) else {
+      throw LocalBrainLaunchError.couldNotLaunch(
+        "O launcher local precisa de um interpretador Python absoluto no cabeçalho.")
+    }
     let key = LocalBrainKeyFile.makeKey()
     do {
       try keyFile.write(key)
     } catch {
-      throw LocalBrainLaunchError.couldNotLaunch("não consegui guardar a chave: \(error.localizedDescription)")
+      throw LocalBrainLaunchError.couldNotLaunch(
+        "não consegui guardar a chave: \(error.localizedDescription)")
     }
 
     let process = Process()
-    process.executableURL = URL(fileURLWithPath: runtime.executable, isDirectory: false)
+    process.executableURL = URL(fileURLWithPath: executable, isDirectory: false)
+    process.currentDirectoryURL = storageDirectory
     process.arguments = LocalBrainPolicy.makeArguments(runtime, model: model)
     process.environment = LocalBrainPolicy.makeEnvironment(
       inheriting: ProcessInfo.processInfo.environment, apiKey: key)
@@ -290,8 +326,8 @@ final class EvieLocalBrainLauncher: LocalBrainStarting {
     // The file `Scripts/evie-brain` writes, so `stop` and `status` there see
     // the server Evie started.
     try? String(process.processIdentifier).write(
-      to: Self.pidURL, atomically: true, encoding: .utf8)
-    try? manager.setAttributes([.posixPermissions: 0o600], ofItemAtPath: Self.pidURL.path)
+      to: pidFileURL, atomically: true, encoding: .utf8)
+    try? manager.setAttributes([.posixPermissions: 0o600], ofItemAtPath: pidFileURL.path)
     return (process, key)
   }
 
@@ -411,6 +447,11 @@ final class EvieLocalBrainLauncher: LocalBrainStarting {
     return expectedImages(for: runtime.executable).contains(image)
   }
 
+  private static func servesProfile(_ pid: pid_t, runtime: LocalRuntime, model: String) -> Bool {
+    guard let arguments = EvieProcessInspector.arguments(of: pid) else { return false }
+    return LocalBrainPolicy.argumentsServeProfile(arguments, runtime: runtime, model: model)
+  }
+
   private static func expectedImages(for executable: String) -> Set<String> {
     var images: Set<String> = [resolved(executable)]
     if let handle = FileHandle(forReadingAtPath: executable) {
@@ -427,8 +468,8 @@ final class EvieLocalBrainLauncher: LocalBrainStarting {
     URL(fileURLWithPath: path).resolvingSymlinksInPath().path
   }
 
-  private static func recordedPID() -> pid_t? {
-    guard let text = try? String(contentsOf: pidURL, encoding: .utf8) else {
+  private func recordedPID() -> pid_t? {
+    guard let text = try? String(contentsOf: pidFileURL, encoding: .utf8) else {
       return nil
     }
     return pid_t(text.trimmingCharacters(in: .whitespacesAndNewlines))
@@ -437,21 +478,21 @@ final class EvieLocalBrainLauncher: LocalBrainStarting {
   /// Removes the pid file and the key that went with it, when the pid file
   /// names this server: the key opens nothing once the server is gone.
   private func forgetFiles(ofServer pid: pid_t) {
-    if Self.recordedPID() == pid {
-      try? FileManager.default.removeItem(at: Self.pidURL)
+    if recordedPID() == pid {
+      try? FileManager.default.removeItem(at: pidFileURL)
       keyFile.remove()
     }
   }
 
-  private static func openLog() throws -> FileHandle {
+  private func openLog() throws -> FileHandle {
     let manager = FileManager.default
-    let path = logURL.path
+    let path = logFileURL.path
     if let size = (try? manager.attributesOfItem(atPath: path))?[.size] as? Int,
-      size > logRotationBytes
+      size > Self.logRotationBytes
     {
-      let previous = runtimeDirectory.appendingPathComponent("brain.log.1", isDirectory: false)
+      let previous = storageDirectory.appendingPathComponent("brain.log.1", isDirectory: false)
       try? manager.removeItem(at: previous)
-      try? manager.moveItem(at: logURL, to: previous)
+      try? manager.moveItem(at: logFileURL, to: previous)
     }
     if !manager.fileExists(atPath: path) {
       manager.createFile(atPath: path, contents: nil, attributes: [.posixPermissions: 0o600])

@@ -208,6 +208,8 @@ extension OverlayViewModel {
       onLayoutInvalidated?()
 
     case .usage(let usage):
+      contextUsageDescription = Self.contextUsageLabel(
+        tokens: usage.promptTokens, capacity: answeringProfile.contextTokens, estimated: false)
       secondaryText = "\(usage.totalTokens) tokens · \(answeringLocation.statusTag)"
 
     case .completed(let message, _):
@@ -837,6 +839,23 @@ extension OverlayViewModel {
     return formatter.string(from: now)
   }
 
+  static func contextUsageLabel(tokens: Int, capacity: Int, estimated: Bool) -> String {
+    let percent = Double(tokens) / Double(max(1, capacity)) * 100
+    let count = tokens.formatted(.number.locale(Locale(identifier: "pt_BR")))
+    let ratio = percent.formatted(
+      .number.precision(.fractionLength(1)).locale(Locale(identifier: "pt_BR")))
+    return
+      "\(estimated ? "~" : "")\(count) tokens · \(ratio)% (\(estimated ? "estimativa" : "servidor"))"
+  }
+
+  func showContextCompactionProgress(completed: Int, total: Int, request: UUID?, conversation: UUID)
+  {
+    guard activeRequestID == request, activeConversationID == conversation else { return }
+    isCompactingConversation = true
+    secondaryText = "Organizando o contexto da conversa… \(completed)/\(total)"
+    onLayoutInvalidated?()
+  }
+
   /// Everything this turn adds after the history, built for `plan`'s brain:
   /// the persona says where that brain runs and names only tools it has, the
   /// history is trimmed to its budget, and pictures go only if it takes them.
@@ -844,8 +863,8 @@ extension OverlayViewModel {
     adding userMessage: ChatMessage,
     evidence: ChatMessage? = nil,
     pictures: EvieTurnPictures = EvieTurnPictures(),
-    plan: EvieTurnPlan
-  ) -> [ChatMessage] {
+    plan: EvieTurnPlan, client: any AgentClient
+  ) async throws -> [ChatMessage] {
     // Rebuilt every turn, which costs a string: the date in it may have turned
     // over, and the brain may differ from the last turn's. Within a
     // conversation both stay put, so the first bytes — and the server's cached
@@ -891,7 +910,32 @@ extension OverlayViewModel {
     // cannot see gets their text, fenced, just before it.
     let tail =
       [guidance, evidence].compactMap { $0 } + plan.pictureTail(asking: asked, with: pictures)
-    let messages = plan.prefix(history, then: tail)
+    let pictured = EvieTurnPlan.keepingNewestPictures(
+      history + tail, sees: plan.profile.capabilities.vision)
+    let request = activeRequestID
+    let conversationID = activeConversationID
+    await contextResetTask?.value
+    try Task.checkCancellation()
+    defer {
+      if activeRequestID == request { isCompactingConversation = false }
+    }
+    let prepared = try await contextCompaction.prepare(
+      history: Array(pictured.prefix(history.count)), tail: Array(pictured.suffix(tail.count)),
+      budget: plan.characterBudget, client: client,
+      targetID:
+        "\(conversationID)|\(plan.profile.id)|\(plan.profile.model)|\(plan.profile.contextTokens)|\(plan.profile.endpoint.absoluteString)",
+      onProgress: { [weak self] completed, total in
+        await self?.showContextCompactionProgress(
+          completed: completed, total: total,
+          request: request, conversation: conversationID)
+      })
+    try Task.checkCancellation()
+    guard activeRequestID == request, activeConversationID == conversationID else {
+      throw CancellationError()
+    }
+    contextUsageDescription = Self.contextUsageLabel(
+      tokens: prepared.estimatedInputTokens, capacity: plan.profile.contextTokens, estimated: true)
+    let messages = plan.prefix(prepared.messages, then: [])
     if !pictures.isEmpty, plan.profile.capabilities.vision {
       sendingPictureTurn = EvieSentPictureTurn(
         questionID: userMessage.id,
@@ -1058,11 +1102,11 @@ extension OverlayViewModel {
     let looking = turn.screen != nil
     let pictures = await pictures(for: turn, on: plan)
     try Task.checkCancellation()
-    let requestMessages = conversationPrefix(
+    let requestMessages = try await conversationPrefix(
       adding: turn.userMessage,
       evidence: turn.evidence,
       pictures: pictures,
-      plan: plan
+      plan: plan, client: brain.client
     )
     let requestID = turn.requestID
     if looking, plan.profile.capabilities.vision {

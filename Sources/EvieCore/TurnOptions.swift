@@ -78,7 +78,7 @@ public struct TurnOptions: Sendable, Equatable {
 
   /// A written answer.
   public static func chat(_ configuration: EvieConfiguration) -> TurnOptions {
-    answering(configuration, cap: 2_048)
+    answering(configuration, cap: configuration.maxCompletionTokens)
   }
 
   /// One step of a computer-use session. It thinks a little on the PC, where

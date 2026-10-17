@@ -40,6 +40,7 @@ struct GlassSurface<Content: View>: View {
 
   @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
   @Environment(\.colorScheme) private var colorScheme
+  @Environment(\.colorSchemeContrast) private var contrast
 
   init(
     cornerRadius: CGFloat = 22,
@@ -61,47 +62,50 @@ struct GlassSurface<Content: View>: View {
   }
 
   var body: some View {
-    content
-      .padding(contentPadding)
-      .background {
-        ZStack {
-          if reduceTransparency {
-            Color(nsColor: .windowBackgroundColor)
-              .opacity(0.98)
-          } else {
-            GlassVisualEffectView(material: material)
-          }
+    surface
+      // Keep the shadow inside the overlay's existing transparent margin.
+      .shadow(color: .black.opacity(colorScheme == .dark ? 0.24 : 0.12), radius: 14, y: 6)
+  }
 
-          LinearGradient(
-            colors: [
-              Color.white.opacity(colorScheme == .dark ? 0.055 : 0.16),
-              tint.opacity(colorScheme == .dark ? 0.11 : 0.075),
-              Color.black.opacity(colorScheme == .dark ? 0.065 : 0.018),
-            ],
-            startPoint: .topLeading,
-            endPoint: .bottomTrailing
+  /// Glass belongs to the floating controls, while reading surfaces retain a
+  /// thicker popover material. One native effect per surface, no animated blur,
+  /// shaders, timers, or nested glass layers.
+  @ViewBuilder
+  private var surface: some View {
+    if material == .hudWindow, !requiresSolidSurface {
+      content
+        .padding(contentPadding)
+        .glassEffect(.regular.tint(tint.opacity(0.08)), in: surfaceShape)
+    } else {
+      content
+        .padding(contentPadding)
+        .background {
+          ZStack {
+            if requiresSolidSurface {
+              Color(nsColor: .windowBackgroundColor)
+            } else {
+              GlassVisualEffectView(material: material)
+              // Answers need a quiet, legible field even over a busy desktop.
+              Color(nsColor: .windowBackgroundColor).opacity(0.42)
+              tint.opacity(colorScheme == .dark ? 0.045 : 0.025)
+            }
+          }
+          .clipShape(surfaceShape)
+        }
+        .overlay {
+          surfaceShape.strokeBorder(
+            requiresSolidSurface
+              ? Color.primary.opacity(0.35)
+              : Color.primary.opacity(colorScheme == .dark ? 0.13 : 0.10),
+            lineWidth: requiresSolidSurface ? 1 : 0.75
           )
         }
         .clipShape(surfaceShape)
-      }
-      .overlay {
-        surfaceShape
-          .strokeBorder(
-            LinearGradient(
-              colors: [
-                Color.white.opacity(colorScheme == .dark ? 0.20 : 0.46),
-                Color.white.opacity(0.055),
-              ],
-              startPoint: .topLeading,
-              endPoint: .bottomTrailing
-            ),
-            lineWidth: 0.75
-          )
-      }
-      .clipShape(surfaceShape)
-      // Radius plus offset stays under the overlay's transparent margin, so the
-      // shadow fades out instead of being sliced off at the window edge.
-      .shadow(color: .black.opacity(colorScheme == .dark ? 0.30 : 0.15), radius: 16, y: 7)
+    }
+  }
+
+  private var requiresSolidSurface: Bool {
+    reduceTransparency || contrast == .increased
   }
 
   private var surfaceShape: RoundedRectangle {

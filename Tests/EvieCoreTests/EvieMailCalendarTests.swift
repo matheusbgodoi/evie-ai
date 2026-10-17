@@ -3,7 +3,10 @@ import Testing
 
 @testable import EvieCore
 
-@Suite("Evie mail and calendar scripts")
+// These integration cases address the same Mail/Calendar processes and the
+// system AppleScript compiler. Concurrent cases contend for those shared OS
+// resources; keep every payload and deadline, but give each case exclusive use.
+@Suite("Evie mail and calendar scripts", .serialized)
 struct EvieMailCalendarScriptTests {
   /// The property the whole design rests on.
   ///
@@ -118,11 +121,12 @@ struct EvieMailCalendarScriptTests {
     withKnownIssue("the stub times out on the first payload") {
       _ = try Self.runHostile(
         EvieAppleScripts.searchMail, app: .mail, payloads: ["um", "dois", "três"],
-        witness: witness, arguments: { [$0, "3"] }
-      ) { _, arguments, app in
-        attempted.append(arguments[0])
-        return OsascriptRun(outcome: .timedOut, standardError: "", app: app)
-      }
+        witness: witness, arguments: { [$0, "3"] },
+        runner: { _, arguments, app in
+          attempted.append(arguments[0])
+          return OsascriptRun(outcome: .timedOut, standardError: "", app: app)
+        }
+      )
     }
     #expect(attempted == ["um"])
   }
@@ -133,10 +137,11 @@ struct EvieMailCalendarScriptTests {
 
     let runs = try Self.runHostile(
       EvieAppleScripts.searchMail, app: .mail, payloads: ["um", "dois"],
-      witness: witness, arguments: { [$0, "3"] }
-    ) { _, _, app in
-      OsascriptRun(outcome: .exited(0), standardError: "", app: app)
-    }
+      witness: witness, arguments: { [$0, "3"] },
+      runner: { _, _, app in
+        OsascriptRun(outcome: .exited(0), standardError: "", app: app)
+      }
+    )
     #expect(runs.map(\.payload) == ["um", "dois"])
   }
 

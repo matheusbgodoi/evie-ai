@@ -44,6 +44,9 @@ public struct EvieConfigurationLoader: Sendable {
     var active = try activeProfile(in: profiles, environment: environment)
     try apply(environment: environment, to: &active)
     try active.configuration.validate()
+    do { try active.validateContextCapacity() } catch {
+      throw LoaderError.invalidEnvironmentVariable("EVIE_MODEL_CONTEXT")
+    }
     do {
       try active.validateLocalEndpoint()
     } catch {

@@ -140,6 +140,7 @@ public struct LoginKeychainItems: EvieKeychainItems {
 /// Whether a profile's key is saved, as the settings pane shows it. The pane
 /// never shows the key itself.
 public enum EvieModelKeyStatus: Sendable, Equatable {
+  case checking
   case saved
   case missing
   /// The keychain could not be asked; the message says why.
@@ -147,6 +148,7 @@ public enum EvieModelKeyStatus: Sendable, Equatable {
 
   public var text: String {
     switch self {
+    case .checking: "verificando chave…"
     case .saved: "chave salva ✓"
     case .missing: "sem chave"
     case .unknown(let reason): "não consegui ver a chave: \(reason)"
@@ -295,6 +297,59 @@ public struct EvieModelKeys: Sendable {
     try await withCheckedThrowingContinuation { continuation in
       Thread.detachNewThread {
         continuation.resume(with: Result { try work() })
+      }
+    }
+  }
+}
+
+/// Attributes-only Keychain queries can wait behind another process's password
+/// prompt. One utility queue keeps that OS wait off MainActor/the cooperative
+/// pool; each consumer holds only its active snapshot and newest pending one.
+@MainActor
+public final class EvieModelKeyStatusRefresh {
+  public private(set) var statuses: [String: EvieModelKeyStatus] = [:]
+  public var onChange: (@MainActor () -> Void)?
+  private static let queue = DispatchQueue(
+    label: "com.matheusbgodoi.evie.key-status", qos: .utility)
+  private let keys: EvieModelKeys
+  private var wanted: [String: CredentialReference] = [:]
+  private var resolved: [String: CredentialReference] = [:]
+  private var generation = UUID()
+  private var isRefreshing = false
+
+  public init(keys: EvieModelKeys) { self.keys = keys }
+
+  /// `force: false` is a cache-only render path: an unchanged reference never
+  /// starts polling. Explicit refreshes coalesce behind the single active job.
+  public func refresh(_ references: [String: CredentialReference], force: Bool = true) {
+    if !force, wanted == references { return }
+    wanted = references
+    generation = UUID()
+    statuses = references.mapValues { _ in EvieModelKeyStatus.checking }.merging(
+      statuses.filter { resolved[$0.key] == references[$0.key] && references[$0.key] != nil }
+    ) { _, cached in cached }
+    onChange?()
+    if !isRefreshing { startLatest() }
+  }
+
+  private func startLatest() {
+    guard !wanted.isEmpty else { return }
+    isRefreshing = true
+    let references = wanted
+    let requestedGeneration = generation
+    let keys = keys
+    Self.queue.async { [weak self] in
+      let result = references.mapValues { keys.status(of: $0) }
+      Task { @MainActor [weak self] in
+        guard let self else { return }
+        isRefreshing = false
+        if generation == requestedGeneration, wanted == references {
+          statuses = result
+          resolved = references
+          onChange?()
+        } else {
+          startLatest()
+        }
       }
     }
   }

@@ -4,6 +4,70 @@ All notable changes to Evie are documented here. Dates use `YYYY-MM-DD`.
 
 ## [Unreleased]
 
+### Final integration candidate — 2026-10-17
+
+- Operational PC context set to 200,704 tokens and LensVLM qualified at
+  131,072 tokens on the target Mac, synchronized with runtime KV capacity.
+  The synthetic 127,527-input/38-output run retrieved 5/5 target items with
+  2.4 GiB minimum sampled free memory and 13.8 GiB MLX-reported peak memory in 392.31 s;
+  eight-bit KV, prefill 512, allocator cache 256 MiB and profile timeout 900 s.
+- Automatic adaptive conversation compaction, output/framing reservation,
+  token-usage source and progress in the brain popover; full visible history
+  and current question remain intact. Summary cancellation/cache invalidation
+  follows conversation and request identity; visual provenance remains untrusted.
+- Key saving updates only the captured endpoint and host-bound credential;
+  unsaved drafts/preferences and edits during the await survive. Concurrent key
+  saves are rejected, and partial Keychain/configuration failures are explained.
+- Local launcher reconciles changed model and memory controls on next use,
+  preserves matching processes, rotates per-launch keys, and refuses foreign
+  listeners. Optional KV quantization, prefill and bounded MLX allocator controls
+  share configuration/argv contracts with the manual script.
+- Public web transport pins approved DNS addresses, rechecks redirects, bounds
+  decoded gzip/streamed bytes and cancels actual transfers without persistent
+  cookies/cache. Real loopback regressions and a public synthetic query passed.
+- Real-boundary standalone regressions for settings JSON persistence and local
+  process/HTTP/MLX bootstrap, plus documented native speech/wake lifecycle and
+  conversation-compaction diagnostics. Full-suite and final signed-bundle gates
+  are recorded in PROJECT_STATUS; no release/install completion is claimed here.
+
+
+### Integrated Evie 2 delivery — 2026-10-16
+
+- Compact brain popover, same-conversation model switching, save-first preference
+  persistence, inline per-profile reasoning, web and agent controls; custom names.
+- Owner-requested enabled defaults, real permission audit/request launch mode,
+  revocation when agent mode is disabled and wake shutdown on emergency stop.
+- Native public voice selection, synthesis cancellation/deadlines and five-call
+  on-device wake calibration without retained audio or Siri-private API claims.
+- Public AppIntents with generated/validated bundle metadata, original glass
+  visual identity/icon, accessibility materials and no idle breathing animation.
+- Executor revalidates focus/ownership/secure fields after awaits and per input
+  chunk; drag cancels between steps. Clipboard replacement requires explicit
+  approval except the scoped research/isolated diagnostic output grant.
+- Research grants bound the action vocabulary to answer entry/selection.
+- Private provider connection removed from public source/examples/artifacts;
+  local saved HTTPS hosts and host-bound Keychain credentials preserve configured
+  providers. Publication uses a sanitized snapshot without private v2 ancestry.
+- Full-package build and tests added on the newly available GitHub xcode-27
+  runner, alongside macOS 26 core compatibility checks.
+
+### Research sessions — 2026-10-16
+
+- Two configurable shortcuts: ⌃⌥⇧P opens research consent or revokes it;
+  ⌃⌥⇧K runs one task while the 15-minute session is armed. Research hides the
+  chat and disarms the wake listener between requests; screen indicators remain.
+- Isolated vision-to-clipboard turns, with no tools/history and no delivery
+  after cancellation, expiry, incomplete output or a concurrent clipboard copy.
+- Optional filling/selection through the existing PC agent and its confirmations,
+  with no parallel chat/capture execution and a grant capped by research expiry.
+- In-memory action logs and explicit, content-free measurement export; synthetic
+  real-model check and light/dark consent snapshots. Methods in
+  `docs/RESEARCH_MODE.md`; ADR 0020 records the authority change.
+- Proprietary notice for versions distributed with it: third-party use requires
+  prior written authorization, including personal, educational and research use.
+  Earlier licences and third-party terms remain unaffected. Repository remains
+  public at the owner's explicit direction.
+
 Evie v2 (2026-10-16, branch `v2`): the PC's `qwen-daily` is the default brain,
 over an authenticated tailnet transport; LensVLM wakes on the Mac when the PC is
 out; Evie looks at the screen when asked; agent mode controls the Mac under code
@@ -545,7 +609,7 @@ ADRs 0013–0018 record the decisions.
   `ModelTransportPolicy` replaces the loopback-only check (ADR 0013, superseding
   ADR 0006 in part): plain `http` only to loopback; any other host only over
   `https`, on an exact allowlist whose default is the owner's PC gateway
-  `ai-node-3090.tail6146ef.ts.net`, and only with a credential bound to that
+  `models.example.invalid`, and only with a credential bound to that
   host. `*.ts.net` is never trusted, URLs carrying a user or password are
   refused, and an off-list endpoint fails before any request with "Evie refused
   to send the conversation".

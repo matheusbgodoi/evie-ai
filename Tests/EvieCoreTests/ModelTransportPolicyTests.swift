@@ -5,8 +5,31 @@ import Testing
 
 @Suite("Model transport policy")
 struct ModelTransportPolicyTests {
-  private let pcHost = "ai-node-3090.tail6146ef.ts.net"
+  private let pcHost = "models.example.invalid"
   private let policy = ModelTransportPolicy()
+
+  @Test("saved remote hosts are loaded at request time and credentials stay bound")
+  func savedRemoteConfiguration() throws {
+    let file = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+    defer { try? FileManager.default.removeItem(at: file) }
+    let policy = ModelTransportPolicy(allowedRemoteHosts: [], trustedConfigurationURL: file)
+    let endpoint = URL(string: "https://owner.example/v1")!
+    #expect(policy.evaluate(endpoint, credentialHost: "owner.example").isRefused)
+    try Data(#"{"profiles":[{"endpoint":"https://owner.example/v1"}]}"#.utf8).write(to: file)
+    #expect(policy.evaluate(endpoint, credentialHost: "owner.example") == .allowed)
+    #expect(policy.evaluate(endpoint, credentialHost: "another.example").isRefused)
+    #expect(
+      policy.evaluate(URL(string: "http://owner.example/v1")!, credentialHost: "owner.example")
+        .isRefused)
+    try Data(#"{"profiles":[{"endpoint":"https://replacement.example/v1"}]}"#.utf8).write(to: file)
+    #expect(policy.evaluate(endpoint, credentialHost: "owner.example").isRefused)
+    #expect(
+      policy.evaluate(
+        URL(string: "https://replacement.example/v1")!, credentialHost: "replacement.example")
+        == .allowed)
+    try Data("malformed".utf8).write(to: file)
+    #expect(policy.evaluate(endpoint, credentialHost: "owner.example").isRefused)
+  }
 
   @Test("plain http to loopback is allowed without a credential")
   func loopbackHTTP() {
@@ -75,7 +98,7 @@ struct ModelTransportPolicyTests {
   func credentialForAnotherHost() {
     let verdict = policy.evaluate(
       URL(string: "https://\(pcHost)/v1")!,
-      credentialHost: "other-node.tail6146ef.ts.net"
+      credentialHost: "other-node.example-tailnet.ts.net"
     )
 
     #expect(verdict.isRefused)
@@ -84,7 +107,7 @@ struct ModelTransportPolicyTests {
   @Test("host comparison ignores case, as DNS does")
   func caseInsensitiveHost() {
     let verdict = policy.evaluate(
-      URL(string: "https://AI-Node-3090.tail6146ef.ts.net/v1")!,
+      URL(string: "https://models.example.invalid/v1")!,
       credentialHost: pcHost
     )
 
@@ -93,24 +116,24 @@ struct ModelTransportPolicyTests {
 
   @Test("the tailnet wildcard admits one label of that tailnet and nothing wider")
   func tailnetWildcard() {
-    let wildcard = ModelTransportPolicy(allowedRemoteHosts: ["*.tail6146ef.ts.net"])
+    let wildcard = ModelTransportPolicy(allowedRemoteHosts: ["*.example-tailnet.ts.net"])
 
     #expect(
       wildcard.evaluate(
-        URL(string: "https://laptop.tail6146ef.ts.net/v1")!,
-        credentialHost: "laptop.tail6146ef.ts.net"
+        URL(string: "https://laptop.example-tailnet.ts.net/v1")!,
+        credentialHost: "laptop.example-tailnet.ts.net"
       ) == .allowed
     )
     #expect(
       wildcard.evaluate(
-        URL(string: "https://a.b.tail6146ef.ts.net/v1")!,
-        credentialHost: "a.b.tail6146ef.ts.net"
+        URL(string: "https://a.b.example-tailnet.ts.net/v1")!,
+        credentialHost: "a.b.example-tailnet.ts.net"
       ).isRefused
     )
     #expect(
       wildcard.evaluate(
-        URL(string: "https://tail6146ef.ts.net/v1")!,
-        credentialHost: "tail6146ef.ts.net"
+        URL(string: "https://example-tailnet.ts.net/v1")!,
+        credentialHost: "example-tailnet.ts.net"
       ).isRefused
     )
     #expect(

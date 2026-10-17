@@ -37,6 +37,19 @@ if [[ ! "${VERSION}" =~ '^[0-9]+(\.[0-9]+)*(-[0-9A-Za-z.]+)?$' ]]; then
   exit 1
 fi
 
+# Private v2 worktrees may contain connection details in older commits even
+# after the current files are sanitized. Only the reviewed public main line may
+# be pushed by this convenience script (ADR 0024).
+if [[ "$(git branch --show-current)" != "main" ]]; then
+  print -u2 "Publish from the reviewed public main branch only."
+  print -u2 "Private worktree ancestry must never be pushed; see docs/adr/0024-local-provider-configuration-and-private-release-history.md."
+  exit 1
+fi
+if ! git merge-base --is-ancestor origin/main HEAD; then
+  print -u2 "The public origin/main must be an ancestor of the release. Fetch and reconcile it first."
+  exit 1
+fi
+
 if git rev-parse "${TAG}" >/dev/null 2>&1; then
   print -u2 "${TAG} already exists. A published release is not rewritten."
   exit 1

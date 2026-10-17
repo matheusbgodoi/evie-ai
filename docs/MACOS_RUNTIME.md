@@ -448,3 +448,110 @@ Prototype targets:
 - wake stack below 300 MB and below 2% average CPU as targets to validate;
 - no raw audio retained by default;
 - workers unload on memory pressure and do not prevent system sleep.
+
+## Bounded MLX allocator adapter (2026-10-17)
+
+`LocalRuntime` accepts optional `kv_bits`, `prefill_step_size`, and
+`metal_cache_limit_mb`. Missing fields decode as nil and preserve the legacy
+launch. KV quantization and prefill size are public upstream CLI flags. The
+allocator cache is separate from the model KV cache: its limit is applied with
+public `mlx.core.set_cache_limit` before the unmodified installed CLI runs.
+The custom profile-runtime JSON adapter also persists all three optional fields.
+Real `EvieConfigurationStore.save` → JSON → `EvieConfigurationLoader.loadProfiles`
+regressions cover both complete bounded controls and legacy files without them.
+
+A bounded launch reads the CLI's absolute Python shebang and executes that
+interpreter with `-I -c <exact bootstrap> <CLI path> <cache bytes> <server flags>`.
+It refuses env/PATH shebangs or interpreter flags. It adds no PYTHONPATH, worker,
+dependency fork, or inherited server settings. The app's existing minimal,
+authenticated, offline environment remains in force.
+
+Process identity and reuse are separate checks. Stopping an owned server accepts
+the exact wrapper or its legacy executable/interpreter form, on the configured
+loopback port. Reuse additionally checks model, KV cap, one sequence, KV bits,
+prefill size, and allocator limit. A changed profile must not silently reuse the
+previous process. Modified inline code is not the owned wrapper.
+
+`Scripts/evie-brain` supports the same optional controls through
+`EVIE_BRAIN_KV_BITS`, `EVIE_BRAIN_PREFILL_STEP_SIZE`, and
+`EVIE_BRAIN_CACHE_LIMIT_MB`. Its manual recovery default remains 32K with no
+optional controls; it does not read or update the installed app's profile. For
+example, the measured 64K configuration can be started manually with:
+
+```sh
+EVIE_BRAIN_MAX_KV=65536 EVIE_BRAIN_KV_BITS=8 \
+EVIE_BRAIN_PREFILL_STEP_SIZE=512 EVIE_BRAIN_CACHE_LIMIT_MB=256 \
+Scripts/evie-brain start
+```
+
+The short Swift/zsh bootstrap bridge is protected by an actual script launch
+parity test, including exact argv and the scrubbed environment. The script
+recognizes an existing bounded server for status/stop even when its current
+manual configuration differs. It never accepts arbitrary `-c` code.
+The real-process regression also covers macOS's Xcode Python shim, which
+reexecutes with the `Python` framework executable name: the exact wrapper is
+stopped with SIGTERM, while modified bootstrap code is left running. The focused
+bounded-runtime/script run passed 15 tests in two suites (1.156 seconds).
+
+A separate probe executed the exact production bootstrap against the installed
+MLX and absolute Python, without loading a model. It confirmed a 268,435,456-byte
+allocator limit, intact CLI argv, and isolated Python mode. The installed MLX
+has no `get_cache_limit`: the probe observed the previous limit returned by a
+second `set_cache_limit` call. Context, quality and headroom qualification are
+recorded separately in `MODEL_TUNING.md`; allocator API correctness alone does
+not qualify a larger context.
+
+
+## Bounded Mail queries and OS integration tests
+
+Mail's `messages of inbox whose ...` can materialize the entire mailbox before
+filtering. A real main-thread sample showed `NSWhoseSpecifier` →
+`MFSpecialMailbox.messages` → synchronous library/SQLite work. Killing the
+`osascript` caller did not cancel that queued work in Mail, so later account
+queries could exceed their unchanged 10-second test deadline. A normal Mail
+quit succeeded; Mail was reopened in the background to preserve its prior
+running state. No message, account or draft was changed.
+
+Both `read_mail` (including unread filtering) and `search_mail` now use indexed
+inbox windows: at most 80 candidates, 20 returned snippets and one subject-only
+lookahead. Subjects/read-status arrive in one explicitly bounded range instead
+of one AppleEvent per candidate. At the tail, at most seven binary probes find
+the last existing position; only missing-index errors -1719/-1728 mean end of
+window. Authorization, timeout and unexpected database errors propagate. Bodies
+are read only for matches. Optional zero-based `offset`
+continues a page; only a successful lookahead emits `next_offset`. The maximum
+addressable position is 10,000. Every result explicitly describes partial scope,
+even with no matches or no continuation. New arrivals can shift positions;
+this is bounded live pagination, not a transactional mailbox snapshot. Old
+protocol conformers retain first-page compatibility and explicitly reject
+unsupported continuation.
+
+The final real script boundary completed synthetic no-match searches at offsets
+0/80 in 2.483/2.427 seconds, with 80 scanned candidates and next offsets 80/160.
+A final partial window examined five candidates and returned no continuation in
+1.242 seconds. The actual out-of-range error was -1719; an offset beyond this
+mailbox returned an empty window. Cold body reads took longer (7.713 seconds
+for one unread result, 3.920 seconds for one all-mail result); the application's
+existing 90-second ceiling is unchanged. Only counts, cursor metadata and exit
+status were recorded; no subjects, bodies or addresses entered evidence logs.
+Both scripts also passed the system AppleScript compiler.
+
+Hostile-input integration cases keep all payloads and their original deadlines.
+The suite runs serially because its cases address shared Mail/Calendar processes
+and the OS compiler; no retry, assertion weakening or blanket skip was added.
+The final full run passed 1,542 tests in 145 suites in 23.807 seconds, including
+all hostile-input cases and the new pagination regressions. One preexisting
+known-issue test deliberately verifies that an interrupted hostile-input run
+is reported rather than counted as successful coverage.
+
+The signed Evie app's Automation grant is separate from the terminal/editor
+responsible for `Scripts/test`. After a UI audit opened Calendar, its host-level
+grant was absent: the unchanged ungated witness case reached its 10-second
+ceiling, and the grant-gated completion case reported its unmet precondition.
+Calendar had no sheet, popover or modal window and accepted a normal quit,
+restoring the original closed-app precondition without granting the test host
+new privileges. The closed-app test branch verifies the early marker and no
+side effects; the installed Evie's own permission audit remains separate
+evidence. Following indentation-only normalization, both Mail programs passed
+`osacompile`, strict Swift formatting and the global whitespace check. The
+Mail/pagination/agent-focused run passed 51 tests in four suites (23.999 seconds).

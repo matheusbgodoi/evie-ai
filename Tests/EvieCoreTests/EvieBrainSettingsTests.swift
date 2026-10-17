@@ -13,6 +13,47 @@ struct EvieBrainSettingsTests {
 
   // MARK: Copy
 
+  @Test("editing a label preserves a larger existing server window")
+  func unrelatedEditPreservesServerWindow() throws {
+    var configured = mac
+    configured.contextTokens = 32_768
+    if case .localOnDemand(var runtime) = configured.runtime {
+      runtime.maxKVSize = 65_536
+      configured.runtime = .localOnDemand(runtime)
+    }
+    var draft = EvieProfileDraft(configured)
+    draft.displayName = "Minha Evie local"
+    let changed = try draft.applied(to: configured)
+    #expect(changed.runtime == configured.runtime)
+    #expect(changed.contextTokens == configured.contextTokens)
+  }
+
+  @Test("changing local context changes the launched server capacity too")
+  func localContextUpdatesRuntime() throws {
+    var configured = mac
+    configured.serverContextTokens = 65_536
+    var draft = EvieProfileDraft(configured)
+    draft.contextTokens = 65_536
+    let changed = try draft.applied(to: configured)
+    guard case .localOnDemand(let runtime) = changed.runtime else {
+      Issue.record("The local runtime was lost")
+      return
+    }
+    #expect(runtime.maxKVSize == 65_536)
+    #expect(changed.contextTokens == runtime.maxKVSize)
+  }
+
+  @Test("sampling recipes belong to the actual model family")
+  func modelSamplingRecipes() {
+    let pc = EvieModelProfile.builtInPC.recommendedSampling
+    #expect(pc.temperature == nil && pc.topP == nil)
+    let lens = EvieModelProfile.builtInMac.recommendedSampling
+    #expect(lens.temperature == 0 && lens.topP == 1)
+    var unknown = EvieModelProfile.builtInPC
+    unknown.model = "my-other-model"
+    #expect(unknown.recommendedSampling.temperature == EvieProfileDraft.recommendedTemperature)
+  }
+
   @Test("the context line gives the server's figure and the cap Evie uses")
   func contextLine() {
     var unlabelled = pc
@@ -20,14 +61,15 @@ struct EvieBrainSettingsTests {
     unlabelled.contextTokens = 65_536
 
     // A no-break space between the groups, so the figure never wraps in two.
-    #expect(pc.contextLine == "servidor: 200\u{A0}704 · Evie usa: 135\u{A0}168")
-    #expect(mac.contextLine == "servidor: 262\u{A0}144 · Evie usa: 32\u{A0}768")
+    #expect(pc.contextLine == "servidor: 200\u{A0}704 · Evie usa: 200\u{A0}704")
+    #expect(mac.contextLine == "servidor: 131\u{A0}072 · Evie usa: 131\u{A0}072")
     #expect(unlabelled.contextLine == "Evie usa: 65\u{A0}536")
   }
 
   @Test("where each brain runs, said plainly")
   func whereItRuns() {
-    #expect(ModelLocation.yourPC.placeDescription == "No seu PC, pela sua rede Tailscale (criptografada)")
+    #expect(
+      ModelLocation.yourPC.placeDescription == "No seu PC, pela sua rede Tailscale (criptografada)")
     #expect(ModelLocation.thisMac.placeDescription == "Somente neste Mac")
   }
 
@@ -52,7 +94,9 @@ struct EvieBrainSettingsTests {
     }
   }
 
-  @Test("the persona calls her personal, not local, on either brain", arguments: [ModelLocation.yourPC, .thisMac])
+  @Test(
+    "the persona calls her personal, not local, on either brain",
+    arguments: [ModelLocation.yourPC, .thisMac])
   func personaIsNotLocal(location: ModelLocation) {
     var capabilities = EvieCapabilitySnapshot.allEnabled
     capabilities.whereItRuns = location
@@ -84,7 +128,7 @@ struct EvieBrainSettingsTests {
   @Test("a draft applies what was edited, and nothing else")
   func draftAppliesEdits() throws {
     var draft = EvieProfileDraft(pc)
-    draft.endpoint = "  https://ai-node-3090.tail6146ef.ts.net/v1/  "
+    draft.endpoint = "  https://models.example.invalid/v1/  "
     draft.model = " qwen-uncensored "
     draft.contextTokens = 100_000
     draft.maxCompletionTokens = 8_192
@@ -95,7 +139,7 @@ struct EvieBrainSettingsTests {
 
     let edited = try draft.applied(to: pc)
 
-    #expect(edited.endpoint.absoluteString == "https://ai-node-3090.tail6146ef.ts.net/v1/")
+    #expect(edited.endpoint.absoluteString == "https://models.example.invalid/v1/")
     #expect(edited.model == "qwen-uncensored")
     #expect(edited.contextTokens == 100_000)
     #expect(edited.maxCompletionTokens == 8_192)
@@ -111,11 +155,11 @@ struct EvieBrainSettingsTests {
   @Test("a draft the profile could not run with is refused in Portuguese")
   func draftRefusesWhatCannotRun() {
     var notAURL = EvieProfileDraft(pc)
-    notAURL.endpoint = "ai-node-3090"
+    notAURL.endpoint = "example-workstation"
     var noModel = EvieProfileDraft(pc)
     noModel.model = "  "
     var outputOverCap = EvieProfileDraft(mac)
-    outputOverCap.maxCompletionTokens = 40_000
+    outputOverCap.maxCompletionTokens = mac.contextTokens + 1
 
     #expect(throws: EvieProfileDraft.Problem.invalidEndpoint) { try notAURL.applied(to: pc) }
     #expect(throws: EvieProfileDraft.Problem.emptyModel) { try noModel.applied(to: pc) }
@@ -176,24 +220,24 @@ struct EvieBrainSettingsTests {
         == "evil.example não está na lista de servidores que a Evie pode usar."
     )
 
-    draft.endpoint = "http://ai-node-3090.tail6146ef.ts.net/v1"
+    draft.endpoint = "http://models.example.invalid/v1"
     #expect(
       draft.endpointProblem(credential: pc.credential, policy: policy)
-        == "ai-node-3090.tail6146ef.ts.net precisa de https: http só vale para este Mac."
+        == "models.example.invalid precisa de https: http só vale para este Mac."
     )
 
-    draft.endpoint = "https://ai-node-3090.tail6146ef.ts.net/v1"
+    draft.endpoint = "https://models.example.invalid/v1"
     #expect(
       draft.endpointProblem(credential: nil, policy: policy)
-        == "ai-node-3090.tail6146ef.ts.net precisa de uma chave antes de a Evie mandar qualquer coisa."
+        == "models.example.invalid precisa de uma chave antes de a Evie mandar qualquer coisa."
     )
 
-    draft.endpoint = "https://other.tail6146ef.ts.net/v1"
+    draft.endpoint = "https://other.example-tailnet.ts.net/v1"
     #expect(
       draft.endpointProblem(
         credential: pc.credential,
-        policy: ModelTransportPolicy(allowedRemoteHosts: ["*.tail6146ef.ts.net"])
-      ) == "A chave salva é de outro servidor, não de other.tail6146ef.ts.net."
+        policy: ModelTransportPolicy(allowedRemoteHosts: ["*.example-tailnet.ts.net"])
+      ) == "A chave salva é de outro servidor, não de other.example-tailnet.ts.net."
     )
 
     draft.endpoint = "ftp://127.0.0.1/v1"
@@ -202,7 +246,7 @@ struct EvieBrainSettingsTests {
         == "O endereço precisa começar com http:// ou https://."
     )
 
-    draft.endpoint = "https://user:secret@ai-node-3090.tail6146ef.ts.net/v1"
+    draft.endpoint = "https://user:secret@models.example.invalid/v1"
     let withPassword = draft.endpointProblem(credential: pc.credential, policy: policy)
     #expect(withPassword == "O endereço não pode levar usuário ou senha.")
 

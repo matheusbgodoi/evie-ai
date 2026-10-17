@@ -1,0 +1,519 @@
+# Evie research delivery — persistent execution ledger
+
+Updated: 2026-10-17 (America/Sao_Paulo). This file is the continuation anchor.
+
+## Authorization and workspace
+
+- User explicitly requests implementation, real tests, optimization, native Apple
+  integration, redesigned UI/icon inspired by macOS 27/Siri (authorized read-only
+  RE), installation, public GitHub publication under proprietary licence, commits
+  and an actual release. User explicitly requested agents and a persistent goal.
+- Active goal stored with create_goal in this thread; no token budget.
+- Work ONLY in `/Users/matheusbgodoi/Developer/evie-ai-research`, branch
+  `v2-research`, from integrated v2 `11ef9c9`. Main worktree evie-ai stays untouched.
+- Public GitHub `matheusbgodoi/evie-ai` stays public by explicit user choice.
+  LICENSE changed prospectively to proprietary/all rights reserved; older grants
+  and GitHub's public viewing/fork rights remain unaffected. Never claim IP filing.
+- User's latest preference: all EXISTING capabilities enabled by default and in
+  current installation; macOS permissions requested using actual system prompts,
+  never forged. Consent flags and raw audio retention are not capabilities to
+  silently enable. Outbound/destructive action confirmations stay intact.
+
+## Agent assignments (shared filesystem, no independent commits)
+
+- `/root/native_apple`: new native AppIntents bridge and metadata/build integration;
+  own NativeApple* sources/tests/docs/NATIVE_APPLE.md. Send hooks for root files.
+- `/root/apple_visual`: read-only Siri style inspection, original icon via imagegen,
+  native glass/mark/palette surfaces. Own GlassSurface/EvieMark/palette/icon sources
+  and docs/APPLE_VISUAL_IDENTITY.md. Do not edit brain/root coordinator.
+- `/root/research_validation`: real isolated native text/radio fixture and diagnostic
+  screenshot→model→executor verification; own ResearchValidation*, fixtures,
+  Scripts/research-*, docs/RESEARCH_VALIDATION.md. Review controller risks.
+- Root owns AppCoordinator, BrainChipView, prefs, resolver, research controller,
+  overall docs/release/installation. Coordinate SwiftPM builds to avoid races.
+
+## Implemented so far (uncommitted)
+
+- EvieResearchSession core: explicit 15min arm, one run lease, cancellation/expiry,
+  old-result revocation. Run deadline caps real broker grant.
+- ResearchModeController/View: consent window, shortcuts ⌃⌥⇧P toggle and ⌃⌥⇧K run,
+  clipboard or existing PC-agent fill/select; mandatory capture/action indicators,
+  sensitive confirmations, no chat/history persistence, metadata export max100.
+  Stops on sleep/session deactivation/shutdown and emergency stop.
+- EvieResearchAnswer: isolated screenshot turn, no tools/history, completed/bounded
+  output only. Preserves a clipboard copied during inference; no late deliveries.
+- Root hooks block overlapping chat/voice/captures; research brain pins per consent
+  session and resets after explicit brain choice when idle.
+- BrainChipView now a 30px native glass brain icon, gold border when agent on,
+  status dot. Popover BrainControlsView: PC/Mac/auto, segmented effort, agent/web
+  toggles. Replaces the long chip that crowded input.
+- Brain resolver choose(choice,for:conversation) releases that conversation's pin
+  while preserving others. Existing choose(choice) still affects future only.
+  VM rejects model switch while busy; original answer model labels unchanged.
+- Brain choice persisted in prefs; inline reasoning saves only selected profile
+  through configurationStore re-read/merge. ModelSettingsViewModel merges changed
+  effort without overwriting unsaved edits. Web toggle persists via normal prefs.
+- Existing capability defaults changed true: fileChanges/autoApproveChanges,
+  web/mailCalendar/computerUse/directSave, voice wake/pushToTalk/speech/typed/call.
+  Explicit saved false remains false. computerUseConsentGiven=false/rawAudio=false.
+- --request-permissions flag: one explicit launch requests never-asked 5 core TCC
+  permissions through existing guide, leaves refused grants for manual System UI.
+- LICENSE, README, research ADR0020, RESEARCH_MODE, architecture/security/evals
+  updated partly; remaining docs need final expanded scope reconciliation.
+
+## Executed evidence
+
+- Initial focused 74 tests passed; first complete suite 1450/134 passed,1 known issue.
+- Research final core suite before expanded UI/defaults:1451 tests/134 suites passed,
+  1 known Mail script issue. `/tmp/evie-research-full-tests-final.log`.
+- Screenshot UI light/dark consent rendered and inspected via view_image:
+  `/tmp/evie-research-ui/research-{light,dark}.png`, no clipping.
+- Signed release build completed twice (129.30s and188.20s) using pinned Evie Dev
+  certificate. Last build `.build/release/Evie.app` includes research but predates
+  new compact brain/defaults/native/visual changes. NOT installed yet.
+- Real `--research-check` through LaunchServices worked: qwen-daily, reasoning off,
+  synthetic900x300 math multiple choice, answer B in6.213433833s, isolated clipboard
+  write/readback true. Evidence `~/Library/Logs/Evie/research-check.log`.
+  Direct binary start in .build stalled and was terminated; LS open -n works.
+- Brain bug reproduced with new API initially leaving pin: two assertions failed
+  in `/tmp/evie-brain-choice-red.log`; then unpin fix passed20 focused tests.
+- Public-source credential-pattern scan of unpublished history:0 known key patterns.
+  Documentation link check:0 missing targets at that time. Re-run after agent docs.
+- Toolchain: Swift6.4, Xcode27.1 build27A9275, macOS27.2 build26B5086k, arm64 M5.
+
+## Current immediate issue / next actions
+
+1. Root full suite after compact brain, defaults and preference-store corrections:
+   **1454 tests/134 suites passed,1 known issue**, log
+   `/tmp/evie-expanded-tests-final3.log`. Root fixed store omission of brainChoice
+   and missing-key defaults to use EviePreferences() values centrally. The initial
+   new test helper compile issue is resolved. No warnings in final3.
+2. New agent sources have arrived AFTER that pass. research_validation currently
+   owns a swift build slot; root MUST NOT start package builds until it releases.
+   Root has added registry --research-validation and native bridge hooks in
+   AppCoordinator.start/stop; verify compile with agent feedback.
+3. Native agent owns Scripts/evie-app metadata hook until it finishes. It already
+   extracted actual 3 AppIntents+3 shortcuts with SDK metadata processor and
+   typechecked native source under26 SDK. Root will change version2.0.0 later.
+4. Visual agent implemented native HUD glass/cards/mark, new original alpha PNG
+   and ICNS generator; QA/docs pending. Native Siri study is read-only REA/Ghidra;
+   original private assets/code not reused.
+5. Research validation agent has fixture built at
+   `/var/folders/bq/3w7v2sfj5vv70dnhk0t80y7w0000gn/T/evie-research-fixture.Kkx9bN/Evie Research Fixture.app`.
+   It supplies ResearchValidation.run(fixturePath:), restricted window capture,
+   named clipboard, model-driven answer→realexecutor field/radio roundtrip.
+6. Re-render+inspect compact input and new BrainControlsView (610pt snapshot) in
+   light/dark/accessibility and narrow/multiline. Need actual popup/hotkey tests.
+7. Finish native and visual integration, root TCC audit/request hook, docs ADR0021
+   manual current-conversation choice, ADR0022 owner defaults. Update README/
+   WEB_SEARCH outdated off/noimplementation claims; accepted ADRs superseded via
+   new ADRs, not silently rewritten.
+8. Final install: back up bundle/preferences locally (outside git); stop old app;
+   apply user-authorized true capability flags while preserving preferences and
+   consent/raw audio; set brain_choice=alwaysPC reflecting user screenshot intent;
+   install signed bundle; launch --request-permissions. Never edit/reset TCC DB.
+   Mail/Calendar Automation may need OS prompt; request without reading user data.
+9. Validate fixture, native metadata/actions, webquery, hotkeys/popup selection,
+   cancellation/revocation. Measure idle CPU/RSS and energy fairly (wake enabled;
+   cannot claim zero energy or watts-per-process without privileged measurement).
+10. Final diff+full suite+swift build/release+zip-signature proof. Docs WORKLOG every
+    commit, PROJECT_STATUS, CHANGELOG, design/evals/ledger measured results. Publish
+    v2-research and v2.0.0 release (manual body-file flow or adjust release script
+    worklog contract). Preserve other branches/worktree; verify installed binary
+    hash matches release; normal app open. Mark goal complete only then.
+
+## Continuation checkpoint: privacy, native voice and runtime proof
+
+- The user's accidental pause was explicitly revoked. Continue work; goal API has
+  no `active` transition, so its stale paused state must not stop execution.
+- Latest explicit requirement: never publish the owner's Tailscale connection.
+  Eighteen source/docs/test files contained it and were sanitized to reserved
+  examples. Runtime configuration outside git stays untouched. Live transport
+  trusts HTTPS endpoints from that local configuration and still requires an
+  exactly host-bound credential. Tests cover edits, malformed config and mismatch.
+- **Do not push v2/v2-research ancestry:** unpublished history contains private
+  connection details. Preserve local history and publish a sanitized snapshot
+  parented only by the public main, after scanning reachable trees/artifacts.
+- Research fixture passed real screenshot→Qwen68→named clipboard→AX field68 and
+  radioB→independent fixture JSONreadback. 4actions,43.743s total; model40.277s.
+  No general clipboard, no auto approvals; own fixture terminated/focus restored.
+- Native signed bundle diagnostic passed actual3AppIntentperform calls, busy/
+  notReady/Unicode guards, generated3actions+3shortcuts metadata; FoundationModels
+  available. Checkpoint release2.0.0 succeeded210.54s before latest safety/voice.
+- Visual agent: executor focus/secure-input/dwell/AXfallback/drag safety;
+  red75tests15issues→green75tests0issues. Explicit clipboard grant defaultfalse.
+  Root host passes true only from consented research; fixture owns named board.
+- Root fixed save-first brain choice, stops normal computer session when agent
+  disabled, blocks connection-test status from interrupting active responses.
+- Native agent now owns voice catalogue and fivephrase wake calibration. Signed
+  AVFoundation probe synthesized public Luciana voice; Siri-specific voices were
+  unusable inside signed app. Never label those supported. Keep personal models
+  and clones intact; switch installation to native without deleting user assets.
+- Validation agent now also closes web byte-stream limit/redirect/DNS/session
+  isolation gaps and updates stale WEB_SEARCH/UI_UX docs. Coordinate SwiftPM slot.
+- Final build/fulltests/install/runtime/energy/commit/sanitized-publicrelease still
+  required. Root owns integration, ADR21/22, finaldocs, privacy and release.
+
+## User steering: context, sampling and compaction
+
+- New explicit requests retain all previous deliverables: Qwen context matching
+  OpenCode, maximum viable LensVLM context, researched model-specific sampling,
+  visible token limits/usage and automatic compaction across model changes.
+- Verified local OpenCode qwen-daily context200704/output16384; qualified PC
+  runtime MAX200704 (higher rungs rejected in existing stack evidence). Root
+  builtInPC changed135168→200704; personal runtime config will migrate on install.
+- Official Qwen3.8-27B card: native262144, optionalYaRN1M not enabled; sampler off
+  .7/.80/topk20/minp0/presence1.5/repeat1 vs thinking1/.95/20/0/0/1. Existing PC
+  gateway enforces the correct pair; Evie leaves sampling to that gateway.
+- LensVLM baseQwen3.5-9B, mixedweights~8GB. Official evaluation greedy/temp0 and
+  max2048perturn; local profile now0/topP1. No unsupported Qwen3.8 sampler copying.
+- Root isolated bf16256k capacity run (246085 actual server prompt tokens) failed
+  MetalOOM after323.119s at72704prefilled tokens. No appuser/config changes.
+  The Python local-template count2 was an erroneous BatchEncoding keycount; use
+  actual server count and fix metadata, never claim this run passed.
+- Visual agent now owns isolated KV8bit/prefill512 capacity ladder; it terminated
+  only root-owned testserver59677 and will report peakMetal/quality/latency.
+  Pending processstate private `/tmp/evie-lens-capacity-state-path` must stay outgit.
+- Native agent owns EvieConversationCompaction actor/coretests. Root hooked async
+  conversationPrefix, two callers, picture normalization/taint, cancellation/reset
+  chain and progress. Custom current questions/tail never truncated. Fullhistory
+  remains stored. Four cacheentries byprefix+target. Need actual live summary test.
+- Visual context UI complete and native screenshot verified: exactlimit/output,
+  lastsend with source/progress, without growing inputbrain30px. Rootwired usage.
+- Native voice final signedprobePASS: assetsptBR actuallyinstalled; silentTTS
+  62236frames/2.82saudio/0.643s, cancellationtrue, realASRsyntheticphrase and temp
+  fivealias calibrationPASS. Syntheticinitial Evie name NOT recognized; user
+  enrollment remainsnotConfigured, no fakepersonaltraining.
+- Web new14tests and realfetch diagnostic being finalized by validationagent;
+  ADR0027web (0026reservedcontext). NewCIxcode-27fullsuite enabled (official GA
+  2026-10-15). Native84focused tests+shellbuild passed before compaction changes.
+- Rootfix compiler callback uses awaitVMshowContextCompactionProgress helper,
+  avoiding swift-format removing necessary nestedclosure explicitself.
+- All finalchecks/install/localcommit/sanitizedpubliccommit/CI/release still needed.
+
+## 2026-10-17 continuation: final context boundary fixes
+
+- All three agents continue under explicit user delegation. Never stop on stale
+  paused goal status; user explicitly resumed. No final install/commit/push/tag
+  has happened yet. Old installed app still PID45464 at last observation.
+- Local backup ready OUTSIDEgit: path reference `/tmp/evie-delivery-backup-path`
+  (backup contains original signed app + config/preferences/permissionguide).
+- Native wake race reproduced with real mic: removing only generationguard in a
+  temporary signed probe caused stale rearm; production source GREEN pendingarm
+  interrupted, no resurrection, normal arm+disarm succeeded. New source
+  NativeWakeLifecycleCheck + registry --wake-lifecycle-check ready. No rawaudio.
+- Rootcontextregression red44tests5issues: new3behaviorcases (4assertions) showed
+  localdraft context didnotupdate launchedKV and profiles could exceed runtime/
+  reportedserver. Extraissue was stale runtime seed defaults. Rootfixes:
+  validateContextCapacity on set/environment/draft; explicit context edit syncs
+  runtimeKV; unrelated edits preserve a larger existing server window. Updated
+  runtime seedPC200704/Lensgreedy0/1. Focused115tests8suites then had only ONE
+  stale expected2048 outputcap assertion; root updated it to configured cap.
+- Root ordinarychat uses configuredcompletioncap (PC16384); voice1024 and computer
+  steps separate. Characterbudget now reserves framing/tool margin and has no
+  unsafe8000floor for tiny windows. UIreports exactserverprompt usage and% when
+  available, otherwise explicit~estimate; compactionprogress safelyguarded.
+- Independent review found saveKey clobbering unsaved drafts/concurrent config.
+  Validation agent reproduced RED with VM+realtemporaryJSON, fixed endpoint+
+  credential-only write, perfielddraft rebase/current changes/preference/fallback
+  preservation/isSavingKey;3coretests +2standalonecasesPASS. Script
+  model-settings-validation and docs/MODEL_SETTINGS_VALIDATION.md ready.
+- Root launcher now separates process identity from profile matching. Readiness
+  returnsnil for oldKV/model; next actualturn stops authenticatedoldEvieserver,
+  checksportfree and relaunches. Settings/probes do not interrupt a currentreply.
+  New init(storageDirectory:...) isolates PID/log/key for realboundaryharness.
+- Native agent added optional LocalRuntime.kvBits,prefillStepSize,metalCacheLimitMB
+  backwardcompatible fields, boundedBootstrap publicPython-I-c adapter using
+  mx.set_cache_limit BEFORE unmodifiedCLI, executablederivedfromabsolutePython
+  shebang. No fork/PYTHONPATH; process identity matchesEXACTbootstrap. Pure
+  argumentsServeProfile checksmodel/KV/seq/quant/prefill/cache separately.
+  76coretests8suitesPASS +exactbootstrap livepublicMLXAPI268435456bytes,isolated1.
+  Agent now ensures Scripts/evie-brain legacyrecovery canrecognizeboundedserver,
+  and optional envflagsparity tests; duplicationtinybridge protectedbyparitytest.
+- Validation agent is building Scripts/local-brain-validation: actuallauncher+
+  temporaryauthenticatedHTTPCLIfixture, noLLM/userstate, proves liveprofilechange
+  replacesPID, rightopts, reusecorrectprofile, neverkillsforeignlistener.
+- LensBF16near246kOOM323s at72704. InitialKV8/defaultallocator262k abort after
+  <2GiBheadroom at119296 (notqualified; onlyownPIDterminated). Found defaultMLX
+  alloccache~22.8GiB above17.76GiBMetalworking; publiccap256MiBremedieswaste.
+  WithKV8/cap256MiB/prefill512:64kPASS64473prompt+32output,4/4codes,139.17s,
+  TTFT136.31s,MLXpeak12.438GB,minfree22%. Visualagent continues128k→optionalhigher
+  onlyheadroom>=2GiB, then adds512x128syntheticZEBRA4817image+4needles onlargest
+  qualifiedVLMrung. DO NOT SETnominal262k effectiveuntilactualqualification.
+  Privatebenchmarkstate/ledgers only /tmp, no secrets/host inreport/publicsource.
+- FinalOCR sourceimageprivacyPASS20images,3privatepatternneedles derived inRAM,
+  no matches/errors/OCRtextlogged. Existingpublic132commits scan0private metadata.
+- Web14testsPASS includingactualDNSpin/TLS/cancel/gzipbomb. RealSwift.orgsearch6
+  hits+3255chars fetched1.899960417s. Agentdocs WEB_SEARCH/UI_UX/ADR0027done.
+- RealcompactionPASS synthetic46247→16374chars/budget32768,oldAuroraAzulfact
+  preserved/currentquestionexact/cache reuse;10coretestsPASS. ADR0026rootwritten.
+- Remaining required work: qualifyLensmaxtext+visionheadroom, setbuiltIn+runtime
+  configoptfields/macmax+scriptseed/defaultdocs; verify lifecycleactuallauncher;
+  completefullsuite/releasebuild+allfinalruntimeflags; actualpermissionsMail/
+  Calendar request (core5alreadygranted;Mailneedsconsent,Calendarwasclosed), final
+  install/prefsallcapabilities+nativevoice+PCchoice; idleCPU/physicalmemory/energy
+  measure; docsWORKLOG/STATUS/CHANGELOG/design/TASKS/ledger currentevidence;
+  privacy scanfinaltree+binary, localcommit then sanitizedpubliccommit parentmain,
+  actualCIgreen, v2.0.0releasezip/signature/downloadhash proof and appopen.
+
+- Real temporary local-launcher boundary PASS (2026-10-17): Script
+  local-brain-validation used actual Shell launcher/process inspector+PythonMLX
+  without model weights, authenticated401/200HTTP and isolatedstate/port. Verified
+  boundedallocator268435456bytes, modelA/KV32k→modelB/KV64k newPID+newkey,
+  model-only change newPID, exactprofile reuse samePID, readinessneverstopsold,
+  foreign executablelistener remainsalive, cleanup removesonlytemporaryPID/key.
+- Native script bounded options/parity14testsPASS; extra exactidentity stop/reject
+  test pendingnativeagentfreeze. Sourceadapter liveAPI proved isolatedPython-I.
+- Benchmark128k stillrunning near119k;headroom9% borderline. Do not qualify larger
+  windows just because prefill reachedthem; maximum must pass textANDimage with
+  >=2GiB sampledheadroom. Visualagent owns all capacity processes, no othermodels.
+
+## 2026-10-17 active final integration checkpoint
+
+- User resumed all work; the goal tool's stale `paused` value has no resume API
+  and is not an instruction to stop. Continue to actual installed/public release.
+- Root final-suite attempt: 1,521 tests/141 suites; one real stale test failed:
+  research clipboard reads are now structurally refused, rather than offered a
+  confirmation. Updated regression asserts that refusal and uses an ungranted
+  clipboard replacement to verify the shortcut cannot approve sensitive actions.
+  The other reported issue is the intentional known Mail timeout-injection test.
+- Root review found custom `EvieModelProfile.Runtime` Codable dropped the three
+  new MLX controls even though LocalRuntime itself round-tripped. Native agent
+  fixed the actual store→JSON→loader boundary and added two regressions. It now
+  owns adaptive long-input deadlines: a qualified 128K prefill exceeds the old
+  60/120-second deadlines; preserve short-request policy and bound large requests
+  by configuration and the existing 900-second resource ceiling.
+- Lens text 128K passed four synthetic facts; final text+image benchmark is still
+  running on agent-owned PID63924. Do not build a memory-heavy release until it
+  finishes. No 196K trial: largest proposed qualified context131072, conditional
+  on final image/needles/headroom result. Root will update built-in+seed+personal
+  config only after result. No user endpoint/key changes.
+- `/tmp/evie-final-privacy.py` derives full host/tailnet/host-label privately from
+  local configuration and emits only counts. Its expanded case-insensitive scan
+  found two residual host-label mentions, now sanitized (BrainSettingsTests and
+  design doc). Current tracked+untracked source scan496files/0matches.
+- Publication correction supersedes any earlier queue wording: NEVER push the
+  private v2/v2-research ancestry. Publish a sanitized tree on origin/main only.
+  No installation/commit/push/tag/release has happened yet.
+- Documentation agent finished current amendments and relative-link check; five
+  explicit final-evidence placeholders remain in PROJECT_STATUS/release notes.
+  Root must replace and mark install/release only after real evidence.
+
+## Vision gate — do not release a false capacity claim
+
+- New deadline/persistence focused58tests passed (6suites); actual streaming
+  headers/first-token watchdogs and cancellation covered. Root profile defaults
+  PC and Mac now requestTimeout900, seed aligned, short requests retain prior
+  policy. Follow-up real profile/research39tests passed, including seed equality.
+- Full-suite second run1530tests143suites had only the seed equality failure
+  because root changed Mac timeout during compilation; that focused regression
+  is now green. The intentional known Mail timeout issue remains documented.
+- Fresh real settings harness2scenarios and launcher harness both passed.
+- Critical final LensVLM vision baseline failed even with short prompts, BF16
+  and the reference OptiqEngine. Text-only128K passed but is NOT a VLM capacity
+  qualification. Do not adopt131072 until text+image passes. Agent probes use
+  synthetic images exclusively. Existing production configuration remains intact.
+- The sidecar is NOT missing: original index loads333vision tensors; strict
+  coverage1260/1260 passed. Preprocessing stock/reference arrays agree at1.19e-7,
+  correct64image tokens; all past hypotheses are hypotheses, not shipped fixes.
+- Native/visual agents investigate model/vision compatibility; no unverified
+  loader monkeypatch or cache modification has been applied to production.
+- Root strengthened --brain-check: asks both colour and pixel-only OCR, requires
+  exact synthetic code and owned-process shutdown, writes brain-check.log. A
+  completed HTTP response alone no longer earns an `ok`. Debug full package
+  warnings-as-errors passed in6.68s. Final installed probe still required.
+
+## Final qualified configuration and release queue (active)
+
+- Lens final PASS:127527input+38output, exact4facts+ZEBRA4817, stop;
+  392.31s total,386.82sTTFT, peakMLX14.819GB/13.80GiB,
+  sampledminimum10%free~2.4GiB, noabort. Experimental server budget262144;
+  accepted request fits adopted131072 including2048reservedoutput. Evidence
+  docs/validation/lens-context-qualification.json and MODEL_TUNING. Agents stopped
+  all their experimental workers; existing other oMLX/MCP processes preserved.
+- Root builtInMac and seed now131072client/server/maxKV +KV8/prefill512/cache256;
+  PC200704; both profiles requestTimeout900 with adaptive long-input policy.
+  Default profile tests updated; 32K failover tests use explicit32K fixtures so
+  the smaller-model safety regression does not disappear when the default grows.
+- Last full suite4 PASS1535tests144suites16.555s +1intentionalknownMailissue.
+  Native agent now does ONLY6strictstylefixes: forEach→for in registry/compaction
+  fixture, four explicit attempt closures in BrainTurnTests; then finalfullsuite.
+  Root MUST await its sourcefreeze/buildslot release before signedreleasebuild.
+- Native image helper in final request only for exact localLens/topLevel:
+  actual ImageIOdimensions/orientation, native nearest enlargement min589824px,
+  sRGB PNG, preserve IDs/origin/taint/history, cap20MiB/16MP/4096edge.
+  61focusedtests6suites passed; nativepreparedPNG exactpixelmatch0 vsPILnearest.
+  GPU/model path still to prove in actual signed installed --brain-check.
+- Brain-check now meaningful: refuses preexistinglistener, complete stop/assistant
+  responses only, exactcolour+pixel-onlyOCR, PIDgoneANDportfree, --idle must
+  actually unload before explicitstop. Shell warningsbuild passed10.21s.
+- Public parent ancestry: origin/main870unique blobs scanned0private matches.
+  Current source500files0private matches; redo afterfinalstage. Native strictlint
+  afterstylefix should be0. Images20previousOCR0matches/errors.
+- Scripts/evie-release refuses non-main before mutations/build/push and requires
+  origin/main ancestry; actual private-branch refusal tested. Still MANUAL public
+  snapshot flow required for this release: NEVER pushprivatev2-research ancestry.
+- Scripts/evie-app microphone description now truthful re wake listening/native
+  ASR; removed generic TCCreset suggestions. No TCC database edits/resets done.
+- All currentdocs nowqualified131072; remaining4 placeholders onlyfinalsuite and
+  energy in PROJECT_STATUS/release notes. Root will replace withactualevidence.
+
+Immediate queue after native stylefreeze:
+1. Scripts/evie-app build (warnings-as-errors/signature/metadata). Nothing installed
+   yet; old installed EviePID45464 remains. Scan finalartifact privately using
+   /tmp/evie-final-privacy.py artifact .build/release/Evie.app.
+2. Backup exists via /tmp/evie-delivery-backup-path. Gracefullyquit oldapp; then
+   run PRIVATE /tmp/evie-migrate-final.py131072 to atomically set contexts,
+   recommendedsampling/reasoningoff, allrequestedcapabilities/nativevoice and
+   alwaysPC, preserving endpoint+credential exactly. Do not run migration while
+   oldapp may rewrite prefs. Scripts/evie-app install opensnewnormalapp.
+3. Stopnormalapp, openMail/Calendarbackground, launchinstalled--request-permissions
+   (normalcoordinator) forrealOSconsent; core5alreadygranted; verifyactualreport.
+   Never fakeTCC. Then stopnormalapp forcontrolleddiagnostics/fixture.
+4. Trigger research_validation agent START: sequential installed--native-apple-check,
+   --context-check,--web-check, Scripts/research-validation. Root afteragent done:
+   --brain-check(actualnew131072/cache/imagehelper/correctOCR/shutdown),
+   --native-voice-check,--wake-lifecycle-check,--permissions-check, presentation/UI.
+   All diagnostics via LaunchServices open -n, require fresh log mtimes.
+5. Wake/idle energy actualmeasure; filter anypersonaltranscript fromwake-costlogs
+   before publicdocs. No modelworkerleft. NormalappCPU/RSS and sharedGPU/thermal;
+   nofalse0watts/perprocessclaim. Finaldocs/WORKLOG/releaseplaceholders complete.
+6. Private localcommit sanitizedtree; fetchpublicmain; create clean snapshotcommit
+   parentONLYorigin/main, newpublicbranchref, scanreachablehistory/artifact;
+   pushpubliccommit:main ONLY. Wait actualCI all3jobs green, resolvefailures ifany.
+7. dittozip/signatureunzipproof/sha256; tagv2.0.0 publiccommit; ghreleasecreate
+   notes-file docs/releases/2.0.0.md; downloadverifyhash/signature; installedbinary
+   identical; appnormalopen/PCready. Onlythenmarkgoalcomplete/final.
+
+## Installed candidate and actual Mail regression — active (do not stop)
+
+- Candidate2.0.0 signed release build PASS90.42s,3AppIntents+3shortcuts metadata,
+  pinnedEvieDev cert, artifact6files0privatepatterns. Installed after graceful
+  oldEviePID45464 termination and existing localbackup. Private migration script
+  /tmp/evie-migrate-final.py131072 completed; endpoint+credential unchanged;
+  PC200704/Mac131072, effortoff, recommend samplers, allrequestedcapabilities,
+  alwaysPC/nativevoice. Installed candidate SHA256 executable:
+  dc562e0c90fddcd34895336a0e493e40fd433b3deb8f31af70b3eb96a0ff96d6.
+  This is a VALIDATIONcandidate, not finalrelease: Mailfix+braincleanup pending.
+- Root stopped candidate normalcoordinator forisolateddiag. Helper
+  /tmp/evie-run-diagnostic.py flag reportFilename timeout [extraargs] launches
+  installedbundle open -n and requiresfreshreportmtime. /tmp/evie-quit-app safely
+  requests NSRunningApplication.terminate forbundleID (noforcekill).
+- Actual candidate --brain-check:131072/KV8/cache256 helper path colorTRUE,
+  OCRTRUE,5.326slaunch/3.062scolor,portfreestop0.163s. OverallFAILED onlyimmediate
+  kill(pid,0) ESRCHcheck: Foundationreapschildonrunloop afterreport (psconfirmedno
+  workersleft). Root diagnostic nowwaits bounded5s/50ms afterstop toallowreap,
+  STILLrequiresESRCHANDportfree, no acceptingzombie. Needsfinalbuild/rerun.
+- Nativevoice candidate PASS:62236frames/2.822saudio,0.4385ssynthesis,
+  realSpeechAnalyzer synthetictranscript/synthcancel/tempfivealiascalibrationtrue.
+  Only9publicvoices and0enhanced/premiumptBR; bestcurrentlycompactLuciana,
+  SiriSandra/Nandounavailable; userwakeenrolmentnotConfigured (requiresreal5calls).
+  /root/apple_visual NOW owns authorized PUBLIC enhancedvoice installation via
+  SystemSettingsUI/AppleScriptAX only; noprivateSiri/MobileAssetAPI/noTCCbypass.
+  Coordinate UI before request-permissions. Native CUA app API disabled.
+- Wake lifecycle candidate PASS actualmic:normalarm/disarm,pendingarmcancel,
+  stalearmfalse. Newreport --permissions-check:core5allgranted;Mail-1744,
+  Calendar-600closed. Automation requests stillrequired onceMail/visualworkdone.
+- /root/research_validation NOW running candidate installed sequential4diag:
+  nativeapple PASS0.154s3/3+guards/FoundationModelsavailable; context-checkrunning
+  PC; thenweb andactualresearchfixture. NoSwiftPM/OSperms/Mailtouchbythisagent.
+- Strictstyle101Swiftfilesfixedbutfinalsuite exposed REALMailproblem. Parallel
+  fullfuzz failed2/2 despiteisolated6payloads0.612s; .serializedMailSuite helped
+  onefullgreen26.841s, butsecondserializedfailed too. Notjusttestcontention!
+  Nativeagent sampled MailPID856: mainthreadNSWhoseSpecifier→MFSpecialMailbox
+  messages; workerEDPersistenceDatabaseSQLite stepping. searchMail materializes
+  inbox via `(messages of inbox whose subject contains term)` BEFOREoutputlimit.
+  CancelingosascriptleavesMailworking. No timeoutincrease/assertionweaken/skip.
+- Nativeagent authorizedproductionMailfix now: prototypeboundedindexedcandidate
+  window80, explicitpartialscope even0matches, optionalpaginationpreservecoverage,
+  unreadOnlysameunboundedgettermustfix. Needvalidateindexesavoidwholegetter and
+  updateprotocol/AgentLoop/Shell/tests asneeded (sendwidefileplanbeforeedit).
+  RootapprovedgracefulMailquit; succeeded<=10s, noforce, preserveuserdrafts;
+  agentrestoresMailbackgroundforprobe. DonotrequestMailTCCuntilagentquiescent.
+- Rootreleasebuildslot FREE; nativeagentownsMailpatch+debugtests. A FINAL rebuild/
+  reinstall afterMailfix+brainreapfix is REQUIRED. No commits/push/tag/release yet.
+  Do NOT reportcurrentcandidateasfinal. Continue allremainingpublication/energy/
+  permissions/installeddiagnostics gates; no finalpartialdelivery.
+
+
+## Final validation continuation — Keychain UI correction active
+
+- Final Mail fix passed **1542 tests / 145 suites in 23.807 s**, with one
+  intentional known timeout-injection issue. Bounded pages80/results20, real
+  batch subject lookups, offsets0...9999 and explicit cursor/partial scope.
+  Strict Swift lint106files passed; native agent finishing only whitespace in
+  AppleScript multiline literals (osacompile and focused regressions required).
+- Signed build2 passed38.60s and includes Mail batch + diagnostic5s strict child
+  reap wait, but is NOT installed. Existing installed candidate predates these.
+  A build3 after final source freeze is REQUIRED.
+- Public System Settings installed **Luciana Aprimorada** (38MB download) with
+  no private Siri API. Candidate real native-voice-check PASS:10publicptBRvoices,
+  1enhanced, selected com.apple.voice.enhanced.pt-BR.Luciana,58599frames,
+  2.658saudio,0.291ssynthesis, cancellation/realASR/tempfivealias true.
+- PC synthetic context-check failed at320s because legitimate SecurityAgent
+  login-Keychain password authorization was pending, NOT PC health (HTTP200).
+  Async user input requested password DIRECTLY in OS alert/Permitir Sempre;
+  NO answer yet. Never obtain password here or bypass the dialog. Normal
+  candidate currently running so owner sees legitimate Evie password alert.
+- Visual agent confirmed actual main-thread bug via sample: openSettings →
+  ModelSettingsViewModel.refreshKeyStatus → LoginKeychainItems.contains →
+  SecItemCopyMatching attributes waits behind pending secret access. Attributes
+  alone do not guarantee nonblocking. research_validation now owns correction:
+  off-main bounded/coalesced status refresher and async PC-key guide row, stale
+  guards and real-VM blocking-boundary regression. Do not start finalbuild until
+  freeze. Original SecurityAgent alert remains untouched.
+- Visual public Automation Settings inspection: **Calendar enabled**, Mail not
+  listed yet. Calendar opened background. Closed only Settings opened by agent.
+  After corrected installation, legitimate Mail request via Evie guide still
+  required. Core5TCC alreadygranted. No TCCDB edits/resets/password automation.
+- Latest source scan501files0private matches; relative Markdown links0missing.
+  gitdiffcheck currently only Mail literal indent whitespace native is fixing.
+- Goal store still says paused from revoked accidental user pause; APIs expose
+  no resume action. Continue authorized work; do not falsely mark complete.
+- No commits/push/tag/release yet. Final queue remains: sourcefreeze+suite+
+  signedbuild/install; installedbrain/native/voice/wake/web/permission checks;
+  ownerKeychaingrant→context+restrictive researchfixture; idle/wake/energy;
+  closefinaldocs; privatecommit then sanitized publicsnapshot parentONLYorigin/main;
+  privatepattern reachablehistory/artifactscan, publicpush+actualCIgreen,
+  tag2.0.0+zip/hash/release/downloadsignatureproof, normalappopenPCready.
+
+
+### Source-freeze addendum
+
+- Native Mail whitespace freeze complete: osacompile2scripts, strictformatter,
+  globalgitdiffcheckPASS; focused Mail/pagination/AgentLoop51tests4suitesPASS
+  23.999s. Calendar had been opened only for permissionaudit; safelyrestoredCLOSED
+  originaltestprecondition. One broad focus while Calendaropen exposed hostTCC
+  no-grant timeout (not Eviegrant); no skipped assertion disguised as green and
+  no privileges added to the testhost. Actual EvieCalendarpermission audited
+  separately; reopenforfinalaudit AFTERsuite.
+- Root added --research-agent-validation and Scripts/research-validation --agent
+  selecting separate report research-agent-validation.log, retaining180sbounded
+  scriptwait. Visualagent owns narrow optional real-planning branch in existing
+  ResearchValidation, same offlinefixture/PIDcapture/namedboard/broker/executor,
+  confirmalwaysfalse, independentnoncePIDfield/radiooracle. Normalcode untouched
+  except ResearchModeController.agentGoal nowinternalstatic to share EXACT
+  productiongoal instructions, no duplicate diagnosis-only modelcoaching.
+- Validationagent reproduced RED mainactorstall250ms in realVM fixture and is
+  implementing boundedserialutility Keychainstatus refresher. Currentlyowns
+  SwiftPMfocusedCoretests thenstandaloneVM. Do not releasebuilduntil both
+  validation+visualsourcefreeze; registrytemporarilyreferencesnewrunBool.
+- Root reconciled currentREADME Mail/file/web defaults and remoteproviderprivacy;
+  replaced false absolute networking claims; historical PROJECT_STATUS blocks
+  explicitlylabeledhistorical. Enhancedvoice report/docs added byvisualagent.
+- No modelworker or legacySpeechworker running; one normalcandidateEvie is
+  present with ownerKeychainalert. Energymeasurement stillafterfinalinstall.
+
+
+### Final source suite — PASS
+
+- All source nowfrozen including optionalrealplanningdiagnostic.
+- Scripts/test fullpackage warnings-as-errors: **1545 tests /146 suites PASS
+  23.913s**,1intentionalknownMailtimeoutinjection. Calendaroriginalclosedstate.
+  Log /tmp/evie-final-keychain-agent-fullsuite.log. No testskip/weaken/retry.
+- Strictswift-format111changed/newSwiftfilesPASS;11shellsyntaxchecksPASS.
+- Rootstarted signedreleasebuild3 logfile
+  /tmp/evie-final-keychain-agent-release-build.log, execsession80417.
+  Waitbuild, scanartifact, install; then nativeagent legitimateMailpermissionUI,
+  visualmainresponsive proof+brainbuttonUI. CoordinateexclusiveUI before own
+  windowdiagnostics/energy. OwnerKeychaininput stillpending.

@@ -66,7 +66,7 @@ public enum ScreenshotEncoding {
   /// The first frame with its EXIF orientation applied, at full size. ImageIO
   /// applies the orientation only when it makes a thumbnail, so this asks for
   /// a "thumbnail" as large as the picture itself.
-  private static func orientedImage(from source: CGImageSource) -> CGImage? {
+  static func orientedImage(from source: CGImageSource) -> CGImage? {
     guard
       let properties = CGImageSourceCopyPropertiesAtIndex(source, 0, nil) as? [CFString: Any],
       let width = properties[kCGImagePropertyPixelWidth] as? Int,

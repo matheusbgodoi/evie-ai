@@ -56,6 +56,10 @@ final class OverlayViewModel: ObservableObject {
   func dismissCommandMenu() {
     isCommandMenuDismissed = true
   }
+  @Published var isCompactingConversation = false
+  @Published var contextUsageDescription: String?
+  let contextCompaction = EvieConversationCompaction()
+  var contextResetTask: Task<Void, Never>?
   @Published private(set) var activeConversationID = UUID()
   // Not `private(set)`: the turn machinery that writes this lives in a sibling
   // file now, and `private(set)` is scoped to the file. Still internal, so
@@ -212,6 +216,9 @@ final class OverlayViewModel: ObservableObject {
   /// Switches agent mode from the chip's menu. Set by the coordinator, which
   /// saves the preference; nil leaves the item out.
   var onSetAgentMode: (@MainActor (Bool) -> Void)?
+  var onSetBrainReasoning: (@MainActor (String, ReasoningLevel) -> Void)?
+  var onBrainChoiceChanged: (@MainActor (EvieBrainChoice) throws -> Void)?
+  var onSetWebSearch: (@MainActor (Bool) -> Void)?
   /// Opens Settings on a section, from the chip's menu.
   var onOpenSettingsSection: (@MainActor (EvieSettingsSection) -> Void)?
   /// The wake question on screen and the turn waiting for its answer.
@@ -245,6 +252,9 @@ final class OverlayViewModel: ObservableObject {
   /// Looks at the screen: permission, the presence glow, the capture. Set by
   /// the coordinator; `nil` in a build that cannot capture.
   var screenLook: EvieScreenLook?
+  /// A separate research turn shares the observer/executor and must not race
+  /// a chat turn, a one-shot capture or a second agent session.
+  var isResearchBusy: @MainActor () -> Bool = { false }
   /// Opens Privacy & Security › Screen & System Audio Recording.
   var openScreenRecordingSettings: (@MainActor () -> Void)?
   /// A capture taken with the shortcut, waiting for the question it belongs
@@ -350,7 +360,18 @@ final class OverlayViewModel: ObservableObject {
     onLayoutInvalidated?()
   }
 
+  func resetContextCompaction() {
+    contextUsageDescription = nil
+    isCompactingConversation = false
+    let previous = contextResetTask
+    contextResetTask = Task { [contextCompaction] in
+      await previous?.value
+      await contextCompaction.reset()
+    }
+  }
+
   func startNewConversation() {
+    resetContextCompaction()
     if hasActiveRequest {
       cancelCurrentInteraction()
     }
@@ -383,6 +404,7 @@ final class OverlayViewModel: ObservableObject {
 
   @discardableResult
   func openConversation(id: UUID) async -> Bool {
+    resetContextCompaction()
     if hasActiveRequest {
       cancelCurrentInteraction()
     }
@@ -898,7 +920,7 @@ final class OverlayViewModel: ObservableObject {
       onStopRequested?()
       return
     }
-    guard !prompt.isEmpty, !hasActiveRequest else {
+    guard !prompt.isEmpty, !hasActiveRequest, !isResearchBusy() else {
       NSSound.beep()
       return
     }
@@ -1120,6 +1142,7 @@ final class OverlayViewModel: ObservableObject {
   }
 
   func cancelCurrentInteraction() {
+    resetContextCompaction()
     guard activeRequestID != nil else {
       return
     }

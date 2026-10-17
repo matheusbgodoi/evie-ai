@@ -60,7 +60,13 @@ struct EvieOverlayView: View {
       onTestConnection: { viewModel.testBrainConnection() },
       onNewConversation: { viewModel.startNewConversation() },
       onSetAgentMode: viewModel.onSetAgentMode.map { set in { set($0) } },
-      onOpenSettings: viewModel.onOpenSettingsSection.map { open in { open($0) } }
+      onOpenSettings: viewModel.onOpenSettingsSection.map { open in { open($0) } },
+      onSetReasoning: { viewModel.onSetBrainReasoning?(viewModel.brainChip.profile.id, $0) },
+      webEnabled: viewModel.isWebSearchEnabled(),
+      onSetWebSearch: viewModel.onSetWebSearch.map { set in { set($0) } },
+      isBusy: viewModel.hasActiveRequest || viewModel.isResearchBusy(),
+      contextUsage: viewModel.contextUsageDescription,
+      isCompacting: viewModel.isCompactingConversation
     )
   }
 }

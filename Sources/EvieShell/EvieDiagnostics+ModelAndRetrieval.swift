@@ -261,47 +261,56 @@ extension EvieDiagnostics {
   }
 
   static func webCheck(query: String) async {
+    setvbuf(stdout, nil, _IOLBF, 0)
     let client = EvieWebClient()
-    print("buscando: \(query)")
-    let started = Date()
-
-    let results: [EvieSearchResult]
+    var lines = ["Evie web: synthetic/live query → public DNS pin → bounded text"]
+    func report(_ line: String) {
+      lines.append(line)
+      print(line)
+    }
+    defer { writeLog(lines, named: "web-check.log") }
+    var passed = true
+    let started = ContinuousClock.now
     do {
-      results = try await client.search(query)
-    } catch {
-      print("BUSCA falhou: \((error as? LocalizedError)?.errorDescription ?? "\(error)")")
-      return
-    }
-    print(String(format: "BUSCA: %d resultados em %.1f s", results.count, Date().timeIntervalSince(started)))
-    for result in results.prefix(3) {
-      print("  · \(result.title)")
-      print("    \(result.url)")
-    }
-
-    guard let first = results.first else {
-      return
-    }
-    do {
+      let results = try await client.search(query)
+      report("search results: \(results.count); elapsed: \(started.duration(to: .now))")
+      guard let first = results.first else {
+        report("RESULTADO: falhou — busca não trouxe resultados verificáveis.")
+        return
+      }
+      report("first source: \(first.url)")
       let text = try await client.read(first.url)
-      print("LER PÁGINA: \(text.count) caracteres de \(first.url)")
-      print("  início: \(text.prefix(160).replacingOccurrences(of: "\n", with: " "))…")
+      report("read page: \(text.count) characters; source: \(first.url)")
+      passed = !text.isEmpty
     } catch {
-      print("LER falhou: \((error as? LocalizedError)?.errorDescription ?? "\(error)")")
+      report(
+        "public search/read failure [\(String(describing: type(of: error)))]: \(error.localizedDescription)"
+      )
+      passed = false
     }
-
-    // The guard that matters more than the feature.
-    print("")
-    print("endereços recusados:")
     for address in [
-      "http://127.0.0.1:38433/v1/models",
-      "http://localhost/admin",
-      "http://192.168.1.1",
-      "http://169.254.169.254/latest/meta-data/",
-      "file:///etc/passwd",
-      "http://10.0.0.5",
+      "http://127.0.0.1/", "http://localhost/", "http://192.168.1.1/",
+      "http://169.254.169.254/latest/meta-data/", "file:///etc/passwd",
+      "http://10.0.0.5/", "http://100.64.0.1/", "http://[::1]/",
+      "http://[::ffff:127.0.0.1]/", "http://0177.0.0.1/",
     ] {
-      print("  \(EvieWebClient.validate(address) == nil ? "recusado" : "ACEITOU — BUG") \(address)")
+      do {
+        _ = try await client.read(address)
+        report("FAIL: forbidden destination accepted")
+        passed = false
+      } catch EviePublicWebError.unsafeAddress {
+        report("PASS: public policy rejected synthetic forbidden destination")
+      } catch EvieWebClient.WebError.unsafeAddress {
+        report("PASS: URL policy rejected synthetic forbidden destination")
+      } catch {
+        report(
+          "FAIL: unexpected error while checking forbidden destination: \(error.localizedDescription)"
+        )
+        passed = false
+      }
     }
+    report("total: \(started.duration(to: .now))")
+    report(passed ? "RESULTADO: passou" : "RESULTADO: falhou")
   }
 
   /// Compares taking a prefix of one page against selecting passages from three.
@@ -318,7 +327,10 @@ extension EvieDiagnostics {
       print("busca não trouxe nada")
       return
     }
-    print(String(format: "busca: %d resultados em %.1f s", results.count, Date().timeIntervalSince(searchStart)))
+    print(
+      String(
+        format: "busca: %d resultados em %.1f s", results.count,
+        Date().timeIntervalSince(searchStart)))
 
     // What the previous version sent.
     let oldStart = Date()
@@ -349,8 +361,10 @@ extension EvieDiagnostics {
     }
     if total > 0, prefix.count > 0 {
       print("")
-      print(String(format: "prompt: %.0f%% do tamanho anterior, de %d fontes em vez de 1",
-                   Double(total) / Double(prefix.count) * 100, sources.count))
+      print(
+        String(
+          format: "prompt: %.0f%% do tamanho anterior, de %d fontes em vez de 1",
+          Double(total) / Double(prefix.count) * 100, sources.count))
     }
   }
 
@@ -362,7 +376,8 @@ extension EvieDiagnostics {
 
     let matched = EvieSkillLibrary.matching(question, in: installed)
     print("pergunta: \(question)")
-    print("carregou: \(matched.isEmpty ? "(nenhuma)" : matched.map(\.name).joined(separator: ", "))")
+    print(
+      "carregou: \(matched.isEmpty ? "(nenhuma)" : matched.map(\.name).joined(separator: ", "))")
     guard let guidance = EvieSkillLibrary.guidance(for: matched) else {
       print("→ nenhuma habilidade se aplica; ela responde normalmente")
       return
@@ -405,7 +420,8 @@ extension EvieDiagnostics {
 
     var started = Date()
     let passages = EvieVaultIndex.collect(from: [root])
-    print(String(format: "%d passagens em %.1f s", passages.count, Date().timeIntervalSince(started)))
+    print(
+      String(format: "%d passagens em %.1f s", passages.count, Date().timeIntervalSince(started)))
 
     started = Date()
     let vectors = passages.map { embedder.vector(for: $0.searchableText) }
@@ -443,7 +459,9 @@ extension EvieDiagnostics {
       print("— \(question)")
       started = Date()
       let found = retriever.retrieve(question, from: passages, vectors: vectors, limit: 3)
-      print(String(format: "  %d trechos em %.0f ms", found.count, Date().timeIntervalSince(started) * 1000))
+      print(
+        String(
+          format: "  %d trechos em %.0f ms", found.count, Date().timeIntervalSince(started) * 1000))
       for item in found {
         let how = [
           item.matchedByWords ? "palavras" : nil,

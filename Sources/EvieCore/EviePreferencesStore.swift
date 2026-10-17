@@ -56,17 +56,19 @@ public struct EviePreferencesStore: Sendable {
       return (EviePreferences(), .unsupportedSchemaVersion(document.schemaVersion))
     }
 
+    let defaults = EviePreferences()
     var preferences = EviePreferences(
       appearance: document.appearance ?? EvieAppearancePreferences(),
       shortcuts: document.shortcuts ?? EvieShortcutPreferences(),
       voice: document.voice ?? EvieVoicePreferences(),
-      fileChangesEnabled: document.fileChangesEnabled ?? false,
-      autoApproveChanges: document.autoApproveChanges ?? false,
-      webSearchEnabled: document.webSearchEnabled ?? false,
-      mailAndCalendarEnabled: document.mailAndCalendarEnabled ?? false,
-      computerUseEnabled: document.computerUseEnabled ?? false,
+      brainChoice: document.brainChoice ?? defaults.brainChoice,
+      fileChangesEnabled: document.fileChangesEnabled ?? defaults.fileChangesEnabled,
+      autoApproveChanges: document.autoApproveChanges ?? defaults.autoApproveChanges,
+      webSearchEnabled: document.webSearchEnabled ?? defaults.webSearchEnabled,
+      mailAndCalendarEnabled: document.mailAndCalendarEnabled ?? defaults.mailAndCalendarEnabled,
+      computerUseEnabled: document.computerUseEnabled ?? defaults.computerUseEnabled,
       computerUseConsentGiven: document.computerUseConsentGiven ?? false,
-      savesDocumentsWhenAsked: document.savesDocumentsWhenAsked ?? false
+      savesDocumentsWhenAsked: document.savesDocumentsWhenAsked ?? defaults.savesDocumentsWhenAsked
     )
 
     do {
@@ -96,6 +98,7 @@ public struct EviePreferencesStore: Sendable {
       appearance: preferences.appearance,
       shortcuts: preferences.shortcuts,
       voice: preferences.voice,
+      brainChoice: preferences.brainChoice,
       fileChangesEnabled: preferences.fileChangesEnabled,
       autoApproveChanges: preferences.autoApproveChanges,
       webSearchEnabled: preferences.webSearchEnabled,
@@ -166,6 +169,7 @@ extension EviePreferencesStore {
       case appearance
       case shortcuts
       case voice
+      case brainChoice = "brain_choice"
       case fileChangesEnabled = "file_changes_enabled"
       case autoApproveChanges = "auto_approve_changes"
       case webSearchEnabled = "web_search_enabled"
@@ -179,6 +183,7 @@ extension EviePreferencesStore {
     let appearance: EvieAppearancePreferences?
     let shortcuts: EvieShortcutPreferences?
     let voice: EvieVoicePreferences?
+    let brainChoice: EvieBrainChoice?
     let fileChangesEnabled: Bool?
     let autoApproveChanges: Bool?
     let webSearchEnabled: Bool?
@@ -191,7 +196,7 @@ extension EviePreferencesStore {
     let computerUseEnabled: Bool?
     /// Absent before S5d (2026-10-16): the consent was never given.
     let computerUseConsentGiven: Bool?
-    /// Absent before ADR 0019 (2026-10-16): off.
+    /// Missing keys use the current owner-selected default (ADR 0022).
     let savesDocumentsWhenAsked: Bool?
   }
 }

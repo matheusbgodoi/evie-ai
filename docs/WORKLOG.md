@@ -1,5 +1,118 @@
 # Work log
 
+## 2026-10-17 — bounded Mail, enhanced native voice and responsive Keychain status
+
+- Reproduced Mail's unbounded inbox materialization under the real application;
+  replaced search/read candidate enumeration with bounded batch pages of up to
+  80 items and 20 results, explicit partial scope and validated continuation.
+  Complete suite passed 1,542 tests / 145 suites in 23.807 s, with one intentional
+  known timeout-injection case. After whitespace-only literal cleanup, real
+  AppleScript compilation, strict lint and 51 affected tests passed (23.999 s).
+- Installed a signed validation candidate without changing its designated
+  requirement, preserving local endpoint/credential references. Private migration
+  set operational contexts to PC200704/Mac131072, measured runtime controls,
+  recommended samplers, reasoning off and the requested existing capabilities.
+  A final rebuild/install after subsequent corrections is still required.
+- Installed Luciana Aprimorada through public System Settings. The installed
+  candidate selected it automatically from 10 public pt-BR voices (one enhanced),
+  produced 58,599 frames / 2.658 s audio in 0.291 s synthesis and passed real
+  synthetic transcription, cancellation and temporary calibration checks.
+  Personal wake enrollment still needs the owner's five actual calls.
+- Found an actual Settings freeze behind a legitimate login-Keychain prompt:
+  even an attributes-only synchronous lookup blocked MainActor. The real VM
+  regression first failed with the blocked lookup, then passed after introducing
+  one serial background status queue, cached checking state, coalescing and
+  generation/reference guards. Focused Core: 38 tests / 4 suites passed in
+  0.046 s. Settings/guide integration still requires the final package build.
+- The pending password authorization is handled only by the owner in the OS
+  dialog. No password collection, TCC database modification or unlock bypass.
+  Core permissions were granted; public Settings showed Calendar authorized and
+  Mail not yet listed. Calendar was restored closed before host test execution;
+  host automation permissions and the signed Evie's permissions are separate.
+- Added an optional real-agent planning branch to the isolated offline-form
+  diagnostic. It shares production goal instructions and uses only its own
+  fixture's pixels, a named clipboard and the bounded executor. The independent
+  readback oracle never supplies the answer to the model. Actual final execution
+  remains a gate; the earlier deterministic pipeline is reported separately.
+- Reconciled the current README's provider privacy and enabled defaults, marked
+  older project-status checkpoints historical and added sanitized enhanced-voice
+  evidence. Eleven modified shell scripts passed syntax checks; relative Markdown
+  links had no missing destinations and the source privacy scan found no owner
+  network patterns. Final artifact/ancestry scans are separate release gates.
+
+
+## 2026-10-17 — LensVLM 131K qualified on the target Mac
+
+- The coordinating run completed the synthetic long-context qualification:
+  127,527 input + 38 output tokens, exact retrieval of all five target items,
+  2.4 GiB minimum sampled free memory (10% margin), 13.8 GiB MLX-reported peak memory,
+  392.31 seconds. These results qualify the measured 131,072-token operating
+  setting, not every workload or the nominal 262,144 architecture.
+- Root synchronized client context/runtime maxKVSize to 131,072, eight-bit KV,
+  prefill step 512, allocator cache 256 MiB and profile timeout 900 seconds.
+  Current README/architecture/status/changelog/tasks/design now record the actual
+  result; the earlier pending-baseline entry below remains historical.
+- Replaced only the Lens capacity placeholder in the 2.0.0 release draft, linking
+  MODEL_TUNING. The coordinating agent is running the final full suite after the
+  defaults change; final suite/resource placeholders and install/publication
+  claims remain gated on their actual results. No code/build was run by this
+  documentation update.
+
+
+## 2026-10-17 — final v2 source candidate, context and real-boundary regressions
+
+- Reconciled current README, architecture, design amendment, task checkpoint,
+  changelog and project status without rewriting dated older findings. ADRs
+  0026/0027 describe adaptive context/compaction and pinned public web transport.
+  PC operational context is 200,704 tokens. LensVLM retains its 32,768-token
+  source baseline while the 131,072-token candidate is qualified on this Mac;
+  successful loading or argv inspection does not qualify a context capacity.
+- Automatic compaction prepares an in-memory request, preserving the complete
+  visible history/current question and visual provenance. Core cache/cancellation
+  cases passed; the real PC synthetic probe reduced 46,247 to 16,374 characters
+  within 32,768, retained the tested old fact and reused its summary.
+- Independently reviewed saveKey and reproduced a stale-write failure with the
+  production view model and real temporary JSON store. Fixed persistence to only
+  the captured endpoint and credential; rebase preserves current unsaved fields,
+  preference/fallback/selection and edits made during await. Busy guard preserves
+  newly pasted text. A newer-schema failure leaves its bytes intact and explains
+  a partial Keychain save. Three rebase tests passed; standalone VM regression
+  passed. Keychain storage is deliberately in memory for this fixture.
+- Independently reviewed local runtime reconciliation and implemented
+  `Scripts/local-brain-validation`: production launcher/process inspector with
+  ephemeral ports and isolated PID/log/key state; real HTTP auth, 32K/A→64K/B,
+  model-only restart, identical-profile reuse, old-key rejection, foreign listener
+  preserved, actual MLX allocator limit 268,435,456 bytes. Passed in 7.70 s,
+  including standalone swiftc. The fixture loads no model weights; method in
+  `docs/LOCAL_BRAIN_VALIDATION.md` distinguishes this from model qualification.
+- Standalone scripts prefer the current aggregate `EvieCore.o`: the core-only
+  build updates module/object but can leave `libEvieCore.a` stale. The initial
+  link failure exposed the mismatch; both standalone regressions then passed.
+- Real public web search/read completed on synthetic Swift.org query; web wire
+  tests cover DNS cancellation/pinning, redirects, gzip expansion, bounded stream
+  and cancellation. Existing repository image OCR checked 20 PNG/JPEG against
+  three private patterns held only in memory: no matches/errors, no desktop capture.
+- Native speech/wake, restrictive research, visual identity and AppIntents evidence
+  are linked from PROJECT_STATUS. Earlier signed/research checkpoints are labeled
+  as such rather than substituted for the final bundle's checks.
+- Final source integration is the release candidate. The coordinating agent is
+  running the complete suite; final context qualification, signed-bundle checks,
+  resource measurements, installation and sanitized public release are not claimed
+  complete by this entry. Final evidence is recorded in PROJECT_STATUS and the
+  persistent root delivery ledger. The release-notes draft has explicit final
+  metric placeholders; private v2 ancestry remains local.
+- Release hardening by the coordinator: `Scripts/evie-release` refuses a branch
+  other than main before writes/build/push and requires the public origin/main
+  ancestry. An actual invocation on the private v2-research branch was refused
+  as expected. This delivery still uses a sanitized snapshot, never the private
+  development HEAD. Updated microphone usage copy to describe native ASR and
+  optional wake listening; removed the generic post-install TCC-reset suggestion.
+  No TCC reset was performed.
+- Documentation checks: the existing CI relative-Markdown-link validator passed
+  across the repository; `git diff --check` passed. No SwiftPM build or source
+  edit was performed for this reconciliation.
+
+
 ## 2026-10-16 — two leftovers from the brain chip work
 
 - Completed: the Codable decoder of EviePreferences now reads a missing
@@ -1484,7 +1597,7 @@
   - Docs: design doc "Implemented" note, `ARCHITECTURE.md`, `SECURITY.md`,
     CHANGELOG, `PROJECT_STATUS.md`.
 - Verified 2026-10-16 from this Mac (M5, macOS 27.2), read-only against
-  `https://ai-node-3090.tail6146ef.ts.net` with qwen-daily resident: `/health`
+  `https://models.example.invalid` with qwen-daily resident: `/health`
   at the origin, no key, 200 in 37 ms; `/v1/health` 404; `/v1/models` 200 in
   69 ms and `/running` 200 in 31 ms with the key, both 401 without it or with a
   wrong one. Load states recorded: qwen-daily and qwen-uncensored `loaded` /
@@ -1699,7 +1812,7 @@
     class, its error type (`OpenAICompatibleClientError`) and every use are
     renamed with no typealias. Error copy says "the model server".
   - New `Sources/EvieCore/ModelTransportPolicy.swift`: http only to loopback;
-    https plus an exact allowlist (default `ai-node-3090.tail6146ef.ts.net`; one
+    https plus an exact allowlist (default `models.example.invalid`; one
     wildcard form, `*.<tailnet>.ts.net`, one label) plus a credential bound to
     the host for anything else; no userinfo in URLs.
   - New `Sources/EvieCore/EvieCredentialProviding.swift`: `CredentialReference`,

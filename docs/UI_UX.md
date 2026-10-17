@@ -1,8 +1,12 @@
 # Native interface and interaction model
 
-Status: VS-003 identity, window control, and the animated mark are source
-implemented; target interaction acceptance is `QA-006`. CLUI CC is a UX reference,
-not a runtime dependency.
+Current review: 2026-10-17. Evie v2 has a native overlay, configurable shortcuts,
+voice, history, a settings sidebar, screen capture and agent sessions. The brain
+control is a 30-point button with an anchored popover. New floating surfaces use
+native Liquid Glass; reading surfaces retain a thicker material and an opaque
+accessibility fallback. CLUI CC and Siri are design references, without runtime
+dependencies on either implementation. See [Apple visual identity](APPLE_VISUAL_IDENTITY.md)
+and [research validation](RESEARCH_VALIDATION.md) for measured checks and limits.
 
 ## Product stance
 
@@ -10,6 +14,25 @@ Evie is not primarily a chat application. The default interface is a transient,
 always-available macOS HUD for voice, quick text, status, artifacts, and approvals.
 Conversation history exists, but it is opened deliberately rather than occupying a
 permanent window.
+
+## Current voice and permission state
+
+Wake listening is enabled by default at the owner's explicit request (ADR 0022).
+While armed, it captures microphone input for local recognition and retains the
+system indicator; a quiet HUD does not mean the microphone is closed. Its
+control, push-to-talk, spoken replies and call mode remain separate settings.
+Emergency stop and research isolation disarm the listener. Five-call owner
+calibration remains a user recording step; a synthetic speech diagnostic cannot
+complete it.
+
+The installed-candidate voice check now selects public **Luciana Aprimorada**:
+10 usable Brazilian voices, one enhanced, verified with actual synthesis and
+recognition. That improves the available voice catalog without claiming access
+to Siri's private voices. Permission indicators remain based on real OS state:
+the inspected Automation page already allowed Calendar, while Mail still needed
+its own request. These are checkpoint observations; final release and grant
+results belong in [PROJECT_STATUS](PROJECT_STATUS.md), with detailed voice
+[evidence](NATIVE_VOICE.md).
 
 ## CLUI CC research
 
@@ -98,44 +121,50 @@ needed for the current state:
 ### Quick text pill
 
 A separate configurable shortcut opens a single-line or short multiline command
-field. It submits without opening history. Representative defaults for prototyping:
+field. It submits without opening history. Current defaults, configurable in
+Configurações → Atalhos:
 
-- `Option-Space`: show or dismiss the passive overlay in VS-001; it is reserved for
-  push-to-talk after the voice phase;
+- `Option-Space`: show or dismiss the overlay, ready to type;
 - `Option-Shift-Space`: quick text;
-- `Escape`: cancel or dismiss;
-- `Command-Enter`: approve/commit the selected action;
-- a separate shortcut: full history/control center.
+- `Option-V`: push-to-talk while held;
+- `Option-Shift-H`: history;
+- `Option-Shift-O`: attach a screen capture to the next question;
+- `Control-Option-Shift-P`: open research consent, or stop an armed session;
+- `Control-Option-Shift-K`: run one task inside an armed research session;
+- `Option-Shift-Escape`: stop all work. Sensitive confirmations require a real
+  hand click and are never approved by a keyboard shortcut.
 
 All shortcuts remain configurable and must be tested against Spotlight, input
 methods, editors, and accessibility tools.
 
-VS-002 opens the field at shell launch, uses `Option-Space` as its primary
+The original VS-002 prototype opened the field at shell launch, used `Option-Space` as its primary
 open/hide shortcut, submits with `Return`, closes with `Escape`, and exposes stream
 cancellation in the capsule. After completion, the answer card stays visible and a
 new focused field returns for a follow-up. `Option-Shift-Space` remains a temporary
 secondary text shortcut until the voice phase. Shortcuts are fixed in source for
-the prototype; persistence and conflict preferences belong to `UI-009`.
+that historical prototype. The current shortcut settings persist overrides,
+show conflicts, allow disabling individual bindings and retain menu access.
 
 ### The brain chip (2026-10-16)
 
-The owner asked "como eu sei quando é o Qwen e quando é o LLM local do Mac?".
-The input bar (and the voice capsule) carries a small chip, left of the
-paperclip: the brain the next question goes to, named from its profile
-(`EvieModelProfile.chipTitle`: "Qwen 3.8 · PC", "LensVLM · Mac"), and a dot —
+The input bar and voice capsule carry a fixed-width circular brain button, left
+of the paperclip, preserving the writing area. Its small state dot is
 filled green ready, a yellow ring cold (the PC's model unloaded, or the Mac
 brain asleep), a breathing yellow dot while the Mac brain wakes, red with a
 cross unreachable (no key, refused, out), a gray ring not yet probed. The
-tooltip and VoiceOver say the state in words (`EvieBrainChip`). While agent
-mode is on, an amber "Agente" pill sits inside the chip.
+tooltip and VoiceOver say the model and state in words (`EvieBrainChip`). While
+agent mode is enabled, the button gains an amber outline; no model name or
+"Agente" text occupies the input field.
 
-Clicking it opens a menu: "Próximas conversas" — Automático (the preference
-order, "PC, depois Mac"), Sempre o PC, Sempre o Mac — then, when the open
-conversation is pinned elsewhere, a note and "Começar nova conversa"; "Testar
-conexão" (the answer goes on the status line); "Raciocínio: …" which opens
-Configurações › Cérebro; "Modo agente (controlar o Mac)" and "Tela e modo
-agente…". The choice goes through `EvieBrainResolver.choose(_:)`, lasts for
-the app session, and never moves a conversation already pinned.
+Clicking opens an anchored popover with the model name, connection state and
+connection-test button, Automático / Sempre o PC / Sempre o Mac, inline reasoning
+level, agent-mode and web-search toggles. It also shows the selected profile's
+context and output limits, last-send token usage with its source, and automatic
+compaction state. Estimates are identified as estimates. Model and reasoning
+controls are disabled while a task or compaction is running. Changing model explicitly clears this
+conversation's old pin, so the next answer follows the choice; history is
+preserved. The app-session choice goes through `EvieBrainResolver.choose(_:)`.
+Enabling agent mode permits requested sessions; it does not continuously act.
 
 Every answer card names its model and place beside "RESPOSTA", quietly
 ("Qwen 3.8 · no seu PC"); a card restored from history does not know it and
@@ -228,25 +257,19 @@ confirmed by its target.
 
 ## Evie's mark
 
-The logo is a key drawn in ASCII. It is rendered into a `Canvas` with explicitly
-square cells rather than stacked `Text` rows, because a monospaced glyph cell is
-about 1.9 times taller than it is wide and would stretch the drawing. Three grid
-densities exist and are chosen by rendered size: 5×5 below 44 points, 7×7 below
-56, 9×9 above. A 9×9 grid inside a 28-point badge resolves to a 3.4-point font and
-is illegible, so density follows size rather than preference.
+The current HUD mark is a crisp sparkle symbol over an original violet glass
+badge. The application icon is a separate original image packaged reproducibly
+as ICNS. An ASCII key existed in an early prototype and remains historical;
+it does not describe the current 30-point mark.
 
 The mark is also the voice button. Clicking it, holding push-to-talk, and saying
 the wake phrase all enter through one activation path, so the three routes cannot
 drift apart.
 
-Motion is deliberately two layers:
-
-- a `rotation3DEffect` tilt animated by Core Animation, running whenever the
-  overlay is on screen, at effectively no cost because the render server
-  interpolates the transform without re-running the view body;
-- a shading sweep that re-chooses each cell's character from the ramp
-  `" .:-=+*#%@"` every frame, which only runs while Evie is listening, speaking,
-  transcribing, thinking, or using a tool.
+The idle and completed mark does not animate. Active listening, speaking and
+work use Core Animation and measured audio samples. Hover feedback respects
+Reduce Motion. Glass surfaces do not add blur timers, shaders or nested animated
+glass layers. No claim of zero energy is inferred from using Core Animation.
 
 An overlay that is hidden or occluded has no timeline in its view tree at all.
 Ordering the window out is not sufficient — see `docs/MACOS_RUNTIME.md` for the
@@ -393,7 +416,11 @@ ripple becomes one flash of the highlight. VoiceOver hears each state change.
 agent; `--reduced-motion` shows the reduced variants and `--with-esc` takes the
 Esc key as a real session does.
 
-## Prototype sequence
+## Historical prototype sequence
+
+This sequence records the original plan, before voice, wake word and history
+were implemented. Its old phase statuses do not describe the current release;
+current implementation and checks live in [PROJECT_STATUS](PROJECT_STATUS.md).
 
 1. Static overlay with real materials and card layout. **Source implemented.**
 2. Global quick-text shortcut and no-focus-steal behavior. **Source implemented;

@@ -77,9 +77,9 @@ extension OverlayViewModel {
     on brain: ResolvedBrain
   ) async throws {
     let plan = EvieTurnPlan(brain)
-    let messages = conversationPrefix(
+    let messages = try await conversationPrefix(
       adding: ChatMessage(role: .user, content: question),
-      plan: plan
+      plan: plan, client: brain.client
     )
     // No vault, because the whole point is not to consult it. Passing it and
     // ignoring the result would still pay for the retrieval. A capture still

@@ -19,7 +19,7 @@ Gemma/TurboFieldfare measurements remain the record for the Mac-local path.
 Evie's model ran on this Mac, on loopback, with no key: ADR 0006 made "rejects
 non-loopback endpoints" and "carries no credential" part of the adapter's
 contract. Evie v2 moves the default brain to the owner's RTX 3090, served by a
-gateway at `https://ai-node-3090.tail6146ef.ts.net` on the owner's tailnet.
+gateway at `https://models.example.invalid` on the owner's tailnet.
 
 Measured 2026-10-16 from this Mac (M5, macOS 27.2), read-only requests: `GET
 /health` answers 200 with no auth in 49 ms; `GET /v1/models` answers 401 without
@@ -40,7 +40,7 @@ used:
 - `http` and `https` only, and never a URL with a user or password in it;
 - plain `http` only to loopback (`127.0.0.1`, `localhost`, `::1`);
 - every other host needs `https` and an **exact** match in an allowlist whose
-  default is `["ai-node-3090.tail6146ef.ts.net"]`; one wildcard form,
+  default is `["models.example.invalid"]`; one wildcard form,
   `*.<tailnet>.ts.net`, admits a single label inside that one tailnet;
 - a remote host needs a credential **bound to that same host**.
 

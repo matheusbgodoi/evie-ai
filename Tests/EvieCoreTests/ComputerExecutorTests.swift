@@ -23,6 +23,8 @@ struct ComputerExecutorTests {
     var dwellCompletes = true
     var onDwell: () -> Void = {}
     var onType: (String) -> Void = { _ in }
+    var onActing: () -> Void = {}
+    var onInsert: () -> Void = {}
     var pressAnswer: AccessibilityPressResult = .pressed
     var stillThere = true
     var insert: AccessibilityInsertResult = .unavailable
@@ -36,7 +38,16 @@ struct ComputerExecutorTests {
     func click(at point: CGPoint, button: MouseButton, count: Int) {
       journal.append("click \(Self.p(point)) \(button) \(count)")
     }
-    func drag(from start: CGPoint, to end: CGPoint) async {
+    var onDragStep: () -> Void = {}
+    func drag(
+      from start: CGPoint, to end: CGPoint,
+      checking: @MainActor (CGPoint) async throws -> Void
+    ) async throws {
+      try await checking(start)
+      journal.append("drag start")
+      defer { journal.append("drag release") }
+      onDragStep()
+      try await checking(end)
       journal.append("drag \(Self.p(start)) \(Self.p(end))")
     }
     func scroll(at point: CGPoint, dx: Int, dy: Int) {
@@ -63,6 +74,7 @@ struct ComputerExecutorTests {
     }
     func insertText(_ text: String, processID: Int32) async -> AccessibilityInsertResult {
       journal.append("AXInsert \(text)")
+      onInsert()
       return insert
     }
     func focusedValue(ofProcess processID: Int32) async -> String? {
@@ -82,7 +94,10 @@ struct ComputerExecutorTests {
     }
 
     // ComputerActingIndicator
-    func showActing(on display: CGDirectDisplayID) async { journal.append("acting \(display)") }
+    func showActing(on display: CGDirectDisplayID) async {
+      journal.append("acting \(display)")
+      onActing()
+    }
     func lookAt(_ rect: CGRect, on display: CGDirectDisplayID) { journal.append("look") }
     func willClick(at point: CGPoint, on display: CGDirectDisplayID, label: String?) async -> Bool {
       journal.append("dwell \(label ?? "-")")
@@ -103,7 +118,8 @@ struct ComputerExecutorTests {
     }
 
     // ComputerScreenLocating
-    func frontApp() -> ComputerAppIdentity? { nil }
+    var frontmost: ComputerAppIdentity? = ComputerUseFixture.mail
+    func frontApp() -> ComputerAppIdentity? { frontmost }
     func displayUnderPointer() -> CGDirectDisplayID? { 1 }
     func displayFrame(_ display: CGDirectDisplayID) -> CGRect? { ComputerExecutorTests.window }
     func display(containing point: CGPoint) -> CGDirectDisplayID? { 1 }
@@ -125,6 +141,7 @@ struct ComputerExecutorTests {
     let clock: TestClock
     let broker: EvieAgentModeBroker
     let grant: EvieAgentModeGrant
+    var confirmations: [String] = []
     let screen: StubComputer
     let mac = FakeMac()
     let pasteboard = ClipboardSessionTests.MemoryPasteboard([
@@ -139,13 +156,21 @@ struct ComputerExecutorTests {
           sleep: { [mac] in mac.journal.append("restore wait \($0)") }),
         sleep: { [mac] seconds in mac.journal.append("sleep \(seconds)") }))
 
-    init(goal: String = "Salva esse rascunho no Mail", screen observation: ComputerObservation? = nil) {
+    init(
+      goal: String = "Salva esse rascunho no Mail", screen observation: ComputerObservation? = nil,
+      allowsClipboardWrites: Bool = false
+    ) {
       let clock = TestClock()
       self.clock = clock
       broker = EvieAgentModeBroker(policy: Fixture.policy, now: { clock.now })
-      grant = broker.begin(goal: goal, gesture: .button)!
+      grant = broker.begin(
+        goal: goal, gesture: .button, allowsClipboardWrites: allowsClipboardWrites)!
       screen = StubComputer(broker: broker)
-      screen.screens = [observation ?? Fixture.observation(windowFrame: ComputerExecutorTests.window)]
+      screen.screens = [
+        observation ?? Fixture.observation(windowFrame: ComputerExecutorTests.window)
+      ]
+      mac.frontmost = screen.screens[0].frontApp
+      mac.owner = screen.screens[0].frontApp.processID
     }
 
     /// Observes through the executor, registers it, and has the broker
@@ -159,6 +184,7 @@ struct ComputerExecutorTests {
       case .commit(let commit):
         return commit
       case .needsConfirmation(let question):
+        confirmations.append(question.text)
         guard case .commit(let commit) = broker.approve(question, grant: grant, gesture: .button)
         else {
           throw Unexpected.notCommitted
@@ -221,7 +247,8 @@ struct ComputerExecutorTests {
 
   // MARK: - Clicks
 
-  @Test("a listed element is pressed through Accessibility, after the dwell, inside the posting window")
+  @Test(
+    "a listed element is pressed through Accessibility, after the dwell, inside the posting window")
   func pressesElement() async throws {
     let rig = Rig()
 
@@ -387,8 +414,154 @@ struct ComputerExecutorTests {
 
     let result = try await rig.executor.perform(action, commit: commit)
 
-    #expect(result == ActionResult(outcome: .failed, detail: ComputerActionPolicy.passwordFieldRefusal))
+    #expect(
+      result == ActionResult(outcome: .failed, detail: ComputerActionPolicy.passwordFieldRefusal))
     #expect(!rig.mac.journal.contains { $0.hasPrefix("type") || $0.hasPrefix("AXInsert") })
+  }
+
+  @Test("a focus switch during the dwell prevents both AXPress and pointer fallback")
+  func focusChangesDuringDwell() async throws {
+    let rig = Rig()
+    rig.mac.onDwell = {
+      rig.screen.live = { _ in
+        ComputerLiveState(frontApp: nil, secureInputEnabled: false, focusedFieldIsSecure: false)
+      }
+    }
+
+    let result = try await rig.perform(Self.saveDraft)
+
+    #expect(result.outcome == .failed)
+    #expect(!rig.mac.journal.contains { $0.hasPrefix("AXPress") || $0.hasPrefix("click") })
+  }
+
+  @Test("a listed element whose fallback point is covered by another app is not clicked")
+  func fallbackChecksWindowOwner() async throws {
+    let rig = Rig()
+    rig.mac.pressAnswer = .notPressable
+    rig.mac.owner = 4_242
+
+    let result = try await rig.perform(Self.saveDraft)
+
+    #expect(result.outcome == .failed)
+    #expect(!rig.mac.journal.contains { $0.hasPrefix("click") })
+  }
+
+  @Test("a pointer window changing during the dwell is rechecked")
+  func pointerOwnerChangesDuringDwell() async throws {
+    let rig = Rig()
+    rig.mac.onDwell = { rig.mac.owner = 4_242 }
+
+    let result = try await rig.perform(
+      .click(.normalized(x: 500, y: 500, observationID: "obs-1"), button: .left, count: 1))
+
+    #expect(result.outcome == .failed)
+    #expect(!rig.mac.journal.contains { $0.hasPrefix("click") })
+  }
+
+  @Test("secure input becoming active while showing the indicator prevents a key chord")
+  func secureInputChangesBeforeKeyPosting() async throws {
+    let rig = Rig()
+    rig.mac.onActing = {
+      rig.screen.live = { observation in
+        ComputerLiveState(
+          frontApp: observation?.frontApp, secureInputEnabled: true, focusedFieldIsSecure: false)
+      }
+    }
+
+    let result = try await rig.perform(.pressKeys(KeyChord(parsing: "cmd+n")!))
+
+    #expect(result.outcome == .failed)
+    #expect(!rig.mac.journal.contains { $0.hasPrefix("keys") })
+  }
+
+  @Test(
+    "secure input or a secure field appearing between text chunks stops the remaining text",
+    arguments: [true, false])
+  func secureInputChangesBetweenChunks(global: Bool) async throws {
+    let rig = Rig()
+    rig.executor.typingMode = .keys
+    rig.mac.onType = { _ in
+      rig.screen.live = { observation in
+        ComputerLiveState(
+          frontApp: observation?.frontApp, secureInputEnabled: global, focusedFieldIsSecure: !global
+        )
+      }
+    }
+
+    let result = try await rig.perform(.typeText(String(repeating: "a", count: 45)))
+
+    #expect(result.outcome == .failed)
+    #expect(rig.mac.journal.filter { $0.hasPrefix("type ") }.count == 1)
+  }
+
+  @Test("losing focus during AX insertion fallback prevents paste and preserves the clipboard")
+  func focusChangesBeforePaste() async throws {
+    let rig = Rig()
+    rig.mac.onInsert = {
+      rig.screen.live = { _ in
+        ComputerLiveState(frontApp: nil, secureInputEnabled: false, focusedFieldIsSecure: false)
+      }
+    }
+
+    let result = try await rig.perform(.typeText("ação"))
+
+    #expect(result.outcome == .failed)
+    #expect(!rig.mac.journal.contains("keys ⌘V"))
+    #expect(rig.pasteboard.stored == [PasteboardItemSnapshot(text: "do Matheus")])
+  }
+
+  @Test("the synchronous frontmost process is checked even when AX returned an old app")
+  func locatorChangesAfterAXRead() async throws {
+    let rig = Rig()
+    rig.mac.onDwell = { rig.mac.frontmost = Fixture.terminal }
+
+    let result = try await rig.perform(Self.saveDraft)
+
+    #expect(result.outcome == .failed)
+    #expect(!rig.mac.journal.contains { $0.hasPrefix("AXPress") || $0.hasPrefix("click") })
+  }
+
+  @Test("a window moving during the dwell prevents the pointer fallback")
+  func windowMovesDuringDwell() async throws {
+    let rig = Rig()
+    rig.mac.pressAnswer = .notPressable
+    rig.mac.onDwell = { rig.mac.window = Self.window.offsetBy(dx: 80, dy: 0) }
+
+    let result = try await rig.perform(Self.saveDraft)
+
+    #expect(result.outcome == .failed)
+    #expect(!rig.mac.journal.contains { $0.hasPrefix("click") })
+  }
+
+  @Test("a focus switch during a drag stops its remaining movement")
+  func focusChangesDuringDrag() async throws {
+    let rig = Rig()
+    rig.mac.onDragStep = { rig.mac.frontmost = Fixture.terminal }
+
+    let result = try await rig.perform(
+      .drag(
+        from: .normalized(x: 200, y: 500, observationID: "obs-1"),
+        to: .normalized(x: 300, y: 700, observationID: "obs-1")))
+
+    #expect(result.outcome == .failed)
+    #expect(rig.mac.journal.contains("drag start"))
+    #expect(rig.mac.journal.contains("drag release"))
+    #expect(!rig.mac.journal.contains { $0.hasPrefix("drag (") })
+  }
+
+  @Test("revoking a drag is checked again before another movement")
+  func revokedDuringDrag() async throws {
+    let rig = Rig()
+    rig.mac.onDragStep = { rig.broker.revoke() }
+
+    await #expect(throws: ComputerUseError.sessionEnded) {
+      try await rig.perform(
+        .drag(
+          from: .normalized(x: 200, y: 500, observationID: "obs-1"),
+          to: .normalized(x: 300, y: 700, observationID: "obs-1")))
+    }
+    #expect(rig.mac.journal.contains("drag release"))
+    #expect(!rig.mac.journal.contains { $0.hasPrefix("drag (") })
   }
 
   // MARK: - Keys
@@ -526,5 +699,29 @@ struct ComputerExecutorTests {
     #expect(rig.pasteboard.stored == [PasteboardItemSnapshot(text: "um parágrafo")])
     #expect(rig.mac.journal == ["copied notice"])
     #expect(result.outcome == .changed)
+    #expect(rig.confirmations.count == 1)
+    #expect(rig.confirmations[0].hasSuffix("um parágrafo"))
+  }
+
+  @Test("clipboard output consent is scoped to the internally minted session")
+  func explicitlyAuthorizedClipboardWrite() async throws {
+    let rig = Rig(goal: "Copiar a resposta da pesquisa", allowsClipboardWrites: true)
+
+    let result = try await rig.perform(.writeClipboard("resposta autorizada"))
+
+    #expect(result.outcome == .changed)
+    #expect(rig.grant.allowsClipboardWrites)
+    #expect(rig.confirmations.isEmpty)
+    #expect(rig.pasteboard.stored == [PasteboardItemSnapshot(text: "resposta autorizada")])
+  }
+
+  @Test("clipboard output consent does not authorize clipboard reading")
+  func clipboardWriteConsentDoesNotPermitRead() async throws {
+    let rig = Rig(goal: "Copiar a resposta da pesquisa", allowsClipboardWrites: true)
+
+    _ = try await rig.perform(.readClipboard)
+
+    #expect(rig.confirmations.count == 1)
+    #expect(rig.confirmations[0].contains("Ler"))
   }
 }

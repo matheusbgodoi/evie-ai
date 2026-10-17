@@ -100,20 +100,21 @@ having written nothing. What is true today:
   rather than by path-string checks. Writing exists and proposes: the tool the
   model calls performs nothing, and a person presses the button. Deleting means
   the Trash. Since ADR 0019 (2026-10-16): a new document (`propose_document`)
-  is a card with Salvar, or — only under the opt-in "Salvar direto quando eu
-  pedir explicitamente", when the person's own message asked to save — a new
+  is a card with Salvar, or — under "Salvar direto quando eu pedir
+  explicitamente" (enabled by default at the owner's request, ADR 0022),
+  when the person's own message asked to save — a new
   file written by the shell after the turn; it never overwrites. `open_file` and
   `reveal_in_finder` act without a card, inside authorised folders, opening
   only documents from an allowlist. Mesa, Documentos, Downloads and the
   Obsidian vault can be granted by a one-click card the person presses.
-- **Web**: off by default, and the one switch in the application that changes what
-  leaves the Mac. Addresses that are not the public web — loopback, private
+- **Web**: enabled by default at the owner's request (ADR 0022); requests leave
+  the Mac when this capability is used. Addresses that are not the public web — loopback, private
   ranges, `.local`, the cloud metadata endpoint — are refused before any request
   is made.
 - **Retrieval**: over authorised folders only, into a cache under Application
   Support. Retrieved text is fenced as data.
-- **Apple Events**: Mail and Calendar are reached through `osascript`, off by
-  default. Three tools read — two of mail, one of the calendar — and two propose:
+- **Apple Events**: Mail and Calendar are reached through `osascript`, enabled
+  by default at the owner's request (ADR 0022), subject to real macOS grants. Three tools read — two of mail, one of the calendar — and two propose:
   `propose_event` and, since `6dade94`, `propose_mail`. Neither performs
   anything. The functions that create an event, send a message and save a draft
   sit on two protocols the agent loop does not hold. This line has now been wrong
@@ -150,7 +151,7 @@ body and decides where a conversation may go before it sends anything:
 
 - **Allowlist.** Plain `http` only to loopback. Every other host needs `https`
   and an exact match in `ModelTransportPolicy.allowedRemoteHosts`, by default
-  only `ai-node-3090.tail6146ef.ts.net`. The one wildcard accepted is
+  only `models.example.invalid`. The one wildcard accepted is
   `*.<tailnet>.ts.net`, one label inside that tailnet; `*.ts.net` never matches,
   because Tailscale Funnel serves strangers' machines under it. URLs carrying a
   user or password are refused. The web client's private-range check is not
@@ -166,7 +167,7 @@ body and decides where a conversation may go before it sends anything:
   cannot follow a `Location` anywhere; the 3xx is reported as an error.
 - **Configuration names the key's place, not the key.** Since schema v2 the
   built-in PC profile carries the reference `com.matheusbgodoi.evie.model` /
-  `pc-3090`, bound to `ai-node-3090.tail6146ef.ts.net`; the file stores only
+  `pc-3090`, bound to `models.example.invalid`; the file stores only
   that reference, and a test checks that no key-like field appears in it.
   Environment overrides are never written into the file by a settings save.
 - **Storage.** Tokens are read from the legacy login keychain as generic
@@ -175,7 +176,7 @@ body and decides where a conversation may go before it sends anything:
   only its status code.
 - **Evie keeps her own copy of the PC key (v2 S2d).** The item is
   `com.matheusbgodoi.evie.model` / `pc-3090` in the legacy login keychain,
-  labelled "Evie — chave do modelo (ai-node-3090.tail6146ef.ts.net)". It is
+  labelled "Evie — chave do modelo (models.example.invalid)". It is
   written from Configurações › Cérebro in one of two ways, or by the same
   import from the first-run guide's "Chave do PC" row (S7, 2026-10-16), and
   from nowhere else:
@@ -316,13 +317,14 @@ the takeover monitor and the kill switches put them in the app.
 
 - **Available behind a switch** (ADR 0018): "Deixar a Evie controlar o Mac"
   in Configurações › Tela e modo agente (also the brain chip's menu and "Modo
-  agente" in the menu bar), off by default since 2026-10-16 (it shipped on at
-  the owner's request first); `EVIE_COMPUTER_USE=0` forces it off for
+  agente" in the menu bar), enabled by default at the owner's explicit request
+  (ADR 0022, superseding the earlier off-by-default rollout); `EVIE_COMPUTER_USE=0` forces it off for
   a launch, and nothing in the environment forces it on. The switch never
   starts a session — the rules below do the protecting, not an opt-in.
 
 - **A session only from a hand.** `EvieAgentModeBroker.begin` makes a grant
-  (at most 15 minutes) for push-to-talk or a click, never for the wake word,
+  (at most 15 minutes) for push-to-talk, a click, or a research shortcut inside
+  its hand-armed expiring lease (ADR 0020), never for the wake word,
   which the microphone can hear from anyone. Without the active grant the
   computer-use tools are not declared at all.
 - **Starting (S5d).** A request becomes a session card only when his own
@@ -372,6 +374,13 @@ the takeover monitor and the kill switches put them in the app.
   double click and ⌘O / ⌘↓ in the Finder and other file browsers. ADR 0016's
   notes list the everyday flows this asks about. The question is built from the
   accessibility title and the system's app name, never from the model's words.
+- **Research grants are answer-entry only.** `researchShortcut` derives the
+  restricted grant in code: no Return/newline, app launching, clipboard reading,
+  drag, generic submit button or unknown coordinate control. Only identified
+  AX fields and standard choices are accepted; confirmations cannot expand the
+  grant. Websites may still auto-save or send on input/change/paste, so this is
+  not a promise about arbitrary third-party application behavior. Details and
+  regression evidence: [executor revalidation](COMPUTER_EXECUTOR_REVALIDATION.md).
 - **On-screen text is fenced** with a nonce made for each observation, after the
   screen was read, and cleaned so it cannot close the fence or start a line.
 - **Observing (S5b).** No observation without the observing glow composited on
@@ -406,8 +415,14 @@ the takeover monitor and the kill switches put them in the app.
   puts everything back 400 ms after ⌘V, only if nobody copied in between; the
   wait is not cut short by a stop, so the app cannot paste the person's own
   clipboard instead. `clipboard_read` asks first and hands the model the text
-  fenced with a nonce, cut at 4,000 characters; `clipboard_write` is plain text
-  that stays, with the "copiado" notice.
+  fenced with a nonce, cut at 4,000 characters; `clipboard_write` asks before
+  replacing the clipboard and displays the full proposed text. Only a trusted
+  local flow that already collected explicit clipboard-output consent may
+  mint that permission on its expiring grant (`allowsClipboardWrites`); this
+  never authorizes clipboard reads. The written text stays, with the
+  "copiado" notice. See [executor revalidation](COMPUTER_EXECUTOR_REVALIDATION.md)
+  for the red-to-green regressions and the unavoidable check-to-dispatch OS
+  race; these checks are not an atomic transaction.
 - **Posting needs Accessibility** (`CGPreflightPostEventAccess`, never
   prompting); the prompt (`CGRequestPostEventAccess`) is for the session's
   start in S5d. A binary run from a terminal acts with the terminal's grant —
@@ -437,6 +452,24 @@ the takeover monitor and the kill switches put them in the app.
   other than ⌘Space, Return in messaging apps, opening files from the Finder —
   are for the Fix phase. This is mitigation, not proof, and the one-time
   consent says so.
+
+### Research shortcuts (ADR 0020)
+
+An explicit hand click authorizes one in-memory objective and destination for
+15 minutes. The run shortcut starts at most one task under that lease and never
+approves sensitive steps. Revocation and expiry are checked after awaits and
+before clipboard delivery; the agent broker independently caps its grant by the
+same deadline. A changed clipboard revision refuses clipboard delivery.
+Clipboard mode has no tools, retrieval or saved conversation. Agent mode keeps
+all existing refusals, confirmation rules, presence and takeover controls.
+Sleep, user-session deactivation and app shutdown revoke research authority.
+The wake listener is disarmed while the session is armed. Screen presence cannot
+be suppressed. Only explicit measurement export persists metadata; no pixels,
+answer, objective or AX text are exported. The clipboard itself is visible to
+other apps with clipboard access. Existing executor findings remain open;
+this feature does not claim to resolve them. See
+[ADR 0020](adr/0020-expiring-research-shortcut-sessions.md) and
+[research verification](RESEARCH_MODE.md).
 
 ### Conversation history
 
@@ -491,8 +524,8 @@ already hold the user's Gmail and iCloud accounts. Two further scripts are not
 tools the model can call: `listCalendars` reads the writable calendar names for
 the event proposal, and `listMailAccounts` reads the addresses Mail can send
 from, so the card can name the account a message would leave from. No OAuth
-application, no token, no account to configure. Off by default behind
-`mail_and_calendar_enabled`, in Settings › O que ela sabe › Mail e agenda. Both
+application, no token, no account to configure. Enabled by default at the owner's
+request (ADR 0022), behind `mail_and_calendar_enabled`, in Settings › O que ela sabe › Mail e agenda. Both
 proposing tools are declared only when that switch is on, on the same switch as
 reading, because it is the same permission surface: the same apps, the same
 Automation grant.
@@ -692,7 +725,8 @@ in code and covered by `EvieCoreTests`:
   `O_RESOLVE_BENEATH | O_NOFOLLOW_ANY`, creating a missing one with `mkdirat`.
   A taken name becomes "nome (2).ext"; a symlink with the name counts as taken.
   Expiry is fifteen minutes.
-- **The one standing policy.** Off by default. On, a new document is saved
+- **The one standing policy.** Enabled by default at the owner's request
+  (ADR 0022). On, a new document is saved
   without its card only when the person's own prompt asks to save
   (`EvieDocumentIntent`), no picture rides in the request, and the folder was
   granted before the turn. Overwrites, moves, renames and the Trash are never
@@ -915,9 +949,13 @@ grant meant for Evie would land on Terminal and extend to everything that ever
 runs there. Recovery for a grant given to the wrong place:
 `tccutil reset ScreenCapture|Accessibility|PostEvent com.matheusbgodoi.evie`.
 
-The first-run guide never prompts by itself. Every system prompt follows a press
-of its row's "Pedir"; a refused permission is only ever offered as a link to its
-pane in System Settings. The "Chave do PC" row reads only the attributes of
+The ordinary first-run guide prompts after a press of its row's "Pedir".
+An explicit `--request-permissions` launch also opens the guide and requests
+available permissions sequentially as requested by the owner (ADR 0022).
+The app cannot silently grant macOS privacy controls: a refused permission is
+shown as a link to its System Settings pane, and the audit reports actual OS
+state. Native App Intents are foreground entry points, not a way around these
+grants. The "Chave do PC" row reads only the attributes of
 Evie's item to show "Salva" / "Sem chave" (measured 2026-10-16 on this Mac, M5
 24 GB, macOS 27.2: the same attributes-only query from an unlisted program
 answered in 4 ms with no prompt, for the PC configuration's item too); the

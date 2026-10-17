@@ -175,9 +175,9 @@ function configure() {
         {
           id: "pc-3090",
           display_name: "PC RTX 3090",
-          endpoint: "https://ai-node-3090.tail6146ef.ts.net/v1",
+          endpoint: "https://models.example.invalid/v1",
           model: "qwen-daily",
-          context_tokens: 135168,
+          context_tokens: 200704,
           server_context_tokens: 200704,
           max_completion_tokens: 16384,
           capabilities: {vision: true, tools: true},
@@ -186,22 +186,24 @@ function configure() {
           credential: {
             service: "com.matheusbgodoi.evie.model",
             account: "pc-3090",
-            bound_host: "ai-node-3090.tail6146ef.ts.net"
+            bound_host: "models.example.invalid"
           },
           runtime: {kind: "remoteGateway"},
           location: "yourPC",
           family: "qwen",
           coordinate_convention: "normalized1000",
           stop_sequences: [],
-          request_timeout_seconds: 300
+          request_timeout_seconds: 900
         },
         {
           id: "mac-local",
           display_name: "Mac local",
           endpoint: "http://127.0.0.1:38480/v1",
           model: "mlx-community/LensVLM-9B-OptiQ-4bit",
-          context_tokens: 32768,
-          server_context_tokens: 262144,
+          temperature: 0,
+          top_p: 1,
+          context_tokens: 131072,
+          server_context_tokens: 131072,
           max_completion_tokens: 2048,
           capabilities: {vision: true, tools: false},
           thinking_style: "topLevel",
@@ -211,13 +213,16 @@ function configure() {
             launcher: "mlxVLM",
             executable: $mac_executable,
             port: 38480,
-            max_kv_size: 32768
+            max_kv_size: 131072,
+            kv_bits: 8,
+            prefill_step_size: 512,
+            metal_cache_limit_mb: 256
           },
           location: "thisMac",
           family: "qwen",
           coordinate_convention: "normalized1000",
           stop_sequences: [],
-          request_timeout_seconds: 300
+          request_timeout_seconds: 900
         },
         {
           id: "custom",

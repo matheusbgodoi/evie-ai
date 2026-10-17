@@ -199,7 +199,8 @@ denied app, or a click landing on another app's window.
   refused. A listed element is the front app's own and is pressed through
   Accessibility, so another owner over it (a sandboxed app's save panel is a
   system service's window) is not refused by the policy; the executor's own
-  check before posting a fallback click is queued finding #11c.
+  check before posting a fallback click was queued finding #11c and is now
+  implemented for every pointer fallback, including a listed AX element.
 
 **Everyday flows that now ask** (one click on Fazer each):
 - sending or just pressing Return in WhatsApp, Telegram, Mensagens, Slack,
@@ -220,3 +221,16 @@ Not asked, so the common writing flows stay one step each: typing without a
 newline anywhere; Return and newlines in TextEdit, Notas, Stickies, Pages,
 Numbers and Keynote; single clicks outside browsers and file browsers;
 `open_app` for an app the request named.
+
+**2026-10-16, executor findings 11b–11d implemented.** Input context is
+revalidated after asynchronous waits and before each operation/text chunk;
+keyboard routes recheck secure input and secure focused fields, including a
+synchronous front-app/secure-input check after the AX await. Every pointer
+fallback checks the current window owner, observed window geometry and Evie
+window overlap. Each drag step checks the active grant and context, propagates
+cancellation, and releases its held mouse button on interruption. Permanent
+clipboard replacement now asks with the complete text; a trusted local flow
+may carry explicit prior clipboard-output consent on its expiring grant,
+without granting clipboard reads. Red-to-green regressions and the non-atomic
+OS check-to-dispatch limit are recorded in
+[Executor context revalidation](../COMPUTER_EXECUTOR_REVALIDATION.md).

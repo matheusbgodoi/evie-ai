@@ -14,7 +14,7 @@ struct EvieConfigurationLoaderTests {
     #expect(configuration.model == EvieConfiguration.defaultModel)
     // The built-in PC profile's client cap since schema v2; it was Gemma's
     // 65536 before.
-    #expect(configuration.contextWindowTokens == 135_168)
+    #expect(configuration.contextWindowTokens == 200_704)
   }
 
   @Test("environment overrides the local file")

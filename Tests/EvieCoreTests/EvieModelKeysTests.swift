@@ -27,7 +27,7 @@ struct EvieModelKeysTests {
     try await keys.save(pasted: "  sk-test-0123456789\n", for: reference)
 
     #expect(items.secret(at: evieItem) == "sk-test-0123456789")
-    #expect(items.label(at: evieItem) == "Evie — chave do modelo (ai-node-3090.tail6146ef.ts.net)")
+    #expect(items.label(at: evieItem) == "Evie — chave do modelo (models.example.invalid)")
     #expect(await credentials.invalidated == [reference])
   }
 

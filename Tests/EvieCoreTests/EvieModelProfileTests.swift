@@ -5,6 +5,34 @@ import Testing
 
 @Suite("Evie model profiles")
 struct EvieModelProfileTests {
+  @Test("a profile cannot promise more context than its configured server")
+  func contextExceedsServer() {
+    var set = EvieModelProfileSet.builtIn
+    set.profiles[0].contextTokens = 200_705
+    #expect(throws: (any Error).self) { try set.validate() }
+  }
+
+  @Test("a local profile cannot exceed its launched KV capacity")
+  func contextExceedsLocalRuntime() {
+    var set = EvieModelProfileSet.builtIn
+    guard case .localOnDemand(let runtime) = set.profiles[1].runtime else { return }
+    set.profiles[1].serverContextTokens = nil
+    set.profiles[1].contextTokens = runtime.maxKVSize + 1
+    #expect(throws: (any Error).self) { try set.validate() }
+  }
+
+  @Test("the public provider example loads without an owner connection")
+  func publicProviderExample() throws {
+    let root = URL(fileURLWithPath: #filePath).deletingLastPathComponent()
+      .deletingLastPathComponent().deletingLastPathComponent()
+    let file = root.appendingPathComponent("config/examples/model-v2.example.json")
+    let loaded = try EvieConfigurationLoader(fileURL: file).loadProfiles(environment: [:])
+    #expect(loaded.activeProfile.displayName == "Minha IA")
+    #expect(loaded.activeProfile.endpoint.host == "models.example.invalid")
+    #expect(loaded.activeProfile.credential?.boundHost == loaded.activeProfile.endpoint.host)
+    #expect(loaded.activeProfile.runtime == .remoteGateway)
+  }
+
   @Test("the PC RTX 3090 is the built-in default, with its key reference and no key")
   func pcProfile() throws {
     let set = EvieModelProfileSet.builtIn
@@ -14,9 +42,9 @@ struct EvieModelProfileTests {
     #expect(set.preferenceOrder == ["pc-3090", "mac-local"])
     #expect(set.macFallback == .ask)
     #expect(pc.displayName == "PC RTX 3090")
-    #expect(pc.endpoint.absoluteString == "https://ai-node-3090.tail6146ef.ts.net/v1")
+    #expect(pc.endpoint.absoluteString == "https://models.example.invalid/v1")
     #expect(pc.model == "qwen-daily")
-    #expect(pc.contextTokens == 135_168)
+    #expect(pc.contextTokens == 200_704)
     #expect(pc.serverContextTokens == 200_704)
     #expect(pc.maxCompletionTokens == 16_384)
     #expect(pc.capabilities == .init(vision: true, tools: true))
@@ -27,7 +55,7 @@ struct EvieModelProfileTests {
         == CredentialReference(
           service: "com.matheusbgodoi.evie.model",
           account: "pc-3090",
-          boundHost: "ai-node-3090.tail6146ef.ts.net"
+          boundHost: "models.example.invalid"
         )
     )
     #expect(pc.runtime == .remoteGateway)
@@ -43,8 +71,8 @@ struct EvieModelProfileTests {
     #expect(mac.displayName == "Mac local")
     #expect(mac.endpoint.absoluteString == "http://127.0.0.1:38480/v1")
     #expect(mac.model == "mlx-community/LensVLM-9B-OptiQ-4bit")
-    #expect(mac.contextTokens == 32_768)
-    #expect(mac.serverContextTokens == 262_144)
+    #expect(mac.contextTokens == 131_072)
+    #expect(mac.serverContextTokens == 131_072)
     #expect(mac.maxCompletionTokens == 2_048)
     #expect(mac.capabilities == .init(vision: true, tools: false))
     #expect(mac.thinkingStyle == .topLevel)
@@ -56,7 +84,10 @@ struct EvieModelProfileTests {
       return
     }
     #expect(runtime.port == 38_480)
-    #expect(runtime.maxKVSize == 32_768)
+    #expect(runtime.maxKVSize == 131_072)
+    #expect(runtime.kvBits == 8)
+    #expect(runtime.prefillStepSize == 512)
+    #expect(runtime.metalCacheLimitMB == 256)
     #expect(runtime.executable.hasPrefix("/"))
   }
 
@@ -79,7 +110,7 @@ struct EvieModelProfileTests {
 
     #expect(configuration.endpoint == pc.endpoint)
     #expect(configuration.model == "qwen-daily")
-    #expect(configuration.contextWindowTokens == 135_168)
+    #expect(configuration.contextWindowTokens == 200_704)
     #expect(configuration.maxCompletionTokens == 16_384)
     #expect(configuration.credential == pc.credential)
     #expect(configuration.thinkingStyle == .templateKwargs)
@@ -90,9 +121,9 @@ struct EvieModelProfileTests {
   @Test("the configuration defaults are the built-in PC, not Gemma on 38433")
   func configurationDefaults() {
     #expect(EvieConfiguration.builtIn == EvieModelProfileSet.builtIn.preferredProfile.configuration)
-    #expect(EvieConfiguration.defaultEndpoint.host == "ai-node-3090.tail6146ef.ts.net")
+    #expect(EvieConfiguration.defaultEndpoint.host == "models.example.invalid")
     #expect(EvieConfiguration.defaultModel == "qwen-daily")
-    #expect(EvieConfiguration.defaultContextWindow == 135_168)
+    #expect(EvieConfiguration.defaultContextWindow == 200_704)
   }
 
   @Test("a set with a repeated id, an unknown preference or no profiles is refused")
@@ -119,7 +150,8 @@ struct EvieModelProfileTests {
     var relative = EvieModelProfileSet.builtIn
     try relative.updateProfile(id: "mac-local") { profile in
       profile.runtime = .localOnDemand(
-        LocalRuntime(launcher: .mlxVLM, executable: "mlx_vlm.server", port: 38_480, maxKVSize: 32_768)
+        LocalRuntime(
+          launcher: .mlxVLM, executable: "mlx_vlm.server", port: 38_480, maxKVSize: 32_768)
       )
     }
     #expect(throws: EvieModelProfileSet.ValidationError.invalidLocalRuntime(id: "mac-local")) {
@@ -254,7 +286,7 @@ struct EvieConfigurationSchemaV2Tests {
 
     #expect(failure != nil)
     #expect(loaded.configuration == EvieConfiguration.builtIn)
-    #expect(loaded.configuration.endpoint.host == "ai-node-3090.tail6146ef.ts.net")
+    #expect(loaded.configuration.endpoint.host == "models.example.invalid")
     #expect(loaded.configuration.endpoint.port != 38_433)
   }
 
@@ -305,7 +337,7 @@ struct EvieConfigurationSchemaV2Tests {
         == [
           "service": "com.matheusbgodoi.evie.model",
           "account": "pc-3090",
-          "bound_host": "ai-node-3090.tail6146ef.ts.net",
+          "bound_host": "models.example.invalid",
         ]
     )
     for forbidden in [#""token""#, #""key""#, "api_key", "apiKey", "password", "secret", "Bearer"] {
@@ -354,8 +386,10 @@ struct EvieConfigurationSchemaV2Tests {
 
     let reread = try EvieConfigurationLoader(fileURL: fileURL).loadProfiles(environment: [:])
     #expect(reread.profiles.profile(id: "mac-local")?.requestTimeout == 45)
-    #expect(reread.profiles.profile(id: "mac-local")?.model == "mlx-community/LensVLM-9B-OptiQ-4bit")
-    #expect(reread.profiles.profile(id: "pc-3090") == EvieModelProfileSet.builtIn.profile(id: "pc-3090"))
+    #expect(
+      reread.profiles.profile(id: "mac-local")?.model == "mlx-community/LensVLM-9B-OptiQ-4bit")
+    #expect(
+      reread.profiles.profile(id: "pc-3090") == EvieModelProfileSet.builtIn.profile(id: "pc-3090"))
   }
 
   @Test("the settings save turns a v1 file into v2 instead of writing v1 back")
@@ -393,7 +427,9 @@ struct EvieConfigurationSchemaV2Tests {
 
     #expect(saved.macFallback == .off)
     #expect(saved.preferredProfile.topP == 0.8)
-    #expect(try EvieConfigurationLoader(fileURL: fileURL).loadProfiles(environment: [:]).profiles == saved)
+    #expect(
+      try EvieConfigurationLoader(fileURL: fileURL).loadProfiles(environment: [:]).profiles == saved
+    )
   }
 
   @Test("the settings save keeps a damaged file as config.json.damaged.bak before repairing it")
@@ -413,7 +449,9 @@ struct EvieConfigurationSchemaV2Tests {
     #expect(store.damagedBackupURL.lastPathComponent == "config.json.damaged.bak")
     #expect(try String(contentsOf: store.damagedBackupURL, encoding: .utf8) == damaged)
     #expect(try permissions(of: store.damagedBackupURL) == 0o600)
-    #expect(try EvieConfigurationLoader(fileURL: fileURL).loadProfiles(environment: [:]).activeProfile.topP == 0.8)
+    #expect(
+      try EvieConfigurationLoader(fileURL: fileURL).loadProfiles(environment: [:]).activeProfile
+        .topP == 0.8)
   }
 
   @Test("the settings save refuses to replace a file written by a newer schema")
@@ -433,7 +471,8 @@ struct EvieConfigurationSchemaV2Tests {
     }
     #expect(try String(contentsOf: fileURL, encoding: .utf8) == newer)
     #expect(!FileManager.default.fileExists(atPath: store.damagedBackupURL.path))
-    #expect(EvieConfigurationStore.SaveError.newerSchema(3).localizedDescription.contains("mais nova"))
+    #expect(
+      EvieConfigurationStore.SaveError.newerSchema(3).localizedDescription.contains("mais nova"))
   }
 
   @Test("the settings save leaves a file it cannot read, and so cannot back up, in place")

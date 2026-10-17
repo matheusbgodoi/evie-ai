@@ -1,11 +1,30 @@
 # Evie implementation task ledger
 
-Last updated: 2026-08-05
+Last updated: 2026-10-17
 
 This is the execution backlog for Evie. It complements `docs/ROADMAP.md`: the
 roadmap defines product gates, while this ledger defines bounded implementation
 tasks, dependencies, completion evidence, and handoff rules. Task IDs are stable;
 completed IDs are never renamed or reused.
+
+## Final v2 integration checkpoint — 2026-10-17
+
+The historical VS/phase registry below retains its task IDs and original scopes.
+The active delivery is tracked in
+[EVIE_RESEARCH_DELIVERY](EVIE_RESEARCH_DELIVERY.md); this checkpoint reconciles
+source completion with the remaining final-evidence gates without declaring a
+release from implementation alone.
+
+| Scope | State at this checkpoint | Evidence / gate |
+| --- | --- | --- |
+| Compact brain, same-conversation model/effort, provider names and key persistence | Implemented; focused regressions passed | [Settings boundary](../MODEL_SETTINGS_VALIDATION.md) |
+| Revocable research, executor and two shortcuts | Implemented; checkpoint real-model form run passed | [Research methods](../RESEARCH_VALIDATION.md); rerun latest policy in final signed bundle |
+| Native speech, five-call calibration, AppIntents and original glass/icon | Implemented; native probes executed | [Native voice](../NATIVE_VOICE.md), [AppIntents](../NATIVE_APPLE.md) |
+| Context budget and automatic compaction | Implemented; core and real-PC synthetic probes passed | [Context](../CONVERSATION_CONTEXT.md), ADR 0026; PC 200,704 tokens |
+| LensVLM context qualification | Passed at 131,072 tokens; client/runtime synchronized | 127,527 input + 38 output tokens, 5/5 target items, 2.4 GiB minimum sampled free and 13.8 GiB MLX-reported peak memory in 392.31 s; [model tuning](../MODEL_TUNING.md) |
+| Local model/memory reconfiguration and pinned public web | Implemented; real process/HTTP/MLX and curl boundaries passed | [Launcher](../LOCAL_BRAIN_VALIDATION.md), [web](../WEB_SEARCH.md), ADR 0027 |
+| Final source freeze, full suite and signed bundle | Integrated candidate; final suite running | Update [PROJECT_STATUS](../PROJECT_STATUS.md) with actual results after completion |
+| Energy, installation/open-state and sanitized release | Final evidence not yet recorded complete | Root ledger owns release/install claims and final private-ancestry/artifact scan |
 
 ## Status vocabulary
 
@@ -474,3 +493,26 @@ Do not start these until the current slice is coherently integrated:
 5. Add Hermes only at `AGT-001`; do not fold it into the current client or UI.
 6. Start microphone/STT/TTS work only at Phase E, after honest state and lifecycle
    foundations exist.
+
+## 2026-10-16 — integrated research/native release delivery
+
+Continuation ledger: [EVIE_RESEARCH_DELIVERY](EVIE_RESEARCH_DELIVERY.md).
+Owner authorized implementation, parallel agents, local install, proprietary
+public GitHub and an actual release. Keep private runtime configuration and
+unpublished private development ancestry out of publication.
+
+- [x] Research lease/shortcuts/cancellation/clipboard isolation and real fixture.
+- [x] Compact brain/inline effort and same-conversation manual model changes.
+- [x] Executor revalidation, scoped clipboard and research answer-entry policy.
+- [x] Original visual identity/icon, public native actions and bundle metadata.
+- [x] Owner-enabled defaults and real TCC audit/request path.
+- [x] Configurable private endpoints and names; sanitized source and examples.
+- [x] Native voice/calibration signed probes and real microphone cancellation checks.
+- [x] Web transport hardening and real public-network regression.
+- [ ] Final full tests, signed bundle, runtime UI/resource checks, installation.
+- [ ] Reviewed local commit, sanitized public snapshot, successful CI and release.
+
+- [x] Context/usage UI, automatic summary/cache and real synthetic semantic check.
+- [x] Local context/runtime consistency guards and save-key draft concurrency fix.
+- [ ] Qualified maximum local VLM text+image context with bounded allocator cache.
+- [ ] Real isolated local-launcher reconfiguration/lifecycle boundary validation.

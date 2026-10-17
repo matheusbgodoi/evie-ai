@@ -30,6 +30,8 @@ public struct ModelTurnDeadlines: Sendable, Equatable {
 /// separate first-token deadline still covers a server that sends its headers
 /// early and then stalls.
 public struct ModelDeadlinePolicy: Sendable, Equatable {
+  static let maximumTurnSeconds: TimeInterval = 900
+  private static let longPromptThresholdTokens = 16_384
   /// The idle gap once the model is known to be loaded.
   public var idleGap: TimeInterval
   /// The idle gap while it loads: llama-swap blocks the request for the whole
@@ -69,25 +71,42 @@ public struct ModelDeadlinePolicy: Sendable, Equatable {
   /// With no rung — every turn until the readiness probe and the resolver
   /// exist — each stage keeps the configured request timeout. That was the only
   /// deadline before, and the loopback model's long prefills fit inside it.
+  /// Above 16K estimated input tokens, reserve bounded prefill time as well.
+  /// Zero preserves existing callers; readiness probes keep their own deadlines.
   public func deadlines(
     readiness: ReadinessRung?,
     carriesImage: Bool,
-    configuration: EvieConfiguration
+    configuration: EvieConfiguration,
+    inputTokens: Int = 0
   ) -> ModelTurnDeadlines {
     let response = carriesImage ? imageResponse : textResponse
+    let base: ModelTurnDeadlines
     switch readiness {
     case nil:
       let configured = configuration.requestTimeout
-      return ModelTurnDeadlines(
+      base = ModelTurnDeadlines(
         idleGap: configured,
         headers: .seconds(configured),
         firstToken: .seconds(configured)
       )
     case .modelCold:
-      return ModelTurnDeadlines(idleGap: coldIdleGap, headers: coldHeaders, firstToken: response)
+      base = ModelTurnDeadlines(idleGap: coldIdleGap, headers: coldHeaders, firstToken: response)
     case .ready, .unreachable, .keyMissing, .keyRejected, .modelUnknown:
-      return ModelTurnDeadlines(idleGap: idleGap, headers: response, firstToken: response)
+      base = ModelTurnDeadlines(idleGap: idleGap, headers: response, firstToken: response)
     }
+    guard inputTokens > Self.longPromptThresholdTokens else { return base }
+
+    // Observed: ~3.14 ms/token for the Mac's 128K prefill, ~1.67 ms/token
+    // for an uncached 150K PC prefill. Six ms/token plus 30 s is conservative
+    // scheduling headroom, not a prediction or a universal tokenizer guarantee.
+    // Explicit profile timeout and the existing resource ceiling still bound it.
+    let reserve = min(
+      Self.maximumTurnSeconds, configuration.requestTimeout, 30 + Double(inputTokens) * 0.006)
+    return ModelTurnDeadlines(
+      idleGap: max(base.idleGap, reserve),
+      headers: max(base.headers, .seconds(reserve)),
+      firstToken: max(base.firstToken, .seconds(reserve))
+    )
   }
 }
 
@@ -101,7 +120,7 @@ extension URLSessionConfiguration {
   /// plus a cold load.
   public static var evieModel: URLSessionConfiguration {
     let configuration = URLSessionConfiguration.ephemeral
-    configuration.timeoutIntervalForResource = 900
+    configuration.timeoutIntervalForResource = ModelDeadlinePolicy.maximumTurnSeconds
     configuration.urlCache = nil
     configuration.requestCachePolicy = .reloadIgnoringLocalCacheData
     return configuration

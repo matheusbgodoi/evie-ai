@@ -1,8 +1,110 @@
 # Project status
 
-Last updated: 2026-10-16
+Last updated: 2026-10-17
 
-## Evie v2 (code complete for this iteration; manual QA owed)
+## Final integrated v2 candidate — 2026-10-17
+
+Source integration is in the isolated `v2-research` worktree. The final candidate
+combines brain controls, research, native voice/AppIntents, visual identity,
+context compaction and the executor/network/persistence corrections. The exact
+continuation anchor remains
+[EVIE_RESEARCH_DELIVERY](implementation/EVIE_RESEARCH_DELIVERY.md).
+This is a source/evidence checkpoint, not a claim that final installation,
+publication or a release has already occurred.
+
+### Context and current contracts
+
+- PC/Qwen operational context: **200,704 tokens**, with output and framing
+  reserved from that capacity. The architectural model limit is not the
+  operational budget.
+- LensVLM: **131,072 tokens qualified** on the target Mac, synchronized between
+  client context and runtime KV cap. Runtime controls: eight-bit KV, prefill step
+  512, MLX allocator cache 256 MiB and profile timeout 900 seconds. The synthetic
+  run used **127,527 input + 38 output tokens**, retrieved **5/5 target items**,
+  retained **2.4 GiB minimum sampled free memory** (10% margin), and reached **13.8 GiB
+  MLX-reported peak memory** over **392.31 seconds**. This is measured workload
+  evidence, not a claim that every workload or architectural ceiling fits.
+  See [MODEL_TUNING](MODEL_TUNING.md) and the release notes.
+- [Adaptive compaction](CONVERSATION_CONTEXT.md) keeps the complete visible
+  history, summarizes only a prepared in-memory request and never silently cuts
+  the current question. Summaries are fallible data and preserve visual origin;
+  cache/revocation are bound to conversation, profile and budget.
+- Compact brain controls apply explicit model changes to the next turn of the
+  same conversation. Profiles support local/remote endpoints and custom labels.
+  Saving a key preserves other drafts and fresh file changes field by field.
+- Research has two configurable shortcuts, a revocable 15-minute lease and
+  bounded clipboard/answer-entry routes. Native voice selection/calibration and
+  public AppIntents do not use private Siri services. Enabled capabilities still
+  require real OS permission and the existing action authority.
+- The local launcher reuses only compatible model/memory options and reconciles
+  changed options on next use. Web DNS/redirects are pinned to public addresses
+  separately from the private model transport. Current decisions are ADRs
+  **0020–0027**; earlier records below are historical where they differ.
+
+### Executed evidence, with scope
+
+- Earlier complete checkpoint: **1,454 tests / 134 suites passed**, with one
+  intentional known-issue fixture in Mail timeout coverage. This precedes the
+  last changes and is not substituted for the final full-suite run.
+- Executor/policy/broker/clipboard: **112 tests passed** after reproduced red
+  runs. Guards cover focus/ownership/secure-field changes after awaits and per
+  input step. A synchronous check and the OS input event are not an atomic OS API.
+- Signed release checkpoint: build with warnings as errors in **210.54 s**;
+  generated metadata for **3 AppIntents / 3 AppShortcuts**; actual perform routing,
+  busy/not-ready/Unicode guards passed. This checkpoint precedes the final freeze.
+- Native synthetic screen→Qwen→named clipboard→real executor→independent
+  field/radio fixture readback: **68**, **4 actions**, **43.743 s** total, no
+  general clipboard use or auto-approved confirmation. The run predates the last
+  restrictive answer-entry policy; the final signed bundle rerun is a separate gate.
+- Context probe through the real PC client: **46,247 → 16,374 characters** inside
+  a **32,768-character** request budget, current question identical, old synthetic
+  fact retained and next preparation cache reused. This is one observed semantic
+  case, not a proof that every summary preserves every fact.
+- Web/compaction integrated checkpoint: **23 tests / 3 suites passed in 4.238 s**;
+  live synthetic Swift.org search/read passed in **1.900 s**, six results and
+  ten prohibited destinations refused. Stream/gzip, DNS cancellation/pinning,
+  redirects and real transport interruption have isolated regressions.
+- Settings remained responsive in the real-view-model regression while an
+  attributes lookup was deliberately blocked for 250 ms. The old implementation
+  failed this case; the serial coalesced worker and cached guide update passed.
+  Focused status/guide/key/rebase coverage: 38 tests / 4 suites passed.
+- [Settings boundary regression](MODEL_SETTINGS_VALIDATION.md): stale-write bug
+  reproduced before the fix; **3 field-rebase tests** and real view-model/JSON
+  cases passed, including edits during await and refused newer schema. Keychain
+  storage is in memory in this regression, not a personal Keychain dialog test.
+- [Local launcher boundary regression](LOCAL_BRAIN_VALIDATION.md): actual OS
+  processes, HTTP bearer enforcement, per-launch key rotation, 32K/A→64K/B and
+  model-only restart, same-profile reuse, foreign listener preserved, real MLX
+  **256 MiB** allocator bootstrap; **7.70 s** including standalone compilation.
+  No model weights are loaded by that fixture.
+- Native voice diagnostic exercised actual AVFoundation buffers and SpeechAnalyzer
+  on synthetic audio; temporary five-transcription persistence passed. The wake
+  lifecycle race was reproduced red and corrected green against the real microphone,
+  without recording audio/transcripts. User calibration still needs five real calls.
+- Public ancestry scan: **132 commits** checked for the owner's private host and
+  tailnet identifiers. Existing repository image OCR: **20 PNG/JPEG**, no matches
+  and no OCR errors for the private patterns held only in memory. The final
+  snapshot, reachable ancestry and signed artifact are checked separately.
+
+### Draft final gates — replace with executed evidence before publishing
+
+- Final full-suite result: **1,545 tests in 146 suites passed (23.913 s), with one intentional known timeout-injection issue**.
+- Final resource/energy measurements, including conditions: **VALOR_FINAL_A_INSERIR**.
+- LensVLM qualification: completed at 131,072 tokens with the measured controls
+  above; the final full-suite run covers the synchronized source defaults.
+- Signed final bundle build, latest restrictive research fixture rerun,
+  installation/open-state check and public release: not recorded complete here.
+- Publication must use the sanitized tree parented by existing public main,
+  excluding private local v2 ancestors. Runtime endpoints remain outside git
+  and the bundle. Final tree/artifact/ancestry scan results belong in the ledger.
+
+## Historical checkpoints before the integrated 2026-10-17 delivery
+
+The entries below preserve earlier implementation decisions, test results and
+then-open work. Their defaults, limitations and pending lists describe those
+checkpoints; the current contracts and final validation are recorded above.
+
+### Original Evie v2 checkpoint (manual QA still owed at that time)
 
 Evie v2 is specified in `docs/design/2026-10-16-evie-v2-design.md`, whose
 "as implemented" notes under each slice are the detailed record. Every slice in

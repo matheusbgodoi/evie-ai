@@ -5,8 +5,8 @@ import Foundation
 /// options that pick its deadlines.
 ///
 /// Built from a `ResolvedBrain` before the prompt exists, and built again from
-/// the new brain after a failover — the PC's 135K budget, tools and pictures do
-/// not fit the Mac's 32K, tool-less, possibly blind brain, so a prompt built for
+/// the new brain after a failover — the PC's 200K budget, tools and pictures do
+/// not fit the Mac's 128K, tool-less, possibly blind brain, so a prompt built for
 /// one is never resent to the other.
 public struct EvieTurnPlan: Sendable, Equatable {
   /// How the turn reaches the model.
@@ -31,10 +31,11 @@ public struct EvieTurnPlan: Sendable, Equatable {
   }
 
   /// How many characters of history and question the prompt may hold: about two
-  /// per token of the profile's cap, less what the answer may use. The PC gets
-  /// 237,568 and the Mac 61,440. The floor keeps a tiny custom profile usable.
+  /// per token of the profile's cap, less what the answer may use. This is an estimate, not
+  /// a tokenizer count. The reply budget is reserved before history compaction.
   public var characterBudget: Int {
-    max(8_000, (profile.contextTokens - profile.maxCompletionTokens) * 2)
+    let framingReserve = min(4_096, max(256, profile.contextTokens / 32))
+    return max(0, profile.contextTokens - profile.maxCompletionTokens - framingReserve) * 2
   }
 
   /// The route for a turn with these sources switched on.

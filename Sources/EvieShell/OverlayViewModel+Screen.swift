@@ -55,7 +55,7 @@ extension OverlayViewModel {
   /// The shortcut: captures the screen under the pointer now and holds it for
   /// the next question, which is sent with it.
   func captureScreenForNextQuestion() {
-    guard !hasActiveRequest else {
+    guard !hasActiveRequest, !isResearchBusy() else {
       primaryText = "Aguarde ou cancele a consulta atual"
       onLayoutInvalidated?()
       return

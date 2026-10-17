@@ -26,12 +26,14 @@ struct EvieAppImportKeyScriptTests {
     #expect(calls.first == "find-generic-password -s local-ai-3090 -a gateway-api-key -w")
     // Whatever item held the name goes first, and the add has no -U: an item
     // someone else made would keep its own access list through an update.
-    #expect(calls.dropFirst().first == "delete-generic-password -s com.matheusbgodoi.evie.model -a pc-3090")
+    #expect(
+      calls.dropFirst().first
+        == "delete-generic-password -s com.matheusbgodoi.evie.model -a pc-3090")
     let app = sandbox.root.appendingPathComponent("Applications/Evie.app").path
     #expect(
       calls.last
         == "add-generic-password -s com.matheusbgodoi.evie.model -a pc-3090 "
-        + "-l Evie — chave do modelo (ai-node-3090.tail6146ef.ts.net) -T \(app) -w"
+        + "-l Evie — chave do modelo (models.example.invalid) -T \(app) -w"
     )
     // `-w` last, with no value: `security` then reads the secret, twice, from
     // stdin.
@@ -47,9 +49,10 @@ struct EvieAppImportKeyScriptTests {
     let run = try sandbox.runImport()
 
     #expect(run.status == 0)
-    #expect(try sandbox.securityCalls().map { $0.components(separatedBy: " ").first } == [
-      "find-generic-password", "delete-generic-password", "add-generic-password",
-    ])
+    #expect(
+      try sandbox.securityCalls().map { $0.components(separatedBy: " ").first } == [
+        "find-generic-password", "delete-generic-password", "add-generic-password",
+      ])
     #expect(try sandbox.addInput() == "\(key)\n\(key)\n")
   }
 
@@ -60,9 +63,10 @@ struct EvieAppImportKeyScriptTests {
     let run = try sandbox.runImport()
 
     #expect(run.status != 0)
-    #expect(try sandbox.securityCalls().map { $0.components(separatedBy: " ").first } == [
-      "find-generic-password", "delete-generic-password",
-    ])
+    #expect(
+      try sandbox.securityCalls().map { $0.components(separatedBy: " ").first } == [
+        "find-generic-password", "delete-generic-password",
+      ])
     #expect(!run.output.contains(key))
   }
 
@@ -95,9 +99,10 @@ struct EvieAppImportKeyScriptTests {
     let run = try sandbox.runImport()
 
     #expect(run.status != 0)
-    #expect(try sandbox.securityCalls().map { $0.components(separatedBy: " ").first } == [
-      "find-generic-password"
-    ])
+    #expect(
+      try sandbox.securityCalls().map { $0.components(separatedBy: " ").first } == [
+        "find-generic-password"
+      ])
     #expect(run.output.contains("local-ai-3090"))
   }
 

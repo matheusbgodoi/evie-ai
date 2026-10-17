@@ -183,7 +183,7 @@ extension OverlayViewModel {
   /// After Começar: the permissions (asked once each), then the session as
   /// a turn of its own, cancelled like any other.
   func startComputerUse(goal: String) {
-    guard let host = computerUse, !hasActiveRequest else {
+    guard let host = computerUse, !hasActiveRequest, !isResearchBusy() else {
       NSSound.beep()
       return
     }

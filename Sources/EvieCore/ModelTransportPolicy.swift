@@ -27,14 +27,40 @@ public struct ModelTransportPolicy: Sendable, Equatable {
     case refused(String)
   }
 
-  /// The one machine Evie talks to off this Mac unless told otherwise: the
-  /// owner's RTX 3090 gateway on the owner's tailnet.
-  public static let defaultRemoteHosts = ["ai-node-3090.tail6146ef.ts.net"]
+  /// Reserved documentation host. Live clients trust only the user's saved
+  /// configuration; no owner's private connection ships in the application.
+  public static let defaultRemoteHosts = ["models.example.invalid"]
 
   public let allowedRemoteHosts: [String]
+  public let trustedConfigurationURL: URL?
 
-  public init(allowedRemoteHosts: [String] = ModelTransportPolicy.defaultRemoteHosts) {
+  public init(
+    allowedRemoteHosts: [String] = ModelTransportPolicy.defaultRemoteHosts,
+    trustedConfigurationURL: URL? = nil
+  ) {
     self.allowedRemoteHosts = allowedRemoteHosts
+    self.trustedConfigurationURL = trustedConfigurationURL
+  }
+
+  /// The local configuration is written by Settings, never by model tools.
+  /// Reading it at the request boundary applies saved host changes immediately.
+  /// Missing or malformed files grant nothing; credentials remain host-bound.
+  private var configuredRemoteHosts: [String] {
+    guard let trustedConfigurationURL,
+      let data = try? Data(contentsOf: trustedConfigurationURL),
+      let document = try? JSONDecoder().decode(TrustedDocument.self, from: data)
+    else { return [] }
+    return document.profiles.compactMap { profile in
+      guard profile.endpoint.scheme?.lowercased() == "https",
+        profile.endpoint.user == nil, profile.endpoint.password == nil
+      else { return nil }
+      return profile.endpoint.host?.lowercased()
+    }
+  }
+
+  private struct TrustedDocument: Decodable {
+    struct Profile: Decodable { let endpoint: URL }
+    let profiles: [Profile]
   }
 
   /// - Parameter credentialHost: the host the endpoint's credential was saved
@@ -135,7 +161,7 @@ public struct ModelTransportPolicy: Sendable, Equatable {
   }
 
   private func allows(_ host: String) -> Bool {
-    allowedRemoteHosts.contains { entry in
+    (allowedRemoteHosts + configuredRemoteHosts).contains { entry in
       let entry = entry.lowercased()
       guard entry.hasPrefix("*.") else {
         return entry == host

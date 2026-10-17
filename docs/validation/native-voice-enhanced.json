@@ -1,0 +1,35 @@
+{
+  "checked_date": "2026-10-17",
+  "scope": "Executed installed-candidate bundle binary with --native-voice-check after public System Settings voice download; not final release evidence",
+  "voice_installation": {
+    "public_name": "Luciana (Aprimorada)",
+    "language": "pt-BR",
+    "catalog_download_mb": 38.3,
+    "system_reported_installed_mb": 42.7,
+    "system_default_voice_changed": false,
+    "private_api_or_tcc_edit": false
+  },
+  "report": {
+    "audioSeconds": 2.6575510204081536,
+    "cancellationChecksPassed": true,
+    "enhancedOrPremiumVoices": 1,
+    "frames": 58599,
+    "nativeVoices": 10,
+    "personalVoiceAuthorization": "Não permitida nos Ajustes do Sistema",
+    "selectedNativeVoice": "com.apple.voice.enhanced.pt-BR.Luciana",
+    "success": true,
+    "synthesisSeconds": 0.29079875,
+    "syntheticSpeechAnalysisPassed": true,
+    "syntheticTranscript": "esta é uma frase de pesquisa",
+    "syntheticWakeNameRecognized": false,
+    "temporaryCalibrationPassed": true,
+    "unavailableSiriVoices": 2,
+    "wakeAliasCount": 0,
+    "wakeCalibrationStatus": "notConfigured"
+  },
+  "interpretation": [
+    "Frames and transcript use controlled synthetic content, not a personal recording.",
+    "Temporary five-transcription persistence is not owner enrollment; owner wake calibration remains notConfigured.",
+    "The native voice is selected by automatic quality ranking; no proprietary Siri voice became usable."
+  ]
+}

@@ -56,15 +56,29 @@ final class SyntheticInput: SyntheticInputPosting {
     }
   }
 
-  func drag(from start: CGPoint, to end: CGPoint) async {
+  func drag(
+    from start: CGPoint, to end: CGPoint,
+    checking: @MainActor (CGPoint) async throws -> Void
+  ) async throws {
+    try await checking(start)
     move(to: start)
     postMouse(.leftMouseDown, at: start, button: .left)
-    for step in 1...Self.dragSteps {
-      let fraction = CGFloat(step) / CGFloat(Self.dragSteps)
-      let point = CGPoint(
-        x: start.x + (end.x - start.x) * fraction, y: start.y + (end.y - start.y) * fraction)
-      try? await Task.sleep(for: Self.dragStepPause)
-      postMouse(.leftMouseDragged, at: point, button: .left)
+    var last = start
+    do {
+      for step in 1...Self.dragSteps {
+        let fraction = CGFloat(step) / CGFloat(Self.dragSteps)
+        let point = CGPoint(
+          x: start.x + (end.x - start.x) * fraction, y: start.y + (end.y - start.y) * fraction)
+        try await Task.sleep(for: Self.dragStepPause)
+        try await checking(point)
+        postMouse(.leftMouseDragged, at: point, button: .left)
+        last = point
+      }
+    } catch {
+      // Release the already-held button without moving further. Cancellation
+      // must never leave the user's mouse down or continue to the destination.
+      postMouse(.leftMouseUp, at: last, button: .left)
+      throw error
     }
     postMouse(.leftMouseUp, at: end, button: .left)
   }

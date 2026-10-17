@@ -31,7 +31,7 @@ struct ModelRequestBodyTests {
   func maxTokensField() throws {
     let body = try json(request([question], options: .chat(gateway)))
 
-    #expect(body["max_tokens"] as? Int == 2_048)
+    #expect(body["max_tokens"] as? Int == 16_384)
     #expect(body["max_completion_tokens"] == nil)
     let streamOptions = try #require(body["stream_options"] as? [String: Any])
     #expect(streamOptions["include_usage"] as? Bool == true)
@@ -135,9 +135,8 @@ struct ModelRequestBodyTests {
     #expect(body["enable_thinking"] == nil)
     #expect(body["chat_template_kwargs"] == nil)
     #expect(body["thinking_budget_tokens"] == nil)
-    // Asking for reasoning a server cannot be told about must not quietly
-    // quadruple the output cap either.
-    #expect(body["max_tokens"] as? Int == 2_048)
+    // A text answer uses the configured cap regardless of unsupported reasoning.
+    #expect(body["max_tokens"] as? Int == plain.maxCompletionTokens)
   }
 
   @Test("a text-only message keeps content as a String")

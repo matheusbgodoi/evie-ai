@@ -49,7 +49,7 @@ extension ModelLocation {
 }
 
 extension EvieModelProfile {
-  /// "servidor: 200 704 · Evie usa: 135 168": what the server holds, for
+  /// "servidor: 200 704 · Evie usa: 200 704": what the server holds, for
   /// reference, and the cap the budget is built on, which the tab edits.
   public var contextLine: String {
     let used = "Evie usa: \(Self.grouped(contextTokens))"
@@ -57,6 +57,27 @@ extension EvieModelProfile {
       return used
     }
     return "servidor: \(Self.grouped(serverContextTokens)) · \(used)"
+  }
+
+  /// This exact gateway applies the official sampler for the selected reasoning
+  /// mode. LensVLM's public evaluation is greedy; arbitrary providers retain
+  /// Evie's documented generic defaults rather than borrowing another model's.
+  public var recommendedSampling: (temperature: Double?, topP: Double?) {
+    if model.lowercased() == "qwen-daily" { return (nil, nil) }
+    if model.lowercased().contains("lensvlm") { return (0, 1) }
+    return (EvieProfileDraft.recommendedTemperature, EvieProfileDraft.recommendedTopP)
+  }
+
+  public var samplingExplanation: String {
+    if model.lowercased() == "qwen-daily" {
+      return
+        "O gateway aplica a receita Qwen 3.8 conforme o raciocínio: desligado 0,7 / top-p 0,80; ligado 1,0 / 0,95. Top-k 20; min-p 0. Não misture as duas receitas."
+    }
+    if model.lowercased().contains("lensvlm") {
+      return
+        "LensVLM: temperatura 0, geração determinística como na avaliação oficial. Top-p 1 não limita o vocabulário. A receita Qwen 3.8 não se aplica a este ajuste da base Qwen 3.5."
+    }
+    return "Padrão geral da Evie; confira a documentação do modelo deste servidor antes de ajustar."
   }
 
   /// Digits in threes, joined by a no-break space so a figure never wraps: the
@@ -155,6 +176,7 @@ extension EvieModelProfile {
 /// address of a brain Evie starts on this Mac (`fixedEndpointExplanation`).
 public struct EvieProfileDraft: Sendable, Equatable {
   public let profileID: String
+  public var displayName: String
   public var endpoint: String
   public var model: String
   public var contextTokens: Int
@@ -173,6 +195,7 @@ public struct EvieProfileDraft: Sendable, Equatable {
 
   public init(_ profile: EvieModelProfile) {
     profileID = profile.id
+    displayName = profile.displayName
     endpoint = profile.endpoint.absoluteString
     model = profile.model
     contextTokens = profile.contextTokens
@@ -185,6 +208,31 @@ public struct EvieProfileDraft: Sendable, Equatable {
     requestTimeout = profile.requestTimeout
   }
 
+  /// Replays only fields edited since `baseline` onto the latest saved values.
+  /// All three drafts must describe the same profile. Unchanged fields follow
+  /// another settings writer; unsaved edits, including invalid text, stay typed.
+  public func rebased(onto latest: Self, since baseline: Self) -> Self {
+    precondition(profileID == latest.profileID && profileID == baseline.profileID)
+    var result = latest
+    func preserve<Value: Equatable>(_ field: WritableKeyPath<Self, Value>) {
+      if self[keyPath: field] != baseline[keyPath: field] {
+        result[keyPath: field] = self[keyPath: field]
+      }
+    }
+    preserve(\.displayName)
+    preserve(\.endpoint)
+    preserve(\.model)
+    preserve(\.contextTokens)
+    preserve(\.maxCompletionTokens)
+    preserve(\.defaultReasoning)
+    preserve(\.usesServerTemperature)
+    preserve(\.temperature)
+    preserve(\.usesServerTopP)
+    preserve(\.topP)
+    preserve(\.requestTimeout)
+    return result
+  }
+
   /// `profile` with this draft's values, except the `managed` fields, which keep
   /// the profile's own.
   public func applied(
@@ -192,6 +240,8 @@ public struct EvieProfileDraft: Sendable, Equatable {
     keeping managed: Set<EvieManagedField> = []
   ) throws -> EvieModelProfile {
     var edited = profile
+    let name = displayName.trimmingCharacters(in: .whitespacesAndNewlines)
+    if !name.isEmpty { edited.displayName = String(name.prefix(100)) }
     if !managed.contains(.endpoint), profile.fixedEndpointExplanation == nil {
       guard let url = parsedEndpoint else {
         throw Problem.invalidEndpoint
@@ -203,6 +253,10 @@ public struct EvieProfileDraft: Sendable, Equatable {
     }
     if !managed.contains(.contextTokens) {
       edited.contextTokens = contextTokens
+      if case .localOnDemand(var runtime) = edited.runtime, contextTokens != profile.contextTokens {
+        runtime.maxKVSize = contextTokens
+        edited.runtime = .localOnDemand(runtime)
+      }
     }
     if !managed.contains(.maxCompletionTokens) {
       edited.maxCompletionTokens = maxCompletionTokens
@@ -222,6 +276,7 @@ public struct EvieProfileDraft: Sendable, Equatable {
     } catch let reason as EvieConfiguration.ValidationError {
       throw Problem(reason)
     }
+    try edited.validateContextCapacity()
     return edited
   }
 

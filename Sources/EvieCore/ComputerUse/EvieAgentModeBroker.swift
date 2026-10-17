@@ -6,6 +6,9 @@ public enum UserGesture: Sendable, Equatable {
   case pushToTalk
   /// A click on one of Evie's buttons, which refuse events Evie posts herself.
   case button
+  /// A local research trigger, only while a hand-armed, expiring research
+  /// session is held by the shell (ADR 0020). Cannot approve a sensitive step.
+  case researchShortcut
   /// "Evie, …" heard by the microphone — which also hears videos, calls and
   /// other people, so it can start a conversation but never a session.
   case wakeWord
@@ -23,12 +26,23 @@ public struct EvieAgentModeGrant: Sendable, Hashable {
   public let expiresAt: Date
   /// The person's own request, as said or typed.
   public let goal: String
+  /// Explicit clipboard-output consent collected by trusted local UI for this
+  /// session, not inferred from model text or the goal. False for normal use.
+  public let allowsClipboardWrites: Bool
+  /// Research shortcut grants permit only identified answer fields and choices;
+  /// a confirmation cannot expand them into submit/send or launching authority.
+  public let answerEntryOnly: Bool
 
-  fileprivate init(id: UUID, startedAt: Date, expiresAt: Date, goal: String) {
+  fileprivate init(
+    id: UUID, startedAt: Date, expiresAt: Date, goal: String, allowsClipboardWrites: Bool,
+    answerEntryOnly: Bool
+  ) {
     self.id = id
     self.startedAt = startedAt
     self.expiresAt = expiresAt
     self.goal = goal
+    self.allowsClipboardWrites = allowsClipboardWrites
+    self.answerEntryOnly = answerEntryOnly
   }
 }
 
@@ -152,11 +166,14 @@ public final class EvieAgentModeBroker {
 
   /// Begins a session for `goal`, replacing any running one.
   ///
-  /// Only push-to-talk or a button can begin one, and the shell calls this
-  /// only after the confirm click on the session card (S5d). The wake word
-  /// never can: anything the microphone hears could say it.
-  public func begin(goal: String, gesture: UserGesture) -> EvieAgentModeGrant? {
-    guard gesture == .pushToTalk || gesture == .button else {
+  /// Push-to-talk or a button after the session card (S5d), or a research
+  /// shortcut inside its hand-armed lease (ADR 0020). An earlier deadline
+  /// limits the grant. The wake word never can begin one.
+  public func begin(
+    goal: String, gesture: UserGesture, expiresAt deadline: Date? = nil,
+    allowsClipboardWrites: Bool = false
+  ) -> EvieAgentModeGrant? {
+    guard gesture == .pushToTalk || gesture == .button || gesture == .researchShortcut else {
       return nil
     }
     let trimmed = goal.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -164,11 +181,15 @@ public final class EvieAgentModeBroker {
       return nil
     }
     let start = now()
+    let expiry = min(deadline ?? .distantFuture, start.addingTimeInterval(Self.grantLifetime))
+    guard expiry > start else { return nil }
     let grant = EvieAgentModeGrant(
       id: UUID(),
       startedAt: start,
-      expiresAt: start.addingTimeInterval(Self.grantLifetime),
-      goal: trimmed
+      expiresAt: expiry,
+      goal: trimmed,
+      allowsClipboardWrites: allowsClipboardWrites,
+      answerEntryOnly: gesture == .researchShortcut
     )
     session = Session(grant: grant, budget: ComputerUseBudget(startedAt: start))
     return grant
@@ -263,7 +284,9 @@ public final class EvieAgentModeBroker {
     let clearance: ComputerActionPolicy.Clearance
     switch policy.evaluate(
       action, observation: observation, live: live, goal: grant.goal,
-      afterLauncherChord: current.launcherMayBeOpen)
+      afterLauncherChord: current.launcherMayBeOpen,
+      clipboardWriteAuthorized: grant.allowsClipboardWrites,
+      answerEntryOnly: grant.answerEntryOnly)
     {
     case .refused(let reason):
       return .refused(reason)

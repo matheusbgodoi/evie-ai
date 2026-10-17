@@ -110,7 +110,10 @@ final class ComputerUseHost {
   func begin(
     goal: String,
     on profile: EvieModelProfile,
-    log: ComputerActionLog
+    log: ComputerActionLog,
+    gesture: UserGesture = .button,
+    expiresAt: Date? = nil,
+    allowsClipboardWrites: Bool = false
   ) -> ComputerUseSession? {
     end()
     let broker = EvieAgentModeBroker(policy: MacComputerActor.policy())
@@ -118,7 +121,9 @@ final class ComputerUseHost {
       let executor = MacComputerActor.make(
         broker: broker, presence: presence, focus: focus, screenPermission: screenPermission,
         preferences: preferences(), environment: environment),
-      let grant = broker.begin(goal: goal, gesture: .button)
+      let grant = broker.begin(
+        goal: goal, gesture: gesture, expiresAt: expiresAt,
+        allowsClipboardWrites: allowsClipboardWrites)
     else {
       return nil
     }

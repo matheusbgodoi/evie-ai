@@ -1,154 +1,220 @@
 import EvieCore
 import SwiftUI
 
-/// Everything the brain chip draws and does, bundled so the input bar takes
-/// one value instead of seven.
 struct BrainChipModel {
   var chip: EvieBrainChip
   var menu: EvieBrainMenu
   var onChoose: (EvieBrainChoice) -> Void
   var onTestConnection: () -> Void
   var onNewConversation: () -> Void
-  /// Nil when agent mode cannot be switched from here.
   var onSetAgentMode: ((Bool) -> Void)? = nil
   var onOpenSettings: ((EvieSettingsSection) -> Void)? = nil
+  var onSetReasoning: ((ReasoningLevel) -> Void)? = nil
+  var webEnabled = false
+  var onSetWebSearch: ((Bool) -> Void)? = nil
+  var isBusy = false
+  /// Formatted last-send usage, including its source, e.g. "28.100 tokens
+  /// (servidor)" or "~28.100 tokens (estimativa)". Percentage may be included.
+  /// Absence means no usage has been reported for this conversation.
+  var contextUsage: String? = nil
+  var isCompacting = false
 }
 
-/// The chip in the input bar: which brain the next question goes to, a dot for
-/// whether it can answer, and agent mode when it is on. Clicking it opens the
-/// menu that pins the brain for the next conversation.
-///
-/// Small and quiet on purpose: it is read when wanted, like the clock in the
-/// menu bar, and the field beside it is what the bar is for.
+/// A fixed-width brain button preserves the writing area. Native popover
+/// placement anchors the controls above the input without resizing the HUD.
 struct BrainChipView: View {
   var model: BrainChipModel
-
-  private var chip: EvieBrainChip { model.chip }
+  @State private var isExpanded = false
 
   var body: some View {
-    Menu {
-      menuContent
+    Button {
+      isExpanded.toggle()
     } label: {
-      label
+      Image(systemName: "brain")
+        .font(.system(size: 13, weight: .medium))
+        .foregroundStyle(model.chip.isAgentModeOn ? BrainChipPalette.agent : .primary)
+        .frame(width: 30, height: 30)
+        .contentShape(Circle())
     }
-    .menuStyle(.button)
     .buttonStyle(.plain)
-    .menuIndicator(.hidden)
-    .focusEffectDisabled()
-    .fixedSize()
-    .help(help)
-    .accessibilityLabel("Cérebro")
-    .accessibilityValue(chip.accessibilityLabel)
-    .accessibilityHint("Abre o menu para escolher o cérebro das próximas conversas")
-  }
-
-  private var help: String {
-    var lines = [
-      "\(chip.profile.displayModelName) \(chip.profile.location.answerPlace): \(chip.stateDescription)"
-    ]
-    if chip.isAgentModeOn {
-      lines.append("Modo agente ligado: ela pode controlar o Mac numa sessão que você começar.")
-    }
-    lines.append("Clique para escolher o cérebro ou testar a conexão.")
-    return lines.joined(separator: "\n")
-  }
-
-  /// A capsule drawn as a continuous rounded rectangle: `Capsule`'s stroke
-  /// left a hairline tick at each end at this size.
-  private var shape: RoundedRectangle {
-    RoundedRectangle(cornerRadius: 11, style: .continuous)
-  }
-
-  private var label: some View {
-    HStack(spacing: 0) {
-      if chip.isAgentModeOn {
-        // A pill inside the pill: agent mode is a state of its own, not part
-        // of the brain's name.
-        HStack(spacing: 4) {
-          Image(systemName: "cursorarrow.click.2")
-            .font(.system(size: 9, weight: .semibold))
-          Text("Agente")
-            .font(.system(size: 11, weight: .semibold))
-        }
-        .foregroundStyle(BrainChipPalette.agent)
-        .padding(.horizontal, 7)
-        .frame(height: 18)
-        .background(BrainChipPalette.agent.opacity(0.16), in: Capsule())
-        .padding(.leading, 2)
-        .accessibilityHidden(true)
-      }
-
-      HStack(spacing: 6) {
-        BrainStateDot(state: chip.state)
-        Text(chip.title)
-          .font(.system(size: 11, weight: .medium))
-          .foregroundStyle(.primary.opacity(0.82))
-          .lineLimit(1)
-        Image(systemName: "chevron.down")
-          .font(.system(size: 7, weight: .bold))
-          .foregroundStyle(.tertiary)
-      }
-      .padding(.leading, chip.isAgentModeOn ? 6 : 8)
-      .padding(.trailing, 8)
-    }
-    .frame(height: 22)
-    .background(.primary.opacity(0.06), in: shape)
+    .background(.primary.opacity(0.045), in: Circle())
     .overlay {
-      shape.strokeBorder(
-        chip.isAgentModeOn ? BrainChipPalette.agent.opacity(0.5) : .primary.opacity(0.10),
-        lineWidth: 0.75
+      Circle().strokeBorder(
+        model.chip.isAgentModeOn ? BrainChipPalette.agent.opacity(0.85) : .primary.opacity(0.10),
+        lineWidth: model.chip.isAgentModeOn ? 1.25 : 0.5
       )
+      .allowsHitTesting(false)
     }
-    .contentShape(shape)
+    .overlay(alignment: .bottomTrailing) {
+      BrainStateDot(state: model.chip.state)
+        .padding(1.5)
+        .background(.background, in: Circle())
+        .offset(x: 1, y: 1)
+        .allowsHitTesting(false)
+    }
+    .frame(width: 30, height: 30)
+    .focusEffectDisabled()
+    .help(model.chip.accessibilityLabel + " · modelo, raciocínio e modo agente")
+    .accessibilityLabel("Cérebro e controles da Evie")
+    .accessibilityValue(model.chip.accessibilityLabel)
+    .accessibilityHint("Abre modelo, raciocínio, modo agente e pesquisa web")
+    .popover(isPresented: $isExpanded, attachmentAnchor: .rect(.bounds), arrowEdge: .bottom) {
+      BrainControlsView(model: model)
+    }
+  }
+}
+
+struct BrainControlsView: View {
+  var model: BrainChipModel
+
+  private var isWorking: Bool { model.isBusy || model.isCompacting }
+
+  var body: some View {
+    ScrollView {
+      controls
+    }
+    .scrollBounceBehavior(.basedOnSize)
+    .frame(width: 330)
+    .frame(maxHeight: 680)
   }
 
-  @ViewBuilder
-  private var menuContent: some View {
-    Section("Próximas conversas") {
-      ForEach(model.menu.items) { item in
-        Toggle(
-          item.title,
-          isOn: Binding(
-            get: { item.isSelected },
-            set: { if $0 { model.onChoose(item.choice) } }
-          )
-        )
-        .disabled(!item.isAvailable)
-      }
-    }
-
-    if let note = model.menu.pinnedNote {
-      Section {
-        Text(note)
-        Button(
-          "Começar nova conversa", systemImage: "square.and.pencil", action: model.onNewConversation
-        )
-      }
-    }
-
-    Section {
-      Button(
-        "Testar conexão", systemImage: "antenna.radiowaves.left.and.right",
-        action: model.onTestConnection)
-      if let onOpenSettings = model.onOpenSettings {
-        Button("\(model.menu.reasoningLine)…", systemImage: "brain") {
-          onOpenSettings(.brain)
-        }
-      }
-    }
-
-    if let onSetAgentMode = model.onSetAgentMode {
-      Section {
-        Toggle(
-          "Modo agente (controlar o Mac)",
-          isOn: Binding(get: { chip.isAgentModeOn }, set: { onSetAgentMode($0) })
-        )
-        if let onOpenSettings = model.onOpenSettings {
-          Button("Tela e modo agente…", systemImage: "macwindow.and.cursorarrow") {
-            onOpenSettings(.screenAndAgent)
+  private var controls: some View {
+    VStack(alignment: .leading, spacing: 16) {
+      HStack(spacing: 10) {
+        Image(systemName: "brain").font(.title2).foregroundStyle(.secondary)
+        VStack(alignment: .leading, spacing: 3) {
+          Text(model.chip.title).font(.headline)
+          HStack(spacing: 5) {
+            BrainStateDot(state: model.chip.state)
+            Text(model.chip.stateDescription).font(.caption).foregroundStyle(.secondary)
           }
         }
+        Spacer()
+        Button(action: model.onTestConnection) {
+          Image(systemName: "arrow.clockwise").frame(width: 24, height: 24)
+        }
+        .buttonStyle(.plain)
+        .disabled(isWorking)
+        .help("Testar conexão com este cérebro")
+        .accessibilityLabel("Testar conexão")
       }
+      VStack(alignment: .leading, spacing: 5) {
+        Text("CÉREBRO").font(.caption2.weight(.semibold)).foregroundStyle(.secondary)
+        ForEach(model.menu.items) { item in
+          Button {
+            model.onChoose(item.choice)
+          } label: {
+            HStack(spacing: 9) {
+              Image(systemName: item.choice.symbol).frame(width: 18)
+              Text(item.title).font(.callout)
+              Spacer(minLength: 4)
+              if item.isSelected { Image(systemName: "checkmark").font(.caption.weight(.semibold)) }
+            }
+            .padding(.horizontal, 9).padding(.vertical, 8)
+            .contentShape(RoundedRectangle(cornerRadius: 8))
+            .background(
+              .primary.opacity(item.isSelected ? 0.08 : 0), in: RoundedRectangle(cornerRadius: 8))
+          }
+          .buttonStyle(.plain)
+          .disabled(!item.isAvailable || isWorking)
+          .accessibilityAddTraits(item.isSelected ? [.isSelected] : [])
+        }
+        Text(
+          isWorking
+            ? "Pare a tarefa atual para trocar o cérebro."
+            : "A escolha vale para a próxima resposta desta conversa."
+        )
+        .font(.caption).foregroundStyle(.secondary)
+      }
+      Divider()
+      contextSummary
+      if let setReasoning = model.onSetReasoning {
+        VStack(alignment: .leading, spacing: 7) {
+          Text("Raciocínio").font(.callout.weight(.medium))
+          Picker(
+            "Raciocínio",
+            selection: Binding(
+              get: { model.chip.profile.defaultReasoning }, set: { setReasoning($0) })
+          ) {
+            ForEach(ReasoningLevel.allCases, id: \.self) { level in
+              Text(level.title).tag(level)
+            }
+          }
+          .pickerStyle(.segmented)
+          .labelsHidden()
+          .disabled(isWorking || model.chip.profile.thinkingStyle == .none)
+          Text("Desligado responde mais rápido; Máximo pode levar mais tempo.")
+            .font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+        }
+      }
+      if let setAgent = model.onSetAgentMode {
+        VStack(alignment: .leading, spacing: 5) {
+          Toggle(
+            "Permitir modo agente",
+            isOn: Binding(
+              get: { model.chip.isAgentModeOn }, set: { setAgent($0) })
+          )
+          .toggleStyle(.switch)
+          Text(
+            "Habilita sessões de controle do Mac. Só age quando você inicia uma tarefa; não fica controlando o computador o tempo todo."
+          )
+          .font(.caption).foregroundStyle(.secondary)
+        }
+      }
+      if let setWeb = model.onSetWebSearch {
+        VStack(alignment: .leading, spacing: 5) {
+          Toggle("Pesquisa na web", isOn: Binding(get: { model.webEnabled }, set: { setWeb($0) }))
+            .toggleStyle(.switch)
+          Text("Envia termos de busca ao DuckDuckGo e lê páginas públicas.")
+            .font(.caption).foregroundStyle(.secondary)
+        }
+      }
+    }
+    .padding(18)
+  }
+
+  private var contextSummary: some View {
+    VStack(alignment: .leading, spacing: 6) {
+      HStack {
+        Text("Contexto").font(.callout.weight(.medium))
+        Spacer()
+        Text("\(tokenCount(model.chip.profile.contextTokens)) tokens")
+          .font(.callout.monospacedDigit())
+      }
+      Text("Saída: até \(tokenCount(model.chip.profile.maxCompletionTokens)) tokens")
+        .font(.caption).foregroundStyle(.secondary)
+      if let usage = model.contextUsage {
+        Text("Último envio: \(usage)")
+          .font(.caption.monospacedDigit()).foregroundStyle(.secondary)
+          .fixedSize(horizontal: false, vertical: true)
+      }
+      HStack(spacing: 6) {
+        if model.isCompacting {
+          ProgressView().controlSize(.small)
+            .accessibilityLabel("Compactando a conversa")
+        } else {
+          Image(systemName: "arrow.triangle.2.circlepath")
+        }
+        Text(model.isCompacting ? "Compactando a conversa…" : "Compactação automática")
+      }
+      .font(.caption).foregroundStyle(.secondary)
+      Text("Histórico, entrada e resposta compartilham o limite de contexto.")
+        .font(.caption).foregroundStyle(.secondary)
+        .fixedSize(horizontal: false, vertical: true)
+    }
+  }
+
+  private func tokenCount(_ count: Int) -> String {
+    count.formatted(.number.locale(Locale(identifier: "pt_BR")))
+  }
+}
+
+extension EvieBrainChoice {
+  fileprivate var symbol: String {
+    switch self {
+    case .automatic: "arrow.triangle.branch"
+    case .alwaysPC: "desktopcomputer"
+    case .alwaysMac: "laptopcomputer"
     }
   }
 }

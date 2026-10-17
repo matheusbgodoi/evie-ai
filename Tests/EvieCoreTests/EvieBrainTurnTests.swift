@@ -10,10 +10,18 @@ import Testing
 struct EvieBrainTurnTests {
   // MARK: - The plan
 
+  @Test("a tiny context never gets an input budget larger than its window")
+  func tinyContextBudget() {
+    var tiny = pcProfile
+    tiny.contextTokens = 1_024
+    tiny.maxCompletionTokens = 1_024
+    #expect(EvieTurnPlan(profile: tiny, readiness: .ready).characterBudget == 0)
+  }
+
   @Test("the character budget comes from the profile: the PC's cap, the Mac's 32K")
   func budgetPerProfile() {
-    #expect(EvieTurnPlan(profile: pcProfile, readiness: .ready).characterBudget == 237_568)
-    #expect(EvieTurnPlan(profile: macProfile, readiness: .ready).characterBudget == 61_440)
+    #expect(EvieTurnPlan(profile: pcProfile, readiness: .ready).characterBudget == 360_448)
+    #expect(EvieTurnPlan(profile: macProfile, readiness: .ready).characterBudget == 59_392)
   }
 
   @Test("a profile without tools takes the direct stream, with evidence gathered first")
@@ -137,17 +145,18 @@ struct EvieBrainTurnTests {
       conversation: conversation,
       on: first,
       resolver: harness.resolver,
-      onSwitch: { notices.append($0.notice) }
-    ) { brain in
-      let plan = EvieTurnPlan(brain)
-      return try await text(
-        of: brain.client.stream(
-          messages: plan.prefix(history, then: [question]),
-          tools: [],
-          options: plan.options(spoken: false)
+      onSwitch: { notices.append($0.notice) },
+      attempt: { brain in
+        let plan = EvieTurnPlan(brain)
+        return try await text(
+          of: brain.client.stream(
+            messages: plan.prefix(history, then: [question]),
+            tools: [],
+            options: plan.options(spoken: false)
+          )
         )
-      )
-    }
+      }
+    )
 
     #expect(answer == "Oi, Matheus.")
     #expect(notices == ["PC indisponível, usando o Mac"])
@@ -196,14 +205,15 @@ struct EvieBrainTurnTests {
         conversation: conversation,
         on: first,
         resolver: harness.resolver,
-        onSwitch: { _ in switched = true }
-      ) { brain in
-        for try await event in brain.client.stream(messages: [], tools: [], options: .init()) {
-          if case .responseTextDelta(let delta) = event {
-            shown.append(delta)
+        onSwitch: { _ in switched = true },
+        attempt: { brain in
+          for try await event in brain.client.stream(messages: [], tools: [], options: .init()) {
+            if case .responseTextDelta(let delta) = event {
+              shown.append(delta)
+            }
           }
         }
-      }
+      )
     }
 
     #expect(!switched)
@@ -233,15 +243,16 @@ struct EvieBrainTurnTests {
         conversation: conversation,
         on: first,
         resolver: harness.resolver,
-        onSwitch: { _ in }
-      ) { brain in
-        try await EvieAgentLoop().run(
-          messages: [ChatMessage(role: .user, content: "oi")],
-          roots: [],
-          client: brain.client,
-          emit: { _ in }
-        )
-      }
+        onSwitch: { _ in },
+        attempt: { brain in
+          try await EvieAgentLoop().run(
+            messages: [ChatMessage(role: .user, content: "oi")],
+            roots: [],
+            client: brain.client,
+            emit: { _ in }
+          )
+        }
+      )
     }
     #expect(await macClient.calls.isEmpty)
   }
@@ -264,10 +275,11 @@ struct EvieBrainTurnTests {
         conversation: conversation,
         on: first,
         resolver: harness.resolver,
-        onSwitch: { _ in }
-      ) { brain in
-        try await text(of: brain.client.stream(messages: [], tools: [], options: .init()))
-      }
+        onSwitch: { _ in },
+        attempt: { brain in
+          try await text(of: brain.client.stream(messages: [], tools: [], options: .init()))
+        }
+      )
     }
     #expect(await pcClient.calls.count == 1)
     #expect(await macClient.calls.count == 1)
@@ -327,7 +339,13 @@ extension EvieBrainTurnTests {
   fileprivate var pc: String { EvieModelProfile.pcProfileID }
   fileprivate var mac: String { EvieModelProfile.macProfileID }
   fileprivate var pcProfile: EvieModelProfile { EvieModelProfileSet.builtIn.profile(id: pc)! }
-  fileprivate var macProfile: EvieModelProfile { EvieModelProfileSet.builtIn.profile(id: mac)! }
+  // Keep the smaller-window failover regression independent of the qualified
+  // hardware default. Custom 32K profiles must still fit and preserve the tail.
+  fileprivate var macProfile: EvieModelProfile {
+    var profile = EvieModelProfileSet.builtIn.profile(id: mac)!
+    profile.contextTokens = 32_768
+    return profile
+  }
 
   /// A system prompt, then `turns` question-and-answer pairs, the newest
   /// question carrying a picture.

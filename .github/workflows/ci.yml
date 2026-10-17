@@ -1,9 +1,7 @@
 name: CI
 
-# Evie is a macOS application built against the macOS 27 SDK, and the newest
-# image GitHub offers is macOS 26.5. What can be checked here is checked here,
-# and what cannot is said plainly at the step that would have done it rather
-# than quietly left out.
+# Core compatibility remains on macOS 26. The xcode-27 runner now also builds
+# the complete shell and runs the complete test suite (available 2026-10-15).
 on:
   push:
     branches: [main, dev]
@@ -42,35 +40,23 @@ jobs:
             ${{ runner.os }}-spm-
 
       - name: Build the core
-        # `EvieCore`, not the `evie-shell` product, and this is a real
-        # limitation rather than a preference.
-        #
-        # `EvieShell` needs the macOS 27 SDK. `EvieVisionDescriber` uses
-        # `Attachment` from FoundationModels, which exists in the 27 SDK and not
-        # in 26. The `if #available(macOS 27, *)` around it governs what runs,
-        # not what compiles, so a 26 SDK fails to find the symbol at all. The
-        # newest runner GitHub offers is macos-26 (26.5, Xcode 26.6), so the
-        # shell cannot be built here until a macOS 27 image exists.
-        #
-        # This proves that the half of the code holding the agent loop, the
-        # tools, retrieval and the permission boundary compiles somewhere other
-        # than one laptop. It does not prove the shell does. See below.
-        run: swift build --target EvieCore
+        run: swift build --target EvieCore -Xswiftc -warnings-as-errors
 
-      # There is no test step, and pretending otherwise would be worse than
-      # saying so. `swift test` builds every target including EvieShell, which
-      # needs the macOS 27 SDK. Building only EvieCoreTests and running with
-      # --skip-build works on the author's Command Line Tools, where the bundle
-      # is EvieCoreTests.xctest, and fails on a runner's full Xcode, where
-      # SwiftPM looks for a whole-package EviePackageTests.xctest that a
-      # single-target build never produces.
-      #
-      # So the 618 tests run on one Mac and are reported in every commit that
-      # touches them. This is recorded as a limitation in docs/PROJECT_STATUS.md
-      # rather than left for somebody to infer from a short workflow.
-      #
-      # What unblocks it: a macOS 27 runner image, at which point this becomes
-      # `run: Scripts/test` and the comment goes.
+  full-package:
+    name: Build and test the full package
+    runs-on: xcode-27
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - name: Record the toolchain
+        run: |
+          swift --version
+          xcodebuild -version
+          sw_vers
+      - name: Build the shell
+        run: swift build -Xswiftc -warnings-as-errors
+      - name: Run all behavioral tests
+        run: Scripts/test
 
   documentation:
     name: Documentation

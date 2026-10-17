@@ -33,6 +33,19 @@ struct EvieBrainChipTests {
     #expect(EvieModelProfile.displayModelName(forModel: model) == expected)
   }
 
+  @Test("a chosen profile name appears without changing the model identifier")
+  func customProfileName() throws {
+    var draft = EvieProfileDraft(pc)
+    draft.displayName = "  Minha IA  "
+    let profile = try draft.applied(to: pc)
+    #expect(profile.model == pc.model)
+    #expect(profile.chipTitle == "Minha IA · PC")
+    #expect(profile.answerLabel == "Minha IA · no seu PC")
+    let restored = try JSONDecoder().decode(
+      EvieModelProfile.self, from: JSONEncoder().encode(profile))
+    #expect(restored.displayName == "Minha IA")
+  }
+
   @Test("an edited model id renames the brain")
   func editedModel() {
     var edited = pc
@@ -153,6 +166,20 @@ struct EvieBrainChipTests {
 struct EvieBrainResolverChoiceTests {
   private let pc = EvieModelProfile.pcProfileID
   private let mac = EvieModelProfile.macProfileID
+
+  @Test("an explicit PC choice releases the current Mac pin but preserves other conversations")
+  func explicitChoiceChangesCurrentConversation() async {
+    let harness = ResolverHarness(keys: .saved, rungs: [pc: .ready, mac: .ready])
+    harness.resolver.choose(.alwaysMac)
+    let current = UUID()
+    let other = UUID()
+    _ = await harness.resolver.resolve(conversation: current)
+    _ = await harness.resolver.resolve(conversation: other)
+    harness.resolver.choose(.alwaysPC, for: current)
+    #expect(harness.resolver.expectedProfile(for: current).id == pc)
+    #expect(await harness.resolver.resolve(conversation: current).profile.id == pc)
+    #expect(harness.resolver.pinnedProfileID(for: other) == mac)
+  }
 
   @Test("Sempre o Mac starts a new conversation on the Mac, without asking, though the PC is ready")
   func alwaysMac() async {

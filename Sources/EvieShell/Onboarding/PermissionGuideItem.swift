@@ -17,12 +17,20 @@ protocol PermissionGuideItem {
   /// and must never show a prompt.
   func row(given record: PermissionGuideRecord) -> PermissionGuideRow
 
+  func refreshStatus()
+  func observeRowChanges(_ onChange: @escaping @MainActor () -> Void)
+
   /// Runs the row's button.
   ///
   /// - Returns: the permission whose one system prompt this just used, so the
   ///   guide remembers it was spent and offers System Settings from then on; nil
   ///   when nothing was requested.
   func perform(_ action: PermissionGuideRow.Action) async -> EviePermission?
+}
+
+extension PermissionGuideItem {
+  func refreshStatus() {}
+  func observeRowChanges(_ onChange: @escaping @MainActor () -> Void) {}
 }
 
 /// A row for one macOS privacy permission.
@@ -120,6 +128,11 @@ struct SystemPermissionItem: PermissionGuideItem {
 @MainActor
 struct PCKeyItem: PermissionGuideItem {
   let step: EvieGuidePCKeyStep
+
+  func refreshStatus() { step.refreshStatus() }
+  func observeRowChanges(_ onChange: @escaping @MainActor () -> Void) {
+    step.onStatusChanged = onChange
+  }
 
   func row(given record: PermissionGuideRecord) -> PermissionGuideRow {
     step.row

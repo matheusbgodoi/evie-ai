@@ -2,7 +2,7 @@
 /// the server really sends rather than against what its documentation says.
 ///
 /// Recorded 2026-10-16 from this Mac against
-/// `https://ai-node-3090.tail6146ef.ts.net/v1/chat/completions`, model
+/// `https://models.example.invalid/v1/chat/completions`, model
 /// `qwen-daily` (llama.cpp `b1-749f688` behind gateway-edge), `max_tokens` 64,
 /// `stream_options.include_usage` on. Each chunk below is a verbatim line of the
 /// recording; the only edit is that runs of identical-shape reasoning chunks were

@@ -1,0 +1,67 @@
+#!/bin/zsh
+
+# SwiftPM does not run Xcode's Extract App Intents Metadata build phase. Extract
+# the actual Swift declarations, then let Apple's tool validate and package them.
+# Run before codesigning; metadata is part of the signed bundle.
+set -euo pipefail
+
+readonly native_script_dir="${0:A:h}"
+readonly native_repo_dir="${native_script_dir:h}"
+readonly native_bundle="${1:?Usage: Scripts/evie-native-metadata <Evie.app>}"
+readonly native_sdk="$(xcrun --show-sdk-path)"
+readonly native_toolchain="$(dirname "$(dirname "$(dirname "$(xcrun --find swiftc)")")")"
+readonly native_arch="$(uname -m)"
+readonly native_xcode_version="$(xcodebuild -version | sed -n 's/^Build version //p')"
+readonly native_scratch="$(mktemp -d -t evie-appintents)"
+trap 'rm -rf "${native_scratch}"' EXIT
+
+# The installed Swift compiler accepts the legacy array form here, while the
+# toolchain distributes a versioned object. Derive the list from that toolchain
+# instead of freezing Apple's protocol inventory into this repository.
+python3 - "${native_toolchain}" "${native_scratch}" "${native_repo_dir}" <<'PY'
+import json
+from pathlib import Path
+import sys
+
+toolchain, scratch, repository = map(Path, sys.argv[1:])
+protocols = json.loads((toolchain / 'usr/share/swift/SwiftConstantValues/AppIntents.json').read_text())
+if isinstance(protocols, dict):
+    protocols = protocols['constValueProtocols']
+(scratch / 'protocols.json').write_text(json.dumps(protocols))
+(scratch / 'sources.list').write_text(str(repository / 'Sources/EvieShell/NativeAppleIntents.swift') + '\n')
+(scratch / 'constvalues.list').write_text(str(scratch / 'NativeAppleIntents.swiftconstvalues') + '\n')
+PY
+
+xcrun swiftc -parse-as-library -emit-object -module-name EvieShell \
+  -target "${native_arch}-apple-macosx26.0" -sdk "${native_sdk}" \
+  -warnings-as-errors \
+  -const-gather-protocols-list "${native_scratch}/protocols.json" \
+  -emit-const-values-path "${native_scratch}/NativeAppleIntents.swiftconstvalues" \
+  -o "${native_scratch}/NativeAppleIntents.o" \
+  "${native_repo_dir}/Sources/EvieShell/NativeAppleIntents.swift"
+
+mkdir -p "${native_bundle}/Contents/Resources"
+xcrun appintentsmetadataprocessor \
+  --output "${native_bundle}/Contents/Resources" \
+  --toolchain-dir "${native_toolchain}" --module-name EvieShell \
+  --sdk-root "${native_sdk}" --xcode-version "${native_xcode_version}" \
+  --platform-family macOS --deployment-target 26.0 \
+  --target-triple "${native_arch}-apple-macosx26.0" \
+  --source-file-list "${native_scratch}/sources.list" \
+  --swift-const-vals-list "${native_scratch}/constvalues.list"
+
+# A successful compiler exit with empty metadata must not produce a release
+# whose Shortcuts actions silently disappear.
+python3 - "${native_bundle}" <<'PY'
+import json
+from pathlib import Path
+import sys
+
+metadata = Path(sys.argv[1]) / 'Contents/Resources/Metadata.appintents/extract.actionsdata'
+data = json.loads(metadata.read_text())
+expected = {'OpenEvieIntent', 'PrepareEvieQuestionIntent', 'CaptureEvieScreenIntent'}
+actual = set(data.get('actions', {}))
+if actual != expected or len(data.get('autoShortcuts', [])) != 3:
+    raise SystemExit('App Intents metadata does not contain all three Evie actions and shortcuts')
+print('App Intents: 3 actions and 3 App Shortcuts extracted and validated.')
+PY

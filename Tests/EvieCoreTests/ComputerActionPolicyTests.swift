@@ -12,13 +12,15 @@ struct ComputerActionPolicyTests {
     _ action: ComputerAction,
     on observation: ComputerObservation = F.observation(),
     live: ComputerLiveState? = nil,
-    goal: String = "responde o email do Pedro no Mail"
+    goal: String = "responde o email do Pedro no Mail",
+    answerEntryOnly: Bool = false
   ) -> ComputerActionPolicy.Decision {
     F.policy.evaluate(
       action,
       observation: observation,
       live: live ?? F.live(for: observation),
-      goal: goal
+      goal: goal,
+      answerEntryOnly: answerEntryOnly
     )
   }
 
@@ -82,7 +84,8 @@ struct ComputerActionPolicyTests {
 
   @Test("a click on a point over a keyword button asks first, like the element")
   func pointOverKeywordButton() {
-    let decision = decide(.click(.normalized(x: 530, y: 890, observationID: "obs-1"), button: .left, count: 1))
+    let decision = decide(
+      .click(.normalized(x: 530, y: 890, observationID: "obs-1"), button: .left, count: 1))
     #expect(confirmation(decision)?.contains("Enviar") == true)
   }
 
@@ -96,7 +99,9 @@ struct ComputerActionPolicyTests {
 
   @Test(
     "each risky chord asks first",
-    arguments: ["cmd+q", "cmd+w", "cmd+space", "cmd+opt+esc", "ctrl+cmd+q", "shift+cmd+q", "cmd+tab"]
+    arguments: [
+      "cmd+q", "cmd+w", "cmd+space", "cmd+opt+esc", "ctrl+cmd+q", "shift+cmd+q", "cmd+tab",
+    ]
   )
   func riskyChords(text: String) throws {
     let decision = decide(try chord(text))
@@ -158,10 +163,12 @@ struct ComputerActionPolicyTests {
     #expect(confirmation(decide(.click(element(0), button: .left, count: 1), on: link)) == nil)
   }
 
-  @Test("Return inside a launcher asks first", arguments: [
-    ("com.apple.Spotlight", "Spotlight"), ("com.raycast.macos", "Raycast"),
-    ("com.runningwithcrayons.Alfred", "Alfred"),
-  ])
+  @Test(
+    "Return inside a launcher asks first",
+    arguments: [
+      ("com.apple.Spotlight", "Spotlight"), ("com.raycast.macos", "Raycast"),
+      ("com.runningwithcrayons.Alfred", "Alfred"),
+    ])
   func launcherReturn(bundleID: String, name: String) throws {
     let launcher = F.screen(of: F.identity(bundleID, name), button: "Terminal", role: "AXRow")
     #expect(confirmation(decide(try chord("return"), on: launcher)) != nil)
@@ -177,10 +184,49 @@ struct ComputerActionPolicyTests {
     #expect(confirmation(decide(try chord("return"), on: plain)) == nil)
   }
 
-  @Test("reading the clipboard asks first")
+  @Test("reading or replacing the clipboard asks first")
   func clipboardRead() {
     #expect(confirmation(decide(.readClipboard)) != nil)
-    #expect(confirmation(decide(.writeClipboard("olá"))) == nil)
+    #expect(confirmation(decide(.writeClipboard("olá")))?.contains("olá") == true)
+  }
+
+  @Test("research entry refuses submission, launch, clipboard reads and unknown targets")
+  func researchEntryRefusals() throws {
+    let editor = F.observation(app: F.textEdit)
+    let forbidden: [ComputerAction] = [
+      .pressKeys(try #require(KeyChord(parsing: "return"))),
+      .pressKeys(try #require(KeyChord(parsing: "cmd+return"))),
+      .pressKeys(try #require(KeyChord(parsing: "cmd+space"))),
+      .typeText("primeira\nsegunda"),
+      .readClipboard,
+      .openApp(name: "Notas", url: nil),
+      .click(element(0), button: .left, count: 1),
+      .click(element(1), button: .left, count: 2),
+      .click(.normalized(x: 900, y: 700, observationID: "obs-1"), button: .left, count: 1),
+      .drag(from: element(1), to: element(3)),
+    ]
+    for action in forbidden {
+      #expect(isRefused(decide(action, on: editor, answerEntryOnly: true)), "\(action.kindName)")
+    }
+  }
+
+  @Test(
+    "research entry permits an identified field and a standard choice, but never a submit label")
+  func researchEntryTargets() throws {
+    #expect(!isRefused(decide(.typeText("Resposta"), answerEntryOnly: true)))
+    #expect(!isRefused(decide(.click(element(1), button: .left, count: 1), answerEntryOnly: true)))
+    #expect(!isRefused(decide(try chord("cmd+a"), answerEntryOnly: true)))
+    #expect(!isRefused(decide(try chord("cmd+v"), answerEntryOnly: true)))
+    for title in ["Alternativa A", "Enviar alternativa"] {
+      let option = AXElementSummary(
+        index: 7, role: "AXRadioButton", title: title,
+        box0to1000: CGRect(x: 450, y: 350, width: 100, height: 30), isSecure: false)
+      let observation = F.observation(elements: [option], focused: 7)
+      let decision = decide(
+        .click(element(7), button: .left, count: 1), on: observation,
+        answerEntryOnly: true)
+      #expect(isRefused(decision) == title.hasPrefix("Enviar"))
+    }
   }
 
   @Test("opening an app the person did not name asks first; one they named does not")
@@ -528,7 +574,8 @@ struct ComputerActionPolicyTests {
     #expect(text.contains("instalar.command"))
     #expect(
       confirmation(
-        decide(.click(.normalized(x: 450, y: 420, observationID: "obs-1"), button: .left, count: 2),
+        decide(
+          .click(.normalized(x: 450, y: 420, observationID: "obs-1"), button: .left, count: 2),
           on: folder)) != nil)
     #expect(confirmation(decide(.click(element(0), button: .left, count: 1), on: folder)) == nil)
     // Emptying the Trash stays the .delete class, double click or not.
@@ -550,18 +597,22 @@ struct ComputerActionPolicyTests {
   static let crowded: [ComputerWindowSummary] = [
     ComputerUseFixture.window(
       ComputerUseFixture.dock, CGRect(x: 0, y: 900, width: 1_512, height: 82), layer: 20),
-    ComputerUseFixture.window(ComputerUseFixture.terminal, CGRect(x: 0, y: 0, width: 756, height: 900)),
+    ComputerUseFixture.window(
+      ComputerUseFixture.terminal, CGRect(x: 0, y: 0, width: 756, height: 900)),
     ComputerUseFixture.window(
       ComputerUseFixture.identity("com.apple.Notes", "Notas"),
       CGRect(x: 756, y: 300, width: 300, height: 100)),
-    ComputerUseFixture.window(ComputerUseFixture.mail, CGRect(x: 756, y: 0, width: 756, height: 900)),
+    ComputerUseFixture.window(
+      ComputerUseFixture.mail, CGRect(x: 756, y: 0, width: 756, height: 900)),
   ]
 
   @Test("a point is judged by the app whose window holds it")
   func pointOwner() throws {
     let screen = F.observation(windows: Self.crowded)
     func click(_ x: Int, _ y: Int) -> ComputerActionPolicy.Decision {
-      decide(.click(.normalized(x: x, y: y, observationID: "obs-1"), button: .left, count: 1), on: screen)
+      decide(
+        .click(.normalized(x: x, y: y, observationID: "obs-1"), button: .left, count: 1), on: screen
+      )
     }
 
     // On the Terminal's window: its denylist applies, whatever is in front.
@@ -588,13 +639,16 @@ struct ComputerActionPolicyTests {
 
   @Test("a point on no window at all is refused once the windows were read")
   func pointOnNoWindow() {
-    let screen = F.observation(windows: [F.window(F.mail, CGRect(x: 756, y: 0, width: 756, height: 900))])
+    let screen = F.observation(windows: [
+      F.window(F.mail, CGRect(x: 756, y: 0, width: 756, height: 900))
+    ])
     let desktop = ComputerAction.click(
       .normalized(x: 100, y: 100, observationID: "obs-1"), button: .left, count: 1)
     #expect(isRefused(decide(desktop, on: screen)))
   }
 
-  @Test("an element under a denied app's window is refused; under another app's panel it is pressed")
+  @Test(
+    "an element under a denied app's window is refused; under another app's panel it is pressed")
   func elementOwner() {
     // The subject field's centre, (350, 115) on the grid, is under these.
     let terminalOver = F.observation(windows: [

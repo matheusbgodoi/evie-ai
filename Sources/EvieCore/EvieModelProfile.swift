@@ -45,8 +45,8 @@ public struct EvieModelProfile: Codable, Sendable, Identifiable, Equatable {
   /// Exactly the id the server answers to. For a local server that is the
   /// `--model` it was launched with, so a request can never make it load another.
   public var model: String
-  /// The client's cap, which the context budget uses. Smaller than the server's
-  /// on the PC on purpose: an uncached prefill at 150K tokens took 250 s there.
+  /// The client's total window, including reserved output and input framing.
+  /// It may be smaller than the server's actual configured capacity.
   public var contextTokens: Int
   /// What the server itself holds, for display only; nothing is budgeted on it.
   public var serverContextTokens: Int?
@@ -151,19 +151,46 @@ public struct LocalRuntime: Codable, Sendable, Equatable {
   /// The server's KV cache cap, matched to the client's context cap: the Mac's
   /// Metal working set is 17.8 GB and the weights take about 8 of it.
   public var maxKVSize: Int
+  /// Optional upstream controls; nil preserves legacy launch behavior.
+  public var kvBits: Int?
+  public var prefillStepSize: Int?
+  /// MLX allocator cache, separate from the model's KV cache, in MiB.
+  public var metalCacheLimitMB: Int?
+
+  public var metalCacheLimitBytes: Int? {
+    guard let limit = metalCacheLimitMB, limit > 0, limit <= Int.max / (1 << 20) else {
+      return nil
+    }
+    return limit * (1 << 20)
+  }
+
+  public var hasValidMemoryConfiguration: Bool {
+    (kvBits.map { [2, 3, 4, 6, 8].contains($0) } ?? true)
+      && (prefillStepSize.map { $0 > 0 } ?? true)
+      && (metalCacheLimitMB == nil || metalCacheLimitBytes != nil)
+  }
 
   private enum CodingKeys: String, CodingKey {
     case launcher
     case executable
     case port
     case maxKVSize = "max_kv_size"
+    case kvBits = "kv_bits"
+    case prefillStepSize = "prefill_step_size"
+    case metalCacheLimitMB = "metal_cache_limit_mb"
   }
 
-  public init(launcher: Launcher, executable: String, port: Int, maxKVSize: Int) {
+  public init(
+    launcher: Launcher, executable: String, port: Int, maxKVSize: Int,
+    kvBits: Int? = nil, prefillStepSize: Int? = nil, metalCacheLimitMB: Int? = nil
+  ) {
     self.launcher = launcher
     self.executable = executable
     self.port = port
     self.maxKVSize = maxKVSize
+    self.kvBits = kvBits
+    self.prefillStepSize = prefillStepSize
+    self.metalCacheLimitMB = metalCacheLimitMB
   }
 
   /// The only address this server answers on: the launcher binds it to
@@ -293,12 +320,13 @@ public struct EvieModelProfileSet: Codable, Sendable, Equatable {
       if case .localOnDemand(let runtime) = profile.runtime {
         guard runtime.executable.hasPrefix("/"),
           (1...65_535).contains(runtime.port),
-          runtime.maxKVSize > 0
+          runtime.maxKVSize > 0, runtime.hasValidMemoryConfiguration
         else {
           throw ValidationError.invalidLocalRuntime(id: profile.id)
         }
         try profile.validateLocalEndpoint()
       }
+      try profile.validateContextCapacity()
     }
     if let unknown = preferenceOrder.first(where: { !seen.contains($0) }) {
       throw ValidationError.unknownProfileInOrder(unknown)
@@ -313,6 +341,7 @@ public struct EvieModelProfileSet: Codable, Sendable, Equatable {
     case unknownProfileInOrder(String)
     case invalidProfile(id: String, reason: EvieConfiguration.ValidationError)
     case invalidLocalRuntime(id: String)
+    case contextExceedsCapacity(id: String, maximum: Int)
     /// A brain Evie starts on this Mac with an endpoint other than the one she
     /// starts it on.
     case localEndpointMismatch(id: String, expected: String)
@@ -320,6 +349,16 @@ public struct EvieModelProfileSet: Codable, Sendable, Equatable {
 }
 
 extension EvieModelProfile {
+  func validateContextCapacity() throws {
+    var capacity = serverContextTokens
+    if case .localOnDemand(let runtime) = runtime {
+      capacity = min(capacity ?? runtime.maxKVSize, runtime.maxKVSize)
+    }
+    if let capacity, contextTokens > capacity {
+      throw EvieModelProfileSet.ValidationError.contextExceedsCapacity(id: id, maximum: capacity)
+    }
+  }
+
   /// For a brain Evie starts on this Mac: its endpoint is its runtime's
   /// (`LocalRuntime.endpoint`). Checked for the file's profiles and again
   /// after the `EVIE_MODEL_*` overrides.
@@ -349,6 +388,8 @@ extension EvieModelProfileSet.ValidationError: LocalizedError {
       "Model profile \(id): \(reason.localizedDescription)"
     case .invalidLocalRuntime(let id):
       "Model profile \(id) needs an absolute executable path, a valid port and a positive KV cache size."
+    case .contextExceedsCapacity(let id, let maximum):
+      "O contexto de \(id) supera a capacidade configurada do servidor (\(maximum) tokens)."
     case .localEndpointMismatch(let id, let expected):
       "Model profile \(id) is started by Evie on this Mac, so its endpoint must be \(expected)."
     }
@@ -370,21 +411,20 @@ extension EvieModelProfileSet {
 }
 
 extension EvieModelProfile {
-  static let pcGatewayHost = "ai-node-3090.tail6146ef.ts.net"
+  static let pcGatewayHost = "models.example.invalid"
 
   /// The owner's RTX 3090 gateway. Server figures are the gateway's own
   /// `GET /v1/models` metadata for qwen-daily, read 2026-10-16:
   /// `contextWindow` 200704, `maxTokens` 32768, vision and tools true. The client
-  /// cap of 135168 is the PC stack's own client figure, chosen because an
-  /// uncached 150K prefill measured 250 s; the output cap of 16384 is what a
-  /// maximum-reasoning turn needs (`ReasoningLevel.thinkingOutputCap`), and
-  /// ordinary turns ask for far less through `TurnOptions`.
+  /// window matches the owner's current OpenCode profile at 200704; output
+  /// remains 16384 as in that profile. A larger cap allows long answers when
+  /// requested; it does not force the model to consume the entire window.
   static let builtInPC = EvieModelProfile(
     id: pcProfileID,
     displayName: "PC RTX 3090",
     endpoint: URL(string: "https://\(pcGatewayHost)/v1")!,
     model: "qwen-daily",
-    contextTokens: 135_168,
+    contextTokens: 200_704,
     serverContextTokens: 200_704,
     maxCompletionTokens: 16_384,
     capabilities: Capabilities(vision: true, tools: true),
@@ -402,24 +442,22 @@ extension EvieModelProfile {
     // asked to click "Salvar" centred at (960, 600) of a synthetic 1280×800
     // screen, qwen-daily answered (745–755, 745–750) whether it was sent the
     // picture at 1024×640 or at 1280×800 — the grid, never pixels.
-    coordinateConvention: .normalized1000
+    coordinateConvention: .normalized1000,
+    requestTimeout: 900
   )
 
-  /// LensVLM on this Mac, started on demand by `EvieLocalBrainLauncher`. Port
-  /// 38480 had no listener on 2026-10-16. Its 262144-token nominal context is
-  /// capped at 32768 on both sides for memory. It looks but is offered no
-  /// tools: measured 2026-10-16, its tool calls come back as malformed XML in
-  /// the content. `.topLevel` sends `enable_thinking` on every request. It
-  /// sees: under `mlx_vlm.server` 0.7.8 it described a synthetic test image
-  /// exactly (shapes, colours and the text "ZEBRA 4817"), and a 32×32 red
-  /// square came back "vermelho".
+  /// LensVLM started on demand. The 131072-token operational window was
+  /// qualified on this 24 GiB Mac with text and an actual image, KV8,
+  /// prefill512 and a bounded256MiB Metal allocator cache (MODEL_TUNING.md).
+  /// It sees images but has no tools: its tool calls are malformed XML.
+  /// Small images are enlarged before encoding to retain enough visual patches.
   static let builtInMac = EvieModelProfile(
     id: macProfileID,
     displayName: "Mac local",
     endpoint: URL(string: "http://127.0.0.1:38480/v1")!,
     model: "mlx-community/LensVLM-9B-OptiQ-4bit",
-    contextTokens: 32_768,
-    serverContextTokens: 262_144,
+    contextTokens: 131_072,
+    serverContextTokens: 131_072,
     maxCompletionTokens: 2_048,
     capabilities: Capabilities(vision: true, tools: false),
     thinkingStyle: .topLevel,
@@ -432,13 +470,19 @@ extension EvieModelProfile {
           .appendingPathComponent(".local/bin/mlx_vlm.server", isDirectory: false)
           .path,
         port: 38_480,
-        maxKVSize: 32_768
+        maxKVSize: 131_072,
+        kvBits: 8,
+        prefillStepSize: 512,
+        metalCacheLimitMB: 256
       )
     ),
     location: .thisMac,
     family: .qwen,
     // Never used: act mode needs tools, which this profile does not have.
-    coordinateConvention: .normalized1000
+    coordinateConvention: .normalized1000,
+    temperature: 0,
+    topP: 1,
+    requestTimeout: 900
   )
 }
 
@@ -556,6 +600,9 @@ extension EvieModelProfile.Runtime: Codable {
     case executable
     case port
     case maxKVSize = "max_kv_size"
+    case kvBits = "kv_bits"
+    case prefillStepSize = "prefill_step_size"
+    case metalCacheLimitMB = "metal_cache_limit_mb"
   }
 
   private enum Kind: String, Codable {
@@ -574,7 +621,10 @@ extension EvieModelProfile.Runtime: Codable {
           launcher: try container.decode(LocalRuntime.Launcher.self, forKey: .launcher),
           executable: try container.decode(String.self, forKey: .executable),
           port: try container.decode(Int.self, forKey: .port),
-          maxKVSize: try container.decode(Int.self, forKey: .maxKVSize)
+          maxKVSize: try container.decode(Int.self, forKey: .maxKVSize),
+          kvBits: try container.decodeIfPresent(Int.self, forKey: .kvBits),
+          prefillStepSize: try container.decodeIfPresent(Int.self, forKey: .prefillStepSize),
+          metalCacheLimitMB: try container.decodeIfPresent(Int.self, forKey: .metalCacheLimitMB)
         )
       )
     }
@@ -591,6 +641,9 @@ extension EvieModelProfile.Runtime: Codable {
       try container.encode(runtime.executable, forKey: .executable)
       try container.encode(runtime.port, forKey: .port)
       try container.encode(runtime.maxKVSize, forKey: .maxKVSize)
+      try container.encodeIfPresent(runtime.kvBits, forKey: .kvBits)
+      try container.encodeIfPresent(runtime.prefillStepSize, forKey: .prefillStepSize)
+      try container.encodeIfPresent(runtime.metalCacheLimitMB, forKey: .metalCacheLimitMB)
     }
   }
 }

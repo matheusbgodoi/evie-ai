@@ -24,6 +24,7 @@ final class ModelSettingsViewModel: ObservableObject {
   @Published private(set) var keyStatus: [String: EvieModelKeyStatus] = [:]
   @Published private(set) var keyFeedback: Feedback?
   @Published private(set) var isImportingKey = false
+  @Published private(set) var isSavingKey = false
   @Published private(set) var reports: [String: ModelConnectionReport] = [:]
   @Published private(set) var testingProfileID: String?
   @Published private(set) var feedback: Feedback?
@@ -40,6 +41,7 @@ final class ModelSettingsViewModel: ObservableObject {
   private let loader: EvieConfigurationLoader
   private let environment: [String: String]
   private let keys: EvieModelKeys
+  private let keyStatusRefresh: EvieModelKeyStatusRefresh
   private let probe: ModelReadinessProbe
   private let transportPolicy: ModelTransportPolicy
   private let onSave: @MainActor (EvieLoadedConfiguration) -> Void
@@ -63,6 +65,7 @@ final class ModelSettingsViewModel: ObservableObject {
     self.loader = loader
     self.environment = environment
     self.keys = keys
+    keyStatusRefresh = EvieModelKeyStatusRefresh(keys: keys)
     probe = factory.makeReadinessProbe()
     transportPolicy = factory.transportPolicy
     self.onSave = onSave
@@ -76,6 +79,10 @@ final class ModelSettingsViewModel: ObservableObject {
     let drafts = Self.drafts(for: loaded)
     self.drafts = drafts
     loadedDrafts = drafts
+    keyStatusRefresh.onChange = { [weak self] in
+      guard let self else { return }
+      keyStatus = keyStatusRefresh.statuses
+    }
     refreshKeyStatus()
   }
 
@@ -123,7 +130,7 @@ final class ModelSettingsViewModel: ObservableObject {
   }
 
   var editingKeyStatus: EvieModelKeyStatus? {
-    editingProfile.credential.map { _ in keyStatus[editingProfileID] ?? .missing }
+    editingProfile.credential.map { _ in keyStatus[editingProfileID] ?? .checking }
   }
 
   /// The import copies the PC configuration's key, so it is offered only on
@@ -169,6 +176,24 @@ final class ModelSettingsViewModel: ObservableObject {
   }
 
   // MARK: Buttons
+
+  /// An effort change from the compact controls must not let an older open
+  /// Settings draft silently restore the old value on its next save.
+  func adoptReasoning(_ level: ReasoningLevel, profileID: String) throws {
+    if let index = drafts.firstIndex(where: { $0.profileID == profileID }),
+      let baseline = loadedDrafts.first(where: { $0.profileID == profileID }),
+      drafts[index].defaultReasoning == baseline.defaultReasoning
+    {
+      drafts[index].defaultReasoning = level
+    }
+    if let index = loadedDrafts.firstIndex(where: { $0.profileID == profileID }) {
+      loadedDrafts[index].defaultReasoning = level
+    }
+    if profiles.profile(id: profileID) != nil {
+      try profiles.updateProfile(id: profileID) { $0.defaultReasoning = level }
+    }
+    if activeProfile.id == profileID { activeProfile.defaultReasoning = level }
+  }
 
   func save() {
     let changed = drafts.filter { !loadedDrafts.contains($0) }
@@ -216,30 +241,93 @@ final class ModelSettingsViewModel: ObservableObject {
 
   func restoreRecommendedSampling() {
     let index = editingIndex
-    drafts[index].temperature = EvieProfileDraft.recommendedTemperature
-    drafts[index].topP = EvieProfileDraft.recommendedTopP
-    drafts[index].usesServerTemperature = false
-    drafts[index].usesServerTopP = false
+    var profile = editingProfile
+    profile.model = drafts[index].model
+    let sampling = profile.recommendedSampling
+    drafts[index].temperature = sampling.temperature ?? EvieProfileDraft.recommendedTemperature
+    drafts[index].topP = sampling.topP ?? EvieProfileDraft.recommendedTopP
+    drafts[index].usesServerTemperature = sampling.temperature == nil
+    drafts[index].usesServerTopP = sampling.topP == nil
     feedback = nil
   }
 
   func saveKey() async {
-    guard let reference = editingProfile.credential else { return }
-    let profile = editingProfile
+    guard !isSavingKey, !isImportingKey else { return }
+    isSavingKey = true
+    defer { isSavingKey = false }
     let pasted = pastedKey
-    // Cleared before the write, so the field never holds the key any longer
-    // than the paste itself, whatever the outcome.
     pastedKey = ""
+    var keyWasSaved = false
     do {
+      let profile = editingProfile
+      let endpointIsManaged = managedFields.contains(.endpoint)
+      let endpointText = drafts[editingIndex].endpoint
+        .trimmingCharacters(in: .whitespacesAndNewlines)
+      guard let endpoint = endpointIsManaged ? profile.endpoint : URL(string: endpointText),
+        endpoint.scheme?.lowercased() == "https",
+        let host = endpoint.host?.lowercased(), !host.isEmpty,
+        endpoint.user == nil, endpoint.password == nil
+      else { throw EvieConfiguration.ValidationError.invalidEndpoint }
+      // Bind only the explicitly captured address. Other draft fields need not
+      // be valid yet and are never saved as a side effect of saving a key.
+      let reference =
+        profile.credential.flatMap { $0.boundHost.lowercased() == host ? $0 : nil }
+        ?? CredentialReference(
+          service: "com.matheusbgodoi.evie.model",
+          account: "\(profile.id)@\(host)", boundHost: host)
       try await keys.save(pasted: pasted, for: reference)
-      keyFeedback = Feedback(message: "Chave salva no Keychain deste Mac.", isError: false)
-      keySaved(for: profile)
+      keyWasSaved = true
+      let saved = try store.saveProfiles(
+        reading: loader, environment: environment, otherwise: repairBaseline
+      ) { set, _ in
+        try set.updateProfile(id: profile.id) {
+          if !endpointIsManaged { $0.endpoint = endpoint }
+          $0.credential = reference
+        }
+      }
+      let effective = try loader.loadProfiles(environment: environment)
+      repairBaseline = saved
+      adoptPreservingEdits(effective)
+      onSave(effective)
+      keyFeedback = Feedback(
+        message:
+          "Chave salva no Keychain e vinculada a este endereço. Ajustes não salvos foram preservados.",
+        isError: false)
+      var keyedProfile = profile
+      keyedProfile.endpoint = endpoint
+      keyedProfile.credential = reference
+      keySaved(for: keyedProfile)
     } catch {
-      keyFeedback = Feedback(message: Self.message(for: error), isError: true)
+      let prefix =
+        keyWasSaved
+        ? "A chave ficou no Keychain, mas o endereço não pôde ser salvo. Seus ajustes continuam na tela. "
+        : ""
+      keyFeedback = Feedback(message: prefix + Self.message(for: error), isError: true)
     }
   }
 
+  /// Read drafts after the keychain await: edits made while it was pending
+  /// belong to the person too. Rebase them field by field onto the fresh file.
+  private func adoptPreservingEdits(_ loaded: EvieLoadedConfiguration) {
+    let pending = drafts
+    let baseline = loadedDrafts
+    let preferred = preferredProfileID != profiles.preferredProfile.id ? preferredProfileID : nil
+    let fallback = macFallback != profiles.macFallback ? macFallback : nil
+    let selection = editingProfileID
+    adopt(loaded)
+    drafts = drafts.map { latest in
+      guard let previous = pending.first(where: { $0.profileID == latest.profileID }),
+        let original = baseline.first(where: { $0.profileID == latest.profileID })
+      else { return latest }
+      return previous.rebased(onto: latest, since: original)
+    }
+    if let preferred, profiles.profile(id: preferred) != nil { preferredProfileID = preferred }
+    if let fallback { macFallback = fallback }
+    if drafts.contains(where: { $0.profileID == selection }) { editingProfileID = selection }
+  }
+
   func importKey() async {
+    guard !isSavingKey, !isImportingKey else { return }
     guard let reference = editingProfile.credential else { return }
     let profile = editingProfile
     isImportingKey = true
@@ -270,13 +358,11 @@ final class ModelSettingsViewModel: ObservableObject {
   }
 
   func refreshKeyStatus() {
-    var status: [String: EvieModelKeyStatus] = [:]
-    for profile in profiles.profiles {
-      if let reference = profile.credential {
-        status[profile.id] = keys.status(of: reference)
-      }
-    }
-    keyStatus = status
+    let references = Dictionary(
+      uniqueKeysWithValues: profiles.profiles.compactMap { profile in
+        profile.credential.map { (profile.id, $0) }
+      })
+    keyStatusRefresh.refresh(references)
   }
 
   // MARK: Helpers

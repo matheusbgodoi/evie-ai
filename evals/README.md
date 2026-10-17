@@ -268,3 +268,22 @@ Benchmark implementation should emit sanitized JSONL with:
 
 Raw private prompts, audio, images, email, and documents never enter tracked result
 files.
+
+## Research shortcut evaluation — 2026-10-16
+
+Deterministic cases: `EvieResearchTests` and `EvieResearchAnswerTests` cover the
+unarmed trigger, one run at a time, stop/rearm and late results, lease expiry,
+invalid goals, start-only shortcut authority, capped executor expiry, image-only
+stateless requests, incomplete/truncated/tool-call output and cancellation.
+`EviePreferencesTests` preserves prior Carbon action positions and checks all
+default shortcuts for conflicts. Run `Scripts/test --filter EvieResearch`.
+
+Real transport and clipboard boundary: `evie-shell --research-check` generates a
+synthetic 17 × 4 multiple-choice image, requests one answer from the configured
+preferred model with reasoning off, writes to a unique NSPasteboard and reads
+back. It neither captures a real display nor changes the general clipboard.
+`--ui-snapshots` includes research consent in light and dark.
+
+Manual cases and evidence protocol: [Research mode](../docs/RESEARCH_MODE.md).
+Do not conflate synthetic model success with a real app's field/radio state,
+TCC grants, global hotkey delivery, or covert operation.

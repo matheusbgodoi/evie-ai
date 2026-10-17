@@ -12,7 +12,13 @@ public struct ModelClientFactory: Sendable {
   ///
   /// Shared so that every client in the process reads the same keychain cache,
   /// and invalidating a rejected key invalidates it for all of them.
-  public static let live = ModelClientFactory(credentials: KeychainCredentialProvider())
+  public static let live: ModelClientFactory = {
+    let loader = EvieConfigurationLoader()
+    let file = (try? loader.resolvedFileURL()) ?? EvieConfigurationLoader.defaultFileURL
+    return ModelClientFactory(
+      credentials: KeychainCredentialProvider(),
+      transportPolicy: ModelTransportPolicy(allowedRemoteHosts: [], trustedConfigurationURL: file))
+  }()
 
   /// One session for every model request in the process, built from
   /// `URLSessionConfiguration.evieModel`: no disk cache, a fifteen-minute cap.

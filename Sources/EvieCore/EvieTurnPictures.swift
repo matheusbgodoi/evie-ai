@@ -146,7 +146,9 @@ extension EvieTurnPlan {
   /// Every message returned is `derivedFromPicture`, so the request counts as
   /// carrying the picture wherever it goes next: to a brain that gets only the
   /// text, or replayed after the picture became a marker.
-  public func pictureTail(asking question: ChatMessage, with pictures: EvieTurnPictures) -> [ChatMessage] {
+  public func pictureTail(asking question: ChatMessage, with pictures: EvieTurnPictures)
+    -> [ChatMessage]
+  {
     guard !pictures.isEmpty else {
       return [question]
     }
@@ -163,7 +165,8 @@ extension EvieTurnPlan {
     var sent = pictures.images
     var dropped = false
     if let limit = picturesPerRequest, sent.count > limit {
-      let screenFirst = sent.filter { $0.origin == .screenshot } + sent.filter { $0.origin != .screenshot }
+      let screenFirst =
+        sent.filter { $0.origin == .screenshot } + sent.filter { $0.origin != .screenshot }
       sent = Array(screenFirst.prefix(limit))
       dropped = true
     }
@@ -182,7 +185,7 @@ extension EvieTurnPlan {
   /// marker; with no vision, every picture does. One picture per request keeps
   /// the PC's CPU projector to one run (the PC stack's ADR-009 measured 61–62 s
   /// for two).
-  static func keepingNewestPictures(_ messages: [ChatMessage], sees: Bool) -> [ChatMessage] {
+  public static func keepingNewestPictures(_ messages: [ChatMessage], sees: Bool) -> [ChatMessage] {
     let newest = sees ? messages.lastIndex { !($0.images ?? []).isEmpty } : nil
     return messages.enumerated().map { index, message in
       guard let images = message.images, !images.isEmpty, index != newest else {

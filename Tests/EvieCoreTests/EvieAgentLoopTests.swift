@@ -93,6 +93,37 @@ struct EvieAgentLoopTests {
     #expect(outcome.answer == "Tem dois arquivos lá.")
   }
 
+  @Test("mail continuation reaches the adapter and rejects invalid offsets before access")
+  func mailPagination() async throws {
+    let apps = PagedMailApps()
+    for name in ["read_mail", "search_mail"] {
+      let client = ScriptedClient(turns: [
+        .tools([
+          EvieToolCall(
+            id: "page", name: name,
+            argumentsJSON: #"{"query":"invoice","offset":80}"#)
+        ]), .text("Done"),
+      ])
+      let outcome = try await EvieAgentLoop(mailAndCalendar: apps).run(
+        messages: [ChatMessage(role: .user, content: "continue")], roots: [], client: client,
+        emit: { _ in })
+      #expect(outcome.appended.first { $0.role == .tool }?.content.contains("offset=160") == true)
+    }
+    #expect(await apps.offsets == [80, 80])
+    let invalid = ScriptedClient(turns: [
+      .tools([
+        EvieToolCall(
+          id: "bad", name: "search_mail",
+          argumentsJSON: #"{"query":"invoice","offset":-1}"#)
+      ]), .text("Done"),
+    ])
+    let outcome = try await EvieAgentLoop(mailAndCalendar: apps).run(
+      messages: [ChatMessage(role: .user, content: "continue")], roots: [], client: invalid,
+      emit: { _ in })
+    #expect(outcome.appended.first { $0.role == .tool }?.content.contains("9999") == true)
+    #expect(await apps.offsets == [80, 80])
+  }
+
   // MARK: - The bounds
 
   /// A model that keeps asking must not keep the user waiting forever.
@@ -1002,7 +1033,8 @@ struct EvieAgentLoopFileTests {
       emit: { _ in })
 
     #expect(outcome.documentProposals.isEmpty)
-    #expect(outcome.appended.first { $0.role == .tool }?.content.contains("Não existe o destino") == true)
+    #expect(
+      outcome.appended.first { $0.role == .tool }?.content.contains("Não existe o destino") == true)
   }
 
   @Test("a read tool naming an ungranted alias requests the folder")
@@ -1044,5 +1076,21 @@ struct EvieAgentLoopFileTests {
     #expect(outcome.fileActions.map(\.summary) == ["Abri a.pdf"])
     #expect(await opener.opened.count == 1)
     #expect(collector.statuses().contains("Abrindo a.pdf…"))
+  }
+}
+
+private actor PagedMailApps: EvieMailCalendarReading {
+  var offsets: [Int] = []
+  func readMail(count: Int, unreadOnly: Bool) async throws -> [EvieMailMessage] { [] }
+  func searchMail(term: String, count: Int) async throws -> [EvieMailMessage] { [] }
+  func readCalendar(from: Date, to: Date, limit: Int) async throws -> [EvieCalendarEvent] { [] }
+  func listCalendars() async throws -> [String] { [] }
+  func listMailAccounts() async throws -> [String] { [] }
+  func readMailPage(count: Int, unreadOnly: Bool, offset: Int) async throws -> EvieMailPage {
+    offsets.append(offset)
+    return EvieMailPage(messages: [], offset: offset, scannedCount: 80, nextOffset: offset + 80)
+  }
+  func searchMailPage(term: String, count: Int, offset: Int) async throws -> EvieMailPage {
+    try await readMailPage(count: count, unreadOnly: false, offset: offset)
   }
 }

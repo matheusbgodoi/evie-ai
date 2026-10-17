@@ -11,7 +11,10 @@ public protocol SyntheticInputPosting: AnyObject {
   func click(at point: CGPoint, button: MouseButton, count: Int)
   /// Press, move in steps, release: an app tracking the mouse needs to see
   /// it travel, so this takes time.
-  func drag(from start: CGPoint, to end: CGPoint) async
+  func drag(
+    from start: CGPoint, to end: CGPoint,
+    checking: @MainActor (CGPoint) async throws -> Void
+  ) async throws
   /// Lines: positive `dy` moves down the page, positive `dx` right.
   func scroll(at point: CGPoint, dx: Int, dy: Int)
   func press(_ chord: KeyChord)
@@ -223,7 +226,11 @@ public final class ComputerExecutor: EvieComputerActing {
       return try await openApp(
         bundleID: commit.proposal.target.canonicalIdentity.identifier, url: url, commit: commit)
     case .click, .moveMouse, .drag, .typeText, .pressKeys, .scroll, .paste:
-      return try await actOnScreen(action, observation: observation, commit: commit)
+      do {
+        return try await actOnScreen(action, observation: observation, commit: commit)
+      } catch let refusal as InputRefusal {
+        return Self.failed(refusal.detail)
+      }
     }
   }
 
@@ -273,8 +280,10 @@ public final class ComputerExecutor: EvieComputerActing {
         return try interrupted()
       }
       return try await mac.indicator.postingSyntheticInput {
-        try ensureStillAuthorized(commit)
-        await mac.input.drag(from: start, to: end)
+        try await ensureInputContext(observation, commit: commit, points: [start, end])
+        try await mac.input.drag(from: start, to: end) { point in
+          try await self.ensureInputContext(observation, commit: commit, points: [point])
+        }
         mac.indicator.didClick(at: end, on: display)
         try await settle()
         return ActionResult(outcome: .carriedOut, detail: "Arrastei.")
@@ -287,7 +296,7 @@ public final class ComputerExecutor: EvieComputerActing {
       await mac.indicator.showActing(on: display)
       mac.indicator.lookAt(rect(of: target, at: point, in: observation), on: display)
       return try await mac.indicator.postingSyntheticInput {
-        try ensureStillAuthorized(commit)
+        try await ensureInputContext(observation, commit: commit, points: [point])
         mac.input.move(to: point)
         try await settle()
         // The pointer's place is the whole effect, and posting it is enough
@@ -302,17 +311,19 @@ public final class ComputerExecutor: EvieComputerActing {
       await mac.indicator.showActing(on: display)
       mac.indicator.lookAt(rect(of: target, at: point, in: observation), on: display)
       return try await mac.indicator.postingSyntheticInput {
-        try ensureStillAuthorized(commit)
+        try await ensureInputContext(observation, commit: commit, points: [point])
         mac.input.scroll(at: point, dx: dx, dy: dy)
         try await settle()
         return ActionResult(outcome: .carriedOut, detail: "Rolei \(max(abs(dx), abs(dy))) linhas.")
       }
 
     case .pressKeys(let chord):
-      return try await pressKeys(chord, detail: "Usei \(chord.symbol).", display: display, commit)
+      return try await pressKeys(
+        chord, detail: "Usei \(chord.symbol).", observation: observation, commit)
 
     case .paste:
-      return try await pressKeys(Self.pasteChord, detail: "Colei.", display: display, commit)
+      return try await pressKeys(
+        Self.pasteChord, detail: "Colei.", observation: observation, commit)
 
     case .typeText(let text):
       return try await type(text, observation: observation, commit: commit)
@@ -338,7 +349,9 @@ public final class ComputerExecutor: EvieComputerActing {
     } else {
       listed = nil
     }
-    let shown = listed ?? ComputerActionPolicy.gridPoint(of: target, in: observation)
+    let shown =
+      listed
+      ?? ComputerActionPolicy.gridPoint(of: target, in: observation)
       .flatMap(observation.element(atGrid:))
     let label = shown.map { ComputerScreenText.sanitized($0.title, limit: 60) }
       .flatMap { $0.isEmpty ? nil : $0 }
@@ -352,7 +365,7 @@ public final class ComputerExecutor: EvieComputerActing {
     }
 
     return try await mac.indicator.postingSyntheticInput {
-      try ensureStillAuthorized(commit)
+      try await ensureInputContext(observation, commit: commit)
       if let listed {
         let named = label.map { "“\($0)”" } ?? "o elemento [\(listed.index)]"
         if button == .left, count == 1 {
@@ -378,6 +391,7 @@ public final class ComputerExecutor: EvieComputerActing {
         }
         try ensureStillAuthorized(commit)
       }
+      try await ensureInputContext(observation, commit: commit, points: [point])
       mac.input.click(at: point, button: button, count: count)
       mac.indicator.didClick(at: point, on: display)
       try await settle()
@@ -389,12 +403,12 @@ public final class ComputerExecutor: EvieComputerActing {
   private func pressKeys(
     _ chord: KeyChord,
     detail: String,
-    display: CGDirectDisplayID,
+    observation: ComputerObservation,
     _ commit: CapabilityCommit
   ) async throws -> ActionResult {
-    await mac.indicator.showActing(on: display)
+    await mac.indicator.showActing(on: observation.displayID)
     return try await mac.indicator.postingSyntheticInput {
-      try ensureStillAuthorized(commit)
+      try await ensureInputContext(observation, commit: commit, usesKeyboard: true)
       mac.input.press(chord)
       try await settle()
       return ActionResult(outcome: .carriedOut, detail: detail)
@@ -411,17 +425,19 @@ public final class ComputerExecutor: EvieComputerActing {
       Self.globalRect(ofBox: $0.box0to1000, in: observation.frame)
     }
     mac.indicator.typing(
-      field: field, on: observation.displayID, app: ComputerScreenText.sanitized(app.name, limit: 60))
+      field: field, on: observation.displayID,
+      app: ComputerScreenText.sanitized(app.name, limit: 60))
     let allowsValue = !ComputerActionPolicy.browserBundleIDs.contains(app.bundleID ?? "")
     var route = ComputerTyping.route(for: text, mode: typingMode, accessibilityAllowed: allowsValue)
     let typed = "\(text.count) caracteres"
 
     if case .accessibility(let fallback) = route {
-      try ensureStillAuthorized(commit)
+      try await ensureInputContext(observation, commit: commit, usesKeyboard: true)
       switch await mac.accessibility.insertText(text, processID: app.processID) {
       case .inserted:
         try await settle()
-        return ActionResult(outcome: .changed, detail: "Escrevi \(typed) no campo e conferi o texto.")
+        return ActionResult(
+          outcome: .changed, detail: "Escrevi \(typed) no campo e conferi o texto.")
       case .mismatch:
         return Self.failed(
           "Escrevi no campo, mas o texto lido de volta não confere. Olhe a tela antes de "
@@ -438,14 +454,15 @@ public final class ComputerExecutor: EvieComputerActing {
     try await mac.indicator.postingSyntheticInput {
       switch route {
       case .paste:
-        try ensureStillAuthorized(commit)
+        try await ensureInputContext(observation, commit: commit, usesKeyboard: true)
         // The clipboard comes back 400 ms after ⌘V, which is also the settle.
         try await mac.clipboard.withTransientText(text) {
+          try await ensureInputContext(observation, commit: commit, usesKeyboard: true)
           mac.input.press(Self.pasteChord)
         }
       case .keys(let chunks):
         for chunk in chunks {
-          try ensureStillAuthorized(commit)
+          try await ensureInputContext(observation, commit: commit, usesKeyboard: true)
           mac.input.type(chunk)
           try await mac.sleep(Self.keyChunkGap)
         }
@@ -500,6 +517,50 @@ public final class ComputerExecutor: EvieComputerActing {
     }
   }
 
+  private struct InputRefusal: Error {
+    let detail: String
+  }
+
+  /// A dwell, AX request, indicator animation or typing gap may yield to another
+  /// app. Read the focused field again, then check the synchronous window-server
+  /// state after that await so an older AX response cannot authorize new input.
+  private func ensureInputContext(
+    _ observation: ComputerObservation,
+    commit: CapabilityCommit,
+    usesKeyboard: Bool = false,
+    points: [CGPoint] = []
+  ) async throws {
+    try ensureStillAuthorized(commit)
+    guard mac.input.mayPost else { throw InputRefusal(detail: Self.postAccessNeeded) }
+    let live = await observer.liveState()
+    try ensureStillAuthorized(commit)
+    let app = observation.frontApp
+    let appName = ComputerScreenText.sanitized(app.name, limit: 60)
+    guard live.frontApp?.processID == app.processID,
+      mac.locator.frontApp()?.processID == app.processID
+    else {
+      throw InputRefusal(
+        detail: "O \(appName) não está mais na frente; parei antes do próximo evento.")
+    }
+    if usesKeyboard,
+      live.secureInputEnabled || live.focusedFieldIsSecure || mac.locator.secureInputEnabled()
+    {
+      throw InputRefusal(detail: ComputerActionPolicy.passwordFieldRefusal)
+    }
+    if !points.isEmpty, let refusal = windowMoved(since: observation, appName: appName) {
+      throw InputRefusal(detail: refusal)
+    }
+    for point in points {
+      guard !mac.locator.evieWindowFrames().contains(where: { $0.contains(point) }),
+        mac.locator.windowOwner(at: point) == app.processID
+      else {
+        throw InputRefusal(
+          detail: "Esse ponto cai numa janela de outro app, não do \(appName); não agi. "
+            + "Olhe a tela de novo.")
+      }
+    }
+  }
+
   private func windowMoved(since observation: ComputerObservation, appName: String) -> String? {
     guard let observed = observation.windowFrame else {
       return nil
@@ -517,7 +578,8 @@ public final class ComputerExecutor: EvieComputerActing {
   /// list was read: a floating panel, the Dock, a banner or another app's
   /// window above the front one takes the click. So a point that is not on
   /// a window of the observed app is refused. A listed element is checked
-  /// by Accessibility instead, which finds it in its own app only.
+  /// by Accessibility instead, which finds it in its own app only. Any pointer
+  /// fallback is checked again by ensureInputContext, including listed elements.
   private func pointElsewhere(
     _ action: ComputerAction,
     observation: ComputerObservation,

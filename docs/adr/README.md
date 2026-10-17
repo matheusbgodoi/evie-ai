@@ -24,3 +24,12 @@ supersede rather than silently rewrite them when the decision changes.
 | [0017](0017-per-launch-key-for-the-local-brain.md) | A per-launch key for the local brain | Accepted for Evie v2; supersedes 0013 and 0015 in part |
 | [0018](0018-agent-mode-switch-on-by-default.md) | Agent mode behind a Settings switch, on by default | Accepted for Evie v2 (S5c); amends the design's S5c flag |
 | [0019](0019-saving-a-new-document-when-asked.md) | Saving a new document when asked, and opening files without a card | Accepted (branch `v2-files`); amends 0009 narrowly |
+| [0020](0020-expiring-research-shortcut-sessions.md) | Expiring research sessions with two configurable shortcuts | Accepted; amends 0016 narrowly |
+
+| [0021](0021-explicit-brain-choice-for-current-conversation.md) | Explicit model choice in the current conversation | Accepted; amends 0014 |
+| [0022](0022-owner-enabled-capabilities-and-system-permissions.md) | Enabled capabilities and real system permissions | Accepted; amends 0018/0019 defaults |
+| [0023](0023-public-app-intents-with-generated-bundle-metadata.md) | Public AppIntents and generated bundle metadata | Accepted |
+| [0024](0024-local-provider-configuration-and-private-release-history.md) | Local provider configuration and private release history | Accepted; amends 0013 |
+| [0025](0025-native-voice-and-explicit-wake-calibration.md) | Native voice and five-phrase wake calibration | Accepted |
+| [0026](0026-adaptive-conversation-context-and-compaction.md) | Adaptive context and automatic compaction | Accepted; amends 0014/0015/0021 |
+| [0027](0027-pinned-public-web-transport.md) | Pinned public web transport | Accepted |

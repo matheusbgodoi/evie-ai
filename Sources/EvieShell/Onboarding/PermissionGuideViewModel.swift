@@ -27,6 +27,9 @@ final class PermissionGuideViewModel: ObservableObject {
     self.store = store
     self.isBundled = isBundled
     record = store.load()
+    for item in items {
+      item.observeRowChanges { [weak self] in self?.renderRows() }
+    }
     refresh()
 
     // macOS posts nothing when a switch flips in System Settings. Coming back
@@ -56,7 +59,10 @@ final class PermissionGuideViewModel: ObservableObject {
     let permissions: [any PermissionGuideItem] = EviePermission.allCases.map { permission in
       SystemPermissionItem(permission: permission, audioCapture: audioCapture)
     }
-    return permissions + [PCKeyItem(step: pcKey), BrainConnectionItem(step: brain)]
+    return permissions + [
+      AutomationPermissionItem(bundleID: "com.apple.mail", title: "Mail"),
+      AutomationPermissionItem(bundleID: "com.apple.iCal", title: "Calendário"),
+    ] + [PCKeyItem(step: pcKey), BrainConnectionItem(step: brain)]
   }
 
   /// Opens by itself until it has been closed once, and never for a copy that
@@ -70,7 +76,21 @@ final class PermissionGuideViewModel: ObservableObject {
   }
 
   func refresh() {
+    for item in items { item.refreshStatus() }
+    renderRows()
+  }
+
+  private func renderRows() {
     rows = items.map { $0.row(given: record) }
+  }
+
+  /// An explicit one-shot command; never called at an ordinary launch.
+  func requestAvailablePermissions() async {
+    let pending = rows.filter { $0.action?.kind == .request }
+    for row in pending {
+      guard let action = row.action else { continue }
+      await perform(action, onRow: row.id)
+    }
   }
 
   func perform(_ action: PermissionGuideRow.Action, onRow rowID: PermissionGuideRow.ID) async {

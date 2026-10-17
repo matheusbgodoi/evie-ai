@@ -49,6 +49,8 @@ final class AppCoordinator: NSObject {
   private let updater = EvieUpdater()
   private let mediaStore = EvieMediaStore()
   private let wakeListener = EvieWakeListener()
+  private var wakeListeningTask: Task<Void, Never>?
+  private var wakeSuppressedByStop = false
   /// Owned here, not by the settings window: its `reload()` sweeps orphan
   /// LaunchAgents, and that has to happen at launch rather than the first time
   /// somebody opens a pane.
@@ -96,6 +98,39 @@ final class AppCoordinator: NSObject {
   private lazy var screenPresence = ScreenPresence()
   private lazy var screenCapture = ScreenCaptureService()
   private lazy var screenPermission = ScreenPermission(guide: permissionGuide)
+  private lazy var researchMode: ResearchModeController = {
+    let controller = ResearchModeController(
+      brainResolver: brainResolver,
+      look: EvieScreenLook(
+        capturer: screenCapture, indicator: screenPresence, permission: screenPermission),
+      host: computerUse)
+    controller.isOtherInteractionBusy = { [weak self] in
+      guard let self else { return true }
+      return NativeWakeTrainingAccess.isActive || viewModel.hasActiveRequest
+        || audioCapture.isCapturing || isInCall
+        || viewModel.screenLookTask != nil || viewModel.pendingSession != nil
+    }
+    controller.onPrepare = { [weak self] in
+      guard let self else { return }
+      speechOutput.stop()
+      wakeListener.disarm()
+      panelController.hide()
+      Task { [focusCoordinator] in await focusCoordinator.restore() }
+    }
+    controller.onStateChange = { [weak self] in
+      self?.updateWakeListening()
+      self?.refreshMenuShortcuts()
+    }
+    controller.onConfirmation = { [weak self] request in
+      self?.viewModel.presentConfirmation(request)
+      self?.panelController.showPassive()
+    }
+    controller.onCloseConfirmation = { [weak self] id in
+      self?.viewModel.closeConfirmation(id)
+      self?.panelController.hide()
+    }
+    return controller
+  }()
   /// The app the person was in when the overlay opened, which an agent
   /// session acts in and hands the front back to when it is stopped.
   private let focusCoordinator = FocusCoordinator()
@@ -184,6 +219,7 @@ final class AppCoordinator: NSObject {
       readiness: modelReadiness,
       localBrain: localBrainLauncher
     )
+    brainResolver.choose(preferencesResult.preferences.brainChoice)
     let viewModel = OverlayViewModel(
       brainResolver: brainResolver,
       conversationStore: conversationStore,
@@ -222,8 +258,10 @@ final class AppCoordinator: NSObject {
     )
     super.init()
 
-    brainResolver.askToWake = { [weak viewModel] question in
-      await viewModel?.askToWake(question) ?? false
+    brainResolver.askToWake = { [weak self] question in
+      guard let self else { return false }
+      if researchMode.isRunning { panelController.showPassive() }
+      return await viewModel.askToWake(question)
     }
     brainResolver.onWaking = { [weak viewModel] waking in
       viewModel?.showLocalBrainWaking(waking)
@@ -533,7 +571,13 @@ final class AppCoordinator: NSObject {
     viewModel.computerUse = computerUse
     screenPresence.onPause = { [weak computerUse] in computerUse?.presencePaused() }
     screenPresence.onResume = { [weak computerUse] in computerUse?.presenceResumed() }
-    computerUse.onExpired = { [weak self] in self?.stopComputerUseSession() }
+    computerUse.onExpired = { [weak self] in
+      guard let self else { return }
+      if researchMode.isRunning { researchMode.stop() } else { stopComputerUseSession() }
+    }
+    viewModel.isResearchBusy = { [weak self] in
+      (self?.researchMode.isRunning ?? false) || NativeWakeTrainingAccess.isActive
+    }
     viewModel.onStopRequested = { [weak self] in self?.stopEverything() }
     viewModel.computerUseConsentGiven = { [weak self] in
       self?.preferences.computerUseConsentGiven ?? false
@@ -542,6 +586,70 @@ final class AppCoordinator: NSObject {
     // The brain chip's menu: agent mode on and off without opening Settings,
     // and Settings opened on the section a line of the menu is about.
     viewModel.onSetAgentMode = { [weak self] enabled in self?.setAgentMode(enabled) }
+    NativeWakeTrainingAccess.store = EvieWakeEnrollmentStore(
+      fileURL: preferencesStore.fileURL.deletingLastPathComponent().appendingPathComponent(
+        "wake-enrollment.json"))
+    NativeWakeTrainingAccess.onAcquire = { [weak self] in
+      guard let self else { throw NativeAppleError.notReady }
+      guard !viewModel.hasActiveRequest, !researchMode.isArmed, !researchMode.isRunning,
+        !audioCapture.isCapturing, !isInCall, !computerUse.isRunning,
+        viewModel.pendingSession == nil, viewModel.screenLookTask == nil
+      else { throw NativeAppleError.busy }
+      wakeListeningTask?.cancel()
+      wakeListeningTask = nil
+      speechOutput.stop()
+      wakeListener.disarm()
+    }
+    NativeWakeTrainingAccess.onRelease = { [weak self] in self?.updateWakeListening() }
+    NativeWakeTrainingAccess.onSaved = { [weak self] in
+      guard let self else { throw NativeAppleError.notReady }
+      var updated = preferences
+      updated.voice.wakePhrase = "Evie"
+      updated.voice.wakeWordEnabled = true
+      try preferencesStore.save(updated)
+      wakeSuppressedByStop = false
+      preferencesDidChange(updated)
+    }
+    NativeAppleActions.handle = { [weak self] request in
+      guard let self else { throw NativeAppleError.notReady }
+      guard !NativeWakeTrainingAccess.isActive, !viewModel.hasActiveRequest, !researchMode.isArmed,
+        !researchMode.isRunning,
+        viewModel.screenLookTask == nil, !computerUse.isRunning, !audioCapture.isCapturing,
+        !isInCall, viewModel.pendingSession == nil
+      else { throw NativeAppleError.busy }
+      switch request {
+      case .openConversation: openQuickText()
+      case .prepareQuestion(let text):
+        guard viewModel.quickText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+          throw NativeAppleError.busy
+        }
+        openQuickText()
+        viewModel.quickText = text
+      case .captureScreen: lookAtScreen()
+      }
+    }
+    viewModel.onSetBrainReasoning = { [weak self] id, level in
+      self?.setBrainReasoning(level, profileID: id)
+    }
+    viewModel.onBrainChoiceChanged = { [weak self] choice in
+      guard let self else { throw CancellationError() }
+      var updated = preferences
+      updated.brainChoice = choice
+      try preferencesStore.save(updated)
+      preferencesDidChange(updated)
+      researchMode.brainChoiceDidChange()
+    }
+    viewModel.onSetWebSearch = { [weak self] enabled in
+      guard let self else { return }
+      var updated = preferences
+      updated.webSearchEnabled = enabled
+      do {
+        try preferencesStore.save(updated)
+        preferencesDidChange(updated)
+      } catch {
+        viewModel.presentRuntimeError(title: "Não consegui mudar a pesquisa web", error: error)
+      }
+    }
     viewModel.onOpenSettingsSection = { [weak self] section in
       self?.openSettings(on: section)
     }
@@ -571,6 +679,13 @@ final class AppCoordinator: NSObject {
     if permissionGuide.opensAtLaunch {
       openPermissionGuide()
     }
+    if CommandLine.arguments.contains("--request-permissions") {
+      openPermissionGuide()
+      Task { [permissionGuide] in
+        await permissionGuide.requestAvailablePermissions()
+        EvieDiagnostics.writeLog(EviePermissionsAudit.report(), named: "permissions-check.log")
+      }
+    }
   }
 
   /// Diagnostics for `--presentation-check`. Not used by the running application.
@@ -587,6 +702,14 @@ final class AppCoordinator: NSObject {
   }
 
   func stop() {
+    wakeSuppressedByStop = true
+    wakeListeningTask?.cancel()
+    wakeListener.disarm()
+    NativeWakeTrainingAccess.stop()
+    NativeWakeTrainingAccess.onAcquire = nil
+    NativeWakeTrainingAccess.onRelease = nil
+    NativeWakeTrainingAccess.onSaved = nil
+    NativeAppleActions.handle = nil
     readinessRefresher.stop()
     // Its 8 GB are not left behind for a process nobody will ask again.
     // `prepareForTermination` has normally stopped it already; this is the
@@ -596,6 +719,7 @@ final class AppCoordinator: NSObject {
     speechOutput.stop()
     viewModel.cancelCurrentInteraction()
     hotKeyController = nil
+    researchMode.shutdown()
     if let statusItem {
       NSStatusBar.system.removeStatusItem(statusItem)
     }
@@ -607,6 +731,11 @@ final class AppCoordinator: NSObject {
   }
 
   func prepareForTermination() async {
+    wakeSuppressedByStop = true
+    wakeListeningTask?.cancel()
+    wakeListener.disarm()
+    NativeWakeTrainingAccess.stop()
+    researchMode.shutdown()
     audioCapture.stop()
     speechOutput.stop()
     viewModel.cancelCurrentInteraction()
@@ -673,6 +802,23 @@ extension AppCoordinator {
     agentItem.isEnabled = !ComputerUseSwitch.forcedOff(
       environment: ProcessInfo.processInfo.environment)
     menu.addItem(agentItem)
+
+    menu.addItem(.separator())
+    add(
+      to: menu, title: researchMode.isArmed ? "Desativar pesquisa" : "Ativar pesquisa…",
+      action: #selector(toggleResearchMode), shortcut: .toggleResearchMode)
+    let researchRun = add(
+      to: menu, title: "Executar tarefa de pesquisa", action: #selector(runResearchTask),
+      shortcut: .runResearchTask)
+    researchRun.isEnabled = researchMode.isArmed && !researchMode.isRunning
+    let researchStatus = NSMenuItem(
+      title: String(researchMode.status.prefix(100)), action: nil, keyEquivalent: "")
+    researchStatus.isEnabled = false
+    menu.addItem(researchStatus)
+    let researchWindow = NSMenuItem(
+      title: "Pesquisa e medições…", action: #selector(showResearchWindow), keyEquivalent: "")
+    researchWindow.target = self
+    menu.addItem(researchWindow)
 
     menu.addItem(.separator())
 
@@ -773,6 +919,9 @@ extension AppCoordinator {
   }
 
   @objc fileprivate func openQuickText() {
+    guard !NativeWakeTrainingAccess.isActive else { return }
+    wakeSuppressedByStop = false
+    updateWakeListening()
     if viewModel.beginQuickText() {
       panelController.showQuickText()
     } else {
@@ -786,6 +935,20 @@ extension AppCoordinator {
   @objc fileprivate func lookAtScreen() {
     openQuickText()
     viewModel.captureScreenForNextQuestion()
+  }
+
+  @objc fileprivate func toggleResearchMode() {
+    focusCoordinator.recordFrontmost()
+    researchMode.toggle()
+  }
+
+  @objc fileprivate func runResearchTask() {
+    researchMode.run()
+  }
+
+  @objc fileprivate func showResearchWindow() {
+    focusCoordinator.recordFrontmost()
+    researchMode.showWindow()
   }
 
   /// The next request, said or typed, becomes a session goal; its card
@@ -972,6 +1135,10 @@ extension AppCoordinator {
       stopEverything()
     case (.lookAtScreen, .pressed):
       lookAtScreen()
+    case (.toggleResearchMode, .pressed):
+      toggleResearchMode()
+    case (.runResearchTask, .pressed):
+      runResearchTask()
     default:
       break
     }
@@ -1031,9 +1198,8 @@ extension AppCoordinator {
   /// Reads the text with its markup already resolved, so no asterisk or hash is
   /// ever pronounced.
   fileprivate func speak(_ answer: EvieRichText) {
-    // Speaking follows how the question was asked. Answering out loud something
-    // that was typed interrupts whatever the person was doing with their hands,
-    // which is why the switch that forces it is off by default.
+    // Speech follows the saved voice preferences, including the owner's
+    // enabled default for reading typed answers (ADR 0022).
     guard
       preferences.voice.speaksAnswer(
         toSpokenPrompt: viewModel.answeringSpokenPrompt,
@@ -1112,6 +1278,8 @@ extension AppCoordinator {
   /// whether what is heard may start an agent-mode session: push-to-talk
   /// and a click may, the wake word and a call may not.
   fileprivate func startListening(origin: ComputerUseRequestOrigin) {
+    guard !researchMode.isRunning, !NativeWakeTrainingAccess.isActive else { return }
+    wakeSuppressedByStop = false
     guard !audioCapture.isCapturing else {
       return
     }
@@ -1201,6 +1369,12 @@ extension AppCoordinator {
   /// Once audio exists this also closes the microphone and cuts playback; the
   /// shortcut is registered now so the reflex is already in the user's hands.
   fileprivate func stopEverything() {
+    wakeSuppressedByStop = true
+    NativeWakeTrainingAccess.stop()
+    wakeListeningTask?.cancel()
+    wakeListeningTask = nil
+    wakeListener.disarm()
+    researchMode.stop()
     // A session first: the grant is revoked and its task cancelled before
     // anything else here, or any indicator, moves.
     let stoppedSession = stopComputerUseSession()
@@ -1330,13 +1504,22 @@ extension AppCoordinator {
   }
 
   fileprivate func updateWakeListening() {
-    guard preferences.voice.wakeWordEnabled, !audioCapture.isCapturing, !isInCall else {
+    wakeListeningTask?.cancel()
+    wakeListeningTask = nil
+    guard preferences.voice.wakeWordEnabled, !wakeSuppressedByStop,
+      !NativeWakeTrainingAccess.isActive, !audioCapture.isCapturing, !isInCall,
+      !researchMode.isArmed, !researchMode.isRunning
+    else {
       wakeListener.disarm()
       return
     }
-    Task { @MainActor [weak self] in
-      guard let self else { return }
-      await wakeListener.arm(phrases: preferences.voice.wakePhrase)
+    wakeListeningTask = Task { @MainActor [weak self] in
+      guard let self, !Task.isCancelled, !wakeSuppressedByStop,
+        !NativeWakeTrainingAccess.isActive, !researchMode.isArmed
+      else { return }
+      await wakeListener.arm(
+        phrases: preferences.voice.wakePhrase,
+        enrollment: NativeWakeTrainingAccess.enrollment(for: preferences.voice.wakePhrase))
     }
   }
 
@@ -1386,9 +1569,15 @@ extension AppCoordinator {
   }
 
   fileprivate func preferencesDidChange(_ updated: EviePreferences) {
+    viewModel.objectWillChange.send()
     let appearanceChanged = updated.appearance != preferences.appearance
     let shortcutsChanged = updated.shortcuts != preferences.shortcuts
     preferences = updated
+    brainResolver.choose(updated.brainChoice)
+    if !isAgentModeOn { stopComputerUseSession() }
+    if !isAgentModeOn, researchMode.isRunning, researchMode.destination == .controlMac {
+      researchMode.stop(message: "Modo agente desativado · pesquisa interrompida")
+    }
     speechOutput.setQualitySteps(updated.voice.resolvedQualitySteps)
 
     if appearanceChanged {
@@ -1409,6 +1598,23 @@ extension AppCoordinator {
     viewModel.applyCapabilities(
       Self.capabilities(for: updated, hasGrantedFolders: !rootsViewModel.roots.isEmpty)
     )
+  }
+
+  fileprivate func setBrainReasoning(_ level: ReasoningLevel, profileID: String) {
+    guard !viewModel.hasActiveRequest, !researchMode.isRunning else { return }
+    do {
+      _ = try configurationStore.saveProfiles(
+        reading: configurationLoader, environment: configurationEnvironment,
+        otherwise: startupConfiguration.profiles
+      ) { profiles, _ in
+        try profiles.updateProfile(id: profileID) { $0.defaultReasoning = level }
+      }
+      let loaded = try configurationLoader.loadProfiles(environment: configurationEnvironment)
+      viewModel.applyConfiguration(loaded, environment: configurationEnvironment)
+      try modelSettings?.adoptReasoning(level, profileID: profileID)
+    } catch {
+      viewModel.presentRuntimeError(title: "Não consegui mudar o raciocínio", error: error)
+    }
   }
 
   /// Re-registers every shortcut and reports the ones the system refused.

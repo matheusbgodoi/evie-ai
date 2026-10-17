@@ -116,11 +116,12 @@ struct EviePermissionGuideBrainTests {
     #expect(items.secret(at: evieItem) == "sk-guide-0123456789")
     #expect(items.reads(of: EvieModelKeys.pcConfigurationItem) == 1)
     #expect(saved.value == [EvieModelProfile.pcProfileID])
+    await waitForSavedKey(step)
     #expect(step.row.mark == .satisfied)
   }
 
   @Test("the row's status reads attributes only, never a secret")
-  func statusNeverReadsASecret() {
+  func statusNeverReadsASecret() async {
     let items = MemoryKeychainItems()
     items.store("sk-guide-0123456789", at: evieItem)
     let step = EvieGuidePCKeyStep(
@@ -129,6 +130,7 @@ struct EviePermissionGuideBrainTests {
       onKeySaved: { _ in }
     )
 
+    await waitForSavedKey(step)
     let row = step.row
 
     #expect(row.mark == .satisfied)
@@ -172,6 +174,13 @@ struct EviePermissionGuideBrainTests {
     #expect(items.writes == 0)
     #expect(step.row.hint == EvieModelKeyError.accessDenied.errorDescription)
     #expect(!"\(step.row)".contains("sk-guide"))
+  }
+
+  private func waitForSavedKey(_ step: EvieGuidePCKeyStep) async {
+    let deadline = ContinuousClock.now + .seconds(2)
+    while step.row.mark != .satisfied, ContinuousClock.now < deadline {
+      try? await Task.sleep(for: .milliseconds(2))
+    }
   }
 
   // MARK: Cérebro

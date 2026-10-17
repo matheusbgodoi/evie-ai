@@ -84,13 +84,36 @@ public struct LocalBrainPolicy: Sendable, Equatable {
   /// - No `--enable-thinking`: the server's default stays off, and Evie sends
   ///   `enable_thinking` on every request regardless.
   public static func makeArguments(_ runtime: LocalRuntime, model: String) -> [String] {
-    [
+    var arguments = [
       "--model", model,
       "--host", "127.0.0.1",
       "--port", String(runtime.port),
       "--max-kv-size", String(runtime.maxKVSize),
       "--max-num-seqs", "1",
     ]
+    if let bits = runtime.kvBits { arguments += ["--kv-bits", String(bits)] }
+    if let step = runtime.prefillStepSize { arguments += ["--prefill-step-size", String(step)] }
+    if let bytes = runtime.metalCacheLimitBytes {
+      arguments = ["-I", "-c", boundedBootstrap, runtime.executable, String(bytes)] + arguments
+    }
+    return arguments
+  }
+
+  /// Applies MLX's public allocator limit before running the unmodified CLI.
+  /// Exact bytes identify this wrapper before a process may be reused or stopped.
+  public static let boundedBootstrap =
+    "import sys,runpy;import mlx.core as mx;server=sys.argv.pop(1);cache=int(sys.argv.pop(1));mx.set_cache_limit(cache);sys.argv[0]=server;runpy.run_path(server,run_name='__main__')"
+
+  /// Bounded launches require the CLI's absolute Python shebang, never PATH/env.
+  public static func launchExecutable(_ runtime: LocalRuntime, scriptHead: String) -> String? {
+    guard runtime.hasValidMemoryConfiguration else { return nil }
+    guard runtime.metalCacheLimitMB != nil else { return runtime.executable }
+    guard let interpreter = interpreterPath(fromScriptHead: scriptHead),
+      URL(fileURLWithPath: interpreter).lastPathComponent.lowercased().hasPrefix("python"),
+      let firstLine = scriptHead.split(separator: "\n", maxSplits: 1).first,
+      firstLine.dropFirst(2).split(whereSeparator: { $0.isWhitespace }).count == 1
+    else { return nil }
+    return interpreter
   }
 
   /// The server's environment: the account basics and where the model cache
@@ -140,13 +163,42 @@ public struct LocalBrainPolicy: Sendable, Equatable {
   /// `--host` serves every interface, with no key, and would be handed the
   /// conversation and the screen.
   public static func argumentsIdentifyServer(_ arguments: [String], runtime: LocalRuntime) -> Bool {
-    guard let program = arguments.firstIndex(where: { $0 == runtime.executable }), program <= 1
-    else {
-      return false
-    }
-    let options = arguments[(program + 1)...]
+    guard let options = serverOptions(arguments, runtime: runtime) else { return false }
     return lastValue(of: "--port", in: options) == String(runtime.port)
       && lastValue(of: "--host", in: options) == "127.0.0.1"
+  }
+
+  /// Identity allows stopping a previous configuration; reuse additionally
+  /// requires the model and all memory controls to match the current profile.
+  public static func argumentsServeProfile(
+    _ arguments: [String], runtime: LocalRuntime, model: String
+  ) -> Bool {
+    guard runtime.hasValidMemoryConfiguration,
+      argumentsIdentifyServer(arguments, runtime: runtime),
+      let options = serverOptions(arguments, runtime: runtime),
+      lastValue(of: "--model", in: options) == model,
+      lastValue(of: "--max-kv-size", in: options) == String(runtime.maxKVSize),
+      lastValue(of: "--max-num-seqs", in: options) == "1",
+      lastValue(of: "--kv-bits", in: options) == runtime.kvBits.map(String.init),
+      lastValue(of: "--prefill-step-size", in: options) == runtime.prefillStepSize.map(String.init)
+    else { return false }
+    let actualBytes = options.startIndex == 6 ? Int(arguments[5]) : nil
+    return actualBytes == runtime.metalCacheLimitBytes
+  }
+
+  private static func serverOptions(
+    _ arguments: [String], runtime: LocalRuntime
+  ) -> ArraySlice<String>? {
+    if arguments.count >= 6, arguments[1] == "-I", arguments[2] == "-c",
+      arguments[3] == boundedBootstrap, arguments[4] == runtime.executable,
+      let bytes = Int(arguments[5]), bytes > 0
+    {
+      return arguments.dropFirst(6)
+    }
+    guard let program = arguments.firstIndex(of: runtime.executable), program <= 1 else {
+      return nil
+    }
+    return arguments.dropFirst(program + 1)
   }
 
   /// Whether every address the server listens on is loopback: exactly

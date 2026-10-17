@@ -9,10 +9,10 @@ public struct EviePreferences: Codable, Hashable, Sendable {
   public var appearance: EvieAppearancePreferences
   public var shortcuts: EvieShortcutPreferences
   public var voice: EvieVoicePreferences
+  public var brainChoice: EvieBrainChoice
   /// Whether Evie may suggest changing a file.
   ///
-  /// Off by default, because it is the first switch in this application that can
-  /// alter something outside her own settings. Even on, the tool she calls only
+  /// Enabled by default at the owner’s request (ADR 0022). The tool only
   /// raises a card — the change happens when a button is pressed.
   public var fileChangesEnabled: Bool
   /// Whether a change she suggests happens without a button.
@@ -25,7 +25,7 @@ public struct EviePreferences: Codable, Hashable, Sendable {
   public var autoApproveChanges: Bool
   /// Whether Evie may search the web.
   ///
-  /// Off by default, and it is the one switch in this application that sends
+  /// Enabled by default at the owner’s request (ADR 0022). This sends
   /// her questions to strangers' servers. Everything else stays on machines the
   /// owner holds — this Mac, or his PC over his tailnet, which the inference
   /// client's transport policy is the only other place it allows — so this is
@@ -33,22 +33,15 @@ public struct EviePreferences: Codable, Hashable, Sendable {
   public var webSearchEnabled: Bool
   /// Whether Evie may read the Mail and Calendar apps.
   ///
-  /// Off by default, for the same reason web search is: reading someone's mail
-  /// is not a thing to switch on for them. Nothing leaves the machine here —
-  /// both apps are on this disk — but the inbox is the one local source a
-  /// stranger can write into, and it is the most personal thing Evie can be
-  /// pointed at. Turning it on is a decision, not a default.
+  /// Enabled by default at the owner's request (ADR 0022). Reading still needs
+  /// the macOS Automation grant, and sending stays behind its confirmation.
   public var mailAndCalendarEnabled: Bool
   /// Whether Evie may control the Mac in agent mode (clicks, typing, opening
   /// apps), as "Deixar a Evie controlar o Mac (modo agente)".
   ///
-  /// Off by default, like the switches above. The owner asked for agent mode
-  /// but chose, on 2026-10-16, to ship it off until the second round of policy
-  /// findings (docs/PROJECT_STATUS.md) is fixed. The switch is not the permission: every session still begins only
-  /// with push-to-talk or a click and a confirm on the session card, under a
-  /// grant of at most 15 minutes, with the code policy, the confirmations and
-  /// the kill switches of ADR 0016. Off means no session can begin at all.
-  /// `EVIE_COMPUTER_USE=0` forces it off (`ComputerUseSwitch`).
+  /// Enabled by default at the owner's request (ADR 0022). Availability is not
+  /// a session grant: a hand-approved session or armed research lease is still
+  /// required. EVIE_COMPUTER_USE=0 still forces the executor off.
   public var computerUseEnabled: Bool
   /// Whether the one-time consent for agent mode was accepted: the first
   /// session's card explains what a session does and that on-screen
@@ -57,7 +50,7 @@ public struct EviePreferences: Codable, Hashable, Sendable {
   public var computerUseConsentGiven: Bool
   /// "Salvar direto quando eu pedir explicitamente" (ADR 0019).
   ///
-  /// Off by default. On, a NEW document in a folder already granted may be
+  /// Enabled by default (ADR 0022). A NEW document in a folder already granted may be
   /// written without its card being clicked — but only when the person's own
   /// message asked to save it, and never with a picture in the request. It
   /// never covers an overwrite, a move or the Trash, which still go through
@@ -68,17 +61,19 @@ public struct EviePreferences: Codable, Hashable, Sendable {
     appearance: EvieAppearancePreferences = EvieAppearancePreferences(),
     shortcuts: EvieShortcutPreferences = EvieShortcutPreferences(),
     voice: EvieVoicePreferences = EvieVoicePreferences(),
-    fileChangesEnabled: Bool = false,
-    autoApproveChanges: Bool = false,
-    webSearchEnabled: Bool = false,
-    mailAndCalendarEnabled: Bool = false,
-    computerUseEnabled: Bool = false,
+    brainChoice: EvieBrainChoice = .automatic,
+    fileChangesEnabled: Bool = true,
+    autoApproveChanges: Bool = true,
+    webSearchEnabled: Bool = true,
+    mailAndCalendarEnabled: Bool = true,
+    computerUseEnabled: Bool = true,
     computerUseConsentGiven: Bool = false,
-    savesDocumentsWhenAsked: Bool = false
+    savesDocumentsWhenAsked: Bool = true
   ) {
     self.appearance = appearance
     self.shortcuts = shortcuts
     self.voice = voice
+    self.brainChoice = brainChoice
     self.fileChangesEnabled = fileChangesEnabled
     self.autoApproveChanges = autoApproveChanges
     self.webSearchEnabled = webSearchEnabled
@@ -96,6 +91,7 @@ public struct EviePreferences: Codable, Hashable, Sendable {
     case appearance
     case shortcuts
     case voice
+    case brainChoice = "brain_choice"
     case fileChangesEnabled = "file_changes_enabled"
     case autoApproveChanges = "auto_approve_changes"
     case webSearchEnabled = "web_search_enabled"
@@ -118,20 +114,22 @@ public struct EviePreferences: Codable, Hashable, Sendable {
     voice =
       try container.decodeIfPresent(EvieVoicePreferences.self, forKey: .voice)
       ?? EvieVoicePreferences()
+    brainChoice =
+      try container.decodeIfPresent(EvieBrainChoice.self, forKey: .brainChoice) ?? .automatic
     fileChangesEnabled =
-      try container.decodeIfPresent(Bool.self, forKey: .fileChangesEnabled) ?? false
+      try container.decodeIfPresent(Bool.self, forKey: .fileChangesEnabled) ?? true
     autoApproveChanges =
-      try container.decodeIfPresent(Bool.self, forKey: .autoApproveChanges) ?? false
+      try container.decodeIfPresent(Bool.self, forKey: .autoApproveChanges) ?? true
     webSearchEnabled =
-      try container.decodeIfPresent(Bool.self, forKey: .webSearchEnabled) ?? false
+      try container.decodeIfPresent(Bool.self, forKey: .webSearchEnabled) ?? true
     mailAndCalendarEnabled =
-      try container.decodeIfPresent(Bool.self, forKey: .mailAndCalendarEnabled) ?? false
+      try container.decodeIfPresent(Bool.self, forKey: .mailAndCalendarEnabled) ?? true
     computerUseEnabled =
-      try container.decodeIfPresent(Bool.self, forKey: .computerUseEnabled) ?? false
+      try container.decodeIfPresent(Bool.self, forKey: .computerUseEnabled) ?? true
     computerUseConsentGiven =
       try container.decodeIfPresent(Bool.self, forKey: .computerUseConsentGiven) ?? false
     savesDocumentsWhenAsked =
-      try container.decodeIfPresent(Bool.self, forKey: .savesDocumentsWhenAsked) ?? false
+      try container.decodeIfPresent(Bool.self, forKey: .savesDocumentsWhenAsked) ?? true
   }
 
   /// Turning changes off must also clear the bypass, or the file keeps a switch
@@ -279,9 +277,10 @@ public enum EvieShortcutAction: String, CaseIterable, Codable, Sendable {
   case openHistory
   case openSettings
   case emergencyStop
-  /// Last, so the Carbon identifiers the other actions are registered under
-  /// (their position in this list) stay what they were.
+  /// New actions are appended so the existing Carbon identifiers stay stable.
   case lookAtScreen
+  case toggleResearchMode
+  case runResearchTask
 
   public var title: String {
     switch self {
@@ -294,6 +293,8 @@ public enum EvieShortcutAction: String, CaseIterable, Codable, Sendable {
     case .openSettings: "Abrir as configurações"
     case .emergencyStop: "Parar tudo agora"
     case .lookAtScreen: "Olhar a tela"
+    case .toggleResearchMode: "Ativar ou desativar a pesquisa"
+    case .runResearchTask: "Executar uma tarefa de pesquisa"
     }
   }
 
@@ -317,6 +318,10 @@ public enum EvieShortcutAction: String, CaseIterable, Codable, Sendable {
       "Cancela a resposta, corta o áudio e fecha o microfone imediatamente."
     case .lookAtScreen:
       "Captura a tela sob o ponteiro, sem as janelas da Evie, para a próxima pergunta."
+    case .toggleResearchMode:
+      "Abre o consentimento da pesquisa ou encerra a sessão ativa e cancela sua tarefa."
+    case .runResearchTask:
+      "Com a pesquisa ativa, interpreta a tela uma vez e executa o objetivo autorizado."
     }
   }
 
@@ -334,6 +339,8 @@ public enum EvieShortcutAction: String, CaseIterable, Codable, Sendable {
     // obvious letters with ⌘ are taken; ⌥⇧ is the family every other default
     // here belongs to.
     case .lookAtScreen: EvieShortcut(keyCode: 31, modifiers: [.option, .shift])
+    case .toggleResearchMode: EvieShortcut(keyCode: 35, modifiers: [.control, .option, .shift])
+    case .runResearchTask: EvieShortcut(keyCode: 40, modifiers: [.control, .option, .shift])
     }
   }
 
@@ -543,10 +550,8 @@ public struct EvieVoicePreferences: Codable, Hashable, Sendable {
   public var speechOutputEnabled: Bool
   /// Whether she also reads out an answer to something that was typed.
   ///
-  /// Off by default, and the default is the point: speaking back to a question
-  /// you spoke is a conversation, speaking back to a question you typed is an
-  /// interruption. Answering out loud follows the way the question was asked
-  /// unless this says otherwise.
+  /// Enabled by default at the owner's explicit request (ADR 0022). Turning it
+  /// off keeps spoken replies for spoken questions without reading typed ones.
   public var speaksTypedAnswers: Bool
   /// Whether a voice turn hides the written transcript entirely.
   public var callModeEnabled: Bool
@@ -576,12 +581,12 @@ public struct EvieVoicePreferences: Codable, Hashable, Sendable {
   public var speechRate: Double
 
   public init(
-    wakeWordEnabled: Bool = false,
+    wakeWordEnabled: Bool = true,
     wakePhrase: String = EvieVoicePreferences.defaultWakePhrase,
     pushToTalkEnabled: Bool = true,
     speechOutputEnabled: Bool = true,
-    speaksTypedAnswers: Bool = false,
-    callModeEnabled: Bool = false,
+    speaksTypedAnswers: Bool = true,
+    callModeEnabled: Bool = true,
     retainsRawAudio: Bool = false,
     voiceProfileAlias: String? = nil,
     voiceIdentifier: String? = nil,

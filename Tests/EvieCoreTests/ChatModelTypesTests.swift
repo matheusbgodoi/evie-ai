@@ -18,7 +18,8 @@ struct ChatModelTypesTests {
     #expect(state.responseText == "Oi")
 
     state.apply(.reasoningDelta("mais um pouco"))
-    state.apply(.completed(message: ChatMessage(role: .assistant, content: "Oi!"), finishReason: "stop"))
+    state.apply(
+      .completed(message: ChatMessage(role: .assistant, content: "Oi!"), finishReason: "stop"))
     #expect(!state.isReasoning)
     #expect(state.responseText == "Oi!")
   }
@@ -99,7 +100,7 @@ struct ChatModelTypesTests {
     let gateway = EvieConfiguration(maxCompletionTokens: 16_384, thinkingStyle: .templateKwargs)
 
     #expect(TurnOptions.voice(gateway) == TurnOptions(reasoning: .off, maxTokens: 1_024))
-    #expect(TurnOptions.chat(gateway) == TurnOptions(reasoning: .off, maxTokens: 2_048))
+    #expect(TurnOptions.chat(gateway) == TurnOptions(reasoning: .off, maxTokens: 16_384))
   }
 
   @Test("a computer-use step thinks a little on the PC and not elsewhere")

@@ -1,20 +1,35 @@
 import AppKit
 import EvieCore
+import ScreenCaptureKit
 import SwiftUI
 
-/// `--ui-snapshots <pasta>`: draws the brain chip, an answer card and the
-/// settings window offscreen, in light and dark, and writes each as a PNG.
-///
-/// It exists so a change to these views can be looked at without launching
-/// the app or touching anyone's screen. Nothing is put on screen: every view
-/// is drawn into a window that is never ordered in. Every model is built
-/// from scratch over files in a temporary folder — no preference, folder
-/// grant, key or permission of the person running it is read or written —
-/// except the update pane, which may ask GitHub for the latest release as it
-/// does when Settings opens. Translucent materials are drawn without what is
-/// behind them, so the glass reads flatter than it does on a desktop.
+/// `--ui-snapshots <pasta>` renders synthetic fixtures in temporary visible
+/// windows and captures ONLY each owned window through ScreenCaptureKit.
+/// Native Liquid Glass lives in the compositor and cannot be verified with
+/// cacheDisplay, which can produce a PNG containing only its backdrop.
+/// Requires the app's existing screen-capture permission; it never requests
+/// that grant or captures the desktop/personal windows. Fixtures use temporary
+/// stores, except the update pane's ordinary GitHub release lookup.
 extension EvieDiagnostics {
+  private static func makeSnapshotResearchResolver() -> EvieBrainResolver {
+    EvieBrainResolver(
+      configuration: .builtIn, environment: [:], factory: .live,
+      readiness: ModelReadinessCache(probe: ModelClientFactory.live.makeReadinessProbe()),
+      localBrain: EvieLocalBrainLauncher())
+  }
+
+  private static func makeSnapshotResearchHost(guide: PermissionGuideViewModel) -> ComputerUseHost {
+    ComputerUseHost(
+      presence: ScreenPresence(), focus: FocusCoordinator(),
+      screenPermission: ScreenPermission(guide: guide),
+      accessibility: AccessibilityPermission(guide: guide), preferences: { EviePreferences() })
+  }
+
   static func uiSnapshots(directory path: String) async {
+    guard CGPreflightScreenCaptureAccess() else {
+      print("capturas inválidas: a Evie não tem permissão de Gravação da Tela; nada foi capturado")
+      return
+    }
     let directory = URL(fileURLWithPath: path, isDirectory: true)
     let scratch = FileManager.default.temporaryDirectory
       .appendingPathComponent("evie-ui-snapshots-\(UUID().uuidString)", isDirectory: true)
@@ -26,11 +41,26 @@ extension EvieDiagnostics {
       return
     }
     defer { try? FileManager.default.removeItem(at: scratch) }
-    NSApp.setActivationPolicy(.prohibited)
+    NSApp.setActivationPolicy(.accessory)
 
     let fixtures = UISnapshotFixtures(scratch: scratch)
     for dark in [false, true] {
       let suffix = dark ? "dark" : "light"
+      await render(
+        BrainControlsView(model: fixtures.brainControls), size: CGSize(width: 330, height: 610),
+        dark: dark, titled: false,
+        to: directory.appendingPathComponent("brain-controls-\(suffix).png"))
+      let research = ResearchModeController(
+        brainResolver: makeSnapshotResearchResolver(),
+        look: EvieScreenLook(
+          capturer: ScreenCaptureService(), indicator: ScreenPresence(),
+          permission: ScreenPermission(guide: fixtures.permissions)),
+        host: makeSnapshotResearchHost(guide: fixtures.permissions))
+      await render(
+        ResearchModeView(controller: research), size: CGSize(width: 580, height: 600),
+        dark: dark, titled: true,
+        to: directory.appendingPathComponent("research-\(suffix).png"))
+      research.shutdown()
       await render(
         fixtures.inputBars, size: CGSize(width: 640, height: 470), dark: dark,
         to: directory.appendingPathComponent("overlay-chip-\(suffix).png"))
@@ -61,13 +91,14 @@ extension EvieDiagnostics {
     }
   }
 
-  /// Draws `view` at `size` into a window that is never shown, after letting
-  /// SwiftUI settle for a moment, and writes it as a PNG.
+  /// Displays synthetic content long enough for native materials to composite,
+  /// then captures only that exact owned window. No offscreen bitmap fallback
+  /// is accepted as evidence of native-glass rendering.
   private static func render(
     _ view: some View, size: CGSize, dark: Bool, titled: Bool = false, to url: URL
   ) async {
     let window = NSWindow(
-      contentRect: CGRect(origin: CGPoint(x: -20_000, y: -20_000), size: size),
+      contentRect: CGRect(origin: CGPoint(x: 100, y: 100), size: size),
       styleMask: titled ? [.titled, .closable, .resizable, .fullSizeContentView] : [.borderless],
       backing: .buffered,
       defer: false
@@ -83,26 +114,59 @@ extension EvieDiagnostics {
     }
     window.contentViewController = hosting
     window.setContentSize(size)
-    let target = window.contentView?.superview ?? hosting.view
-    // A window that is never ordered in gets no display cycles of its own,
-    // and the split view sizes its columns over several: run a few by hand.
+    window.center()
+    // Behind-window AppKit vibrancy must sample synthetic pixels too. A solid
+    // owned backdrop keeps any personal desktop/app out of the material input.
+    let backdrop = NSWindow(
+      contentRect: window.frame.insetBy(dx: -32, dy: -32), styleMask: [.borderless],
+      backing: .buffered, defer: false)
+    backdrop.isReleasedWhenClosed = false
+    backdrop.backgroundColor =
+      dark
+      ? NSColor(srgbRed: 0.14, green: 0.12, blue: 0.20, alpha: 1)
+      : NSColor(srgbRed: 0.86, green: 0.89, blue: 0.95, alpha: 1)
+    backdrop.orderFrontRegardless()
+    window.order(.above, relativeTo: backdrop.windowNumber)
+    defer {
+      window.close()
+      backdrop.close()
+    }
+    // The split view and compositor settle over multiple display cycles.
     for _ in 0..<8 {
       window.layoutIfNeeded()
       window.displayIfNeeded()
       try? await Task.sleep(for: .milliseconds(120))
     }
-    guard let bitmap = target.bitmapImageRepForCachingDisplay(in: target.bounds) else {
-      print("sem imagem: \(url.lastPathComponent)")
-      return
-    }
-    target.cacheDisplay(in: target.bounds, to: bitmap)
     do {
-      try bitmap.representation(using: .png, properties: [:])?.write(to: url)
+      let content = try await SCShareableContent.excludingDesktopWindows(
+        false, onScreenWindowsOnly: true)
+      guard
+        let owned = content.windows.first(where: {
+          $0.windowID == CGWindowID(window.windowNumber)
+            && $0.owningApplication?.processID == ProcessInfo.processInfo.processIdentifier
+        })
+      else {
+        print("sem janela própria; captura inválida: \(url.lastPathComponent)")
+        return
+      }
+      let scale = window.backingScaleFactor
+      let configuration = SCStreamConfiguration()
+      configuration.width = max(1, Int(owned.frame.width * scale))
+      configuration.height = max(1, Int(owned.frame.height * scale))
+      configuration.showsCursor = false
+      let image = try await SCScreenshotManager.captureImage(
+        contentFilter: SCContentFilter(desktopIndependentWindow: owned),
+        configuration: configuration)
+      guard let png = NSBitmapImageRep(cgImage: image).representation(using: .png, properties: [:])
+      else {
+        print("sem PNG; captura inválida: \(url.lastPathComponent)")
+        return
+      }
+      try png.write(to: url, options: .atomic)
       print(url.path)
     } catch {
-      print("não consegui gravar \(url.lastPathComponent): \(error.localizedDescription)")
+      print("captura inválida \(url.lastPathComponent): \(error.localizedDescription)")
     }
-    window.close()
   }
 }
 
@@ -150,6 +214,14 @@ private struct UISnapshotFixtures {
   }
 
   /// The input bar once per state the chip can be in.
+  var brainControls: BrainChipModel {
+    var model = chip(EvieBrainChip(profile: Self.pc, rung: .ready, isAgentModeOn: true))
+    model.onSetReasoning = { _ in }
+    model.webEnabled = true
+    model.onSetWebSearch = { _ in }
+    return model
+  }
+
   var inputBars: some View {
     let states: [EvieBrainChip] = [
       EvieBrainChip(profile: Self.pc, rung: .ready),

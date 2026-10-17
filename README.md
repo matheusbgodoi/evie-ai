@@ -1,17 +1,86 @@
 # Evie
 
-A personal assistant that lives on your Mac and talks only to machines you own.
-Pronounced **"ívi"**. No account, no subscription, no cloud model — she thinks
-on your own PC over your private tailnet, or on this Mac when the PC is out, and
-your voice, your notes, and your conversations stay on the Mac. She is
-macOS-only, and
-not by accident: she is built out of the microphone, speech, vision, and
-signing services this operating system provides, and there is no other build.
+A personal assistant that lives on your Mac. Pronounced **"ívi"**. She can use
+this Mac, your own PC or an OpenAI-compatible provider you configure, without an
+Evie account or subscription. Conversation storage and native speech processing
+stay on the Mac; answering sends the prepared question and relevant context or
+attachments to the selected model. Web search sends search terms to public
+services when enabled. Provider privacy and costs depend on your configuration.
+She is macOS-only, built out of the microphone, speech, vision and signing
+services this operating system provides.
 
 She is a shortcut away rather than a window you keep open: press `⌥Space`, ask,
 and she goes back to being invisible.
 
 ![Evie's overlay, closed and waiting](docs/images/overlay-idle.png)
+
+---
+
+## Evie 2 — release candidate behavior (2026-10-17)
+
+The input bar has a compact brain button with a gold outline when agent mode is
+allowed. Its popover selects PC, Mac or automatic routing, reasoning effort and
+web/agent switches. A manual model change applies to the next reply in the same
+conversation; previous answers keep their model labels. Choose **Desligado** for
+reasoning to reduce the wait before the first token.
+
+The model connection is yours: local or remote OpenAI-compatible endpoint, served
+model id and a display name in **Configurações → Cérebro**. See the reserved,
+nonfunctional [v2 configuration example](config/examples/model-v2.example.json).
+Remote HTTPS endpoints are trusted only after they are saved in your local
+configuration and require an exactly host-bound Keychain credential. **Salvar
+chave** binds a newly supplied key to the address shown. Runtime configuration,
+keys and private network addresses are not part of this public source or bundle.
+
+Existing capabilities default to enabled at the owner's explicit request. This
+allows tasks; it does not grant TCC access, begin a computer-control session or
+approve sending/deleting. Permission requests use the real macOS dialogs. Wake,
+push-to-talk and speech use public Apple APIs; the installed native voice needs
+no Evie TTS model worker. Optional personal clones remain available separately.
+Voice calibration records five short calls, transcribes on device and saves only
+accepted wake aliases, without raw audio or a voice identity model. It does not
+claim access to Siri's private voice/enrollment implementation.
+
+**Research:** ⌃⌥⇧P prepares or ends a 15-minute session; ⌃⌥⇧K runs one screen
+question while armed. Select clipboard output or bounded answer entry/selection.
+The chat stays in the background between tasks; system/capture/action indicators
+remain visible. Stop via ⌥⇧Esc. See [research usage and limits](docs/RESEARCH_MODE.md)
+and the [real synthetic form validation](docs/RESEARCH_VALIDATION.md).
+
+The native redesign uses Liquid Glass on floating controls, legible cards,
+reduced-motion/transparency support and an original icon. Public AppIntents expose
+opening the chat, preparing a question for review and capturing the screen to
+Shortcuts/Siri; these actions do not silently submit questions or approve tasks.
+See [native Apple integration](docs/NATIVE_APPLE.md),
+[voice](docs/NATIVE_VOICE.md) and [visual identity](docs/APPLE_VISUAL_IDENTITY.md).
+
+The PC's operational context is **200,704 tokens**. LensVLM is qualified at
+**131,072 tokens** on this Mac: the synthetic 127,527-token prompt plus 38-token
+answer retrieved all five target items, with 2.4 GiB minimum sampled free memory and
+13.8 GiB MLX-reported peak memory in a 392.31-second run. The local runtime uses
+eight-bit KV, prefill step 512 and a 256 MiB MLX allocator cache limit. This
+measured case qualifies the configured capacity; it is not a guarantee for every
+workload. The brain popover shows context, the source of token usage and
+compaction progress. Automatic compaction summarizes older messages for the
+selected model's budget while keeping the complete visible history unchanged;
+the current question and attachments are never silently truncated. Summaries
+may lose details, and estimated tokens remain labeled as estimates. See
+[conversation context](docs/CONVERSATION_CONTEXT.md),
+[hardware qualification](docs/MODEL_TUNING.md) and
+[current release gates](docs/PROJECT_STATUS.md).
+
+The source candidate is being validated as one integrated package. The full
+suite, final signed bundle, resource measurements, installation and publication
+are recorded separately; this page does not claim those final steps completed.
+The [release notes draft](docs/releases/2.0.0.md) is updated with measured results
+before publication. Reproducible real-boundary regressions also cover
+[settings persistence](docs/MODEL_SETTINGS_VALIDATION.md) and
+[local process reconfiguration](docs/LOCAL_BRAIN_VALIDATION.md).
+
+The historical narrative below records earlier versions; current contracts are
+ADRs 0020–0027 and the current project-status entry. Versions distributed with
+this repository's proprietary licence require the owner's written permission for
+third-party use; earlier grants and third-party terms remain intact.
 
 ---
 
@@ -156,7 +225,7 @@ v2 that PC is the default brain; its key lives in Evie's own keychain item,
 pasted or imported in Configurações › Cérebro (or `Scripts/evie-app
 import-pc-key`), and never in a file. Beyond the model there are two exceptions
 and no others: web search, which
-is off by default and says so where you turn it on, and an e-mail you approved by
+is enabled by the owner and says where requests go, and an e-mail you approved by
 pressing the button on a card that showed you every recipient and the whole text.
 
 **She cannot claim a capability she does not have.** The system prompt is
@@ -290,6 +359,30 @@ asked, 3 of 3, and declined the page's request when told to do what it said,
 explains, once, that these rules reduce the risk of on-screen injection and do
 not eliminate it.
 
+### Research shortcuts
+
+Open **Pesquisa e medições…** in the menu bar, or press **⌃⌥⇧P**. Choose an
+objective and a destination, then click **Ativar por 15 minutos**. Evie's chat
+hides and the wake-word listener is disarmed for this session. The activation
+shortcut turns the session off when it is already on.
+
+Press **⌃⌥⇧K** to interpret the screen under the pointer once. **Copiar a
+resposta** sends an isolated vision turn with no tools and writes the completed
+answer to the clipboard; it preserves anything you copied while she was
+thinking. **Preencher ou selecionar no Mac** uses the existing PC agent to
+copy and fill an answer or select an option. Enable agent mode first; browser
+buttons and other sensitive steps still need a click on their confirmation.
+
+Both shortcuts are configurable in **Configurações › Atalhos**. **⌥⇧Esc**,
+disabling research, sleep, session deactivation or the 15-minute deadline revoke
+the session. Captures and actions keep their screen indicators. This is normal
+background operation, with no promise of invisibility in recordings or screen
+sharing. No screen image, answer or action log is saved automatically. Export
+only timing/outcome metadata with **Exportar medições…**.
+
+Methods, limits and reproducible checks: [Research mode](docs/RESEARCH_MODE.md)
+and [ADR 0020](docs/adr/0020-expiring-research-shortcut-sessions.md).
+
 ### The indicator
 
 Whenever she sees or acts, the screen says so: a violet glow while she looks,
@@ -375,8 +468,9 @@ inventing the numbers and the recognised text is a heap of digits with no shape"
 
 ### Your mail and your agenda
 
-Off by default, in Settings › O que ela sabe › Mail e agenda. Switched on, she can
-read the last messages, search them, and read a stretch of the calendar — through
+Enabled by default in v2, in Settings › O que ela sabe › Mail e agenda; an
+existing saved choice is preserved. After macOS authorizes automation, she can
+read recent messages, search bounded pages and read a stretch of the calendar through
 the Mail and Calendar applications that already hold your Gmail and iCloud. There
 is no account to connect, no Google application, and no token anywhere on this
 Mac.
@@ -477,10 +571,11 @@ worth less than the next one.
 
 ### Changing a file, once you say so
 
-Off by default. Switched on, she can suggest sending to the Trash, renaming, and
-moving, inside authorised folders only. Each suggestion becomes a card naming the
-exact file, and nothing happens until you press the button. Deleting always means
-the Trash — she has no way to delete for good.
+Enabled by default in v2, while preserving an existing saved choice. She can
+suggest sending to the Trash, renaming and moving inside authorised folders only.
+Each suggestion names the exact file. The separate auto-approval setting can
+approve narrowly eligible changes requested in your own message; other changes
+need the card. Deleting means the Trash — she has no way to delete for good.
 
 There is a narrower switch that skips the card, and its scope is deliberate: it
 applies only when *your own message* asked for a change, so a document telling
@@ -497,8 +592,10 @@ Skills are files you write. They are loaded only when they match what you asked 
 a commit-message skill loaded for a question about commit messages cost 448
 characters of context (`d0fbf05`).
 
-Web search is off by default and is the only thing in Evie that reaches a
-stranger's server; the brain is your own PC.
+Web search is enabled by default in v2, while preserving an existing saved
+choice. It sends search terms to DuckDuckGo and reads public pages; turn it off
+in the brain popover or Settings. A configured remote model also receives the
+prepared question and context, under that provider's terms.
 
 ### The window itself
 
@@ -746,10 +843,11 @@ performs nothing, and the function that writes lives on a protocol her loop does
 not hold. No sentence in a message, a web page or a document reaches it — only
 the button on the card. She cannot change or delete an event that already exists.
 
-**She never sends anything without being told.** Beyond your own PC, which is
-her brain, two things in Evie reach past this Mac and both are deliberate: web
-search, which is off by default and says so on its switch, and a message you
-approved on a card by pressing the button. Nothing else leaves.
+**Mail sending requires its confirmation card.** The selected model receives
+the prepared request; enabled web search sends search terms and requests public
+pages. Sending an email requires pressing the card's button. Research answer
+entry does not press a submit control, but a page can react to a changed field
+itself; see [research limits](docs/RESEARCH_MODE.md).
 
 **She never deletes for good.** There is no tool in her vocabulary that
 permanently destroys anything; the strongest thing she can do to a file is put it
@@ -1040,9 +1138,8 @@ Working on this repository: read [AGENTS.md](AGENTS.md) first.
 
 ## Licence
 
-**Personal and domestic use, free. Commercial use, selling, and redistribution,
-no.** Copyright © 2026 Matheus Barboza de Godoi, all rights reserved. The source
-is readable so it can be studied and run, which is not the same as open source.
-Full terms, including what the licence does *not* cover — the language model, the
-inference server, Apple's frameworks, and your own data — in
-[LICENSE](LICENSE).
+**Proprietary; all rights reserved.** Copyright © 2026 Matheus Barboza de
+Godoi. Versions distributed with the current notice require the owner's prior
+written authorization for any third-party use, including personal, educational
+and research use. Public source visibility is not a usage licence. Earlier
+versions and third-party components keep their own terms. See [LICENSE](LICENSE).

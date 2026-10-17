@@ -158,11 +158,15 @@ public final class EvieBrainResolver {
   /// Narrows where conversations without a pin start. A place with no
   /// profile cannot be chosen (`canChoose(_:)`); asking for one changes
   /// nothing.
-  public func choose(_ choice: EvieBrainChoice) {
+  public func choose(_ choice: EvieBrainChoice, for conversation: UUID? = nil) {
     guard canChoose(choice) else {
       return
     }
     self.choice = choice
+    if let conversation {
+      pins.removeValue(forKey: conversation)
+      wakeDeclined.remove(conversation)
+    }
   }
 
   /// Whether some profile runs where `choice` points.

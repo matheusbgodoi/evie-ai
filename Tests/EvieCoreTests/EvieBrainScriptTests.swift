@@ -16,6 +16,80 @@ import Testing
 /// on, and only while the stand-in is still alive.
 @Suite("Evie brain script")
 struct EvieBrainScriptTests {
+  @Test("bounded script launch preserves the exact Swift bootstrap, argv and scrubbed environment")
+  func boundedLaunchMatchesPolicy() throws {
+    let sandbox = try BrainSandbox()
+    try sandbox.prepareBoundedStandIn()
+    let run = try sandbox.run(
+      "start",
+      inherited: [
+        "EVIE_BRAIN_MAX_KV": "65536", "EVIE_BRAIN_KV_BITS": "8",
+        "EVIE_BRAIN_PREFILL_STEP_SIZE": "512", "EVIE_BRAIN_CACHE_LIMIT_MB": "256",
+        "PYTHONPATH": "/tmp/forbidden-import-path",
+      ]
+    )
+    #expect(run.status != 0)
+    #expect(run.standardError.contains("exited during startup"))
+    let runtime = LocalRuntime(
+      launcher: .mlxVLM, executable: sandbox.standIn.path, port: sandbox.port,
+      maxKVSize: 65_536, kvBits: 8, prefillStepSize: 512, metalCacheLimitMB: 256
+    )
+    #expect(
+      try sandbox.recordedArguments()
+        == LocalBrainPolicy.makeArguments(runtime, model: "mlx-community/LensVLM-9B-OptiQ-4bit"))
+    #expect(try sandbox.recordedEnvironment()["PYTHONPATH"] == nil)
+    #expect(try sandbox.recordedEnvironment()["HF_HUB_OFFLINE"] == "1")
+  }
+
+  @Test("bounded script refuses env/PATH shebangs and invalid memory controls before starting")
+  func boundedLaunchRejectsInvalidConfiguration() throws {
+    let sandbox = try BrainSandbox()
+    for settings in [
+      ["EVIE_BRAIN_CACHE_LIMIT_MB": "256"],
+      ["EVIE_BRAIN_CACHE_LIMIT_MB": "0"],
+      ["EVIE_BRAIN_CACHE_LIMIT_MB": "9999999999999999999999999"],
+      ["EVIE_BRAIN_KV_BITS": "5"],
+      ["EVIE_BRAIN_PREFILL_STEP_SIZE": "-1"],
+    ] {
+      let run = try sandbox.run("start", inherited: settings)
+      #expect(run.status != 0)
+      #expect(!sandbox.exists("Runtime/brain.pid"))
+      #expect(!sandbox.exists("Runtime/brain.key"))
+    }
+  }
+
+  @Test("stop recognises an exact bounded Python process and leaves modified bootstrap code alone")
+  func stopRecognisesOnlyExactBoundedBootstrap() throws {
+    let sandbox = try BrainSandbox()
+    defer { try? FileManager.default.removeItem(at: sandbox.root) }
+    let interpreter = try sandbox.prepareIsolatedPythonStandIn()
+    let runtime = LocalRuntime(
+      launcher: .mlxVLM, executable: sandbox.standIn.path, port: sandbox.port,
+      maxKVSize: 65_536, kvBits: 8, prefillStepSize: 512, metalCacheLimitMB: 256
+    )
+    for modified in [false, true] {
+      let server = Process()
+      server.executableURL = interpreter
+      var arguments = LocalBrainPolicy.makeArguments(runtime, model: "synthetic-only")
+      if modified { arguments[2] += ";pass" }
+      server.arguments = arguments
+      server.standardOutput = FileHandle.nullDevice
+      server.standardError = FileHandle.nullDevice
+      try server.run()
+      defer { if server.isRunning { server.terminate() } }
+      try sandbox.write("\(server.processIdentifier)\n", to: "Runtime/brain.pid")
+      let run = try sandbox.run("stop")
+      #expect(run.status == 0)
+      if !modified {
+        server.waitUntilExit()
+        #expect(server.terminationReason == .uncaughtSignal)
+        #expect(server.terminationStatus == SIGTERM)
+      }
+      #expect(server.isRunning == modified)
+      #expect(!sandbox.exists("Runtime/brain.pid"))
+    }
+  }
+
   @Test("start launches the policy's argv with an offline, scrubbed environment and a fresh key")
   func startUsesThePolicyCommand() throws {
     let sandbox = try BrainSandbox()
@@ -221,6 +295,50 @@ private struct BrainSandbox {
       .split(separator: "\n", omittingEmptySubsequences: false)
       .map(String.init)
       .dropLast()
+  }
+
+  /// Records the Python invocation without importing MLX or starting a model.
+  /// A separate real-MLX probe verifies the bootstrap's allocator side effect.
+  func prepareBoundedStandIn() throws {
+    let interpreter = root.appendingPathComponent("python3")
+    let record = """
+      #!/bin/zsh
+      print -rl -- "$@" > \(argumentsRecord.path)
+      /usr/bin/env > \(environmentRecord.path)
+      exit 3
+      """
+    try record.write(to: interpreter, atomically: true, encoding: .utf8)
+    try FileManager.default.setAttributes(
+      [.posixPermissions: 0o700], ofItemAtPath: interpreter.path)
+    try "#!\(interpreter.path)\n".write(to: standIn, atomically: true, encoding: .utf8)
+  }
+
+  /// Real isolated Python and a tiny fixture module exercise ps/argv parsing.
+  /// No installed MLX package, network, model, or production runtime is touched.
+  func prepareIsolatedPythonStandIn() throws -> URL {
+    let virtualEnvironment = root.appendingPathComponent("python-env", isDirectory: true)
+    let setup = Process()
+    setup.executableURL = URL(fileURLWithPath: "/usr/bin/python3")
+    setup.arguments = ["-m", "venv", "--without-pip", virtualEnvironment.path]
+    setup.standardOutput = FileHandle.nullDevice
+    setup.standardError = FileHandle.nullDevice
+    try setup.run()
+    setup.waitUntilExit()
+    guard setup.terminationStatus == 0 else { throw CocoaError(.executableRuntimeMismatch) }
+    let library = virtualEnvironment.appendingPathComponent("lib", isDirectory: true)
+    let version = try #require(
+      FileManager.default.contentsOfDirectory(at: library, includingPropertiesForKeys: nil)
+        .first(where: { $0.lastPathComponent.hasPrefix("python") }))
+    let module = version.appendingPathComponent("site-packages/mlx", isDirectory: true)
+    try FileManager.default.createDirectory(at: module, withIntermediateDirectories: true)
+    try "".write(
+      to: module.appendingPathComponent("__init__.py"), atomically: true, encoding: .utf8)
+    try "def set_cache_limit(limit): return 0\n".write(
+      to: module.appendingPathComponent("core.py"), atomically: true, encoding: .utf8)
+    let interpreter = virtualEnvironment.appendingPathComponent("bin/python3")
+    try "#!\(interpreter.path)\nimport time\ntime.sleep(30)\n".write(
+      to: standIn, atomically: true, encoding: .utf8)
+    return interpreter
   }
 
   func recordedEnvironment() throws -> [String: String] {

@@ -165,8 +165,13 @@ public struct ComputerActionPolicy: Sendable {
     observation: ComputerObservation,
     live: ComputerLiveState,
     goal: String,
-    afterLauncherChord: Bool = false
+    afterLauncherChord: Bool = false,
+    clipboardWriteAuthorized: Bool = false,
+    answerEntryOnly: Bool = false
   ) -> Decision {
+    if answerEntryOnly, let refusal = Self.answerEntryRefusal(action, observation: observation) {
+      return .refused(refusal)
+    }
     switch action {
     case .openApp(let name, let url):
       return evaluateOpenApp(name: name, url: url, goal: goal)
@@ -189,7 +194,8 @@ public struct ComputerActionPolicy: Sendable {
         Clearance(
           operation: .execute,
           summary: "Copiar um texto para a área de transferência",
-          confirmation: nil,
+          confirmation: clipboardWriteAuthorized
+            ? nil : "Substituir o que está copiado por este texto?\n\n" + text,
           targetNamespace: "evie.computer.clipboard",
           targetIdentifier: "general"
         )
@@ -241,6 +247,60 @@ public struct ComputerActionPolicy: Sendable {
       return CGPoint(x: element.box0to1000.midX, y: element.box0to1000.midY)
     case .normalized(let x, let y, _):
       return CGPoint(x: x, y: y)
+    }
+  }
+
+  /// Research grants are for filling an identified field or selecting an
+  /// identified choice. A later confirmation cannot authorize sending or
+  /// launching; unknown/custom controls need the person instead of a guess.
+  private static func answerEntryRefusal(
+    _ action: ComputerAction, observation: ComputerObservation
+  ) -> String? {
+    let refusal =
+      "A pesquisa só preenche campos ou seleciona alternativas identificadas; "
+      + "não envia, confirma, abre apps nem age sobre controles ambíguos. Faça esse passo você."
+    let fields: Set<String> = ["AXTextField", "AXTextArea", "AXSearchField", "AXComboBox"]
+    let choices: Set<String> = ["AXRadioButton", "AXCheckBox", "AXPopUpButton", "AXMenuItem"]
+    let focusedRole = observation.focusedElement?.role ?? ""
+    switch action {
+    case .wait, .writeClipboard, .scroll, .moveMouse:
+      return nil
+    case .typeText(let text):
+      return fields.contains(focusedRole)
+        && !text.unicodeScalars.contains {
+          CharacterSet.newlines.contains($0)
+        } ? nil : refusal
+    case .paste:
+      return fields.contains(focusedRole) ? nil : refusal
+    case .pressKeys(let chord):
+      if fields.contains(focusedRole), chord.modifiers == [.command],
+        ["a", "v"].contains(chord.key)
+      {
+        return nil
+      }
+      if chord.modifiers.isEmpty,
+        ["left", "right", "up", "down", "home", "end"].contains(chord.key),
+        fields.contains(focusedRole) || choices.contains(focusedRole)
+      {
+        return nil
+      }
+      return refusal
+    case .click(let target, let button, let count):
+      guard button == .left, count == 1,
+        let grid = gridPoint(of: target, in: observation)
+      else { return refusal }
+      let hit: AXElementSummary?
+      if case .element(_, let index) = target {
+        hit = observation.element(index: index)
+      } else {
+        hit = observation.element(atGrid: grid)
+      }
+      guard let hit, fields.contains(hit.role) || choices.contains(hit.role),
+        words(hit.title).isDisjoint(with: confirmWords)
+      else { return refusal }
+      return nil
+    case .openApp, .readClipboard, .drag:
+      return refusal
     }
   }
 
@@ -567,7 +627,8 @@ public struct ComputerActionPolicy: Sendable {
       return "Apertar Return no \(appName)? O atalho com Espaço de antes pode ter aberto um "
         + "lançador, e Return abriria o que estiver selecionado nele."
     }
-    let candidates = [observation.focusedElement].compactMap { $0 }
+    let candidates =
+      [observation.focusedElement].compactMap { $0 }
       + observation.elements.filter { Self.pressableRoles.contains($0.role) }
     let confirmable = candidates.first {
       !Self.words($0.title).isDisjoint(with: Self.confirmWords)

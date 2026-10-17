@@ -148,19 +148,22 @@ private struct Turn: Sendable {
         port: configuration.localBrainPort,
         from: localBrainKey
       )
+    let inputTokens = OpenAICompatibleClient.estimatedInputTokens(in: messages)
     let request = try OpenAICompatibleClient.makeRequest(
       messages: messages,
       tools: tools,
       options: options,
       configuration: configuration,
       bearerToken: bearerToken,
-      deadlines: deadlines
+      deadlines: deadlines,
+      inputTokens: inputTokens
     )
     let watchdog = ResponseWatchdog(
       deadlines: deadlines.deadlines(
         readiness: options.readiness,
         carriesImage: messages.contains { !($0.images ?? []).isEmpty },
-        configuration: configuration
+        configuration: configuration,
+        inputTokens: inputTokens
       )
     )
     let outputCap = OpenAICompatibleClient.outputCap(options: options, configuration: configuration)
@@ -373,6 +376,13 @@ extension OpenAICompatibleClient {
     min(options.maxTokens ?? configuration.maxCompletionTokens, configuration.maxCompletionTokens)
   }
 
+  /// Same character/picture proxy as conversation planning, not a tokenizer.
+  /// Computed once for a streamed turn and shared by URLSession and watchdog.
+  static func estimatedInputTokens(in messages: [ChatMessage]) -> Int {
+    let characters = EvieTurnPlan.characters(in: messages)
+    return characters / 2 + characters % 2
+  }
+
   /// The request for one turn. Synchronous and free of I/O — the token is read
   /// before the call — so the body can be tested without a server.
   static func makeRequest(
@@ -381,15 +391,19 @@ extension OpenAICompatibleClient {
     options: TurnOptions,
     configuration: EvieConfiguration,
     bearerToken: String?,
-    deadlines: ModelDeadlinePolicy = .standard
+    deadlines: ModelDeadlinePolicy = .standard,
+    inputTokens: Int? = nil
   ) throws -> URLRequest {
+    let preparedMessages = try EvieLensImagePreparation.prepare(
+      messages, configuration: configuration)
     var request = URLRequest(url: configuration.chatCompletionsURL)
     request.httpMethod = "POST"
     request.timeoutInterval =
       deadlines.deadlines(
         readiness: options.readiness,
         carriesImage: messages.contains { !($0.images ?? []).isEmpty },
-        configuration: configuration
+        configuration: configuration,
+        inputTokens: inputTokens ?? estimatedInputTokens(in: messages)
       ).idleGap
     request.setValue("application/json", forHTTPHeaderField: "Content-Type")
     request.setValue("text/event-stream", forHTTPHeaderField: "Accept")
@@ -405,7 +419,7 @@ extension OpenAICompatibleClient {
     )
     let body = ChatCompletionRequest(
       model: configuration.model,
-      messages: WireConversation.messages(from: messages),
+      messages: WireConversation.messages(from: preparedMessages),
       stream: true,
       streamOptions: .init(includeUsage: true),
       maxTokens: outputCap,

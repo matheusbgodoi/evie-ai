@@ -9,7 +9,7 @@ struct EvieCredentialProvidingTests {
   private let reference = CredentialReference(
     service: "com.matheusbgodoi.evie.model",
     account: "pc-3090",
-    boundHost: "ai-node-3090.tail6146ef.ts.net"
+    boundHost: "models.example.invalid"
   )
 
   @Test("a keychain hit becomes the token, without its trailing newline")

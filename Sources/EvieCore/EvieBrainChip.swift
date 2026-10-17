@@ -17,7 +17,9 @@ extension EvieModelProfile {
   /// profile whose model is edited in Settings is named for what it now runs,
   /// and an id nobody mapped is shown as itself — never as a guess.
   public var displayModelName: String {
-    Self.displayModelName(forModel: model)
+    let label = displayName.trimmingCharacters(in: .whitespacesAndNewlines)
+    if !label.isEmpty, label != "PC RTX 3090", label != "Mac local" { return label }
+    return Self.displayModelName(forModel: model)
   }
 
   /// `qwen-daily` is the PC gateway's alias for the Qwen 3.8 model it keeps
@@ -76,7 +78,7 @@ extension ModelLocation {
 /// it and narrows the existing preference order to the chosen place, so
 /// "Sempre o PC" is the order with the Mac left out and "Automático" is the
 /// order as Settings saved it.
-public enum EvieBrainChoice: String, CaseIterable, Sendable, Identifiable {
+public enum EvieBrainChoice: String, CaseIterable, Codable, Sendable, Identifiable {
   case automatic
   case alwaysPC
   case alwaysMac

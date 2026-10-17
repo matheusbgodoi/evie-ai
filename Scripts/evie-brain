@@ -22,13 +22,20 @@ readonly EVIE_BRAIN_PID_FILE="${EVIE_BRAIN_RUNTIME_DIR}/brain.pid"
 readonly EVIE_BRAIN_LOG="${EVIE_BRAIN_RUNTIME_DIR}/brain.log"
 readonly EVIE_BRAIN_KEY_FILE="${EVIE_BRAIN_RUNTIME_DIR}/brain.key"
 
-# The built-in Mac profile's values. Each can be overridden, for a different
-# install or for a test; the executable must stay an absolute path, never one
-# looked up on $PATH.
+# Manual recovery defaults remain legacy 32K, without optional memory controls.
+# The installed app reads its configured profile; this script does not read or
+# silently replace that configuration. Override these for a measured profile.
+# The executable must stay absolute, never looked up on $PATH.
 readonly EVIE_BRAIN_EXECUTABLE="${EVIE_BRAIN_EXECUTABLE:-${HOME}/.local/bin/mlx_vlm.server}"
 readonly EVIE_BRAIN_MODEL="${EVIE_BRAIN_MODEL:-mlx-community/LensVLM-9B-OptiQ-4bit}"
 readonly EVIE_BRAIN_PORT="${EVIE_BRAIN_PORT:-38480}"
 readonly EVIE_BRAIN_MAX_KV="${EVIE_BRAIN_MAX_KV:-32768}"
+readonly EVIE_BRAIN_KV_BITS="${EVIE_BRAIN_KV_BITS:-}"
+readonly EVIE_BRAIN_PREFILL_STEP_SIZE="${EVIE_BRAIN_PREFILL_STEP_SIZE:-}"
+readonly EVIE_BRAIN_CACHE_LIMIT_MB="${EVIE_BRAIN_CACHE_LIMIT_MB:-}"
+# Exact bridge to LocalBrainPolicy.boundedBootstrap, protected by argv parity
+# tests. It runs the unmodified installed CLI, with no dependency fork.
+readonly EVIE_BRAIN_BOOTSTRAP="import sys,runpy;import mlx.core as mx;server=sys.argv.pop(1);cache=int(sys.argv.pop(1));mx.set_cache_limit(cache);sys.argv[0]=server;runpy.run_path(server,run_name='__main__')"
 # Measured cold start on 2026-10-16 was well under this (see
 # docs/MACOS_RUNTIME.md); the same bound Evie's launcher waits.
 readonly EVIE_BRAIN_READY_SECONDS="${EVIE_BRAIN_READY_SECONDS:-90}"
@@ -56,6 +63,30 @@ function server_arguments() {
     --max-kv-size "${EVIE_BRAIN_MAX_KV}"
     --max-num-seqs 1
   )
+  if [[ -n "${EVIE_BRAIN_KV_BITS}" ]]; then
+    reply+=(--kv-bits "${EVIE_BRAIN_KV_BITS}")
+  fi
+  if [[ -n "${EVIE_BRAIN_PREFILL_STEP_SIZE}" ]]; then
+    reply+=(--prefill-step-size "${EVIE_BRAIN_PREFILL_STEP_SIZE}")
+  fi
+  if [[ -n "${EVIE_BRAIN_CACHE_LIMIT_MB}" ]]; then
+    reply=(-I -c "${EVIE_BRAIN_BOOTSTRAP}" "${EVIE_BRAIN_EXECUTABLE}" \
+      "$(( EVIE_BRAIN_CACHE_LIMIT_MB * 1048576 ))" "${reply[@]}")
+  fi
+}
+
+function launch_executable() {
+  if [[ -z "${EVIE_BRAIN_CACHE_LIMIT_MB}" ]]; then
+    print -r -- "${EVIE_BRAIN_EXECUTABLE}"
+    return 0
+  fi
+  local head
+  IFS= read -r head < "${EVIE_BRAIN_EXECUTABLE}"
+  [[ "${head}" == '#!'* ]] || return 1
+  local -a interpreter_words=(${=head[3,-1]})
+  (( ${#interpreter_words} == 1 )) || return 1
+  [[ "${interpreter_words[1]}" == /*/(python*|Python*) && -x "${interpreter_words[1]}" ]] || return 1
+  print -r -- "${interpreter_words[1]}"
 }
 
 # The environment Evie's launcher passes (LocalBrainPolicy.makeEnvironment):
@@ -90,6 +121,21 @@ function require_configuration() {
   fi
   if [[ "${EVIE_BRAIN_PORT}" != <-> || "${EVIE_BRAIN_MAX_KV}" != <-> ]]; then
     print -u2 "EVIE_BRAIN_PORT and EVIE_BRAIN_MAX_KV must be whole numbers."
+    return 1
+  fi
+  if [[ -n "${EVIE_BRAIN_KV_BITS}" && "${EVIE_BRAIN_KV_BITS}" != (2|3|4|6|8) ]]; then
+    print -u2 "EVIE_BRAIN_KV_BITS must be 2, 3, 4, 6 or 8."
+    return 1
+  fi
+  local value
+  for value in "${EVIE_BRAIN_PREFILL_STEP_SIZE}" "${EVIE_BRAIN_CACHE_LIMIT_MB}"; do
+    if [[ -n "${value}" ]] && { [[ "${value}" != <-> ]] || (( ${#value} > 13 || value <= 0 || value > 8796093022207 )); }; then
+      print -u2 "Optional memory limits must be positive, representable whole numbers."
+      return 1
+    fi
+  done
+  if ! launch_executable >/dev/null; then
+    print -u2 "Bounded MLX launch requires the CLI's absolute Python shebang, without env/PATH or flags."
     return 1
   fi
 }
@@ -196,10 +242,22 @@ function is_our_server() {
   local process_pid="$1"
   local command_line
   command_line=$(ps -ww -p "${process_pid}" -o command= 2>/dev/null) || return 1
-  local -a words=(${=command_line})
-  local program=${words[(ie)${EVIE_BRAIN_EXECUTABLE}]}
-  (( program <= 2 )) || return 1
-  local -a options=("${(@)words[program+1,-1]}")
+  local -a options
+  # ps does not quote arguments containing spaces. Match the exact bootstrap as
+  # one raw prefix before splitting the ordinary CLI options, never any -c code.
+  local image="${command_line%% *}"
+  local wrapper_prefix="${image} -I -c ${EVIE_BRAIN_BOOTSTRAP} ${EVIE_BRAIN_EXECUTABLE} "
+  if [[ "${image}" == /*/(python*|Python*) && "${command_line}" == "${wrapper_prefix}"* ]]; then
+    local remainder="${command_line#${wrapper_prefix}}"
+    local cache_bytes="${remainder%% *}"
+    [[ "${cache_bytes}" == <-> ]] && (( ${#cache_bytes} <= 19 && cache_bytes > 0 )) || return 1
+    options=(${=remainder#* })
+  else
+    local -a words=(${=command_line})
+    local program=${words[(ie)${EVIE_BRAIN_EXECUTABLE}]}
+    (( program <= 2 )) || return 1
+    options=("${(@)words[program+1,-1]}")
+  fi
   [[ "$(last_option_value --port "${options[@]}")" == "${EVIE_BRAIN_PORT}" ]] || return 1
   [[ "$(last_option_value --host "${options[@]}")" == "127.0.0.1" ]] || return 1
   listens_only_on_loopback "${process_pid}"
@@ -246,6 +304,8 @@ function start() {
 
   server_arguments
   local -a arguments=("${reply[@]}")
+  local executable
+  executable=$(launch_executable)
   server_environment
   local -a environment=("${reply[@]}")
 
@@ -266,7 +326,7 @@ function start() {
   # the key from the file into the environment, so it is never in an argv.
   nohup /usr/bin/env -i "${environment[@]}" /bin/sh -c \
     'MLX_VLM_SERVER_API_KEY=$(/bin/cat "$1") && export MLX_VLM_SERVER_API_KEY && shift && exec "$@"' \
-    evie-brain "${EVIE_BRAIN_KEY_FILE}" "${EVIE_BRAIN_EXECUTABLE}" "${arguments[@]}" \
+    evie-brain "${EVIE_BRAIN_KEY_FILE}" "${executable}" "${arguments[@]}" \
     >> "${EVIE_BRAIN_LOG}" 2>&1 </dev/null &
   server_pid=$!
   print -r -- "${server_pid}" > "${EVIE_BRAIN_PID_FILE}"

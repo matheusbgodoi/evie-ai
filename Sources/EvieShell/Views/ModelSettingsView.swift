@@ -106,6 +106,8 @@ struct ModelSettingsView: View {
       }
 
       LabeledContent("Onde roda", value: viewModel.editingProfile.location.placeDescription)
+      TextField("Nome exibido", text: $viewModel.drafts[index].displayName)
+        .help("Seu nome para este cérebro, mostrado na barra e nas respostas")
 
       VStack(alignment: .leading, spacing: 4) {
         let fixedEndpoint = viewModel.editingProfile.fixedEndpointExplanation
@@ -201,21 +203,21 @@ struct ModelSettingsView: View {
         Button("Salvar chave") {
           Task { await viewModel.saveKey() }
         }
-        .disabled(viewModel.pastedKey.isEmpty)
+        .disabled(viewModel.pastedKey.isEmpty || viewModel.isSavingKey || viewModel.isImportingKey)
       }
 
       if viewModel.offersKeyImport {
         VStack(alignment: .leading, spacing: 8) {
           // Said before the button is pressed; the first-run guide says the same.
           Text(EvieModelKeys.importPromptExplanation)
-          .font(.caption)
-          .foregroundStyle(.secondary)
-          .fixedSize(horizontal: false, vertical: true)
+            .font(.caption)
+            .foregroundStyle(.secondary)
+            .fixedSize(horizontal: false, vertical: true)
           HStack {
             Button("Importar da configuração do PC") {
               Task { await viewModel.importKey() }
             }
-            .disabled(viewModel.isImportingKey)
+            .disabled(viewModel.isImportingKey || viewModel.isSavingKey)
             if viewModel.isImportingKey {
               ProgressView().controlSize(.small)
             }
@@ -246,7 +248,8 @@ struct ModelSettingsView: View {
           Task { await viewModel.testConnection() }
         }
         .disabled(viewModel.testingProfileID != nil)
-        .help("Pergunta ao servidor se ele responde, se aceita a chave e se o modelo está carregado")
+        .help(
+          "Pergunta ao servidor se ele responde, se aceita a chave e se o modelo está carregado")
         if viewModel.testingProfileID == profile.id {
           ProgressView().controlSize(.small)
         }
@@ -279,6 +282,11 @@ struct ModelSettingsView: View {
     let index = viewModel.editingIndex
     let managed = viewModel.managedFields
     return Section("Amostragem") {
+      Text(viewModel.editingProfile.samplingExplanation)
+        .font(.caption).foregroundStyle(.secondary)
+        .fixedSize(horizontal: false, vertical: true)
+      Button("Aplicar receita recomendada deste perfil") { viewModel.restoreRecommendedSampling() }
+        .disabled(managed.contains(.temperature) || managed.contains(.topP))
       Toggle(
         "Usar temperatura padrão do servidor",
         isOn: $viewModel.drafts[index].usesServerTemperature

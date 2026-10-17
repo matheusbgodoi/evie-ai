@@ -2,7 +2,7 @@
 /// against the server's real shapes rather than its documentation.
 ///
 /// Recorded 2026-10-16 from this Mac against
-/// `https://ai-node-3090.tail6146ef.ts.net` (gateway-edge in front of
+/// `https://models.example.invalid` (gateway-edge in front of
 /// llama-swap), with `qwen-daily` resident and every other alias unloaded. The
 /// key was read from the keychain into a shell variable and never printed; no
 /// recording holds a request header. What the recordings settled:

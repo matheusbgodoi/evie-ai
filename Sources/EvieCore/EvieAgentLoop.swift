@@ -545,7 +545,8 @@ extension EvieAgentLoop {
         !passages.isEmpty
       {
         result.webFindings = EvieWebPassages.describe(passages, query: query)
-        result.citedPages = passages
+        result.citedPages =
+          passages
           .map(\.source)
           .reduce(into: [String]()) { unique, source in
             if !unique.contains(source) {
@@ -775,7 +776,9 @@ extension EvieAgentLoop {
         let unreadOnly = ["true", "1", "sim", "yes"].contains(
           (arguments["unread_only"] ?? "").lowercased()
         )
-        let messages = try await apps.readMail(count: count, unreadOnly: unreadOnly)
+        let offset = try EvieMailCalendar.resolveMailOffset(arguments["offset"])
+        let messages = try await apps.readMailPage(
+          count: count, unreadOnly: unreadOnly, offset: offset)
         return EvieToolResult(
           callID: call.id,
           name: call.name,
@@ -797,7 +800,8 @@ extension EvieAgentLoop {
           fallback: EvieMailCalendar.defaultMessageCount,
           maximum: EvieMailCalendar.maximumMessageCount
         )
-        let messages = try await apps.searchMail(term: term, count: count)
+        let offset = try EvieMailCalendar.resolveMailOffset(arguments["offset"])
+        let messages = try await apps.searchMailPage(term: term, count: count, offset: offset)
         return EvieToolResult(
           callID: call.id,
           name: call.name,
