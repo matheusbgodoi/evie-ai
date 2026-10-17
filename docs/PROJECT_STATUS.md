@@ -9,8 +9,10 @@ combines brain controls, research, native voice/public URL Shortcuts, visual ide
 context compaction and the executor/network/persistence corrections. The exact
 continuation anchor remains
 [EVIE_RESEARCH_DELIVERY](implementation/EVIE_RESEARCH_DELIVERY.md).
-This is a source/evidence checkpoint, not a claim that final installation,
-publication or a release has already occurred.
+The signed candidate is installed locally. The public source is a release
+candidate; source publication does not assert that a final release or the latest
+live PC checks have completed. The remaining live PC gate requires the owner
+to authorize the legitimate macOS Keychain prompt.
 
 ### Context and current contracts
 
@@ -90,7 +92,16 @@ publication or a release has already occurred.
 
 ### Final validation gates and measured scope
 
-- Latest hosted run [39006928959](https://github.com/matheusbgodoi/evie-ai/actions/runs/39006928959)
+- **Current hosted gate passed:** [run 39007625804](https://github.com/matheusbgodoi/evie-ai/actions/runs/39007625804) on public
+  source `ba17474d11a29aa346377fd75a12dc8ec5712f20`, all three jobs successful.
+  Core executed **1,501 + 55 = 1,556 tests** in 9.659 s + 15.292 s, with the same
+  intentional known Mail fixture. Settings persistence/responsive Keychain,
+  68-chord clipboard guards and the fifteen production-method voice cases
+  passed. Xcode 27 compiled the complete shell in 38.90 s and the actual capture
+  driver compiled. Documentation passed. The reporting commit changes docs only;
+  it does not change the qualified production code, tests or scripts.
+
+- Prior failed hosted run [39006928959](https://github.com/matheusbgodoi/evie-ai/actions/runs/39006928959)
   passed documentation and strict shell/capture-driver compilation but failed
   parallel Core timing fixtures. Earlier CI success below is a dated checkpoint.
   Fixture cleanup and disjoint timing-resource phases are being qualified under

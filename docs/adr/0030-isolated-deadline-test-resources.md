@@ -89,3 +89,7 @@ options, without running a compiler or test in those checks. The hosted gate is
 recorded separately in [PROJECT_STATUS](../PROJECT_STATUS.md) and the
 [delivery ledger](../implementation/EVIE_RESEARCH_DELIVERY.md). A local pass does
 not replace the required fresh hosted run.
+
+Hosted qualification subsequently passed in [run39007625804](https://github.com/matheusbgodoi/evie-ai/actions/runs/39007625804): all 1,556 cases, every additional harness and both other jobs. The
+measured phase times were 9.659 s and 15.292 s. No retry or timing relaxation
+was used.
