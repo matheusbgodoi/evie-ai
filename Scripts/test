@@ -8,8 +8,9 @@ readonly xcode_testing_plugin="${developer_directory}/Toolchains/XcodeDefault.xc
 readonly testing_frameworks="${developer_directory}/Library/Developer/Frameworks"
 readonly testing_libraries="${developer_directory}/Library/Developer/usr/lib"
 
-typeset -a swift_test_arguments
+typeset -a swift_test_arguments swift_test_command
 swift_test_arguments=(-Xswiftc -warnings-as-errors)
+swift_test_command=(swift test)
 
 # The macOS 27 Command Line Tools ship Swift Testing, but SwiftPM 6.4 does not
 # automatically discover its macro plugin or runtime rpaths. Full Xcode handles
@@ -55,8 +56,34 @@ let package = Package(
   ]
 )
 MANIFEST
-  exec swift test --package-path "${core_package}" --scratch-path "${core_products}" \
-    "${swift_test_arguments[@]}" "$@"
+  swift_test_command+=(--package-path "${core_package}" --scratch-path "${core_products}")
 fi
 
-exec swift test "${swift_test_arguments[@]}" "$@"
+# Timing-sensitive OS boundaries need an uncontended admission window. Their
+# own cancellation/concurrency/stress still runs inside each test. Running the
+# finite CPU-saturation fixture alongside unrelated 300 ms network deadlines
+# measures interference between tests instead of the intended boundary (ADR 0030).
+# The two disjoint phases cover every test once; no test is dropped or retried.
+# Explicit selection/parallelism remains a direct SwiftPM invocation.
+# A requested aggregate report uses one serial run: two exports to the same
+# xUnit/coverage path would otherwise discard the regular phase's evidence.
+report_requested=false
+for argument in "$@"; do
+  case "${argument}" in
+    --filter|--filter=*|--skip|--skip=*|--specifier|--specifier=*|-s|-l|--list-tests|list|--parallel|--no-parallel)
+      exec "${swift_test_command[@]}" "${swift_test_arguments[@]}" "$@"
+      ;;
+    --xunit-output|--xunit-output=*|--enable-code-coverage|--enable-coverage|--show-codecov-path|--show-code-coverage-path|--show-coverage-path|--show-coverage-path=*)
+      report_requested=true
+      ;;
+  esac
+done
+if ${report_requested}; then
+  exec "${swift_test_command[@]}" "${swift_test_arguments[@]}" "$@" --no-parallel
+fi
+readonly timed_boundary_suites='OmniVoiceBatchTTSAdapterTests|ModelStreamDecodingTests|EviePublicWebTests'
+print 'Phase 1/2: regular behavioral tests (timed OS suites run in phase 2).'
+"${swift_test_command[@]}" "${swift_test_arguments[@]}" "$@" --skip "${timed_boundary_suites}"
+print 'Phase 2/2: every timed OS boundary, isolated from unrelated suites.'
+exec "${swift_test_command[@]}" "${swift_test_arguments[@]}" "$@" \
+  --skip-build --filter "${timed_boundary_suites}" --no-parallel

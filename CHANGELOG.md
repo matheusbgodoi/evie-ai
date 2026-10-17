@@ -6,6 +6,12 @@ All notable changes to Evie are documented here. Dates use `YYYY-MM-DD`.
 
 ### Final integration candidate — 2026-10-17
 
+- Full-suite resource isolation executes every case once across regular parallel
+  and timed OS phases. Timing assertions and internal concurrency are unchanged;
+  no automatic retry. The finite CPU-load fixture no longer starts load during
+  abandoned cleanup (ADR 0030). All 1,556 cases passed locally as 1,501 regular
+  plus 55 isolated timed tests; the previous named tests remain intact.
+
 - Dedicated process-deadline queue preserves actual TERM/KILL deadlines under
   shared CPU contention; the real process-group regression reproduced the old
   delay before passing with the same timing limits.

@@ -130,7 +130,10 @@ verificada após fechar e reabrir a interface. Os três editores próprios foram
 fechados; a Evie permaneceu aberta em segundo plano, sem revisão pendente.
 A biblioteca terminou com os dez atalhos originais preservados e os três
 canônicos, sem atalhos temporários de QA. O atalho antigo que demonstrou a falha
-de App Intents foi removido.
+de App Intents foi removido. Uma inspeção posterior do catálogo público de
+ações, com busca “Evie”, retornou zero linhas: as ações diretas antigas já não
+eram anunciadas. Os três atalhos canônicos continuam na biblioteca e usam as
+ações públicas de URL, independentemente desse catálogo.
 
 O diálogo de credencial do proprietário permaneceu intocado. Por privacidade,
 a validação de captura parou na revisão/cancelamento; ela não afirma ter

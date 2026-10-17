@@ -4,6 +4,47 @@ Updated: 2026-10-17 (America/Sao_Paulo). This file is the continuation anchor.
 
 ## Current continuation snapshot — supersedes historical entries below
 
+**LATEST LOCAL FIX/FREEZE AFTER CI4 (test tooling only):**
+NativefixtureRED20workers/3.021s onabandonment→GREEN0starts/allfinished0.006s.
+Finalfocused10TTS casesPASS2.795s, stress500ms/50ms/<2s unchanged. Onlytestfile.
+FullplanPASS `/tmp/evie-isolated-deadline-fullsuite.log`:1501/1446.421s(1known)+
+55/610.662s=1556cases. Countercomparisonall1536oldnamedteststartsretainedonce,
+plusnewabandonment1. listcatalog1537functionIDs; --list-tests filtersunsupported,
+DONOTclaimfiltereddiscoveryproof. Privateplanstubbothlayouts/fail-fast/selectors4
+PASS; reportflaghazardfixedoneserialinvocation,4reportmodesPASS. Nativebinary6
+unchanged. Root nowneedsdoclinks/review/privacy→privatecommit+snapshotparent862
+ONLY+freshCI. Keychainownerpending asbefore. No main/tag/release.
+
+**NEW CURRENT CI4 FAILURE AND FOLLOW-UP (uncommitted, source6binary unchanged):**
+Run39006928959 FAILEDCoreparallel timingfixtures; docs+Shell+capturecompilePASS.
+Fullfailedlog /tmp/evie-final-public-ci4-failed.log. StreamexpectedfirstToken→headers,
+largeprefillheader/token deadlines, DNScancel→timedOut, TTSmissingPID/receipt.
+Manyunrelatedtestsresumed8–15s. Do NOTretryunchanged/increasetimeouts/weakasserts.
+Root Scripts/test nowfullplan2disjointphases: regularparallel, all3timedOSsuites
+(OmniVoiceBatchTTSAdapterTests|ModelStreamDecodingTests|EviePublicWebTests)
+serialwith--no-parallel. Allcasesonce; explicitfilter/parallelargsforwardeddirect.
+NativeagentownsSwiftPMfocusedTTSredgreen + concretefixturefix: finiteCPUload
+finishpreviouslystarted3sCPUevenabandonedbeforestart; asyncprep/ownthreads/cancel
+cleanupnowinprogress. No prodsourcechangeplanned. RootownsADR0030/docs/script.
+Afteragentreleasesbuildslot: fullnewtwo-phaseactualcounts, partitionCLIverification,
+review/docs/privacy/privatecommit/publicsnapshot(parent862ONLY)/newCI.
+OwnerKeychainstillpending; no PCfinaltestsrerun or main/tag/release yet.
+
+**LATEST COMMITTED CHECKPOINT — supersedes commit fields below:**
+Private HEAD `79df97d58d5192a2a802493d370994ea80a9c462` (source32files).
+Sanitized public delivery `86259344cc6fb740616c854a270f91fbb4580cca`, single
+parent1b8ONLY, exact tree5b5887cc0aaff76dd0d0c48beab1866232d690be.
+PrivateHEAD/base11ef are NOT ancestors. Full reachable1292blobs0private.
+Pushed onlydeliverybranch; NEW CI run39006928959 queued:
+https://github.com/matheusbgodoi/evie-ai/actions/runs/39006928959
+Main remainsa46, no tag/release. Actualall3ShortcutsPASS, UIreleased.
+AdditionalfocusedUIprobePASS: actioncatalogsearchEvie0rows(old3directintents
+removed), canonical3libraryretained; editorclosed/queryrestored, sourceunchanged.
+Source6installedSHA129d... unchanged, artifact6proof/measurements recordedbelow.
+OwnerKeychainstillrequiredpending. Do not bypass or pretend PCfinaltestsrerun.
+Next: awaitnewCI → ownergrantactualPCcontext/deterministic+--agentfixtures →
+finaldocs/changelog/versionpublicmainFFCI → releasezip+SHA/tag/downloadverify.
+
 **CURRENT BEFORE RELEASE:** actual App Intents system dispatch failed with
 `Unable to get teamId` for the stable local self-signed identity. No valid
 Apple-issued identity exists. Public URL/Shortcuts fallback replaces the default;

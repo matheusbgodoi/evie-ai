@@ -41,7 +41,7 @@ publication or a release has already occurred.
 - The local launcher reuses only compatible model/memory options and reconciles
   changed options on next use. Web DNS/redirects are pinned to public addresses
   separately from the private model transport. Current decisions are ADRs
-  **0020–0029**; earlier records below are historical where they differ.
+  **0020–0030**; earlier records below are historical where they differ.
 
 ### Executed evidence, with scope
 
@@ -89,6 +89,19 @@ publication or a release has already occurred.
   snapshot, reachable ancestry and signed artifact are checked separately.
 
 ### Final validation gates and measured scope
+
+- Latest hosted run [39006928959](https://github.com/matheusbgodoi/evie-ai/actions/runs/39006928959)
+  passed documentation and strict shell/capture-driver compilation but failed
+  parallel Core timing fixtures. Earlier CI success below is a dated checkpoint.
+  Fixture cleanup and disjoint timing-resource phases are being qualified under
+  [ADR 0030](adr/0030-isolated-deadline-test-resources.md); deadlines and assertions
+  stay unchanged. No release is claimed from a failed hosted gate.
+- Corrected fixture causal result: abandoned cleanup previously started twenty
+  workers for 3.021 s; the current fixture starts zero and waits for all workers
+  to finish. Ten focused TTS tests passed in 2.795 s. New full-package plan passed
+  **1,501 + 55 = 1,556 tests**, in 6.421 s and 10.662 s respectively, with the same
+  intentional Mail fixture. All previous named-test starts were preserved once,
+  plus the new regression. Fresh hosted qualification is still required.
 
 - Current exact-source full-suite result: **1,555 tests in 147 suites passed
   (14.241 s), with one intentional known timeout-injection issue**. Five new

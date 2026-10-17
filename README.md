@@ -80,7 +80,7 @@ before publication. Reproducible real-boundary regressions also cover
 [local process reconfiguration](docs/LOCAL_BRAIN_VALIDATION.md).
 
 The historical narrative below records earlier versions; current contracts are
-ADRs 0020–0029 and the current project-status entry. Versions distributed with
+ADRs 0020–0030 and the current project-status entry. Versions distributed with
 this repository's proprietary licence require the owner's written permission for
 third-party use; earlier grants and third-party terms remain intact.
 
