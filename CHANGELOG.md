@@ -6,6 +6,12 @@ All notable changes to Evie are documented here. Dates use `YYYY-MM-DD`.
 
 ### Final integration candidate — 2026-10-17
 
+- Automation permission buttons now open a closed Mail/Calendar target before
+  requesting consent, keep the UI responsive and report launch/probe failures.
+  A closed app is no longer mislabeled as never requested. Explicit batch
+  requests await current asynchronous status; regression coverage includes the
+  real guide ViewModel and two causal negative controls.
+
 - Hosted qualification passed all three jobs on public source ba17474: 1,556
   tests across both phases, real settings/clipboard guards, fifteen voice
   lifecycle cases, strict Xcode 27 shell/capture-driver compilation and docs.

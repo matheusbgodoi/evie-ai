@@ -64,6 +64,11 @@ jobs:
           EVIE_CORE_BUILD_DIR: ${{ github.workspace }}/.build/core-test-products/debug
         run: Scripts/voice-input-validation
 
+      - name: Verify Automation target launch and responsive permission state
+        env:
+          EVIE_CORE_BUILD_DIR: ${{ github.workspace }}/.build/core-test-products/debug
+        run: Scripts/automation-permission-validation
+
   full-package:
     name: Build the full shell with Xcode 27
     runs-on: xcode-27

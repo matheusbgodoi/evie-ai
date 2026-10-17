@@ -86,9 +86,10 @@ final class PermissionGuideViewModel: ObservableObject {
 
   /// An explicit one-shot command; never called at an ordinary launch.
   func requestAvailablePermissions() async {
-    let pending = rows.filter { $0.action?.kind == .request }
-    for row in pending {
-      guard let action = row.action else { continue }
+    for item in items {
+      await item.prepareForRequest()
+      let row = item.row(given: record)
+      guard let action = row.action, action.kind == .request else { continue }
       await perform(action, onRow: row.id)
     }
   }

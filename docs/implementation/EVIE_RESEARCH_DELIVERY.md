@@ -4,6 +4,35 @@ Updated: 2026-10-17 (America/Sao_Paulo). This file is the continuation anchor.
 
 ## Current continuation snapshot — supersedes historical entries below
 
+**CURRENT — Calendar permission fix installed and actually verified:**
+- Private HEAD before commit: 9bf7fea; public delivery parent c62d5c2 only;
+  public main 086c0e5. Never publish private v2 ancestry.
+- New AutomationPermissionItem opens target only on explicit request, probes on
+  serial queue, caches rows, shows closed/denied/error states; generation guards.
+  VM batch awaits prepareForRequest so pending targets are not skipped.
+- Nine controlled real-item/complete-VM cases and two causal controls PASS.
+  Settings retry also reproduced RED before clearing the old error on success.
+  Reviewer final PASS; strict lint, docs links and diff check PASS.
+- Full Scripts/test 1556 PASS (26.965 s + 11.711 s) before last two Shell fixes;
+  exact production debug4 PASS4.21 s and release7 PASS39.23 s.
+- Signed candidate7 INSTALLED. Actual UI agent: Calendar initially closed, shows
+  Aplicativo fechado / Permitir; one click opens Calendar background (inactive),
+  row Permitido. Same Evie PID5769; no event/account/credential/TCC read/reset.
+  Agent restoring only its own Calendar/Settings state. Draft was empty before
+  install (character count only), no action in flight. Signed6 backed up.
+- Installed executable SHA256:
+  59660ad1559e98b3946b1e5d11174cd8815a4eefb63107f971dd015763c645ff.
+- Regenerated ZIP7 6134711 bytes SHA256:
+  34320d27cf2307cd794415f135bcfefdbd3737c507e54f0336cac643d07fb9fb.
+  Unpacked strict signature/equality PASS. Old ZIP6 replaced, do not report6.
+- Next: docs/private commit; sanitized public commit parent c62 ONLY, tree and
+  history scan, push delivery/main FF, fresh automatic CI including new harness.
+- SecurityAgent process absent after app reopen7; this alone DOES NOT establish
+  owner authorization. After UI restore run fresh LS context diagnostic to prove
+  real authorized PC or expose legitimate prompt. Never bypass or fill password.
+  Then deterministic + real-agent fixture, fix if needed, final public release
+  only after actual gates. No final tag/release created. Global objective active.
+
 **AUTHORITATIVE CURRENT HANDOFF — 2026-10-17:**
 
 - PUBLIC MAIN is now `086c0e58f74062f8881152234f89521fda40f936`, source/docs

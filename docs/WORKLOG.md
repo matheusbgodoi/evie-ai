@@ -1,5 +1,31 @@
 # Work log
 
+## 2026-10-17 — fix and install Calendar Automation permission button
+
+- Reproduced the installed UI bug: closed Calendar was labeled never requested;
+  opening it revealed an existing grant. Separated closed target from denied
+  consent, opened the target only on explicit request, moved Carbon probing to
+  a serial utility queue and cached rendering. Launch/Settings failures are
+  visible; duplicate requests and stale refresh results are rejected.
+- Updated explicit bulk requests to await asynchronous status. Review found and
+  fixed stale Settings retry errors and a batch snapshot that skipped pending
+  Automation rows. Added a real production-item/complete-VM harness with nine
+  deterministic cases and two compiled, causally failing controls; all passed.
+- Full Scripts/test passed 1,501 + 55 = 1,556 cases (26.965 s + 11.711 s) before
+  the final two Shell fixes. Strict debug build4 passed 4.21 s; exact production
+  release7 passed 39.23 s; formatting, source review and documentation links passed.
+- Backed up the previous signed app, verified the new artifact and installed with
+  the stable identity. Actual UI: Calendar closed → Aplicativo fechado → one
+  Permitir click → target running/inactive → Permitido. No events, accounts,
+  credentials or TCC database were read/modified. Restored test-owned UI only.
+- Regenerated the ZIP, verified its unpacked strict signature and equality with
+  installed executable. Current hashes and measurement scope are in status and
+  the dedicated validation document. Original worktree remains clean/untouched.
+- Next: publish a privacy-scanned snapshot with only public ancestry and await
+  current CI. Larger release still requires the legitimate Keychain boundary and
+  fresh PC/context/form checks; this fix does not fabricate those results.
+
+
 ## 2026-10-17 — public main CI passed; owner-only final boundary
 
 - Published the sanitized source/docs candidate to main086c0e5 by fast-forward,

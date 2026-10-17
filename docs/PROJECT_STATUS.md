@@ -14,6 +14,25 @@ candidate; source publication does not assert that a final release or the latest
 live PC checks have completed. The remaining live PC gate requires the owner
 to authorize the legitimate macOS Keychain prompt.
 
+### Calendar Automation correction — 2026-10-17
+
+The owner-reported no-op permission button is fixed and installed. Closed targets
+show **Aplicativo fechado**; one explicit click opens Calendar in the background
+and queries/requests the real consent without blocking rendering. The installed
+UI passed closed → Permitir → running but inactive Calendar → **Permitido**,
+with no event/account read or consent reset. The existing grant was already valid.
+Nine controlled production-item/complete-guide cases and two causal negative
+controls passed; both late Shell fixes passed strict debug/release compilation.
+Full Core coverage passed all 1,556 cases before those two Shell-only fixes.
+Release build: 39.23 s. Installed executable SHA256:
+`59660ad1559e98b3946b1e5d11174cd8815a4eefb63107f971dd015763c645ff`.
+New local ZIP: 6,134,711 bytes, SHA256
+`34320d27cf2307cd794415f135bcfefdbd3737c507e54f0336cac643d07fb9fb`;
+unpacked strict signature and installed executable equality passed.
+Source review, strict formatting and documentation links passed. Fresh public CI
+for this correction remains a publication gate; no final release is claimed.
+See [Automation validation](AUTOMATION_PERMISSION_VALIDATION.md).
+
 ### Context and current contracts
 
 - PC/Qwen operational context: **200,704 tokens**, with output and framing
