@@ -8,11 +8,28 @@ set -euo pipefail
 readonly native_script_dir="${0:A:h}"
 readonly native_repo_dir="${native_script_dir:h}"
 readonly native_bundle="${1:?Usage: Scripts/evie-native-metadata <Evie.app>}"
+readonly native_mode="${2:-public-urls}"
+case "${native_mode}" in
+  public-urls)
+    # Do not advertise App Intents that linkd cannot authenticate with the
+    # stable self-signed identity. Public URL actions remain fully available.
+    rm -rf "${native_bundle}/Contents/Resources/Metadata.appintents"
+    print 'Native Apple: public URL mode; no unsupported App Intents metadata.'
+    exit 0
+    ;;
+  app-intents) ;;
+  *) print -u2 'Native Apple mode must be public-urls or app-intents.'; exit 1 ;;
+esac
 readonly native_sdk="$(xcrun --show-sdk-path)"
 readonly native_toolchain="$(dirname "$(dirname "$(dirname "$(xcrun --find swiftc)")")")"
 readonly native_arch="$(uname -m)"
 readonly native_xcode_version="$(xcodebuild -version | sed -n 's/^Build version //p')"
 readonly native_scratch="$(mktemp -d -t evie-appintents)"
+native_core_modules="${native_repo_dir}/.build/release"
+if [[ ! -d "${native_core_modules}/EvieCore.swiftmodule" ]]; then
+  native_core_modules="${native_core_modules}/Modules"
+fi
+readonly native_core_modules
 trap 'rm -rf "${native_scratch}"' EXIT
 
 # The installed Swift compiler accepts the legacy array form here, while the
@@ -33,6 +50,7 @@ if isinstance(protocols, dict):
 PY
 
 xcrun swiftc -parse-as-library -emit-object -module-name EvieShell \
+  -D EVIE_DIRECT_APP_INTENTS -I "${native_core_modules}" \
   -target "${native_arch}-apple-macosx26.0" -sdk "${native_sdk}" \
   -warnings-as-errors \
   -const-gather-protocols-list "${native_scratch}/protocols.json" \

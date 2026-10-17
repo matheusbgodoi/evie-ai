@@ -186,11 +186,31 @@ completo pelo cliente e pelo servidor reais.
 No chat, a entrada divide a janela com sistema, histórico, ferramentas, imagens
 e reserva de saída: não há uma capacidade adicional só para a mensagem nova.
 O painel distingue **contexto** de **saída máxima**: PC: 200.704/16.384 tokens e
-Mac: 131.072/2.048 tokens. A reserva permite gerar até esse teto, sem obrigar uma
-resposta longa. Tokens não equivalem a palavras nem a caracteres.
+Mac: 131.072/2.048 tokens. Esses valores de saída são tetos do perfil, não o
+pedido efetivo de toda chamada. No PC, esforço baixo/médio pede até 8.192 tokens
+e máximo pede até 16.384; o orçamento de raciocínio ocupa no máximo três quartos
+desse pedido, reservando espaço para a resposta final. Chat com raciocínio
+desligado usa o teto do perfil. Voz com raciocínio desligado pede 1.024; se o
+raciocínio estiver ligado, usa o teto maior correspondente ao esforço. Cada
+passo do controle do computador pede 1.024. O cliente limita todos esses pedidos
+ao máximo do perfil escolhido; no Mac esse máximo continua sendo 2.048.
+Raciocínio e resposta final compartilham a saída e a janela total. A reserva
+permite gerar até o teto, sem obrigar uma resposta longa. Tokens não equivalem
+a palavras nem a caracteres.
+
+O raciocínio vem desligado na configuração do proprietário para favorecer
+respostas diretas e latência. A [recomendação oficial do Qwen3.8](https://huggingface.co/Qwen/Qwen3.8-27B)
+usa `preserve_thinking: true` por padrão. Quando a Evie liga raciocínio pela
+receita `templateKwargs`, envia explicitamente `preserve_thinking: false`:
+`ChatMessage` conserva e reenvia o conteúdo da resposta, sem um campo separado
+de raciocínio anterior. Essa escolha difere do template multi-turn recomendado;
+a compactação descrita aqui opera sobre o histórico de mensagens disponível,
+sem prometer preservar um raciocínio que não é armazenado. Os parâmetros por
+modelo e suas fontes estão em [MODEL_TUNING](MODEL_TUNING.md).
 
 O limite de 8.000 caracteres da ação nativa “preparar uma pergunta” pertence a esse
-AppIntent; não é o limite do chat nem a janela do modelo. Pesquisa por atalho
+contrato de integração nativa (URL e App Intent opcional); não é o limite do
+chat nem a janela do modelo. Pesquisa por atalho
 também tem sua própria resposta limitada. Para a pergunta atual que exceda o
 orçamento do cérebro escolhido, o chat explica a capacidade e preserva o texto;
 a compactação do histórico antigo não consegue tornar essa pergunta infinita.

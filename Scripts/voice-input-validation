@@ -1,0 +1,94 @@
+#!/bin/zsh
+set -euo pipefail
+readonly repository="${0:A:h:h}"
+readonly core_build="${EVIE_CORE_BUILD_DIR:-${repository}/.build/debug}"
+if [[ "${core_build}" != /* || ! -d "${core_build}" ]]; then
+  print -u2 -- "EVIE_CORE_BUILD_DIR must name an existing absolute debug product directory."
+  exit 1
+fi
+readonly scratch="$(mktemp -d "${TMPDIR:-/tmp}/evie-voice-input-validation.XXXXXX")"
+trap 'rm -rf "${scratch}"' EXIT
+
+# Extract method bodies verbatim. Changes to names/layout fail explicitly;
+# fixture boundaries replace devices, not the coordinator state machine.
+python3 - "${repository}/Sources/EvieShell/AppCoordinator.swift" "${scratch}" <<'PY'
+from pathlib import Path
+import re
+import sys
+
+source = Path(sys.argv[1]).read_text()
+scratch = Path(sys.argv[2])
+methods = []
+for name in ['startListening', 'stopListening', 'mayContinueVoiceInput', 'presentQuickText']:
+    pattern = re.compile(r'^  (?:fileprivate|private) func ' + name + r'\(', re.MULTILINE)
+    matches = list(pattern.finditer(source))
+    if len(matches) != 1:
+        raise SystemExit(f'Production voice method {name} changed; review fixture extraction.')
+    start = matches[0].start()
+    end = source.find('\n  }', start)
+    if end == -1:
+        raise SystemExit(f'Production voice method {name} has no expected boundary.')
+    methods.append(source[start:end + len('\n  }')])
+actual = ('import EvieCore\nimport Foundation\n@MainActor\nextension VoiceInputHarness {\n'
+          + '\n\n'.join(methods)
+          + '\n  func invokeStart(origin: ComputerUseRequestOrigin) { startListening(origin: origin) }\n'
+          + '  func invokeStop() { stopListening() }\n'
+          + '  func invokeQuickText(reactivatingWake: Bool) { presentQuickText(reactivatingWake: reactivatingWake) }\n}\n')
+(scratch / 'ProductionVoiceMethods.swift').write_text(actual)
+# Control: disable only the post-await permission/generation predicate in a
+# temporary copy. Identical fixture assertions must detect microphone revival.
+original = methods[2]
+head = original[:original.index(') -> Bool {') + len(') -> Bool {')]
+regressive = actual.replace(original, head + '\n    return true\n  }')
+(scratch / 'RegressiveVoiceMethods.swift').write_text(regressive)
+# A second surgical control isolates the ordinary wake hand-back regression.
+handback = '          updateWakeListening()'
+if methods[0].count(handback) != 1:
+    raise SystemExit('Production wake hand-back boundary changed; review the control.')
+without_handback = actual.replace(methods[0], methods[0].replace(handback, '          // control: omitted wake hand-back'))
+(scratch / 'NoWakeRecoveryVoiceMethods.swift').write_text(without_handback)
+
+PY
+
+typeset -a core_link_arguments core_objects
+if [[ -f "${core_build}/EvieCore.o" ]]; then
+  core_link_arguments=(-I "${core_build}" "${core_build}/EvieCore.o")
+elif [[ -f "${core_build}/libEvieCore.a" ]]; then
+  core_link_arguments=(-I "${core_build}" -L "${core_build}" -lEvieCore)
+else
+  core_objects=("${core_build}"/EvieCore.build/*.o(N))
+  if (( ${#core_objects} == 0 )); then
+    print -u2 -- "Build the debug package with Scripts/test before this validation."
+    exit 1
+  fi
+  core_link_arguments=(-I "${core_build}/Modules" "${core_objects[@]}")
+fi
+for variant in Production Regressive NoWakeRecovery; do
+  xcrun swiftc -parse-as-library -swift-version 6 -warnings-as-errors \
+    "${core_link_arguments[@]}" \
+    "${scratch}/${variant}VoiceMethods.swift" \
+    "${repository}/evals/fixtures/VoiceInputValidation.swift" \
+    -o "${scratch}/${variant}"
+done
+python3 - "${scratch}" <<'PY'
+from pathlib import Path
+import subprocess
+import sys
+
+scratch = Path(sys.argv[1])
+control = subprocess.run([str(scratch / 'Regressive')], capture_output=True, text=True, timeout=30)
+expected = 'PTT release during preparation opened the microphone'
+if control.returncode != 1 or expected not in control.stdout + control.stderr:
+    raise SystemExit('Regressive source control did not fail for the expected voice lifecycle bug.')
+print('RED: disabling the production continuation predicate revives released PTT; detected as expected.')
+handback_control = subprocess.run([str(scratch / 'NoWakeRecovery')], capture_output=True, text=True, timeout=30)
+if handback_control.returncode != 1 or 'released PTT did not hand back wake listening once' not in handback_control.stdout + handback_control.stderr:
+    raise SystemExit('Wake hand-back control did not fail for the expected lifecycle bug.')
+print('RED: omitting production wake hand-back leaves released PTT disarmed; detected as expected.')
+
+actual = subprocess.run([str(scratch / 'Production')], capture_output=True, text=True, timeout=30)
+sys.stdout.write(actual.stdout)
+sys.stderr.write(actual.stderr)
+if actual.returncode != 0:
+    raise SystemExit(actual.returncode)
+PY

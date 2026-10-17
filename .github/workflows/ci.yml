@@ -58,6 +58,11 @@ jobs:
           EVIE_CORE_BUILD_DIR: ${{ github.workspace }}/.build/core-test-products/debug
         run: Scripts/research-guard-validation
 
+      - name: Verify voice revocation and native URL wake suppression
+        env:
+          EVIE_CORE_BUILD_DIR: ${{ github.workspace }}/.build/core-test-products/debug
+        run: Scripts/voice-input-validation
+
   full-package:
     name: Build the full shell with Xcode 27
     runs-on: xcode-27
@@ -71,6 +76,8 @@ jobs:
           sw_vers
       - name: Build the shell
         run: swift build -Xswiftc -warnings-as-errors
+      - name: Compile the real native capture lifecycle driver
+        run: Scripts/native-capture-validation --compile-only
 
   documentation:
     name: Documentation

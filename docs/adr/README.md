@@ -28,9 +28,11 @@ supersede rather than silently rewrite them when the decision changes.
 
 | [0021](0021-explicit-brain-choice-for-current-conversation.md) | Explicit model choice in the current conversation | Accepted; amends 0014 |
 | [0022](0022-owner-enabled-capabilities-and-system-permissions.md) | Enabled capabilities and real system permissions | Accepted; amends 0018/0019 defaults |
-| [0023](0023-public-app-intents-with-generated-bundle-metadata.md) | Public AppIntents and generated bundle metadata | Accepted |
+| [0023](0023-public-app-intents-with-generated-bundle-metadata.md) | Public AppIntents and generated bundle metadata | Superseded for local builds by 0029 |
 | [0024](0024-local-provider-configuration-and-private-release-history.md) | Local provider configuration and private release history | Accepted; amends 0013 |
 | [0025](0025-native-voice-and-explicit-wake-calibration.md) | Native voice and five-phrase wake calibration | Accepted |
 | [0026](0026-adaptive-conversation-context-and-compaction.md) | Adaptive context and automatic compaction | Accepted; amends 0014/0015/0021 |
 | [0027](0027-pinned-public-web-transport.md) | Pinned public web transport | Accepted |
 | [0028](0028-runtime-qualified-core-ci.md) | Runtime-qualified complete Core tests and shell compilation | Accepted |
+
+| [0029](0029-native-shortcuts-with-stable-local-signing.md) | Native Shortcuts through public URLs with stable local signing | Accepted; supersedes 0023 for local builds |

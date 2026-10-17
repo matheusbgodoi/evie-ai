@@ -58,6 +58,9 @@ final class AppCoordinator: NSObject {
   /// True while push-to-talk is holding the microphone open, so releasing the key
   /// stops it but a click on the mark toggles instead.
   private var isHoldingToTalk = false
+  private var isPreparingVoiceInput = false
+  private var voiceInputGeneration: UInt64 = 0
+  private var voiceInputFinalizingGeneration: UInt64?
   /// Whether the overlay is currently showing the voice-only surface. Distinct
   /// from the preference: the preference says the mark may switch into a call,
   /// this says it did.
@@ -93,6 +96,7 @@ final class AppCoordinator: NSObject {
     isBundled: EvieAudioCapture.isBundled
   )
   private var permissionGuideWindowController: PermissionGuideWindowController?
+  private let nativeCaptureConsent = NativeCaptureConsentController()
   /// The glow and pill that say Evie is looking at the screen. Nothing is
   /// captured unless it is composited on the display being captured.
   private lazy var screenPresence = ScreenPresence()
@@ -107,8 +111,11 @@ final class AppCoordinator: NSObject {
     controller.isOtherInteractionBusy = { [weak self] in
       guard let self else { return true }
       return NativeWakeTrainingAccess.isActive || viewModel.hasActiveRequest
-        || audioCapture.isCapturing || isInCall
+        || audioCapture.isCapturing || isPreparingVoiceInput
+        || voiceInputFinalizingGeneration != nil
+        || isInCall
         || viewModel.screenLookTask != nil || viewModel.pendingSession != nil
+        || nativeCaptureConsent.isPresented
     }
     controller.onPrepare = { [weak self] in
       guard let self else { return }
@@ -577,6 +584,7 @@ final class AppCoordinator: NSObject {
     }
     viewModel.isResearchBusy = { [weak self] in
       (self?.researchMode.isRunning ?? false) || NativeWakeTrainingAccess.isActive
+        || (self?.nativeCaptureConsent.isPresented ?? false)
     }
     viewModel.onStopRequested = { [weak self] in self?.stopEverything() }
     viewModel.computerUseConsentGiven = { [weak self] in
@@ -592,8 +600,10 @@ final class AppCoordinator: NSObject {
     NativeWakeTrainingAccess.onAcquire = { [weak self] in
       guard let self else { throw NativeAppleError.notReady }
       guard !viewModel.hasActiveRequest, !researchMode.isArmed, !researchMode.isRunning,
-        !audioCapture.isCapturing, !isInCall, !computerUse.isRunning,
-        viewModel.pendingSession == nil, viewModel.screenLookTask == nil
+        !audioCapture.isCapturing, !isPreparingVoiceInput, !isInCall, !computerUse.isRunning,
+        voiceInputFinalizingGeneration == nil,
+        viewModel.pendingSession == nil, viewModel.screenLookTask == nil,
+        !nativeCaptureConsent.isPresented
       else { throw NativeAppleError.busy }
       wakeListeningTask?.cancel()
       wakeListeningTask = nil
@@ -615,17 +625,22 @@ final class AppCoordinator: NSObject {
       guard !NativeWakeTrainingAccess.isActive, !viewModel.hasActiveRequest, !researchMode.isArmed,
         !researchMode.isRunning,
         viewModel.screenLookTask == nil, !computerUse.isRunning, !audioCapture.isCapturing,
-        !isInCall, viewModel.pendingSession == nil
+        !isPreparingVoiceInput,
+        voiceInputFinalizingGeneration == nil,
+        !isInCall, viewModel.pendingSession == nil, !nativeCaptureConsent.isPresented
       else { throw NativeAppleError.busy }
       switch request {
-      case .openConversation: openQuickText()
+      case .openConversation: presentQuickText(reactivatingWake: false)
       case .prepareQuestion(let text):
         guard viewModel.quickText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
           throw NativeAppleError.busy
         }
-        openQuickText()
+        presentQuickText(reactivatingWake: false)
         viewModel.quickText = text
-      case .captureScreen: lookAtScreen()
+      case .captureScreen:
+        presentQuickText(reactivatingWake: false)
+        viewModel.captureScreenForNextQuestion()
+      case .requestCaptureConfirmation: requestNativeCaptureConfirmation()
       }
     }
     viewModel.onSetBrainReasoning = { [weak self] id, level in
@@ -701,8 +716,46 @@ final class AppCoordinator: NSObject {
     panelController.hide()
   }
 
+  func receiveNativeURL(_ result: Result<EvieNativeURLRequest, any Error>) {
+    do {
+      try NativeAppleActions.performURLRequest(result.get())
+    } catch {
+      presentNativeURLError(error)
+    }
+  }
+
+  private func presentNativeURLError(_ error: any Error) {
+    viewModel.presentRuntimeError(title: "Não consegui abrir esse atalho", error: error)
+    panelController.showPassive()
+  }
+
+  private func requestNativeCaptureConfirmation() {
+    speechOutput.stop()
+    wakeListeningTask?.cancel()
+    wakeListeningTask = nil
+    wakeListener.disarm()
+    nativeCaptureConsent.present(
+      onConfirm: { [weak self] in
+        // The confirmation has already closed. Recheck live interaction guards;
+        // opening a URL alone never authorizes a capture or starts inference.
+        guard let self else { return }
+        defer { updateWakeListening() }
+        do {
+          try NativeAppleActions.perform(.captureScreen)
+        } catch {
+          presentNativeURLError(error)
+        }
+      },
+      onDismiss: { [weak self] resumesListening in
+        if resumesListening { self?.updateWakeListening() }
+      })
+  }
+
   func stop() {
     wakeSuppressedByStop = true
+    voiceInputGeneration &+= 1
+    voiceInputFinalizingGeneration = nil
+    nativeCaptureConsent.shutdown()
     wakeListeningTask?.cancel()
     wakeListener.disarm()
     NativeWakeTrainingAccess.stop()
@@ -732,6 +785,9 @@ final class AppCoordinator: NSObject {
 
   func prepareForTermination() async {
     wakeSuppressedByStop = true
+    voiceInputGeneration &+= 1
+    voiceInputFinalizingGeneration = nil
+    nativeCaptureConsent.dismiss(resumingListening: false)
     wakeListeningTask?.cancel()
     wakeListener.disarm()
     NativeWakeTrainingAccess.stop()
@@ -919,9 +975,15 @@ extension AppCoordinator {
   }
 
   @objc fileprivate func openQuickText() {
+    presentQuickText(reactivatingWake: true)
+  }
+
+  private func presentQuickText(reactivatingWake: Bool) {
     guard !NativeWakeTrainingAccess.isActive else { return }
-    wakeSuppressedByStop = false
-    updateWakeListening()
+    if reactivatingWake {
+      wakeSuppressedByStop = false
+      updateWakeListening()
+    }
     if viewModel.beginQuickText() {
       panelController.showQuickText()
     } else {
@@ -1151,6 +1213,7 @@ extension AppCoordinator {
   /// it off, the mark just opens and closes the microphone and the text stays
   /// where it is.
   fileprivate func activateVoice() {
+    guard !nativeCaptureConsent.isPresented else { return }
     guard preferences.voice.callModeEnabled else {
       toggleListening()
       return
@@ -1163,7 +1226,7 @@ extension AppCoordinator {
   }
 
   fileprivate func enterCall() {
-    guard !isInCall else {
+    guard !isInCall, !nativeCaptureConsent.isPresented, !isPreparingVoiceInput else {
       return
     }
     isInCall = true
@@ -1186,7 +1249,7 @@ extension AppCoordinator {
 
   /// Clicking the mark toggles; holding push-to-talk does not.
   fileprivate func toggleListening() {
-    if audioCapture.isCapturing {
+    if audioCapture.isCapturing || isPreparingVoiceInput {
       stopListening()
     } else {
       startListening(origin: .clickedMark)
@@ -1278,7 +1341,9 @@ extension AppCoordinator {
   /// whether what is heard may start an agent-mode session: push-to-talk
   /// and a click may, the wake word and a call may not.
   fileprivate func startListening(origin: ComputerUseRequestOrigin) {
-    guard !researchMode.isRunning, !NativeWakeTrainingAccess.isActive else { return }
+    guard !researchMode.isRunning, !NativeWakeTrainingAccess.isActive,
+      !nativeCaptureConsent.isPresented, !isPreparingVoiceInput
+    else { return }
     wakeSuppressedByStop = false
     guard !audioCapture.isCapturing else {
       return
@@ -1292,24 +1357,57 @@ extension AppCoordinator {
     // talked over is the whole point of being able to interrupt.
     speechOutput.stop()
     viewModel.endSpeaking()
+    isPreparingVoiceInput = true
+    voiceInputGeneration &+= 1
+    voiceInputFinalizingGeneration = nil
+    let generation = voiceInputGeneration
     Task { @MainActor [weak self] in
       guard let self else { return }
+      defer {
+        isPreparingVoiceInput = false
+        if !audioCapture.isCapturing, !wakeSuppressedByStop, !nativeCaptureConsent.isPresented {
+          updateWakeListening()
+        }
+      }
       do {
         let format = try await audioCapture.prepareInputFormat()
+        guard mayContinueVoiceInput(generation: generation, origin: origin) else { return }
         let sink = try await startTranscription(inputFormat: format)
+        guard mayContinueVoiceInput(generation: generation, origin: origin) else {
+          await cancelTranscription()
+          return
+        }
         // Every spoken turn ends itself, except push-to-talk, where releasing
         // the key already says "I finished". Having to click a second time to
         // report that you stopped talking is what made speaking worse than
         // typing, and it is what stopped call mode from behaving like a call.
         audioCapture.detectsEndOfSpeech = !isHoldingToTalk
         try await audioCapture.start(sink: sink)
+        guard mayContinueVoiceInput(generation: generation, origin: origin) else {
+          audioCapture.stop()
+          await cancelTranscription()
+          return
+        }
         viewModel.beginListening()
       } catch {
-        isHoldingToTalk = false
         await cancelTranscription()
+        guard generation == voiceInputGeneration, !wakeSuppressedByStop else { return }
+        isHoldingToTalk = false
         viewModel.presentVoiceUnavailable(error)
       }
     }
+  }
+
+  private func mayContinueVoiceInput(
+    generation: UInt64, origin: ComputerUseRequestOrigin
+  ) -> Bool {
+    guard generation == voiceInputGeneration, !wakeSuppressedByStop,
+      !nativeCaptureConsent.isPresented, !researchMode.isRunning,
+      !NativeWakeTrainingAccess.isActive
+    else { return false }
+    if origin == .pushToTalk { return isHoldingToTalk }
+    if origin == .callMode { return isInCall }
+    return true
   }
 
   /// Starts the recogniser when this Mac has one, and returns the sink the audio
@@ -1342,6 +1440,10 @@ extension AppCoordinator {
   }
 
   fileprivate func stopListening() {
+    // Releasing PTT or stopping during device/transcriber preparation revokes
+    // that in-flight request before there is an audio tap to stop.
+    voiceInputGeneration &+= 1
+    voiceInputFinalizingGeneration = nil
     guard audioCapture.isCapturing else {
       return
     }
@@ -1358,9 +1460,21 @@ extension AppCoordinator {
     }
     transcription = nil
     viewModel.presentTranscribing()
+    let generation = voiceInputGeneration
+    voiceInputFinalizingGeneration = generation
     Task { @MainActor [weak self] in
       let transcript = await recogniser.finish()
-      self?.viewModel.endListening(transcript: transcript)
+      guard let self else { return }
+      defer {
+        if voiceInputFinalizingGeneration == generation {
+          voiceInputFinalizingGeneration = nil
+        }
+      }
+      guard generation == voiceInputGeneration, !wakeSuppressedByStop,
+        !nativeCaptureConsent.isPresented, !researchMode.isRunning,
+        !NativeWakeTrainingAccess.isActive
+      else { return }
+      viewModel.endListening(transcript: transcript)
     }
   }
 
@@ -1370,6 +1484,9 @@ extension AppCoordinator {
   /// shortcut is registered now so the reflex is already in the user's hands.
   fileprivate func stopEverything() {
     wakeSuppressedByStop = true
+    voiceInputGeneration &+= 1
+    voiceInputFinalizingGeneration = nil
+    nativeCaptureConsent.dismiss(resumingListening: false)
     NativeWakeTrainingAccess.stop()
     wakeListeningTask?.cancel()
     wakeListeningTask = nil
@@ -1507,15 +1624,17 @@ extension AppCoordinator {
     wakeListeningTask?.cancel()
     wakeListeningTask = nil
     guard preferences.voice.wakeWordEnabled, !wakeSuppressedByStop,
-      !NativeWakeTrainingAccess.isActive, !audioCapture.isCapturing, !isInCall,
-      !researchMode.isArmed, !researchMode.isRunning
+      !NativeWakeTrainingAccess.isActive, !audioCapture.isCapturing, !isPreparingVoiceInput,
+      !isInCall,
+      !researchMode.isArmed, !researchMode.isRunning, !nativeCaptureConsent.isPresented
     else {
       wakeListener.disarm()
       return
     }
     wakeListeningTask = Task { @MainActor [weak self] in
       guard let self, !Task.isCancelled, !wakeSuppressedByStop,
-        !NativeWakeTrainingAccess.isActive, !researchMode.isArmed
+        !NativeWakeTrainingAccess.isActive, !researchMode.isArmed,
+        !nativeCaptureConsent.isPresented, !isPreparingVoiceInput
       else { return }
       await wakeListener.arm(
         phrases: preferences.voice.wakePhrase,

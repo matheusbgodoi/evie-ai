@@ -539,7 +539,7 @@ Both scripts also passed the system AppleScript compiler.
 Hostile-input integration cases keep all payloads and their original deadlines.
 The suite runs serially because its cases address shared Mail/Calendar processes
 and the OS compiler; no retry, assertion weakening or blanket skip was added.
-The final full run passed 1,542 tests in 145 suites in 23.807 seconds, including
+That checkpoint full run passed 1,542 tests in 145 suites in 23.807 seconds, including
 all hostile-input cases and the new pagination regressions. One preexisting
 known-issue test deliberately verifies that an interrupted hostile-input run
 is reported rather than counted as successful coverage.
@@ -634,3 +634,115 @@ Hosted CI now tests every Core behavior on the qualified 26 runtime, compiles
 the complete Shell on 27 and leaves documentation checks intact. The default
 full-package suite and signed-app diagnostics on the target M5/macOS 27.2 remain
 separate release gates. No legacy or fast OCR production downgrade was adopted.
+
+
+### Complete hosted qualification — 2026-10-17
+
+[CI run 39003951363](https://github.com/matheusbgodoi/evie-ai/actions/runs/39003951363)
+passed on public candidate `1b8b70a`: **all 1,550 Core tests / 146 suites in
+12.009 seconds** on the qualified macOS 26 runtime, one intentional known
+injected-timeout case. Settings persistence/responsive Keychain and the
+68-chord research guard passed against the isolated module. Xcode 27 compiled
+the complete Shell with warnings as errors in 40.80 seconds; documentation also
+passed. The default complete package separately passed 1,550 tests / 146 suites
+in 26.794 seconds on the physical M5/macOS 27.2 before installed candidate 5.
+No hosted test filter, OCR assertion reduction or legacy-engine change was used.
+
+
+### Installed candidate 5 native boundaries — 2026-10-17
+
+The installed candidate-5 executable SHA-256 was verified again as
+`99620b81b290e74f18c9945d37e390fe94d82e0420869eff520b821e3aa31997`.
+Launch Services checks on that bundle passed actual `AppIntent.perform` routing,
+input bounds/busy handling and generated metadata for three intents/shortcuts;
+Foundation Models reported available. This is distinct from operating-system
+Siri/Shortcuts discovery, which metadata alone cannot establish.
+
+Native enhanced Luciana synthesis/cancellation, SpeechAnalyzer synthetic
+round-trip and temporary calibration passed; the real pending-arm interruption
+and normal microphone disarm lifecycle also passed. The owner's enrollment was
+still not configured, and the synthetic recognizer omitted the wake name; neither
+was represented as completed personal training. Launch Services permission
+audit reported five native grants plus Mail/Calendar Automation OSStatus 0.
+Calendar was returned to its original closed state by normal quit.
+
+The same installed public-web diagnostic passed: six synthetic-query results,
+12,000 bounded page characters and ten synthetic forbidden destinations
+rejected in 3.125 seconds. Process idle, native-wake and energy measurements are
+recorded in [RESOURCE_BUDGET](RESOURCE_BUDGET.md#installed-evie-2-candidate--2026-10-17),
+with shared-machine limitations and no raw user text. No Keychain consent was
+answered, no password was entered, and unrelated services were preserved.
+
+
+The installed local-brain boundary also passed its full real idle interval in
+632.480 seconds: owned cold start 3.684 seconds, exact synthetic red image and
+pixel-only code OCR, then automatic unload after 624.756 seconds under the
+unchanged ten-minute policy. Final shutdown was 6.25 ms; independent process
+ESRCH and a free loopback port confirmed cleanup. No existing listener was
+adopted. The normal app was reopened afterward. A count-only inspection found
+one preserved SecurityAgent window; no password fields or alert content were
+read, and PC credential consent remained a separate owner action.
+
+
+### Shortcuts dispatch identity and public-URL mode
+
+A real OS invocation, after the candidate-5 checks above, exposed an additional
+boundary: Shortcuts discovered all three actions, but `linkd` rejected their
+process connection before `perform`, reporting `Unable to get teamId` and
+`LinkDaemon.ProcessRegistry.Errors` code 0. The stable self-signed identity has
+`TeamIdentifier=not set`; metadata extraction and an in-process dispatch check
+cannot establish an authenticated OS connection. Apple's signing documentation
+[defines team identifiers for Apple-issued signing identities](https://developer.apple.com/documentation/security/defining-launch-environment-and-library-constraints).
+
+The default bundle therefore uses `EVIE_NATIVE_APPLE_MODE=public-urls`, preserving
+the stable signing identity and existing grants. It registers `evie://open`,
+`evie://prepare?text=...` and `evie://capture`; the last only opens an explicit
+confirmation window. External URLs cannot submit a question, capture a screen,
+control input or authorize writes. The parser rejects unknown routes/components,
+duplicate parameters, empty or over-8,000-character text and oversized encoded
+input. The compiled App Intents/provider and their metadata are absent in this
+mode, so the build does not advertise unsupported direct actions.
+
+An explicit `app-intents` build opt-in is reserved for a genuine Apple signing
+identity: build and install both validate the candidate's declared mode, actual
+Apple signing anchor and real Team Identifier. Install rejects invalid modes
+before stopping the running app or replacing files. No team entitlement,
+certificate identity or private Siri service is fabricated. See
+[NATIVE_APPLE](NATIVE_APPLE.md) for the actual public-URL Shortcuts workflow and
+system invocation evidence.
+
+
+### Installed candidate 6 qualification — 2026-10-17
+
+Candidate 6, installed SHA-256
+`129d1878a0e0b948a35c26ee9e7b25ad989c0152b7102ab875fa57391a34cb7a`,
+contains the public-URL entry points, explicit capture confirmation and the
+coordinator generation/finalization safeguards. The complete package passed
+**1,555 tests / 147 suites in 14.241 seconds**, and the standalone validation
+of actual production voice-input/quick-text methods passed all 15 controlled
+cases plus both causal regression controls. Those controls use no microphone,
+UI, network or model request.
+
+Fresh Launch Services checks on this executable passed native voice synthesis
+(**58,599 frames / 2.65755 seconds of audio, 0.371844916 seconds synthesis**)
+and every real wake-listener lifecycle assertion. They do not reuse an older
+report to qualify a new binary. The actual Shortcuts invocation evidence and
+its review/confirmation behavior belong in [NATIVE_APPLE](NATIVE_APPLE.md).
+The default installed integration is public URLs, with direct App Intent types
+and metadata disabled; discovery or an in-process `perform` call is not
+reported as successful direct OS execution.
+
+The resource, energy and Lens idle-unload figures remain dated candidate-5
+measurements with their original executable hash. Lens request/preparation,
+worker ownership and ten-minute idle-policy code were unchanged by the URL and
+coordinator work. The 632.480-second Lens check therefore remains evidence of
+that unchanged boundary at its stated checkpoint, not a claimed second full
+model or battery benchmark on candidate 6. No additional microphone, interface
+or model workload was launched while the separate Shortcuts UI validation was
+in progress.
+
+A separate candidate-6 normal-app kernel sample, after the Shortcuts editors
+closed, measured 30.002 s, 0.4167 CPU-s / 1.389% of one core and 96.39 MiB
+footprint (98.89 MiB lifetime peak). The app remained in the background with
+no overlay/capture review, no new model request and the legitimate Keychain
+alert untouched. This is a fresh process sample, not a battery measurement.

@@ -9,10 +9,19 @@ All notable changes to Evie are documented here. Dates use `YYYY-MM-DD`.
 - Dedicated process-deadline queue preserves actual TERM/KILL deadlines under
   shared CPU contention; the real process-group regression reproduced the old
   delay before passing with the same timing limits.
-- All 1,550 behavioral tests run on the qualified macOS 26 CI runtime; the full
+- The prior 1,550-test checkpoint ran on the qualified macOS 26 CI runtime; the full
   shell compiles on Xcode 27. The complete suite also passed on the target M5
   with macOS 27.2. Accurate OCR assertions are unchanged; ADR 0028 records the
   measured hosted macOS 27.0.1 Vision failure and six-route comparison.
+- Current source passed all 1,555 tests in 147 suites on the target M5. Native
+  URL parsing, immediate capture-consent revocation and generation-bound voice
+  preparation/finalization have regressions. Releasing PTT before device setup
+  finishes cannot revive audio; a canceled preparation returns normal wake
+  listening while emergency stop stays latched.
+- Default Apple integration uses three public URL Shortcuts, preserving stable
+  local signing. URLs open UI, prepare a reviewed draft or open capture
+  confirmation. Actual direct App Intents dispatch failed for the local identity;
+  direct intents now require an optional real Apple-signed build.
 - The isolated research diagnostic refuses general-clipboard paste actions and
   uses Accessibility typing; a standalone guard harness checks 68 key chords.
 
@@ -49,8 +58,9 @@ All notable changes to Evie are documented here. Dates use `YYYY-MM-DD`.
   revocation when agent mode is disabled and wake shutdown on emergency stop.
 - Native public voice selection, synthesis cancellation/deadlines and five-call
   on-device wake calibration without retained audio or Siri-private API claims.
-- Public AppIntents with generated/validated bundle metadata, original glass
-  visual identity/icon, accessibility materials and no idle breathing animation.
+- Original glass visual identity/icon, accessibility materials and no idle
+  breathing animation. Direct App Intents were implemented in this checkpoint;
+  ADR 0029 supersedes their default local-build route with public URL Shortcuts.
 - Executor revalidates focus/ownership/secure fields after awaits and per input
   chunk; drag cancels between steps. Clipboard replacement requires explicit
   approval except the scoped research/isolated diagnostic output grant.

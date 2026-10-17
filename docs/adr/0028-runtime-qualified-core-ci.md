@@ -57,8 +57,12 @@ The first local isolated full run passed **1,550 tests in 146 suites in
 26.530 seconds**, with one intentional known timeout-injection issue. Real
 script fixtures resolved through the links. Settings persistence/responsive
 Keychain and the research clipboard guard also passed against the isolated
-module. Hosted full-Core results are recorded separately when executed; the
-standalone OCR matrix alone does not claim that entire suite passed remotely.
+module. The subsequent [hosted complete CI run](https://github.com/matheusbgodoi/evie-ai/actions/runs/39003951363)
+on public candidate `1b8b70a` passed **all 1,550 tests / 146 suites in 12.009
+seconds** on macOS 26, with the one intentional known timeout-injection case.
+Its settings boundary and 68-chord research guard passed; the full Shell built
+with warnings as errors on Xcode 27 in 40.80 seconds, and documentation passed.
+The standalone OCR matrix and complete behavioral job are distinct evidence.
 
 This keeps all behavioral assertions and system integrations. It neither marks
 OCR failures as known issues nor filters tests by machine identity. The public

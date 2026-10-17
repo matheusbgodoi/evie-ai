@@ -2,6 +2,103 @@
 
 Updated: 2026-10-17 (America/Sao_Paulo). This file is the continuation anchor.
 
+## Current continuation snapshot — supersedes historical entries below
+
+**CURRENT BEFORE RELEASE:** actual App Intents system dispatch failed with
+`Unable to get teamId` for the stable local self-signed identity. No valid
+Apple-issued identity exists. Public URL/Shortcuts fallback replaces the default;
+DO NOT fake signing identity or claim discovery as dispatch success.
+
+- Private HEAD2e7/public1b8 remain latest committed checkpoints. New source/docs
+  UNCOMMITTED. All source frozen. Build6-final PASS17.91s, strict signature and
+  artifact scan4files0private. Installed SHA256
+  `129d1878a0e0b948a35c26ee9e7b25ad989c0152b7102ab875fa57391a34cb7a`.
+- FINAL exact-source full package PASS1555tests/147suites14.241s, one intentional
+  known Mail timeout fixture. Log `/tmp/evie-native-urls-final-fullsuite4.log`.
+  Voice actual-source15cases+2causalredcontrols PASS, capture actualcontroller
+  lifecycle red→green and compile-only PASS. Agent final read-only source review,
+  exact CI doclinks, sixscriptssyntax, fiveSwiftstrictlint/diffcheck PASS.
+- Fresh installed LS NativeApple/public-urls PASS(registration/no stale metadata,
+  no capture/submit), nativeVoice PASS58599frames/2.65755s/0.371844916s synthesis,
+  wakelifecycle PASS(normalarm/disarm and stale asyncarm rejected). All diagnostic
+  processes exited; normal93688 reopened. Native docs frozen with precise6scope.
+- Actual three canonical Shortcuts invocations PASS exit0 after public workflow
+  privacy consent. Original10 preserved. Dynamic Ask→URLencode→Text→OpenURLs
+  delivered exact25character accent/&emoji nonce without submission; synthetic
+  draft removed. Capture route opened review with expected IDs; cancelclosed it,
+  no screenshot/inference/Keychain access. Open-afterhide PASS0→1window, nonce
+  cleanedthroughactualediting and absentafterreopen. Threeowneditorsclosed,
+  13workflows=10original+3canonical, 0QA. NATIVE_APPLE frozen, UIreleased.
+  Normal93688background0windows; SecurityAgentintact/pending.
+- Public URL delegate retains1bounded parsed cold request. Routes only openUI,
+  prepare<=8000Unicode draft without overwrite/submit, or captureconfirmation.
+  Emergency stop latch persists; consent synchronously revoked on sleep/session,
+  voice/research/training admission exclusive. PTT preparation/finalization have
+  generation guards and normalwakehandoff, no stale delivery/audio.
+- New workflowCI runs exactvoiceharness26 and capturecompile27; NEW CI notrunyet.
+  Root docs reconciled1555/publicURLcontract, ADR0029+WORKLOG updated. Treeprivacy
+ 523files0private. Need finaldocs once actualUI+hostedCI resultsknown.
+- Owner Keychain alert STILL pending; refreshed async question unanswered.
+  Never collect password/read same secret elsewhere/bypass. Actual finalPC
+  context + deterministic and real-agent fixture reruns require ownergrant.
+- Candidate5 resource/Lens10minunload remain valid dated unchangedruntime evidence,
+  not fabricatednew6measurements. New candidate6archive6126290bytes generated;
+  SHA25687e60b1bc8b0bed3898b918157de4c4fcb01db98aed6348468ec4c558ff4db55.
+  Unpackedstrict/deepsignature+binaryeqinstalledPASS; candidate5zipgone.
+  Regenerateonlyifbundlechanges. Notuploaded.
+- Fresh6normalidle aftervisualcleanup: 30.002s/0.4167CPU-s/1.389%onecore/
+  96.39MiBfootprint98.89peak; nooverlay/model, Keychainintact. Sourceunchanged.
+- NEXT: privatecommit/sanitizedpublicsnapshot
+  parent1b8ONLY/newCI → ownergrantPCcontext+twofixtures → docs/changelog/release
+  commit/publicmainFF/CIgreen → tagv2.0.0+releaseassets+downloadverify → normalopen
+  PCready → goalcomplete. NOmain/tag/release yet. Do not stop at partialdelivery.
+
+
+- Private HEAD `2e7fc8a170a68d20cd5a9dd29fb7739571792921`, worktree/branch unchanged.
+  Sanitized public delivery `1b8b70a8fa945cde9a3ac15d676a72dd65fa2aa3`, parent
+  `107fd5a90228b7f26ada941841eda936bdea718f` ONLY; private HEAD not ancestor.
+  Full reachable public scan: 1260 blobs, zero private connection matches.
+- New normal three-job hosted CI: run **39003951363**, ALL THREE JOBS PASS.
+  Do not confuse diagnostic `vision-ocr-probe` branch/workflow with delivery.
+  Public main remains old `a46da7a`; no v2 tag/release created yet.
+- Final source build5 installed/open, SHA256
+  `99620b81b290e74f18c9945d37e390fe94d82e0420869eff520b821e3aa31997`.
+  Default full package: 1550 tests/146 suites/26.794 s; isolated Core same
+  tests/26.530 s. Both pass with the intentional known timeout-injection issue.
+  Settings and clipboard standalone harnesses pass on both build layouts.
+- Native_apple completed/froze final native/resource docs. Final installed
+  nativeApple/voice/wake/TCC/web/energy all PASS. Lens real idle check PASS:
+  color+pixelOCR, 624.756 s idle unload, ESRCH+port free; total632.480s.
+  Normal app PID90426 reopened. Source/binary/archive5 unchanged.
+- `/root/apple_visual` NOW owns actual Atalhos UI (exclusive). Discovery of all
+  3 Evie actions PASS in real app; preparing actualOpen/draft/capture invocations
+  using temporary own workflows and synthetic data, no autosend. He owns
+  NATIVE_APPLE doc. Do not concurrently operate UI or PC research fixtures.
+  Capture must not include SecurityAgent/private desktop; leave screen-action
+  test pending owner grant if legitimate alert cannot be excluded.
+- Required owner action remains unanswered: authorize the legitimate macOS
+  Keychain alert with the owner's password directly in SecurityAgent/Always Allow.
+  NEVER obtain that password or bypass by reading the same secret elsewhere.
+  Reopened normal app confirmed one SecurityAgent window and PC still checking;
+  actual authorization remains pending. Refreshed async owner-action question
+  accepted after final reopen; still unanswered. Final PC context and both
+  deterministic/real-agent research fixtures depend on this. Do not repeat
+  blocked requests or claim these final runs have passed.
+- Prepared candidate5 archive (replaces stale candidate4):
+  `.build/release-artifacts/v2.0.0/Evie.app.zip`, 6123968 bytes,
+  SHA256 `ba698ce14e9c6c685f46568e3d941b80092d0e33a5ee0fb458f473590bc8e2c7`.
+  `SHA256SUMS` present, unpacked strict/deep signature and binary equality pass.
+  Not uploaded; regenerate only if bundle changes.
+- Next: finish hosted CI and installed native/resource evidence; owner-approved
+  PC context + `Scripts/research-validation` and `--agent`; reconcile all final
+  docs/placeholders; private commit; sanitized snapshot/public main fast-forward
+  (never push private ancestry); wait normal main CI; public v2.0.0 tag/release
+  with archive/checksum; download/verify/signature; reopen normal PC-ready.
+  Only then goal complete. No partial-final delivery or bug-free guarantee.
+
+The sections below preserve the execution history. Their old states such as
+"uncommitted" or pending earlier builds do not override this snapshot.
+
 ## Authorization and workspace
 
 - User explicitly requests implementation, real tests, optimization, native Apple
@@ -742,3 +839,24 @@ Immediate queue after native stylefreeze:
   swift-format4changedSwifts, zsh4scripts, doclinks0missing, diffcheckPASS.
 - Native_apple NOWowns all OS/mic/model diagnostics and RESOURCE_BUDGET/native
   finalmeasure docs; root onlygit/CI/docs. No concurrentrootUI/worker/use.
+
+- Hosted normal delivery CI3 run39003951363 ALLPASS: fullCore26 +settings/guard,
+  completeShellXcode27 +docs. Rawpubliclog `/tmp/evie-final-public-ci3.log`.
+  No OCR assertion removed orrelaxed; no testfilter/skip. FinalmainCIstillrequired
+  afterfinaldocs/publicsnapshot. READMEhero now uses actualsafe Evie2 own-window
+  brain-controlscapture, not oldhistoricalv1asset.
+
+- FINAL5 real Lens --brain-check --idle PASS after632.480s: startup3.684s,
+  exactredcolor2.222s, exactpixelOCRZEBRA4817; actualunchanged10minpolicy exited
+  after624.756s, stop6.25ms, ownedProcessStopped/portFree true; independent
+  kill90022→ESRCH and portempty. NormalreopenedLaunchServices. Nativecurrently
+  inspectsONLYSecurityAgentcount+ownPCready beforeUIhandoff toapple_visual for
+  actualAtalhos3actions (createdtemporaryworkflows/noautosend/syntheticcapture).
+
+- Research_validation finalparameteraudit fixed ONLY docs MODEL_TUNING/context:
+  explicitfalse preserve_thinking vs officialtrue; previousreasoningnotstored;
+  16384profileceiling vs low/medium8192 voiceOFF1024 computerStep1024; source/
+  samplers unchanged. PrimaryQwen/Appleevalsourcesrechecked; docs frozen.
+- Nativefinaldocs RESOURCE_BUDGET/NATIVE_VOICE/MACOS_RUNTIME/ADR28 frozen. Root
+  status/releasesresourceplaceholdersreplaced withactualmeasurednumbers. No
+  remainingVALOR_FINAL placeholders incurrentdeliverydocs. READMEheroactualV2.

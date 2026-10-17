@@ -5,7 +5,7 @@ Last updated: 2026-10-17
 ## Final integrated v2 candidate — 2026-10-17
 
 Source integration is in the isolated `v2-research` worktree. The final candidate
-combines brain controls, research, native voice/AppIntents, visual identity,
+combines brain controls, research, native voice/public URL Shortcuts, visual identity,
 context compaction and the executor/network/persistence corrections. The exact
 continuation anchor remains
 [EVIE_RESEARCH_DELIVERY](implementation/EVIE_RESEARCH_DELIVERY.md).
@@ -34,12 +34,14 @@ publication or a release has already occurred.
   Saving a key preserves other drafts and fresh file changes field by field.
 - Research has two configurable shortcuts, a revocable 15-minute lease and
   bounded clipboard/answer-entry routes. Native voice selection/calibration and
-  public AppIntents do not use private Siri services. Enabled capabilities still
+  public URL Shortcuts do not use private Siri services. Direct App Intents
+  require an Apple-signed build; actual system dispatch with the local signature
+  failed and was replaced by the public URL route (ADR 0029). Enabled capabilities still
   require real OS permission and the existing action authority.
 - The local launcher reuses only compatible model/memory options and reconciles
   changed options on next use. Web DNS/redirects are pinned to public addresses
   separately from the private model transport. Current decisions are ADRs
-  **0020–0028**; earlier records below are historical where they differ.
+  **0020–0029**; earlier records below are historical where they differ.
 
 ### Executed evidence, with scope
 
@@ -86,14 +88,50 @@ publication or a release has already occurred.
   and no OCR errors for the private patterns held only in memory. The final
   snapshot, reachable ancestry and signed artifact are checked separately.
 
-### Draft final gates — replace with executed evidence before publishing
+### Final validation gates and measured scope
 
-- Final full-suite result: **1,550 tests in 146 suites passed (26.794 s), with one intentional known timeout-injection issue**.
-- Final resource/energy measurements, including conditions: **VALOR_FINAL_A_INSERIR**.
+- Current exact-source full-suite result: **1,555 tests in 147 suites passed
+  (14.241 s), with one intentional known timeout-injection issue**. Five new
+  native URL parser tests passed after reproduced failures. The exact coordinator
+  voice harness passed fifteen cases and two causal negative controls; the actual
+  capture controller passed immediate revocation and single-use lifecycle cases.
+- Installed candidate5 normal app, 30.004-second idle sample on M5/24 GiB,
+  macOS 27.2, AC: **1.254% of one CPU core, 97.31 MiB footprint** (97.78 MiB
+  lifetime peak). Separate native wake diagnostic, 30 seconds per armed phase:
+  **1.87% ungated / 1.76% gated**, 17 MiB diagnostic-process footprint, both
+  actually armed. These are process metrics, not total speech-daemon cost or
+  battery-life estimates. Shared GPU 9–36%, mean 16.2%, thermal nominal over
+  29 samples; other apps contribute. Watts unavailable on AC without privileges.
+  Full conditions in [RESOURCE_BUDGET](RESOURCE_BUDGET.md).
+- Prior candidate5 [hosted delivery CI](https://github.com/matheusbgodoi/evie-ai/actions/runs/39003951363):
+  all three jobs passed. The qualified macOS 26 runtime executed every one of
+  the 1,550 tests in 146 suites (12.009 s, same intentional known issue), plus
+  settings and clipboard guard harnesses. Full shell compiled with Xcode 27,
+  warnings as errors (40.80 s). See [ADR 0028](adr/0028-runtime-qualified-core-ci.md).
 - LensVLM qualification: completed at 131,072 tokens with the measured controls
   above; the final full-suite run covers the synchronized source defaults.
-- Signed final bundle build, latest restrictive research fixture rerun,
-  installation/open-state check and public release: not recorded complete here.
+- Candidate5: release compilation 36.20 s, pinned signature verified and
+  installed. Native direct-call intent diagnostics passed, but actual system
+  dispatch later failed because the local identity lacks a TeamIdentifier.
+  Discovery/direct calls are not a system-invocation pass. Actual native
+  voice/transcription, wake lifecycle, all seven permission rows and synthetic
+  public web passed.
+  The real ten-minute local-model unload passed: color/OCR correct, idle exit
+  after 624.756 s, process ESRCH and port free. Final PC
+  context/research diagnostics await the owner's legitimate Keychain approval;
+  public main/tag/release completion is not claimed at this checkpoint.
+- Current candidate6: release compilation 17.91 s; installed executable SHA256
+  `129d1878a0e0b948a35c26ee9e7b25ad989c0152b7102ab875fa57391a34cb7a`.
+  Strict signature and all four bundle-file privacy checks passed. Fresh installed
+  checks confirmed public-URL registration without stale direct-intent metadata,
+  AVFoundation synthesis/SpeechAnalyzer and wake arm/disarm cancellation.
+  Actual three canonical Shortcuts completed exit0: open UI, exact dynamic
+  accented/ampersand/emoji draft without submission, and capture review/cancel
+  without a screenshot. Original ten workflows were preserved. Updated hosted
+  CI and owner-authorized PC diagnostics remain separate gates. After the
+  Shortcuts editors closed, a fresh 30.002-second normal-app sample measured
+  1.389% of one core and 96.39 MiB footprint (98.89 MiB lifetime peak), without
+  a new model request; the legitimate Keychain prompt remained untouched.
 - Publication must use the sanitized tree parented by existing public main,
   excluding private local v2 ancestors. Runtime endpoints remain outside git
   and the bundle. Final tree/artifact/ancestry scan results belong in the ledger.

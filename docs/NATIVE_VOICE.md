@@ -180,3 +180,87 @@ Referências: [qualidade aprimorada](https://developer.apple.com/documentation/a
 [síntese de fala](https://developer.apple.com/documentation/avfaudio/avspeechsynthesizer),
 [SpeechAnalyzer](https://developer.apple.com/documentation/speech/speechanalyzer),
 [Voz Pessoal](https://developer.apple.com/videos/play/wwdc2023/10033/).
+
+
+## Verificação do candidato 5 instalado — 2026-10-17
+
+A mesma identidade assinada e o executável do candidato 5 de SHA-256
+`99620b81b290e74f18c9945d37e390fe94d82e0420869eff520b821e3aa31997`
+foram verificados via Launch Services. O relatório atual confirmou dez vozes
+pt-BR utilizáveis, uma aprimorada, seleção de
+`com.apple.voice.enhanced.pt-BR.Luciana`, **58.599 frames / 2,658 s** de áudio
+sintético produzidos em **0,302 s**. Cancelamento, análise SpeechAnalyzer e
+persistência temporária de calibração passaram; não houve reprodução audível,
+retenção de áudio ambiente ou alteração da calibração do proprietário.
+
+A calibração real permaneceu `notConfigured`, com zero aliases. O teste sintético
+não reconheceu o nome Evie (`syntheticWakeNameRecognized=false`), embora tenha
+reconhecido a frase de pesquisa. Isso não foi convertido em treino pessoal nem
+em garantia de reconhecimento de qualquer falante. Os dois identificadores Siri
+continuaram indisponíveis; a Voz Pessoal não foi solicitada.
+
+O teste real do ciclo do microfone confirmou ativação pendente interrompida,
+nenhuma reativação tardia, ativação normal bem-sucedida e microfone desarmado ao
+final. A auditoria do bundle por Launch Services confirmou microfone e
+reconhecimento de fala concedidos. O processo normal, com escuta habilitada,
+consumiu **1,254% de um núcleo** e **97,31 MiB de footprint** em 30,004 s. No
+processo isolado de diagnóstico, a fase armada com portão usou **1,76% de um
+núcleo / 17 MiB** em 30,1 s, com captura confirmada e 66,2% dos buffers encaminhados.
+Esses números não incluem integralmente serviços compartilhados do macOS nem
+constituem watts de bateria. Condições e comparação estão em
+[RESOURCE_BUDGET](RESOURCE_BUDGET.md#installed-evie-2-candidate--2026-10-17).
+
+
+## Regressão da preparação e finalização da entrada de voz
+
+`Scripts/voice-input-validation` compila os métodos reais de
+`AppCoordinator.startListening`, `stopListening`, `mayContinueVoiceInput` e
+`presentQuickText(reactivatingWake:)`, extraídos sem reimplementar seus corpos.
+As fronteiras assíncronas de dispositivo, transcritor e apresentação são
+controladas; esse teste não abre o microfone, uma janela ou uma conexão.
+
+A cópia temporária de controle remove apenas o predicado de continuação depois
+dos `await`s: o mesmo teste detecta que soltar PTT durante a preparação abre o
+áudio tardiamente. O fonte real passa os 15 cenários, incluindo cancelamento por
+geração, confirmação de captura pendente, fim de chamada, limpeza de transcritor
+antes de permitir outra preparação, início de áudio tardio e casos positivos.
+A finalização revogada não entrega transcrição; uma finalização antiga não apaga
+o token da nova. Abrir uma revisão por URL preserva a supressão de wake após
+Parar, enquanto a ação explícita da interface pode reativá-lo.
+
+O script usa os produtos Core já compilados (`EVIE_CORE_BUILD_DIR` opcional),
+Swift 6 e warnings as errors; não inicia SwiftPM. Na execução de 2026-10-17, o
+controle vermelho esperado e os 15 casos do fonte real passaram em cerca de um
+segundo. Essa evidência de concorrência complementa o teste de microfone real
+anterior, sem ser apresentada como uma nova medição de hardware ou de bateria.
+
+O segundo controle remove só a devolução de wake no `defer` da preparação e
+reproduz a escuta deixada desarmada após soltar PTT. O fonte real solicita uma
+retomada nesse cancelamento normal, mas nenhuma após Parar nem enquanto a
+confirmação de captura está aberta. Ambos os controles vermelhos e os 15 casos
+corrigidos passaram sem acesso ao microfone.
+
+
+## Candidato 6 instalado: voz e ciclo nativo — 2026-10-17
+
+Após a integração dos URLs públicos e as correções de preparação/finalização
+no coordenador, o candidato 6 foi instalado com SHA-256
+`129d1878a0e0b948a35c26ee9e7b25ad989c0152b7102ab875fa57391a34cb7a`.
+O pacote completo passou **1.555 testes em 147 suítes, em 14,241 s**; a
+regressão com os métodos reais passou os 15 cenários e os dois controles
+vermelhos descritos acima.
+
+Nesse bundle, uma nova execução por Launch Services de
+`--native-voice-check` passou: **58.599 frames / 2,65755 s** de áudio sintético,
+com síntese em **0,371844916 s**. O novo `--wake-lifecycle-check` também passou
+todos os estados exigidos, incluindo interrupção de armamento pendente,
+nenhuma reativação tardia, ativação normal e desarme. São checks novos desse
+executável; as medições de CPU, memória e energia continuam sendo o checkpoint
+explicitamente identificado como candidato 5. Não se infere consumo de bateria
+desses tempos de síntese nem se representa a calibração sintética como treino
+pessoal do proprietário.
+
+O modo nativo padrão agora é `public-urls`; a voz e o reconhecimento nativos
+não dependem de uma assinatura Apple para App Intents. A integração funcional
+com Atalhos usa URLs de revisão, com confirmação antes de capturar a tela,
+conforme [NATIVE_APPLE](NATIVE_APPLE.md).
