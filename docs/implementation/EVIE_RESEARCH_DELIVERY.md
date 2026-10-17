@@ -517,3 +517,116 @@ Immediate queue after native stylefreeze:
   Waitbuild, scanartifact, install; then nativeagent legitimateMailpermissionUI,
   visualmainresponsive proof+brainbuttonUI. CoordinateexclusiveUI before own
   windowdiagnostics/energy. OwnerKeychaininput stillpending.
+
+
+## Latest authoritative state — hosted CI failures being corrected
+
+- Private local commit **fc2685692848400228530f320d50e95e815349ed** created,
+  all then-current source/docs. Sanitized public snapshot
+  **8923a4d111caf2bd5a9d76c2957ea1101c7f2bf1**, exactsame tree, ONLY parent
+  a46da7a0804306f98b30c67e027d88d378be1542 (origin/main). PrivateHEAD is NOT its
+  ancestor. Published only branch **v2-public-research**, NOT main/tag/release.
+  Fresh reachablehistoryscan1214blobs0privatepatterns. Helper optimized privately
+  batchedcat-file (no contents printed), no publicrepochangeforhelper.
+- Candidate3 signedreleasebuild37.20s,3+3AppIntentmetadata,stableDR,
+  artifact6files0privatepatterns; installed/opened via Scripts/evie-app install.
+  Current executable SHA256 **9934ed3331a6ccec95ac8d38faf201d2e14ee5114fb79169c361176483411da8**.
+  Subsequent sourcefixes mean build4/reinstall still REQUIRED, not finalrelease.
+- Actual UI candidate3 PASS while SecurityAgent1windowpending: SettingsGeral
+  andPermissions rendered/navigated; modelAuto→Mac→PC immediatelypersisted;
+  Mac131072/output2048,PC200704/output16384; effortoffboth, agentoff→onpersisted,
+  webon. FinalrestoredalwaysPC/effortoff/agenton/webon. No prompt/password
+  interaction/modeltest/chat/inference. Normalapp remainsopen.
+- Visual found missingsemanticAXnames despiteexistinglabelmodifiers. It patched
+  BrainChipView to nativeLabel iconOnly+explicitstableidentifiers/model labels;
+  sourceformatterPASS but actual newAXtree needsbuild4test.
+- Root inspected /tmp/evie-final-brain-overlay.png (ownEvieonly): content DOES
+  clip left/right within330pxpopover (brainhalficon, captions/tokenscut).
+  Visual NOW owns sizing/wrapping correction+method in BrainChipView/UI_UX;
+  do NOT claim layout approved or publish clippedimage. Actual ownwindowafter
+  build4 required. Native has UISTART for legitimateMailAutomation (not yetdone),
+  visualreleasedUIand nowonlysource/offscreenchecks.
+- Hosted CI run **39001815255**
+  https://github.com/matheusbgodoi/evie-ai/actions/runs/39001815255:
+  coremacOS26PASS(Swift6.3.3/Xcode26.6),DocumentationPASS;
+  fullpackageShellbuildPASS(Swift6.4/Xcode27.0), fulltestsFAIL11issuesincl1known.
+  Logs /tmp/evie-candidate-ci-failure.log and -complete.log. No retry/skip allowed.
+- Native NOW owns real CIfixes in queryterms+docreader:
+  NLTaggerassets onVM may classifyfunctionwords.otherWord, so deterministic
+  functionword/auxiliary filtering beforeacceptance, keepNLlemmaswhenavailable;
+  red niltag regression reproduced2issues tenho/quanto.
+  Vision OCR e5rtcompiler11 onvirtualhost: public compute-stageCPU fallback
+  atmostonce afternoncancelautomaticfailure, samequality/errorpropagation.
+  ForcedCPUactualprobe alreadyread full accented/currency samplecorrectly.
+  Needfocusedlocal+actualhostedCI toprove. NativealsoMailpermissionUIafterpatch.
+- Validationagent NOW owns TTS CItestmeasurement investigation/fix: timeout
+  timedOut+childdead+tempcleanupPASS, only outerawait<2sFAILED5.406s whilemany
+  unrelatedtestscomplete4.1sschedulerlag. Productionrunner alreadyGCDtimer+
+  waitpidqueue; no evidenceprocesssurvived5s. Approved fixturemonotonicstart+
+  SIGTERMwitness measuring SAME<2sactualprocesslifetime, no timeout/gracechange,
+  no weakening/skipping/retry; addlateconsumerscenario. No productionchange
+  withoutrealrepro. CoordinateSwiftPMwithnative (currentlynativeowns).
+- RootaddedfullpackageCI step Scripts/model-settings-validation foractualVM
+  persistence/statusregressions; uncommitted withnewWORKLOG. Nextpublicsnapshot
+  mustincludeit, and actualCIstepmustpass beforefinalrelease.
+- Currentmainworktreev2stillcleanuntouched. Originalbranchintegration can safely
+  beconsideredonlyafterfinalprivatecommit+cleanrecheck; neverpushprivatev2.
+- OwnerKeychainasyncquestion STILL NOANSWER, preserveOSalert. Do not repeatPC
+  context/realagenttestswhileauthpending. Independentqueueafterbuild4:
+  actualAX/layout+MailAutomation; normalidleCPU30s+energy30s; isolated native/
+  wake/web and --brain-check --idle(actual10minunload whileindependentwork);
+  wakecostbothorders30s3phases/no rawlastHeardpublication. Reopennormalappfor
+  legitimateowneralert iftemporarilyquitforisolatedmicchecks.
+- FinalCI/sourcefixes MAYrequirefurtherbundlebuild; noneoftheaboveis afinal
+  releaseclaim. Finishactualcontext/restrictiveresearchdeterministic+--agent
+  AFTERownerauth, finaldocsplaceholders/changelog/tasks/WORKLOG, finalprivate
+  commit+publicsnapshotparentONLYlastpubliccommit, source/artifact/historyscan,
+  pushmainandactual3jobsgreen, ziphash/signature/tagv2.0.0/publicrelease,
+  downloadequalityproof, appopenPCready. GoalcompleteONLYthen.
+
+
+### New actual boundaries and fixes (supersedes the preceding pending statuses)
+
+- Visual fixed clipping with content294 inside330 incl18padding, Picker.small,
+  wrapped captions. Standaloneproductionview Swift6warningsbuild and visible
+  ownwindow2-column syntheticpreview passed; rootview_image verified fullpadding
+  and no clipped content. Evidence docs/images/apple-visual/brain-controls-context-fixed.png.
+  Oldclippedimagesmarkedlegacy; installedpopover/AX MUSTstillrerunafterbuild4.
+- Native realMail OSdialog Allow completed onlyEvie→Mail. Actual freshaudit via
+  **LaunchServices open -n installedbundle** at01:23:48 confirms ALL5coregrants
+  plus MailOSStatus0/CalendarOSStatus0. GuideUIalso7allowed. DirectMach-Olaunch
+  hadmisleadingSpeech/CalendarnotdeterminedbecauseinheritsCLIresponsibleTCC;
+  thiswasNOTmissingAppgrant. No Terminalgrant, no newSpeech/Calendarrequest,
+  noSecurityAgentinteraction. NativeclosingSettings+Calendargracefullybeforenext
+  suite, UIshouldbefreeaftertheirack. PreservethislaunchmethodforallTCCchecks.
+- Rootclarified staticmicrophonepurposeCoreguide fordefaultwakeenabled continuous
+  listening; info.plistalreadytruthful. AlsoclarifiedKeychaincontainsdoc background
+  requirement. Thesearetinycopycomments, includednextfullbuild.
+- Standalonelocalbrainvalidation permanentscriptre-runPASS (AppKithost, realHTTP,
+  MLXcache256MiB, strictESRCH, A→B→C, foreignlistenerpreserved), log
+  /tmp/evie-final-local-brain-validation.log. No workersleft.
+- NativeOCR/NLfocused39tests/3suitesPASS0.212s, actual5OCRcasesparameterized
+  automaticANDcpuOnly unchangedqualityassertions. Missingtaggerassetsred→green.
+  ValidationTTSfixture strengtheninginprogress: nochildkillinmeasuredhandler;
+  negativecontrolparent-onlyleaveschildalive, processgroupterminates+reaps.
+  Pythonmainuses signal.pause toavoidreentrantchild.wait deadlock onwarmup.
+  No productionrunnerchange/timebudgetchange. Nativewillruncombinedfocused.
+- Awaitbothagentfreeze+Calendarclosed, then fullScripts/test+strictlint+privacy,
+  nextprivatecommit/publicsnapshotparent8923..., pushcandidatebranchanddispatchCI;
+  signedbuild4/reinstall+actualnewAX/layout+allinstalleddiag/resourcegates.
+
+
+### Portability corrected local source checkpoint — ready for hosted rerun
+
+- Fullpackage **1549tests/146suitesPASS24.818s**,1intentionalMailissue,
+  /tmp/evie-final-portability-fullsuite.log (exec75932completedexit0).
+- UpdatedproductionVM standalone3casesPASS again, logfile
+  /tmp/evie-final-portability-settings-validation.log. ItsnewCIstepisrequired.
+-8Swiftchangedafterfc26856strictlintPASS;doclinks0missing;gitdiffcheckPASS.
+  Freshsource505files0privatepatterns. VisualsyntheticnewPNGcontainsONLYdemo.
+- Rootstarted signedbuild4 exec66357,
+  /tmp/evie-final-portability-release-build.log. No sourceeditsalloweduntilbuild
+  finishes; then artifactscan+install4+actualAX/popover+TCCaudit viaLaunchServices.
+- Nextprivatecommit/publicsnapshot on parent8923... totriggerhostedCIcorrected
+  candidate; no tag/release/mainclaimyet. AllremainingPCintegration stillneeds
+  ownerpassword directlyinlegitimateSecurityAgentalert (pendingasyncanswer).

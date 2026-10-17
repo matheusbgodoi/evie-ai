@@ -29,7 +29,7 @@ public enum EviePermission: String, CaseIterable, Codable, Sendable {
   public var purpose: String {
     switch self {
     case .microphone:
-      "Só abre quando você aciona a fala, e o áudio não sai deste Mac."
+      "Usa o microfone durante a fala e, se a escuta por nome estiver ligada, para reconhecer o chamado. O áudio é processado neste Mac."
     case .speechRecognition:
       "Transcreve sua fala localmente, neste Mac."
     case .screenRecording:

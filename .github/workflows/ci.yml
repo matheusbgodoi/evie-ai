@@ -57,6 +57,8 @@ jobs:
         run: swift build -Xswiftc -warnings-as-errors
       - name: Run all behavioral tests
         run: Scripts/test
+      - name: Verify settings persistence and responsive Keychain status
+        run: Scripts/model-settings-validation
 
   documentation:
     name: Documentation

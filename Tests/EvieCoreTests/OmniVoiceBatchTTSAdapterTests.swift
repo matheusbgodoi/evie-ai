@@ -85,24 +85,33 @@ struct OmniVoiceBatchTTSAdapterTests {
     #expect(try fixture.requestDirectories().isEmpty)
   }
 
-  @Test("times out and terminates the isolated child process group")
-  func timeout() async throws {
-    let fixture = try Fixture(script: Self.longRunningScript)
+  @Test("times out and terminates the isolated child process group", arguments: [false, true])
+  func timeout(observeResultLate: Bool) async throws {
+    let fixture = try Fixture(script: Self.timedLongRunningScript)
     defer { fixture.remove() }
     try fixture.warmUpExecutable()
     let adapter = try OmniVoiceBatchTTSAdapter(
       configuration: fixture.configuration(timeout: 0.5, gracePeriod: 0.05)
     )
-
-    let start = ContinuousClock.now
+    let task = Task { try await adapter.synthesize(fixture.request()) }
+    defer { task.cancel() }
+    if observeResultLate {
+      let timing = try await fixture.terminationTiming()
+      try await fixture.expectChildStopped(timing.childIdentifier)
+      // The consumer deliberately resumes after the process deadline. Only
+      // the child-recorded clock can distinguish its lifetime from this delay.
+      try await Task.sleep(for: .milliseconds(2_100))
+    }
     do {
-      _ = try await adapter.synthesize(fixture.request())
+      _ = try await task.value
       Issue.record("Expected a timeout.")
     } catch let error as EvieTTSError {
       #expect(error == .timedOut)
     }
-    #expect(start.duration(to: .now) < .seconds(2))
+    let timing = try await fixture.terminationTiming()
+    #expect(timing.lifetimeBeforeTermination < .seconds(2))
     let childIdentifier = try await fixture.recordedChildIdentifier()
+    #expect(timing.childIdentifier == childIdentifier)
     try await fixture.expectChildStopped(childIdentifier)
     #expect(try fixture.requestDirectories().isEmpty)
   }
@@ -244,6 +253,48 @@ extension OmniVoiceBatchTTSAdapterTests {
     /usr/bin/truncate -s 67108865 "$res_dir/speech.wav"
     """
 
+  /// The receipt comes from an actual SIGTERM handler in the process being
+  /// timed, before waiting on its descendant. It cannot be synthesized by a
+  /// delayed Swift continuation or mistaken for the warm-up process's receipt.
+  fileprivate static let timedLongRunningScript = """
+    #!/usr/bin/python3
+    import json
+    import os
+    import signal
+    import subprocess
+    import sys
+    import time
+    from pathlib import Path
+
+    arguments = dict(zip(sys.argv[1::2], sys.argv[2::2]))
+    model = Path(arguments['--model'])
+    started = time.monotonic_ns()
+    child = subprocess.Popen([sys.executable, '-c', 'import time; time.sleep(30)', str(model)])
+
+    def terminated(signum, frame):
+        receipt = {'startedNanoseconds': started,
+                   'terminatedNanoseconds': time.monotonic_ns(),
+                   'childIdentifier': child.pid}
+        pending = model / 'termination.pending'
+        pending.write_text(json.dumps(receipt))
+        pending.replace(model / 'termination.json')
+        # Process.terminate() used by warm-up signals only the parent. The
+        # measured request must instead prove the runner signals its group.
+        if model.name == 'warmup':
+            try:
+                os.kill(child.pid, signal.SIGTERM)
+            except ProcessLookupError:
+                pass
+        child.wait()
+        sys.exit(128 + signum)
+
+    signal.signal(signal.SIGTERM, terminated)
+    signal.signal(signal.SIGINT, terminated)
+    (model / 'child.pid').write_text(str(child.pid))
+    while True:
+        signal.pause()
+    """
+
   fileprivate static let longRunningScript = """
     #!/bin/sh
     set -eu
@@ -328,7 +379,30 @@ private final class Fixture: @unchecked Sendable {
   }
 
   func remove() {
+    stopOwnedDescendant(in: modelDirectoryURL)
+    stopOwnedDescendant(in: rootURL.appendingPathComponent("warmup", isDirectory: true))
     try? FileManager.default.removeItem(at: rootURL)
+  }
+
+  /// Failure cleanup is restricted to a recorded PID whose live command still
+  /// contains this fixture's unique directory and exact synthetic child code.
+  private func stopOwnedDescendant(in directory: URL) {
+    guard let data = try? Data(contentsOf: directory.appendingPathComponent("child.pid")),
+      let identifier = Int32(String(decoding: data, as: UTF8.self)), identifier > 0
+    else { return }
+    let process = Process()
+    let output = Pipe()
+    process.executableURL = URL(fileURLWithPath: "/bin/ps")
+    process.arguments = ["-o", "args=", "-p", String(identifier)]
+    process.standardOutput = output
+    process.standardError = FileHandle.nullDevice
+    guard (try? process.run()) != nil else { return }
+    process.waitUntilExit()
+    let command = String(decoding: output.fileHandleForReading.readDataToEndOfFile(), as: UTF8.self)
+    guard command.contains(directory.path), command.contains("import time; time.sleep(30)") else {
+      return
+    }
+    _ = kill(identifier, SIGKILL)
   }
 
   func configuration(
@@ -418,6 +492,34 @@ private final class Fixture: @unchecked Sendable {
     process.waitUntilExit()
   }
 
+  struct TerminationTiming: Decodable {
+    let startedNanoseconds: UInt64
+    let terminatedNanoseconds: UInt64
+    let childIdentifier: Int32
+    var lifetimeBeforeTermination: Duration {
+      .nanoseconds(Int64(terminatedNanoseconds - startedNanoseconds))
+    }
+  }
+
+  func terminationTiming() async throws -> TerminationTiming {
+    let file = modelDirectoryURL.appendingPathComponent("termination.json")
+    let deadline = ContinuousClock.now + .seconds(2)
+    while true {
+      // Check the actual receipt before the observer's deadline: its executor
+      // can resume late even though SIGTERM was delivered on time.
+      if let data = try? Data(contentsOf: file) {
+        let timing = try JSONDecoder().decode(TerminationTiming.self, from: data)
+        guard timing.childIdentifier > 0,
+          timing.terminatedNanoseconds >= timing.startedNanoseconds,
+          timing.terminatedNanoseconds - timing.startedNanoseconds <= UInt64(Int64.max)
+        else { throw FixtureError.invalidTerminationTiming }
+        return timing
+      }
+      guard ContinuousClock.now < deadline else { throw FixtureError.terminationTimingMissing }
+      try await Task.sleep(for: .milliseconds(10))
+    }
+  }
+
   func recordedChildIdentifier() async throws -> Int32 {
     let pidFileURL = modelDirectoryURL.appendingPathComponent("child.pid", isDirectory: false)
     for _ in 0..<40 {
@@ -460,5 +562,7 @@ private final class Fixture: @unchecked Sendable {
 }
 
 private enum FixtureError: Error {
+  case terminationTimingMissing
+  case invalidTerminationTiming
   case childIdentifierMissing
 }

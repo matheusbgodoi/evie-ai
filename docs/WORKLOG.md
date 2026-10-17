@@ -1,5 +1,43 @@
 # Work log
 
+## 2026-10-17 — hosted CI portability and final UI inspection
+
+- The first sanitized public candidate reached hosted CI: macOS 26 core and
+  documentation passed; Xcode 27 compiled the shell, but the full suite exposed
+  missing linguistic assets, Vision's accelerated OCR compilation failure and a
+  process-timeout observation that included delayed Swift task resumption.
+- Query extraction now filters function forms even when the OS tagger provides
+  no useful classification. OCR keeps accurate recognition, language settings,
+  confidence and small-text behavior, with one public CPU alternative after a
+  non-cancellation automatic-device failure. CPU failures still propagate.
+  Original OCR assertions run with both automatic and forced CPU policies.
+- The process-timeout fixture records its own monotonic lifetime on SIGTERM,
+  retaining the same two-second limit and 0.5/0.05-second timeout/grace settings.
+  Both immediate and deliberately delayed consumers must observe the timeout,
+  dead descendant and removed temporary files. A negative control showed that
+  parent-only termination leaves the child alive; the measured handler cannot
+  kill the child itself. The production runner was not changed without evidence.
+  Combined focused validation passed 49 tests / 4 suites in 2.819 s. The full
+  package then passed **1,549 tests / 146 suites in 24.818 s**, with one intentional
+  known timeout-injection issue; the settings view-model harness passed again.
+- Real installed UI showed model Auto/Mac/PC persistence, exact context/output
+  budgets and working Settings while a legitimate Keychain prompt was pending.
+  Inspection then found clipped popover content and missing semantic button names.
+  Constrained the content inside the existing 330-point viewport, used a small
+  segmented control, wrapped captions and supplied explicit labels/identifiers.
+  A visible synthetic production-view preview passed; final installed verification
+  remains required. Earlier clipped screenshots are marked historical.
+- Requested Mail automation through Evie's own guide and accepted only its OS
+  permission alert. Fresh Launch Services audit confirmed all five core grants
+  plus Mail and Calendar OSStatus 0. A direct Mach-O diagnostic initially inherited
+  the CLI's different responsible process; that result was not treated as app TCC.
+  No Terminal grants, Keychain password interactions or personal data reads.
+- Re-ran the local launcher boundary harness with the actual AppKit host: real
+  process/authenticated HTTP/MLX cache bootstrap, profile reconciliation, foreign
+  listener preservation and strict ESRCH cleanup passed. The final full suite and
+  hosted rerun are separate gates recorded in the current status/ledger.
+
+
 ## 2026-10-17 — bounded Mail, enhanced native voice and responsive Keychain status
 
 - Reproduced Mail's unbounded inbox materialization under the real application;
@@ -34,6 +72,9 @@
   fixture's pixels, a named clipboard and the bounded executor. The independent
   readback oracle never supplies the answer to the model. Actual final execution
   remains a gate; the earlier deterministic pipeline is reported separately.
+- Added the real settings view-model harness to the full-package CI job, so
+  concurrent persistence and blocked-Keychain responsiveness remain checked on
+  the hosted Xcode runner, without personal credentials or network.
 - Reconciled the current README's provider privacy and enabled defaults, marked
   older project-status checkpoints historical and added sanitized enhanced-voice
   evidence. Eleven modified shell scripts passed syntax checks; relative Markdown

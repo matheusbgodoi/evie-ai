@@ -166,6 +166,30 @@ conversation's old pin, so the next answer follows the choice; history is
 preserved. The app-session choice goes through `EvieBrainResolver.choose(_:)`.
 Enabling agent mode permits requested sessions; it does not continuously act.
 
+The icon-only brain button has the spoken label “Cérebro e controles da Evie”
+and stable identifier `evie-brain-controls`. Each model option supplies its full
+spoken title, selection trait and `evie-brain-choice-<choice>` identifier. The
+installed UI check must resolve these controls semantically rather than by
+their position; an older candidate exposed only the SF Symbol identifier and
+unnamed model buttons. This accessibility correction requires the rebuilt
+candidate's AX check before it is reported as verified.
+
+The popover keeps a 330-point viewport with 18-point readable insets. Its
+content width is constrained separately from the scroll view: the native
+reasoning picker uses the small control size, and explanatory text wraps
+vertically. An installed-candidate capture exposed clipped left/right content
+with the earlier unconstrained stack; that capture is failure evidence, not
+an approved layout. The corrected layout must be checked in a visible owned
+window because offscreen bitmap caching does not capture these native controls
+reliably.
+
+On 2026-10-17 a standalone Swift 6 build using the real `BrainControlsView`
+and synthetic model data passed warnings-as-errors. Its visible owned-window
+[layout capture](images/apple-visual/brain-controls-context-fixed.png) shows
+normal and compacting controls with complete insets, wrapped captions and
+unclipped token limits. This checks layout; the installed popover and AX labels
+are checked separately after packaging.
+
 Every answer card names its model and place beside "RESPOSTA", quietly
 ("Qwen 3.8 · no seu PC"); a card restored from history does not know it and
 shows nothing.
