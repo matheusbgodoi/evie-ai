@@ -288,3 +288,35 @@ every other read, with a 16 MiB ceiling that refuses a larger file whole rather
 than truncating it into a corrupt one. A scanned PDF has no text layer and is
 reported as such; reading its pixels stays `EvieDocumentReader`'s job, on an
 attached file.
+
+## Writing a new document — implemented 2026-10-16
+
+`propose_document(title, format, destination, subfolder?, content)` is the one
+way Evie writes a document, and it writes nothing: `EvieDocumentTool` turns the
+call into an `EvieDocumentProposal` and the shell draws a card with the file
+name, the place ("Mesa › Faculdade") and a preview, and two buttons, **Salvar**
+and **Salvar e abrir**. `destination` is `mesa`, `documentos`, `downloads` or a
+root identifier, resolved again against the folders granted at the moment of the
+press. `content` is Markdown.
+
+- **Formats.** `.md` as written, `.txt` without the Markdown, `.rtf` and `.docx`
+  through `NSAttributedString`'s own writers (`.officeOpenXML` for Word), and
+  `.pdf` laid out on A4 with Core Text, with a real text layer
+  (`EvieDocumentRenderer`). Arial 12, headings, lists, bold, italic, links.
+  Verified 2026-10-16: the `.docx` is an Office Open XML zip whose every part
+  parses as XML, `file` reports "Microsoft Word 2007+", and reading it back with
+  `NSAttributedString` returns the text with the bold run still bold
+  (`EvieDocumentCreatorTests`). Opening it in Word or Pages was not tried on
+  this Mac.
+- **Never an existing file.** `EvieDocumentCreator` opens the file with
+  `O_CREAT | O_EXCL`, so the kernel refuses a taken name; it then tries
+  "nome (2).ext", "nome (3).ext", up to 99. An existing symlink with the name
+  counts as taken and is never followed.
+- **Inside the folder.** Every directory is opened from a descriptor for the root
+  with `O_RESOLVE_BENEATH | O_NOFOLLOW_ANY`; a missing subfolder shown on the
+  card is created with `mkdirat`; `..`, absolute paths and denied names are
+  refused before any syscall. A half-written file is the only thing ever
+  removed.
+- **Bounded.** 200,000 characters of content, 100 characters of name, and a card
+  good for fifteen minutes — the ADR 0009 ceiling. A new file destroys nothing,
+  so it gets longer than a move's two minutes.

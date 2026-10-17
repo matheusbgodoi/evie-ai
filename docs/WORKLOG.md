@@ -4301,3 +4301,21 @@ nobody but the owner can fetch it.**
   'EvieSuggestedRootTests|EvieFolderAnalysisTests|EvieFileToolboxDocumentTests|EvieFileToolboxTests|EvieScopedFileReader'`
   — 67 tests passed. Fixtures live under the temporary directory; a stand-in
   home is a fresh folder, never the real Desktop.
+
+## 2026-10-16 — documents: propose_document, rendering, new-file-only creation
+
+- `EvieDocumentProposal` / `EvieDocumentTool` (`propose_document`), with format
+  inference from the title, subfolder validation and fifteen-minute expiry.
+- `EvieDocumentRenderer`: `.md`, `.txt`, `.rtf` and `.docx` through
+  `NSAttributedString` (`.officeOpenXML`), `.pdf` through Core Text on A4.
+- `EvieDocumentCreator`: `O_CREAT | O_EXCL` beneath a root descriptor, "nome
+  (2).ext" on a clash, missing subfolders created with `mkdirat`.
+- `EvieDocumentIntent`: the person's own "salva / salve / grava / cria um
+  arquivo", negation-aware, for the opt-in direct save (ADR 0019, shell commit).
+- Verified the Word file outside the tests: `unzip -l` shows
+  `[Content_Types].xml`, `word/document.xml`, `docProps/*`; Python's `zipfile`
+  test passes and every XML part parses; `file` says "Microsoft Word 2007+";
+  `textutil -info` reads the title. Word and Pages were not launched.
+- Checks: `swift build` clean; `Scripts/test --filter
+  'EvieDocumentProposalTests|EvieDocumentIntentTests|EvieDocumentCreatorTests'`
+  — 16 tests passed.
