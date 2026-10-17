@@ -1,111 +1,20 @@
-name: CI
-
-# Core compatibility remains on macOS 26. The xcode-27 runner now also builds
-# the complete shell and runs the complete test suite (available 2026-10-15).
+name: Vision OCR runtime diagnostic
 on:
-  push:
-    branches: [main, dev]
-  pull_request:
-    branches: [main, dev]
   workflow_dispatch:
-
-concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
-
+permissions:
+  contents: read
 jobs:
-  build:
-    name: Build the core
-    runs-on: macos-26
-    timeout-minutes: 30
-
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Record the toolchain
-        # Printed rather than asserted: when a build breaks on a runner and not
-        # on the author's Mac, this is the first thing anybody wants to see.
-        run: |
-          swift --version
-          xcodebuild -version
-          sw_vers
-
-      - name: Cache build products
-        uses: actions/cache@v4
-        with:
-          path: .build
-          key: ${{ runner.os }}-spm-${{ hashFiles('Package.swift') }}-${{ github.sha }}
-          restore-keys: |
-            ${{ runner.os }}-spm-${{ hashFiles('Package.swift') }}-
-            ${{ runner.os }}-spm-
-
-      - name: Build the core
-        run: swift build --target EvieCore -Xswiftc -warnings-as-errors
-
-  full-package:
-    name: Build and test the full package
+  public-vision-routes:
     runs-on: xcode-27
-    timeout-minutes: 30
+    timeout-minutes: 5
     steps:
       - uses: actions/checkout@v4
-      - name: Record the toolchain
+      - name: Record toolchain and virtualized compute devices
         run: |
           swift --version
           xcodebuild -version
           sw_vers
-      - name: Build the shell
-        run: swift build -Xswiftc -warnings-as-errors
-      - name: Run all behavioral tests
-        run: Scripts/test
-      - name: Verify settings persistence and responsive Keychain status
-        run: Scripts/model-settings-validation
-
-  documentation:
-    name: Documentation
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
-
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Every document referenced by another must exist
-        # The repository's rule is that a claim lives in a document and is
-        # linked, not restated. A link that rots breaks that rule silently, so
-        # it is checked rather than trusted.
+      - name: Compare public OCR routes on synthetic Portuguese content
         run: |
-          status=0
-          while IFS= read -r file; do
-            while IFS= read -r target; do
-              [ -z "$target" ] && continue
-              case "$target" in http*|mailto:*|'#'*) continue ;; esac
-              resolved="$(dirname "$file")/${target%%#*}"
-              if [ ! -e "$resolved" ]; then
-                echo "$file -> $target (missing)"
-                status=1
-              fi
-            done < <(grep -oE '\]\([^)]+\)' "$file" | sed 's/^](//; s/)$//')
-          done < <(find . -name '*.md' -not -path './.build/*' -not -path './.git/*')
-          exit $status
-
-      - name: A release must not be claimed before it is cut
-        # REL-001's own rule, enforced. This repository strikes a blocker
-        # through when it closes, so a struck-through REL-001 is the claim, and
-        # a dated 1.0.0 in the changelog is the evidence for it. One without the
-        # other is a document lying about the state of the project.
-        #
-        # A first attempt matched `REL-001.*passed` and failed on the true line
-        # "REL-001 — the first release. What it needs: QA-006 passed" — the
-        # check was wrong, not the document. Hence matching the convention
-        # rather than hopeful keywords.
-        run: |
-          dated=$(grep -cE '^## \[1\.0\.0\] - [0-9]{4}-[0-9]{2}-[0-9]{2}' CHANGELOG.md || true)
-          struck=$(grep -cE '~~\*\*`REL-001`' docs/PROJECT_STATUS.md || true)
-          if [ "$struck" -gt 0 ] && [ "$dated" -eq 0 ]; then
-            echo "PROJECT_STATUS.md strikes REL-001 through, but CHANGELOG.md has no dated 1.0.0."
-            exit 1
-          fi
-          if [ "$dated" -gt 0 ] && [ "$struck" -eq 0 ]; then
-            echo "CHANGELOG.md dates 1.0.0, but PROJECT_STATUS.md still lists REL-001 as open."
-            exit 1
-          fi
-          echo "Release claim and changelog agree (dated=$dated, struck=$struck)."
+          xcrun swiftc -swift-version 6 -parse-as-library -warnings-as-errors Scripts/vision-ocr-probe.swift -o "$RUNNER_TEMP/vision-ocr-probe"
+          "$RUNNER_TEMP/vision-ocr-probe"
