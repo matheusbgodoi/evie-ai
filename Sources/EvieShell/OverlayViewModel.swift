@@ -218,6 +218,13 @@ final class OverlayViewModel: ObservableObject {
   var pendingSkills: [UUID: EvieSkill] = [:]
   var pendingEvents: [UUID: EvieCalendarEventProposal] = [:]
   var pendingMail: [UUID: EvieMailProposal] = [:]
+  /// Folder suggestions, documents and saved files waiting on a button
+  /// (`OverlayViewModel+Documents`).
+  var fileCards = EvieFileCards()
+  /// Grants one well-known folder after "Permitir". Set by the coordinator.
+  var grantSuggestedRoot: (@MainActor (EvieSuggestedRoot) -> Bool)?
+  /// "Salvar direto quando eu pedir explicitamente", read when he asks.
+  var savesDocumentsWhenAsked: @MainActor () -> Bool = { false }
   let visionDescriber = EvieVisionDescriber()
   /// Looks at the screen: permission, the presence glow, the capture. Set by
   /// the coordinator; `nil` in a build that cannot capture.
@@ -981,6 +988,9 @@ final class OverlayViewModel: ObservableObject {
     // Read from his own message, not from the model's decision: a proposal that
     // came out of a document must still stop at a button.
     let heAskedForAChange = EvieChangeIntent.isPresent(in: prompt)
+    // The same rule for a new document (ADR 0019): his own words, and the
+    // switch read now, when he asks.
+    let heAskedToSave = savesDocumentsWhenAsked() && EvieDocumentIntent.isPresent(in: prompt)
 
     // `/plano` is a different shape of turn: several model calls in a row rather
     // than one, minutes rather than seconds. It is a typed command and never a
@@ -1060,7 +1070,9 @@ final class OverlayViewModel: ObservableObject {
       web: web,
       apps: apps,
       offersChanges: changePolicy.offers,
-      autoApprovesChanges: changePolicy.autoApproves && heAskedForAChange
+      autoApprovesChanges: changePolicy.autoApproves && heAskedForAChange,
+      asksAboutFiles: EvieFileIntent.isPresent(in: prompt),
+      savesDocumentsDirectly: heAskedToSave
     )
     requestTask = Task { @MainActor [weak self] in
       guard let self else { return }
@@ -1148,6 +1160,7 @@ final class OverlayViewModel: ObservableObject {
     // Closing the wake question is a no; leaving the turn waiting on a card
     // that is gone would hang it.
     settleWake(id, accepted: false)
+    dismissFileCard(id)
     // Closing a confirmation is a no; closing the session card starts nothing.
     dismissComputerUseCard(id)
     artifacts.removeAll { $0.id == id }
@@ -1166,6 +1179,10 @@ final class OverlayViewModel: ObservableObject {
 
     if action.id.hasPrefix("brain-wake:") || action.id.hasPrefix("brain-stay:") {
       settleWake(id, accepted: action.id.hasPrefix("brain-wake:"))
+      return
+    }
+
+    if handleFileCardAction(id, action: action) {
       return
     }
 

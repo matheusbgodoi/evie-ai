@@ -22,6 +22,10 @@ final class EvieRootsViewModel: ObservableObject {
   var canChangeFiles = false
   var autoApprovesChanges = false
   var onPolicyChanged: (@MainActor (_ canChange: Bool, _ autoApprove: Bool) -> Void)?
+  /// "Salvar direto quando eu pedir explicitamente" (ADR 0019), read and
+  /// written like the two switches above. See `DocumentSettingsSection`.
+  var savesDocumentsWhenAsked = false
+  var onDocumentPolicyChanged: (@MainActor (_ savesWhenAsked: Bool) -> Void)?
 
   func setCanChangeFiles(_ enabled: Bool) {
     canChangeFiles = enabled
@@ -88,7 +92,7 @@ final class EvieRootsViewModel: ObservableObject {
     panel.prompt = "Autorizar"
     panel.message = """
       Escolha uma pasta que a Evie pode ler. Ela só enxerga o que estiver dentro \
-      das pastas autorizadas, e nunca escreve nem apaga nada.
+      das pastas autorizadas, e só cria, move ou apaga algo com um clique seu.
       """
 
     // The window the person is looking at. Falls back to running modally only
@@ -114,12 +118,12 @@ final class EvieRootsViewModel: ObservableObject {
   ///
   /// Separated from the panel so the decision can be tested without a window on
   /// screen.
-  func add(_ url: URL) {
+  func add(_ url: URL, displayName: String? = nil) {
     let isHome =
       EvieRootRegistry.canonicalPath(url.path)
       == EvieRootRegistry.canonicalPath(Self.homeURL.path)
     let root = EvieFileRoot(
-      displayName: isHome ? "Toda a minha pasta pessoal" : url.lastPathComponent,
+      displayName: isHome ? "Toda a minha pasta pessoal" : displayName ?? url.lastPathComponent,
       path: url.path,
       // Not security-scoped: Evie is not sandboxed, so a plain bookmark is what
       // applies here. It buys resilience to the folder being renamed or moved,

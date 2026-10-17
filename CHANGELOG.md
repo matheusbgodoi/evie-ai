@@ -30,6 +30,21 @@ ADRs 0013–0018 record the decisions.
 
 ### Added
 
+- **Files and documents, like an everyday command-line agent** (branch
+  `v2-files`, ADR 0019). Mesa, Documentos, Downloads and the iCloud Obsidian
+  vault are offered as one-click cards — "Permitir que a Evie leia sua Mesa" —
+  when you ask about them, in the first-run guide and in Configurações › Pastas;
+  never granted silently, and macOS asks once per folder. `analyze_folder`
+  gives a counted overview of a folder (kinds, sizes, newest and oldest, names,
+  the opening of a few documents); `read_file` reads PDF, Word, RTF and ODT.
+  `propose_document` writes a new `.md`, `.txt`, `.rtf`, `.docx` or `.pdf` and
+  shows a card with Salvar and Salvar e abrir; a taken name becomes "nome
+  (2).ext" and nothing is ever overwritten. The opt-in "Salvar direto quando eu
+  pedir explicitamente" (off) skips the click only for a new file your own
+  message asked to save. `open_file` opens documents in their default app and
+  `reveal_in_finder` shows a file, both inside authorised folders and on the
+  transcript. File requests — "o que tem na minha mesa?", "analisa a pasta
+  Downloads" — reach the tools even with nothing granted.
 - **Evie can control the Mac when asked** (v2 S5d, ADR 0016). Say or type an
   instruction — "abre o Notas e escreve…", "clica em…", "cola isso no…",
   "digita…" — or choose "Controlar o Mac…" in the menu bar, and an amber card

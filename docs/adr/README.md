@@ -13,7 +13,7 @@ supersede rather than silently rewrite them when the decision changes.
 | [0006](0006-direct-turbo-vertical-slice.md) | Backend-neutral core with direct TurboFieldfare prototype adapter | Accepted for VS-001; superseded in part by 0013 |
 | [0007](0007-local-development-runtime.md) | Pinned local development runtime outside Git | Accepted for first-test development |
 | [0008](0008-local-conversation-history.md) | Local visible conversation history before Hermes | Accepted for native-shell prototype |
-| [0009](0009-nominal-capability-authority.md) | Nominal read/propose/commit with process-local authority | Accepted for policy-broker foundation; amended by 0016 |
+| [0009](0009-nominal-capability-authority.md) | Nominal read/propose/commit with process-local authority | Accepted for policy-broker foundation; amended by 0016 and 0019 |
 | [0010](0010-refuse-unseen-mail-recipients.md) | Refuse a recipient the conversation never contained | Accepted for `propose_mail` |
 | [0011](0011-draft-beside-send.md) | A draft button beside the send button | Accepted for `propose_mail` |
 | [0012](0012-fused-local-retrieval.md) | Retrieval by three fused signals over a cached local embedding | Accepted for the shipped retrieval path |
@@ -23,3 +23,4 @@ supersede rather than silently rewrite them when the decision changes.
 | [0016](0016-in-process-computer-use-executor-under-agent-mode-grant.md) | An in-process computer-use executor under an agent-mode grant | Accepted for Evie v2 (S5a–S5d implemented; manual QA open); amends 0009 |
 | [0017](0017-per-launch-key-for-the-local-brain.md) | A per-launch key for the local brain | Accepted for Evie v2; supersedes 0013 and 0015 in part |
 | [0018](0018-agent-mode-switch-on-by-default.md) | Agent mode behind a Settings switch, on by default | Accepted for Evie v2 (S5c); amends the design's S5c flag |
+| [0019](0019-saving-a-new-document-when-asked.md) | Saving a new document when asked, and opening files without a card | Accepted (branch `v2-files`); amends 0009 narrowly |

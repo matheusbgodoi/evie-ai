@@ -436,6 +436,25 @@ struct EviePreferencesStoreTests {
     #expect(relaunched.preferences == preferences)
   }
 
+  @Test("saving documents directly starts off, survives a relaunch, and is off in older files")
+  func directSavePersists() throws {
+    #expect(!EviePreferences().savesDocumentsWhenAsked)
+    let fileURL = temporaryFileURL()
+    var preferences = EviePreferences()
+    preferences.savesDocumentsWhenAsked = true
+
+    try EviePreferencesStore(fileURL: fileURL).save(preferences)
+    let relaunched = EviePreferencesStore(fileURL: fileURL).loadWithDiagnostics()
+    #expect(relaunched.preferences.savesDocumentsWhenAsked)
+    #expect(relaunched.preferences == preferences)
+
+    let older = temporaryFileURL()
+    try FileManager.default.createDirectory(
+      at: older.deletingLastPathComponent(), withIntermediateDirectories: true)
+    try Data(#"{"schema_version": 1, "auto_approve_changes": true}"#.utf8).write(to: older)
+    #expect(!EviePreferencesStore(fileURL: older).loadWithDiagnostics().preferences.savesDocumentsWhenAsked)
+  }
+
   @Test("a file written before the agent-mode switch existed reads it as off")
   func computerUseSwitchDefaultsOnInOlderFiles() throws {
     let fileURL = temporaryFileURL()

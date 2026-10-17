@@ -1,9 +1,15 @@
 # Reaching the Mac
 
 Status: **reading works end to end.** A folder is granted in Settings > Pastas,
-Evie is offered five read-only tools, and she chains them to answer. Verified
+Evie is offered seven read-only tools, and she chains them to answer. Verified
 against the running model on 5 August 2026 — see "What was measured" below.
-Nothing writes, moves, or deletes; that remains unbuilt by design.
+
+Updated 2026-10-16 (branch `v2-files`): moving, renaming and the Trash exist as
+proposals behind their own switch; new documents (`propose_document`), opening
+and revealing files, `analyze_folder`, document text in `read_file`, and the
+well-known folders as one-click suggestions are described in the sections at the
+end, and ADR 0019 records the policy. The "Order of work" list below is the
+August plan and is kept as written.
 
 This is the design for `SEC-002`, `INT-008`, `WRT-003`, and `POL-001`–`POL-003`.
 It exists because the user asked for something specific: Evie should be able to

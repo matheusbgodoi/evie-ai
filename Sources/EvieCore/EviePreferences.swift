@@ -55,6 +55,14 @@ public struct EviePreferences: Codable, Hashable, Sendable {
   /// injection is mitigated by code policy, not eliminated, and its Começar
   /// is the acceptance. Off by default; nothing but that click sets it.
   public var computerUseConsentGiven: Bool
+  /// "Salvar direto quando eu pedir explicitamente" (ADR 0019).
+  ///
+  /// Off by default. On, a NEW document in a folder already granted may be
+  /// written without its card being clicked — but only when the person's own
+  /// message asked to save it, and never with a picture in the request. It
+  /// never covers an overwrite, a move or the Trash, which still go through
+  /// their own cards, and every save it makes is reported on screen.
+  public var savesDocumentsWhenAsked: Bool
 
   public init(
     appearance: EvieAppearancePreferences = EvieAppearancePreferences(),
@@ -65,7 +73,8 @@ public struct EviePreferences: Codable, Hashable, Sendable {
     webSearchEnabled: Bool = false,
     mailAndCalendarEnabled: Bool = false,
     computerUseEnabled: Bool = false,
-    computerUseConsentGiven: Bool = false
+    computerUseConsentGiven: Bool = false,
+    savesDocumentsWhenAsked: Bool = false
   ) {
     self.appearance = appearance
     self.shortcuts = shortcuts
@@ -76,6 +85,7 @@ public struct EviePreferences: Codable, Hashable, Sendable {
     self.mailAndCalendarEnabled = mailAndCalendarEnabled
     self.computerUseEnabled = computerUseEnabled
     self.computerUseConsentGiven = computerUseConsentGiven
+    self.savesDocumentsWhenAsked = savesDocumentsWhenAsked
   }
 
   /// Written out by hand rather than left to `convertFromSnakeCase`, for the
@@ -92,6 +102,7 @@ public struct EviePreferences: Codable, Hashable, Sendable {
     case mailAndCalendarEnabled = "mail_and_calendar_enabled"
     case computerUseEnabled = "computer_use_enabled"
     case computerUseConsentGiven = "computer_use_consent_given"
+    case savesDocumentsWhenAsked = "saves_documents_when_asked"
   }
 
   /// Every field optional, for the same reason as the sections below: a missing
@@ -119,6 +130,8 @@ public struct EviePreferences: Codable, Hashable, Sendable {
       try container.decodeIfPresent(Bool.self, forKey: .computerUseEnabled) ?? true
     computerUseConsentGiven =
       try container.decodeIfPresent(Bool.self, forKey: .computerUseConsentGiven) ?? false
+    savesDocumentsWhenAsked =
+      try container.decodeIfPresent(Bool.self, forKey: .savesDocumentsWhenAsked) ?? false
   }
 
   /// Turning changes off must also clear the bypass, or the file keeps a switch

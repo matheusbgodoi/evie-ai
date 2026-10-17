@@ -4390,3 +4390,37 @@ nobody but the owner can fetch it.**
   the image one.
 - Checks: `Scripts/test --filter 'EvieOpenTool|EvieAgentLoopFile'` — 16 tests
   passed.
+
+## 2026-10-16 — shell: folder cards, document cards, direct save, settings hook
+
+- `OverlayViewModel+Documents.swift`: `presentFileOutcome` turns a loop's
+  `documentProposals`, `rootRequests` and `fileActions` (plus folders the
+  person's own message mentions) into cards — "Permitir que a Evie leia sua
+  Mesa" (Permitir), "Salvar resumo.docx" (Salvar, Salvar e abrir), "Salvei…"
+  (Abrir, Mostrar no Finder), "Abri…". A document for an ungranted folder is
+  held until Permitir, then shown as a card, never saved directly. Closing a
+  card is a no. `EvieWorkspaceOpener` is the `NSWorkspace` side of
+  `EvieFileOpening`.
+- Hooks kept small for the Settings redesign merge: three stored properties in
+  `OverlayViewModel`, one line each in `performArtifactAction`,
+  `dismissArtifact` and `finishLoop`; two fields on `PreparedTurn`; the loop in
+  `answer` gets the home folder, documents and the opener.
+- `EviePreferences.savesDocumentsWhenAsked` (`saves_documents_when_asked`, off);
+  `EvieRootsViewModel` gains the switch, `suggestedRoots` and
+  `grantSuggested` (lists the folder once off the main thread so the macOS
+  prompt appears at the press); `add(_:displayName:)`.
+- `Views/DocumentSettingsSection.swift`: `SuggestedFoldersSection` and
+  `DocumentSettingsSection`, embedded in `RootsSettingsView` with one line;
+  `PermissionGuideView` shows the suggestions on first launch
+  (`folders:` passed only by the guide window). Copy that said she "nunca
+  escreve" corrected.
+- `AppCoordinator`: `worksWithDocuments` on, the grant and policy callbacks.
+- ADR 0019 (amends 0009 narrowly); `SECURITY.md`, `FILESYSTEM.md`, README
+  "What she does", CHANGELOG, PROJECT_STATUS updated.
+- Checks: `swift build` (whole package) with no warnings; full `Scripts/test`
+  — 1414 tests in 129 suites passed, 1 known issue (the existing Mail one); base
+  was 1351. Not run: the installed app (the owner is using it), so the cards,
+  the TCC prompts and Word/Pages opening the `.docx` are manual QA owed.
+- Next: merge `v2-files` into `v2` after the Settings sidebar lands, moving the
+  one-line `DocumentSettingsSection` embed into "Arquivos e pastas"; then the
+  manual QA in PROJECT_STATUS.

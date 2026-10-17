@@ -99,7 +99,13 @@ having written nothing. What is true today:
 - **Filesystem**: read inside folders the user authorised, contained by the kernel
   rather than by path-string checks. Writing exists and proposes: the tool the
   model calls performs nothing, and a person presses the button. Deleting means
-  the Trash.
+  the Trash. Since ADR 0019 (2026-10-16): a new document (`propose_document`)
+  is a card with Salvar, or — only under the opt-in "Salvar direto quando eu
+  pedir explicitamente", when the person's own message asked to save — a new
+  file written by the shell after the turn; it never overwrites. `open_file` and
+  `reveal_in_finder` act without a card, inside authorised folders, opening
+  only documents from an allowlist. Mesa, Documentos, Downloads and the
+  Obsidian vault can be granted by a one-click card the person presses.
 - **Web**: off by default, and the one switch in the application that changes what
   leaves the Mac. Addresses that are not the public web — loopback, private
   ranges, `.local`, the cloud metadata endpoint — are refused before any request
@@ -129,7 +135,10 @@ having written nothing. What is true today:
   item and the host it was saved for, never the token. See "Model transport"
   below.
 
-The invariant that has not moved: no tool the model can call changes anything.
+The invariant that has not moved: no tool the model can call changes a file.
+Opening a document or revealing it in the Finder changes what is on the screen,
+not what is on the disk (ADR 0019), and a document saved directly is written by
+the shell from the person's own request, after the tool returned.
 Creating a calendar event did not move it, and neither did sending mail —
 `propose_event` and `propose_mail` both perform nothing, and the functions that
 write and send are not reachable from the loop.
@@ -660,6 +669,47 @@ The Automation consent prompt itself was not observed. The terminal used for
 verification already held the grant, and every attempt to provoke a refusal was
 authorised too; the -1743 path is covered by unit tests against the Portuguese
 and English wording rather than by having been seen (`1932f5a`).
+
+### Documents, opening, and the folders a click away (ADR 0019)
+
+Implemented 2026-10-16 on branch `v2-files`. The boundary, each line enforced
+in code and covered by `EvieCoreTests`:
+
+- **Read.** `analyze_folder` and `read_file` on PDF, DOCX, DOC, RTF and ODT read
+  through `EvieScopedFileReader` (`openat`, `O_RESOLVE_BENEATH`,
+  `O_NOFOLLOW_ANY`, 16 MiB ceiling). Extracted text is untrusted content and is
+  labelled as such in the overview.
+- **The denylist is folded.** `isDenied` compares names after NFC composition
+  and case, width and diacritic folding, because APFS opens `.SSH` as `.ssh`.
+  Every caller — reader, file writer, document creator — inherits it.
+- **Propose.** `propose_document` records a proposal. The card shows the file
+  name, the place and a preview; Salvar and Salvar e abrir are the only ways a
+  file is written, except under the policy below. Destinations are resolved
+  again at the press against the folders granted then.
+- **Commit, new files only.** `EvieDocumentCreator` opens the file with
+  `O_CREAT | O_EXCL` beneath a root descriptor and walks subfolders with
+  `O_RESOLVE_BENEATH | O_NOFOLLOW_ANY`, creating a missing one with `mkdirat`.
+  A taken name becomes "nome (2).ext"; a symlink with the name counts as taken.
+  Expiry is fifteen minutes.
+- **The one standing policy.** Off by default. On, a new document is saved
+  without its card only when the person's own prompt asks to save
+  (`EvieDocumentIntent`), no picture rides in the request, and the folder was
+  granted before the turn. Overwrites, moves, renames and the Trash are never
+  covered; text from documents, pages, mail or the screen never counts. Each
+  direct save is reported on screen.
+- **Open and reveal.** No card, three limits: inside a granted folder; only
+  documents (an allowlist of extensions, and for others only PDF, image,
+  audio/video or plain-text types that are not executable, bundle, package,
+  application, script, source code or web content); and a transcript line.
+  HTML, SVG, XML and web archives are reveal-only, since a browser runs their
+  script. Known gap: the check and the `NSWorkspace` call are two steps.
+- **Grant.** Four fixed folders may be granted by a card the person presses; the
+  model's alias can only draw the card. `NSOpenPanel` remains the only way to
+  grant anything else. The shell lists the folder once after the grant so the
+  macOS prompt appears while the person is looking.
+- **Who gets the tools.** Only the shell's own turns: `EvieFileToolbox.home`,
+  `offersDocuments` and the opener are unset for schedules, `/plano` and the
+  diagnostics, so those see no alias and cannot write or open anything.
 
 ### Scheduled runs
 

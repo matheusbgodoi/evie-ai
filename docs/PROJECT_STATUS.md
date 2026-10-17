@@ -12,6 +12,25 @@ queued-security fixes listed in the WORKLOG. Full `Scripts/test` on 2026-10-16
 (M5 24 GB, macOS 27.2, Xcode 27.1): 1351 tests in 120 suites passed, 1 known
 issue. ADRs 0013–0018 record the durable decisions.
 
+### Branch `v2-files`: files and documents (2026-10-16)
+
+Built in the worktree `evie-ai-files` from `v2` at `b97686a`, not yet merged.
+Evie works like a command-line agent for everyday file tasks inside the same
+authority model (ADR 0019): Mesa, Documentos, Downloads and the iCloud Obsidian
+vault as one-click grants (card, first-run guide, Settings); `analyze_folder`;
+document text in `read_file`; `propose_document` (`.md`, `.txt`, `.rtf`,
+`.docx`, `.pdf`, new files only, Salvar / Salvar e abrir) with the opt-in
+"Salvar direto quando eu pedir explicitamente"; `open_file` (documents only,
+from an allowlist) and `reveal_in_finder`; file requests routed to the tools
+with nothing granted. Three security findings from review fixed on the branch
+(folded denylist; `open_file` allowlist; no `public.content` fallback). Full
+`Scripts/test`: 1414 tests in 129 suites passed, 1 known issue (the existing
+Mail one). **Owed:** manual QA on the installed app — the grant card and the
+macOS prompt for each TCC folder, a `.docx` opened in Word and Pages, direct
+save on and off, and a real model turn for each of the five routing requests.
+Settings hook for the sidebar redesign: embed
+`DocumentSettingsSection(viewModel: rootsViewModel)` in "Arquivos e pastas".
+
 ### What is done
 
 - **The PC is the default brain.** `qwen-daily` on the owner's RTX 3090,

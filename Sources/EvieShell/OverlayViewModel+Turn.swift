@@ -604,7 +604,8 @@ extension OverlayViewModel {
     _ outcome: EvieAgentLoop.Outcome,
     requestID: UUID,
     userMessage: ChatMessage,
-    autoApproveChanges: Bool = false
+    autoApproveChanges: Bool = false,
+    savesDocumentsDirectly: Bool = false
   ) {
     guard activeRequestID == requestID else {
       return
@@ -647,6 +648,10 @@ extension OverlayViewModel {
         presentChangeProposal(change)
       }
     }
+    // Documents, folders to permit and files opened. Never routed through
+    // `autoApproveChanges`: a document has its own, narrower policy.
+    presentFileOutcome(
+      outcome, question: userMessage.content, savesDirectly: savesDocumentsDirectly)
     onAnswerReady?(EvieRichText(answer))
     if conversation.count == 1 {
       activeConversationTitle = Self.title(for: userMessage.content)
@@ -1000,6 +1005,12 @@ struct PreparedTurn {
   let apps: (any EvieMailCalendarReading)?
   let offersChanges: Bool
   let autoApprovesChanges: Bool
+  /// `EvieFileIntent`: the question is about his files, so it goes to the
+  /// tools even with no folder granted.
+  let asksAboutFiles: Bool
+  /// His own message asked to save and the switch is on (ADR 0019); a
+  /// picture in the request still cancels it.
+  let savesDocumentsDirectly: Bool
 }
 
 extension OverlayViewModel {
@@ -1068,7 +1079,8 @@ extension OverlayViewModel {
       searchesTheWeb: turn.web != nil,
       readsMailAndCalendar: turn.apps != nil,
       looksAtScreen: looking,
-      carriesPicture: carriesPicture
+      carriesPicture: carriesPicture,
+      asksAboutFiles: turn.asksAboutFiles
     ) {
     case .directStream:
       // Pinned at submit time, like the rest of the turn: a spoken question
@@ -1083,16 +1095,22 @@ extension OverlayViewModel {
       }
 
     case .agentLoop(let offersTools):
+      let savesDirectly = EvieTurnPlan.savesDocumentsDirectly(
+        turn.savesDocumentsDirectly, carriesPicture: carriesPicture)
       // Captured weakly: the loop's callback is `@Sendable` and runs off this
       // actor.
       let outcome = try await EvieAgentLoop(
+        toolbox: EvieFileToolbox(home: Self.homeURL),
         web: turn.web,
         mailAndCalendar: offersTools ? turn.apps : nil,
         vault: retrieveFromVault,
         offersChanges: turn.offersChanges,
         offersTools: offersTools,
         readiness: plan.readiness,
-        modelFamily: plan.profile.family
+        modelFamily: plan.profile.family,
+        offersDocuments: true,
+        savesDocumentsDirectly: savesDirectly,
+        opener: EvieWorkspaceOpener()
       ).run(
         messages: requestMessages,
         roots: turn.roots,
@@ -1107,7 +1125,8 @@ extension OverlayViewModel {
         requestID: requestID,
         userMessage: turn.userMessage,
         autoApproveChanges: EvieTurnPlan.autoApprovesChanges(
-          turn.autoApprovesChanges, carriesPicture: carriesPicture)
+          turn.autoApprovesChanges, carriesPicture: carriesPicture),
+        savesDocumentsDirectly: savesDirectly
       )
     }
   }
