@@ -6,6 +6,10 @@ All notable changes to Evie are documented here. Dates use `YYYY-MM-DD`.
 
 ### Final integration candidate — 2026-10-17
 
+- Hosted qualification passed all three jobs on public source ba17474: 1,556
+  tests across both phases, real settings/clipboard guards, fifteen voice
+  lifecycle cases, strict Xcode 27 shell/capture-driver compilation and docs.
+
 - Full-suite resource isolation executes every case once across regular parallel
   and timed OS phases. Timing assertions and internal concurrency are unchanged;
   no automatic retry. The finite CPU-load fixture no longer starts load during

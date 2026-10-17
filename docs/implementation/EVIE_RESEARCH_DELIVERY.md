@@ -4,6 +4,53 @@ Updated: 2026-10-17 (America/Sao_Paulo). This file is the continuation anchor.
 
 ## Current continuation snapshot — supersedes historical entries below
 
+**AUTHORITATIVE CURRENT HANDOFF — 2026-10-17:**
+
+- Production source is frozen at private source checkpoint51bd2c1 / sanitized
+  publicba17474. The current reporting commit changes docs only. Use git log/ref
+  discovery for its own ID; never push private worktree ancestry.
+- Hosted run39007625804 PASSED all three jobs: 1501+55=1556 Core cases,
+  9.659s+15.292s, same intentional Mail fixture; settings, 68-chord guards,
+  voice15 plus two causal controls; full shell38.90s; capture driver compile;
+  docs. Log `/tmp/evie-final-public-ci5.log`. Previous CI4 failure is resolved,
+  not omitted/retried; ADR0030 and actual causal load cleanup evidence apply.
+- Installed candidate6 remains SHA129d1878a0e0b948a35c26ee9e7b25ad989c0152b7102ab875fa57391a34cb7a.
+  All real native/voice/wake/three canonical Shortcuts and visual checks passed.
+  Old direct actions are absent from the catalog; 10 original shortcuts preserved.
+  Normal process93688 background, no overlay/review, synthetic draft clean.
+- Archive6 is ready, 6126290bytes, SHA87e60b1bc8b0bed3898b918157de4c4fcb01db98aed6348468ec4c558ff4db55;
+  strict unpacked signature and equality to installed executable passed.
+  No release has been created. Regenerate only if the production bundle changes.
+- Resource6 normal30s: 96.39MiB, 1.389% of one core. Earlier candidate5 Lens
+  10min unload and long context remain dated unchanged-runtime measurements.
+- REQUIRED OWNER ACTION is still outstanding: SecurityAgent has one legitimate
+  Keychain window. Only the owner may enter the password there and select
+  Always Allow. Never retrieve/bypass the secret or interact with the field.
+  No fresh final PC context/deterministic/real-agent test has been claimed.
+- Before any final release: owner grant → fresh installed --context-check →
+  Scripts/research-validation installedbundle → same --agent → record all actual
+  results/fix if needed → final release docs/CHANGELOG2.0.0 → sanitized public
+  snapshot/main with green CI → v2.0.0 tag/release archive+SHA → download/unpack/
+  strict signature/equality check → normal PC-ready → goal complete.
+- Original ~/Developer/evie-ai v2 remains clean and untouched; work stays in
+  ~/Developer/evie-ai-research. Public source may be published as a release
+  candidate while the owner gate is pending, but never claim the final tag or
+  release is complete. All agents are idle; no UI/model task is running.
+
+The snapshots below are historical and are superseded by this block.
+
+**LATEST COMMITTED AFTER TIMING FIX:**
+Private HEAD51bd2c13b0830c18c507fbf7e2b563b5aed791bf.
+Public deliveryba17474d11a29aa346377fd75a12dc8ec5712f20 singleparent8625934,
+exacttree26e098e669842af741c54112ec47818a3eb27e5f, no privateancestor.
+Full reachable1305blobs0private. Pushed ONLY v2-public-research.
+NEW CI5 run39007625804 queued:
+https://github.com/matheusbgodoi/evie-ai/actions/runs/39007625804
+Installed6binary/archive unchanged; allsourceproduction unchanged since79df.
+Next awaitCI5 actual (all1556phases +voice15/core harnesses +shellcapturecompile).
+OwnerKeychainpending; aftergrant finalPCcontext +researchdeterministic +--agent.
+No main/tag/release. Finaldocreleasecut/snapshot/mainCI/artifactupload stillgated.
+
 **LATEST LOCAL FIX/FREEZE AFTER CI4 (test tooling only):**
 NativefixtureRED20workers/3.021s onabandonment→GREEN0starts/allfinished0.006s.
 Finalfocused10TTS casesPASS2.795s, stress500ms/50ms/<2s unchanged. Onlytestfile.

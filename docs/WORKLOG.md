@@ -1,5 +1,23 @@
 # Work log
 
+## 2026-10-17 — hosted qualification and public source checkpoint
+
+- Public source ba17474 passed all three jobs in run39007625804. Core ran all
+  1,556 cases as 1,501 regular (9.659 s, intentional known Mail fixture) and
+  55 isolated timed cases (15.292 s). Settings/JSON, clipboard guards and all
+  fifteen exact voice-method cases passed; shell38.90 s and capture-driver
+  compilation plus documentation passed. No retries or weaker limits.
+- Recorded those actual results in current status, release draft and task ledger.
+  This reporting commit changes documentation only; installed executable and
+  qualified production/test/script code stay identical. The signed archive
+  unpacks with valid strict signature and equals the installed executable.
+- Public source publication remains separate from a final tag/release. The live
+  PC context and latest deterministic/real-agent form reruns require the owner
+  to authorize the legitimate macOS Keychain alert; it is still untouched.
+  Exact next action: owner enters the password directly in macOS and chooses
+  Always Allow, then run those three diagnostics before the final release cut.
+
+
 ## 2026-10-17 — isolate deadline fixtures from unrelated resource contention
 
 - Hosted candidate4 CI run39006928959 passed documentation and strict shell/

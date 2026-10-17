@@ -71,11 +71,13 @@ may lose details, and estimated tokens remain labeled as estimates. See
 [hardware qualification](docs/MODEL_TUNING.md) and
 [current release gates](docs/PROJECT_STATUS.md).
 
-The source candidate is being validated as one integrated package. The full
-suite, final signed bundle, resource measurements, installation and publication
-are recorded separately; this page does not claim those final steps completed.
-The [release notes draft](docs/releases/2.0.0.md) is updated with measured results
-before publication. Reproducible real-boundary regressions also cover
+The signed candidate is installed on the target Mac. All **1,556 behavioral
+tests** and all three [hosted CI jobs](https://github.com/matheusbgodoi/evie-ai/actions/runs/39007625804)
+passed; native voice, real Shortcuts and measured resource results are documented.
+This public source is a release candidate. Final live-PC verification needs the
+owner to authorize the legitimate macOS Keychain prompt; a final tag/release is
+not claimed before that gate. The [release notes draft](docs/releases/2.0.0.md)
+keeps the evidence and its scope. Reproducible real-boundary regressions also cover
 [settings persistence](docs/MODEL_SETTINGS_VALIDATION.md) and
 [local process reconfiguration](docs/LOCAL_BRAIN_VALIDATION.md).
 
