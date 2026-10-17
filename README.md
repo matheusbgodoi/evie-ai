@@ -78,7 +78,7 @@ before publication. Reproducible real-boundary regressions also cover
 [local process reconfiguration](docs/LOCAL_BRAIN_VALIDATION.md).
 
 The historical narrative below records earlier versions; current contracts are
-ADRs 0020–0027 and the current project-status entry. Versions distributed with
+ADRs 0020–0028 and the current project-status entry. Versions distributed with
 this repository's proprietary licence require the owner's written permission for
 third-party use; earlier grants and third-party terms remain intact.
 
@@ -981,15 +981,22 @@ integration.
 ```bash
 Scripts/evie-app build|identity|install|run|status|uninstall
 Scripts/test                                # the Swift test suite
+Scripts/test --core-only                    # every Core test; no Shell SDK requirement
 Scripts/evie-runtime status|start|stop|doctor|smoke
 Scripts/evie-voice   status|start|stop|voices|warm
 ```
 
-The gate every change passes is the whole of `Scripts/test`, strict format lint,
-and a release build with `-warnings-as-errors`. The suite lives in
-`Tests/EvieCoreTests/` and covers `EvieCore` — the agent loop, the file toolbox,
-the scoped reader, the writer, plans, retrieval, ranking, wake phrase and gate,
-preferences, release verification, and the rest. The AppKit layer has no unit
+The gate every change passes is the whole test suite, strict format lint,
+and a release build with `-warnings-as-errors`. Hosted CI runs **all** Core
+behavioral tests using `Scripts/test --core-only` on the qualified macOS 26
+runtime and compiles the full shell with Xcode 27. The default `Scripts/test`
+also runs in full on the target Mac with macOS 27.2 before release. This split
+follows a measured system OCR failure on the hosted 27.0.1 image; it removes no
+test or assertion. See [ADR 0028](docs/adr/0028-runtime-qualified-core-ci.md).
+
+The suite lives in `Tests/EvieCoreTests/` and covers `EvieCore` — the agent loop,
+the file toolbox, the scoped reader, the writer, plans, retrieval, ranking, wake
+phrase and gate, preferences, release verification, and the rest. The AppKit layer has no unit
 tests and is covered instead by diagnostics that exercise the real paths:
 
 ```bash

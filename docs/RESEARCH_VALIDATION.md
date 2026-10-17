@@ -78,7 +78,8 @@ O modo `--agent` compartilha a mesma fixture offline, captura exclusiva por
 PID, permissões, broker e executor. O objetivo usa exatamente
 `ResearchModeController.agentGoal`, acrescentando somente que a janela de teste
 deve ser resolvida, o campo deve conter apenas o número e a alternativa
-correspondente deve ser selecionada. O resultado esperado não é informado ao
+correspondente deve ser selecionada. O objetivo também informa a restrição do
+ensaio: preencher por `type`/AX, com pasteboard isolado e colagem indisponível. O resultado esperado não é informado ao
 modelo nem transformado em uma sequência de ações pelo diagnóstico.
 
 `ComputerUseSession` e `EvieAgentLoop.runComputerUse` fazem as observações e
@@ -88,7 +89,13 @@ observador. O raciocínio usa o mesmo
 `computerStep` da produção, sem forçar o modo desligado do método padrão.
 O grant continua sendo `.researchShortcut`, com autorização explícita apenas
 para escrita de resposta no pasteboard nomeado. A digitação usa AX sem fallback
-para o clipboard geral.
+para o clipboard geral. O wrapper recusa `paste` e qualquer acorde com Command
+mais V (inclusive modificadores adicionais), antes de delegar ao executor.
+Retorna falha explícita ao modelo, que pode escolher `type`; tentativas recusadas
+continuam contabilizadas como resultados de ações. Essa trava existe porque o
+atalho de colar do macOS leria o clipboard geral mesmo com um pasteboard nomeado
+injetado no executor. Este ensaio valida escrita no pasteboard nomeado e entrada
+AX; não valida `⌘V`.
 
 Cada confirmação solicitada é contada e respondida com `false`; nenhuma é
 aprovada automaticamente. Diferentemente do método padrão, o laço pode receber
@@ -110,6 +117,27 @@ execução real com o PC ainda não registrada neste checkpoint, enquanto a
 autorização legítima do Chaveiro aguarda o proprietário. Os resultados antigos
 abaixo são do método padrão e não demonstram planejamento autônomo. O relatório
 novo só poderá ser marcado como aprovado depois de executar o bundle integrado.
+
+## Regressão isolada da guarda de colagem
+
+Depois de compilar o Core de debug, execute:
+
+```zsh
+Scripts/research-guard-validation
+```
+
+O script extrai o helper exato de `ResearchValidation.swift`, sem reimplementar
+sua lógica, e o compila com Swift 6, avisos como erros e o Core real já
+construído. A fixture verifica `paste`, 68 combinações e aliases de teclas,
+permissão de `type` e escrita de resposta, e a rota AX com fallback nulo.
+Não inicia SwiftPM, interface, eventos, rede ou pasteboard.
+
+Em 17/10/2026, o script persistido passou todos esses casos. Strict lint da
+fixture, sintaxe do script e `git diff --check` passaram. Essa evidência cobre
+classificação e rota de digitação; a conexão da guarda antes de
+`executor.perform`, a falha devolvida e a contagem no wrapper foram revisadas
+no código. Não é uma execução de hardware/UI nem comprova planejamento do
+modelo. A alteração ficou restrita ao diagnóstico.
 
 ## Limites e estabilidade
 

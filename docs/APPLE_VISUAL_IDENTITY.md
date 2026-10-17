@@ -157,24 +157,48 @@ captures from that compositor correction:
 
 - [Input controls, light](images/apple-visual/integrated-overlay-light.png)
 - [Input controls, dark](images/apple-visual/integrated-overlay-dark.png)
-- [Legacy expanded brain controls, light](images/apple-visual/integrated-brain-controls-light.png)
-- [Legacy expanded brain controls, dark](images/apple-visual/integrated-brain-controls-dark.png)
+- [Legacy expanded brain controls, light](images/apple-visual/legacy-brain-controls-light.png)
+- [Legacy expanded brain controls, dark](images/apple-visual/legacy-brain-controls-dark.png)
 
 The final installed-UI review on 2026-10-17 found a separate layout defect in
-those legacy brain-control images: the unconstrained stack exceeded the
-330-point scroll viewport and clipped its side insets. Their native rendering
-is real, but they are **not approved evidence of the current popover layout**.
+the then-installed popover and an older `/tmp/evie-integrated-ui/` preview:
+the unconstrained stack exceeded the 330-point scroll viewport and clipped
+its side insets. The archived legacy images linked above predate the context
+section and have intact insets; they record an older layout, rather than
+evidence of that clipping or of the current popover.
 The source now bounds content to 294 points inside the 18-point insets, uses
 the small native segmented picker and wraps explanatory text. A standalone
 Swift 6 build passed warnings-as-errors; its visible owned-window
 [corrected layout capture](images/apple-visual/brain-controls-context-fixed.png)
 shows complete text in normal and compacting states. Inactive gray styling in
-that synthetic capture does not validate active-control colors. The rebuilt
-installed popover, semantic AX controls and regenerated integrated images
-require their own final check; the source correction alone does not prove
-them.
+that synthetic capture does not validate active-control colors.
 
-A diagnostic `sandbox_extension_issue_file_to_process` log was emitted for
-the temporary bundle, but its process exited successfully and every expected
-selected-window capture was produced. This run verifies rendering, not physical
-click dispatch or model selection persistence (covered by integration separately).
+The installed candidate was then checked separately on 2026-10-17. Its
+[actual popover capture](images/apple-visual/installed-brain-controls.png)
+shows complete insets and wrapped captions, a gold brain button and blue
+enabled agent/web switches. Stable semantic AX identifiers resolved the brain
+and all three model options; the public AX API returned their spoken labels.
+Automatic → Mac → PC selections each persisted, with reasoning off and
+agent/web enabled restored at the end. No chat/model request was submitted.
+The installed `--ui-snapshots` process also exited successfully after producing
+18 owned-window fixtures. The regenerated expanded controls were reviewed in
+[light](images/apple-visual/integrated-brain-controls-light.png) and
+[dark](images/apple-visual/integrated-brain-controls-dark.png); neither clips
+the content. Other fixture images from that run were produced, but this final
+review concerns the two brain-control captures. The normal app stayed running;
+the temporary diagnostic process exited and its windows closed.
+
+A final privacy review inspected the six brain-control PNGs linked here,
+including both archived previews. Local CPU Vision OCR returned 21–55 text
+lines per image and found no endpoint URL, tailnet name, private address,
+credential or email pattern. Visual inspection likewise found only Evie's
+controls and synthetic fixture text. PNG metadata contains pixel dimensions,
+resolution/color data and, for the two window screenshots, the generic comment
+“Screenshot”; no username, host, location or credential was found. This review
+is scoped to those six files, not every image in the repository.
+
+A diagnostic `sandbox_extension_issue_file_to_process` log was emitted in the
+earlier temporary-bundle run, but its process exited successfully and every
+expected selected-window capture was produced. That run verifies rendering, not physical
+click dispatch or model selection persistence; the later installed-candidate
+semantic actions and persistence checks are recorded separately above.

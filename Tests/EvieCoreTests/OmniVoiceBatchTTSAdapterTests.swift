@@ -96,6 +96,9 @@ struct OmniVoiceBatchTTSAdapterTests {
     let task = Task { try await adapter.synthesize(fixture.request()) }
     defer { task.cancel() }
     if observeResultLate {
+      // Observe a launched child before starting the receipt-reader deadline;
+      // admission to the Swift task is not part of the process lifetime.
+      _ = try await fixture.recordedChildIdentifier()
       let timing = try await fixture.terminationTiming()
       try await fixture.expectChildStopped(timing.childIdentifier)
       // The consumer deliberately resumes after the process deadline. Only
@@ -113,6 +116,33 @@ struct OmniVoiceBatchTTSAdapterTests {
     let childIdentifier = try await fixture.recordedChildIdentifier()
     #expect(timing.childIdentifier == childIdentifier)
     try await fixture.expectChildStopped(childIdentifier)
+    #expect(try fixture.requestDirectories().isEmpty)
+  }
+
+  @Test("the process-group deadline survives shared user-initiated CPU contention")
+  func timeoutUnderCPUContention() async throws {
+    let fixture = try Fixture(script: Self.timedLongRunningScript)
+    defer { fixture.remove() }
+    try fixture.warmUpExecutable()
+    let load = FinitePriorityLoad()
+    defer { load.finish() }
+    let adapter = try OmniVoiceBatchTTSAdapter(
+      configuration: fixture.configuration(timeout: 0.5, gracePeriod: 0.05))
+    let task = Task { try await adapter.synthesize(fixture.request()) }
+    defer { task.cancel() }
+    let child = try await fixture.recordedChildIdentifier()
+    try #require(!fixture.hasTerminationReceipt, "The CPU load must begin before SIGTERM.")
+    load.start()
+    do {
+      _ = try await task.value
+      Issue.record("Expected a timeout under CPU contention.")
+    } catch let error as EvieTTSError {
+      #expect(error == .timedOut)
+    }
+    let timing = try await fixture.terminationTiming()
+    #expect(timing.lifetimeBeforeTermination < .seconds(2))
+    #expect(timing.childIdentifier == child)
+    try await fixture.expectChildStopped(child)
     #expect(try fixture.requestDirectories().isEmpty)
   }
 
@@ -501,6 +531,11 @@ private final class Fixture: @unchecked Sendable {
     }
   }
 
+  var hasTerminationReceipt: Bool {
+    FileManager.default.fileExists(
+      atPath: modelDirectoryURL.appendingPathComponent("termination.json").path)
+  }
+
   func terminationTiming() async throws -> TerminationTiming {
     let file = modelDirectoryURL.appendingPathComponent("termination.json")
     let deadline = ContinuousClock.now + .seconds(2)
@@ -565,4 +600,42 @@ private enum FixtureError: Error {
   case terminationTimingMissing
   case invalidTerminationTiming
   case childIdentifierMissing
+}
+
+/// A finite, isolated reproduction of the priority inversion seen in CI.
+/// Tasks are prepared before spawning so the measured child is already alive
+/// when higher-priority CPU work starts competing with the deadline timer.
+private final class FinitePriorityLoad {
+  private let workers = min(32, max(4, ProcessInfo.processInfo.activeProcessorCount * 2))
+  private let gate = DispatchSemaphore(value: 0)
+  private let group = DispatchGroup()
+  private var started = false
+
+  init() {
+    let ready = DispatchSemaphore(value: 0)
+    let gate = self.gate
+    let group = self.group
+    for _ in 0..<workers {
+      group.enter()
+      DispatchQueue.global(qos: .userInitiated).async {
+        ready.signal()
+        gate.wait()
+        let finish = DispatchTime.now().uptimeNanoseconds + 3_000_000_000
+        while DispatchTime.now().uptimeNanoseconds < finish {}
+        group.leave()
+      }
+    }
+    for _ in 0..<workers { ready.wait() }
+  }
+
+  func start() {
+    guard !started else { return }
+    started = true
+    for _ in 0..<workers { gate.signal() }
+  }
+
+  func finish() {
+    start()
+    group.wait()
+  }
 }
