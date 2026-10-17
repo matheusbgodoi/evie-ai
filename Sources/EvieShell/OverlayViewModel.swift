@@ -462,7 +462,7 @@ final class OverlayViewModel: ObservableObject {
     isQuickTextEntryPresented = true
     visualState = .ready
     primaryText = "Digite um comando"
-    secondaryText = "Tudo acontece neste Mac"
+    secondaryText = "Anexe arquivos ou prints pelo clipe"
     // Opening the field is when the chip is looked at: the cached probe is
     // used while fresh, so this is free most of the time.
     refreshBrainChip()

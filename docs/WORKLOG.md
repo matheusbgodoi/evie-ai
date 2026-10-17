@@ -1,5 +1,14 @@
 # Work log
 
+## 2026-10-16 — two leftovers from the brain chip work
+
+- Completed: the Codable decoder of EviePreferences now reads a missing
+  `computer_use_enabled` as off, matching the store; the quick-text status line no
+  longer claims everything happens on this Mac (the PC answers by default).
+- Files/components: `EviePreferences.swift`, `OverlayViewModel.swift`.
+- Checks: `swift build`; full `Scripts/test` — 1377 tests in 123 suites passed,
+  1 known issue.
+
 ## 2026-10-16 — `--ui-snapshots`: the new views, looked at without the app
 
 - Completed: `evie-shell --ui-snapshots <pasta>` (`EvieDiagnostics+UISnapshots`,

@@ -116,7 +116,7 @@ public struct EviePreferences: Codable, Hashable, Sendable {
     mailAndCalendarEnabled =
       try container.decodeIfPresent(Bool.self, forKey: .mailAndCalendarEnabled) ?? false
     computerUseEnabled =
-      try container.decodeIfPresent(Bool.self, forKey: .computerUseEnabled) ?? true
+      try container.decodeIfPresent(Bool.self, forKey: .computerUseEnabled) ?? false
     computerUseConsentGiven =
       try container.decodeIfPresent(Bool.self, forKey: .computerUseConsentGiven) ?? false
   }
