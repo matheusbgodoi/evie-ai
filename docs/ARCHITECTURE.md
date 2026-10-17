@@ -1,12 +1,89 @@
-# System architecture
+# Current delivery architecture — 2026-10-17
 
-Status: the target architecture below is still the target. What is built is the
-native shell with a direct loopback client, an agent loop with read-only tools and
-three proposing writers — one for files, one for calendar events, one for
-outgoing mail, none of which performs anything — retrieval, voice in both
-directions, vision through the
-system daemon, typed commands, and a self-update path. The `evied` supervisor does
-not exist; the application composition root is doing its job for now.
+Research sessions ([ADR 0020](adr/0020-expiring-research-shortcut-sessions.md)),
+current-conversation brain selection (0021), enabled capabilities with real TCC
+requests (0022), generated public AppIntents metadata (0023), local provider
+configuration/private release history (0024), native voice calibration (0025),
+[adaptive context and compaction (0026)](adr/0026-adaptive-conversation-context-and-compaction.md)
+and [pinned public web transport (0027)](adr/0027-pinned-public-web-transport.md)
+amend the historical target below. The application composition root remains
+`AppCoordinator`; no `evied` supervisor or additional resident model service was
+introduced. PC inference is external, the Mac brain and optional clone worker
+remain on demand, and native STT/TTS use public OS services.
+
+## Current conversation and model boundary
+
+`EvieBrainResolver` resolves each turn, including an explicit model change within
+the same conversation. `EvieTurnPlan` reserves output/framing before preparing
+the input budget. The PC operational context is 200,704 tokens. LensVLM's
+qualified operational context is 131,072 tokens on both client and local runtime,
+with eight-bit KV, prefill step 512, a 256 MiB allocator cache limit and a
+900-second profile timeout. The synthetic 127,527-token input plus 38-token
+output retrieved five of five target items; minimum sampled free memory was
+2.4 GiB and MLX-reported peak memory 13.8 GiB over 392.31 seconds. The architectural 262,144
+ceiling is not the operating setting. Conditions and limits belong in
+[MODEL_TUNING](MODEL_TUNING.md).
+
+`OverlayViewModel.conversationPrefix` normalizes picture replay, waits for pending
+context resets and calls its per-view-model `EvieConversationCompaction` actor.
+Older messages are summarized near the budget threshold; the full visible
+conversation is never replaced. The current tail remains intact. The four-entry
+in-memory summary cache is bound to conversation/profile/model/budget and a
+fingerprint including visual provenance. Request/conversation IDs and task
+cancellation reject stale progress/results. A visual source stays visual-derived
+through summarization, so compaction cannot restore tool or auto-approval access.
+See [context contract and real-model evidence](CONVERSATION_CONTEXT.md).
+
+`ModelClientFactory.live` trusts only HTTPS hosts saved in the external local
+configuration and credentials bound to that exact host. Saving a key persists
+only the captured endpoint and credential reference into the latest file; drafts
+are rebased field by field to preserve current unsaved edits. Runtime settings
+are not bundled. `EvieLocalBrainLauncher` separates process identity (safe stop)
+from exact model/KV/prefill/cache compatibility (safe reuse), authenticates health,
+and reconciles configuration on next use. The optional allocator bootstrap uses
+public `mlx.core.set_cache_limit` before the unmodified CLI, with one sequence.
+Real boundaries are documented in [settings validation](MODEL_SETTINGS_VALIDATION.md)
+and [launcher validation](LOCAL_BRAIN_VALIDATION.md).
+
+## Current capture and web boundaries
+
+Research isolates capture-only clipboard inference from answer entry/selection;
+both have revocable consent leases. No continuous research capture is added.
+The public web fetcher validates all DNS addresses before every connection and
+redirect, pins approved addresses, bounds decoded streaming bytes/time, and
+runs without browser cookies, persistent cache or inherited proxies. This
+boundary is separate from explicitly configured private model servers. Page
+content is data and cannot authorize another action or network destination.
+
+## Integration freeze and evidence
+
+This is the final integration candidate's source contract. Full-suite execution,
+adopted-runtime signed artifact checks, resource measurements,
+installation and sanitized publication are separate gates. Their current status
+is [PROJECT_STATUS](PROJECT_STATUS.md); pending gates are not completed by this
+architecture description.
+
+# Historical target architecture
+
+The sections below preserve the original target and earlier vertical-slice
+boundaries for traceability. Statements about missing executors, loopback-only
+models or a future supervisor are historical, superseded by the current delivery
+architecture and ADRs above. They do not describe the final integrated v2 runtime.
+
+## Research shortcut sessions (2026-10-16)
+
+`EvieResearchSession` holds a transient objective, destination and 15-minute
+consent lease; it serializes runs and refuses expired or revoked deliveries.
+`ResearchModeController` owns its consent window, cancellation, expiry timer and
+bounded in-memory measurements. Two configurable actions use the existing
+shortcut recorder and persistence. Clipboard turns use `EvieResearchAnswer`
+with one image and no tools/history. Control turns reuse `ComputerUseHost`, with
+`researchShortcut` as a start-only gesture and a grant deadline capped by the
+research lease. Chat/voice/capture submissions cannot race research. Sleep and
+user-session deactivation stop it. No worker or continuous capture is added.
+The selected brain is pinned for each consent session, then resolved afresh
+when the next session is armed. See [ADR 0020](adr/0020-expiring-research-shortcut-sessions.md)
+and [research methods](RESEARCH_MODE.md).
 
 ## Design principles
 
@@ -64,23 +141,62 @@ Carbon global shortcut / AppKit status item
        OverlayViewModel -> AgentClient
                     |
                     v
-  TurboFieldfareClient -> loopback Chat Completions SSE
+  ModelClientFactory -> OpenAICompatibleClient
+                    |
+                    v
+  ModelTransportPolicy -> Chat Completions SSE
+  (loopback http, or https to the allowlisted PC with its bound key)
 ```
 
 `EvieCore` owns backend-neutral message, phase, failure, usage, artifact, and
 reducer types, plus nominal read/propose/commit capability contracts. SwiftUI does
 not parse SSE or authorize backend output. The
 application composition root is the only place that chooses the concrete
-TurboFieldfare adapter.
+adapter, and it builds it through `ModelClientFactory`; the client's initialiser
+is internal to EvieCore, so no call site can choose its own policy or key source.
 
 The commit-authority contract is deliberately non-serializable and constructible
 only inside EvieCore's future trusted broker path. It currently has no executor;
 adding a filesystem/network implementation to the direct UI client remains
 forbidden.
 
-This direct connection is accepted only for the current prototype under
-[ADR 0006](adr/0006-direct-turbo-vertical-slice.md). The client still carries no
-credential and rejects non-loopback hosts, and it still never executes a tool.
+This direct connection was accepted for the prototype under
+[ADR 0006](adr/0006-direct-turbo-vertical-slice.md), whose loopback-only and
+no-credential clauses are superseded by
+[ADR 0013](adr/0013-authenticated-tailnet-model-transport.md). Before any request
+`ModelTransportPolicy` allows plain `http` only to loopback, and any other host
+only over `https`, on an exact allowlist (by default the PC gateway
+`models.example.invalid`), with a credential bound to that host. The
+bearer token is read from the login keychain through a `CredentialReference` held
+in the configuration, is attached only over `https` to its bound host, and every
+redirect is refused so the header cannot follow one. The client still never
+executes a tool.
+
+Since v2 S1b each request carries `TurnOptions` (`AgentClient.stream(messages:
+tools:options:)`): the reasoning level, the output cap (voice 1024, chat 2048, a
+computer-use step 1024), and the model's readiness, which picks the deadlines.
+The configuration's `ThinkingParameterStyle` says how the server is told to
+think — `chat_template_kwargs` for the PC gateway, a top-level `enable_thinking`
+for mlx-vlm (with `context_management: []`, so that server never compacts the
+conversation itself), nothing for the loopback Gemma. The first system message goes out
+byte for byte; any later system or developer message (skill guidance) is sent as
+a `<system-context>` block on the next user message, so the cached prefix does
+not move when a skill comes or goes. Reasoning is decoded apart from the answer
+into `.reasoningDelta`, and a turn that spent its cap thinking is reported as
+`ModelClientError.truncated` rather than as an empty answer. A watchdog bounds
+the wait for the headers and for the first token (`ModelDeadlinePolicy`); the PC
+holds its headers until prefill ends, measured, so the headers deadline is a
+first-token deadline, not a connection check.
+
+Since v2 S2b `ModelReadinessProbe` measures that readiness without asking the
+model anything: `GET /health` at the gateway's origin with no key, `GET
+/v1/models` with the key (the profile's entry gives `loadState`/`active` and
+the vision and tools the server reports), and `GET /running` only when the list
+has no load state; a Mac brain gets its loopback `/health`. `ModelReadinessCache`
+keeps each answer 30 s, and the shell's `EvieReadinessRefresher` refreshes the
+launch profile at launch, on activation and on `NWPathMonitor` changes. The
+per-turn resolver reads the cache, and every turn carries the rung, so the
+readiness deadlines apply.
 
 Three of the original abstinences no longer hold, and they are worth naming rather
 than leaving as an out-of-date boundary:
@@ -170,7 +286,7 @@ system frameworks, and every process Evie starts.
 
 | Area | Types |
 |---|---|
-| Transport and loop | `AgentClient`, `TurboFieldfareClient`, `EvieAgentLoop`, `EvieToolCallAccumulator`, `EvieTool` |
+| Transport and loop | `AgentClient`, `OpenAICompatibleClient`, `ModelClientFactory`, `ModelTransportPolicy`, `EvieCredentialProviding` (`KeychainCredentialProvider`, `StaticCredentialProvider`), `TurnOptions`, `ModelDeadlinePolicy`, `ModelReadinessProbe`, `ModelReadinessCache`, `ModelClientError`, `InlineThinkingSplitter`, `EvieImagePart`, `EvieAgentLoop`, `EvieToolCallAccumulator`, `EvieTool` |
 | Conversation | `ChatMessage`, `EvieConversation`, `EvieConversationStore`, `EvieConversationExport`, `EvieInteraction`, `EvieArtifact`, `EvieRichText` |
 | Commands | `EvieCommand`, `EvieSearchCommands`, `EviePlan`, `EviePlanPrompts` |
 | Retrieval and grounding | `EvieVaultRetriever`, `EvieVaultPassage`, `EviePassageRanker`, `EvieQueryTerms`, `EvieGrounding`, `EvieAnswerProvenance`, `EvieWebSearch`, `EvieWebPassages` |
@@ -179,22 +295,24 @@ system frameworks, and every process Evie starts.
 | Arithmetic | `EvieCalculator`, `EvieCalculatorTool` |
 | Schedules | `EvieSchedule`, `EvieScheduleTrigger`, `EvieScheduleAgent`, `EviePropertyList` |
 | Knowledge and identity | `EvieMemory`, `EvieSkill`, `EviePersona`, `EvieCapabilityContracts` |
+| Computer use (`ComputerUse/`, ADR 0016) | `EvieAgentModeBroker` (grant, proposals, commits), `ComputerActionPolicy`, `ComputerUseBudget`, `ComputerAction`, `ComputerToolDefinitions`, `ObservationFormatter`; observing (S5b): `ComputerObserver` and its protocols, `AccessibilitySnapshotBuilder`, `ComputerObservationDiff`, `AccessibilityTrust`; the loop: `EvieAgentLoop.runComputerUse`, `ComputerUseSession`, `ComputerUseTranscript`; acting (S5c): `ComputerExecutor` and its protocols, `ComputerTyping`, `ComputerKeyCodes`, `ClipboardSession`, `ComputerAppCatalog`, `ComputerUseSwitch`; starting and controls (S5d): `ComputerUseStart` (`ComputerUseIntent`, `ComputerUseRequestOrigin`, `ComputerUseStopCommand`, `ComputerUseCopy`), `EvieSyntheticInput`, `ComputerUserPress`, `ComputerConfirmationDesk`, `ComputerUsePause`, `ComputerTakeoverRule`, `ComputerActionLog` |
 | Voice | `EvieTTS`, `OmniVoiceBatchTTSAdapter`, `EvieSpeechGate`, `EvieSilenceTrim`, `EvieWakePhrase`, `EvieWakeGate` |
 | Settings and release | `EvieConfiguration`, `EvieConfigurationLoader`, `EvieConfigurationStore`, `EviePreferences`, `EviePreferencesStore`, `EvieShortcut`, `EvieRelease` |
-| Presentation-adjacent | `EvieOverlayGeometry`, `EvieThinkingWave` |
+| Presentation-adjacent | `EvieOverlayGeometry`, `EvieThinkingWave`, `EvieBrainChip` (the chip's words, dot and menu, `EvieBrainChoice`), `EvieSettingsSection` (the settings sidebar) |
 | Process | `SecureProcessRunner` |
 
 `EvieShell`, by what it owns:
 
 | Area | Types |
 |---|---|
-| Composition and windows | `EvieShellApp`, `AppCoordinator`, `OverlayPanelController`, `SettingsWindowController`, `ConversationHistoryWindowController`, `GlobalHotKeyController` |
-| Overlay state | `OverlayViewModel` plus `+Turn`, `+History`, `+Plan`, `+Search`; `OverlayChromeModel` |
+| Composition and windows | `EvieShellApp`, `AppCoordinator`, `EvieReadinessRefresher`, `OverlayPanelController`, `SettingsWindowController`, `ConversationHistoryWindowController`, `GlobalHotKeyController` |
+| Overlay state | `OverlayViewModel` plus `+Turn`, `+History`, `+Plan`, `+Search`, `+Brain` (the brain chip); `OverlayChromeModel` |
 | Other view models | `ConversationHistoryViewModel`, `EviePreferencesViewModel`, `ModelSettingsViewModel`, `EvieRootsViewModel`, `EvieMemoryViewModel`, `EvieSkillsViewModel`, `EvieVoiceLibraryViewModel` |
 | Audio | `EvieAudioCapture`, `EvieLevelMeter`, `EvieSpeechTranscription`, `EvieSpeechOutput`, `EvieOmniVoiceClient`, `EvieVoiceEngineLauncher`, `EvieWakeListener` |
 | Reading the world | `EvieVaultIndex`, `EvieVisionDescriber`, `EvieDocumentAttachment`, `EvieMediaStore`, `EvieWebClient`, `EvieSkillStore`, `EvieMailCalendarClient` |
+| Computer use (`ComputerUse/`) | `AccessibilitySnapshotter` (`AXTree`), `AccessibilityPermission`, `ComputerScreenLocator` (and `ScreenPresence` as the observing and acting indicator), `ComputerObserveCheck` (`--cu-observe`); acting (S5c): `MacComputerActor` (wires `ComputerExecutor`), `SyntheticInput`, `AccessibilityActions`, `FocusCoordinator`, `AppLauncher` and `InstalledApps`, `SystemPasteboard`, `ComputerSelfTest` (`--cu-selftest`); `Views/ScreenAndAgentSettingsView`; the session (S5d): `ComputerUseHost` (broker, executor, pause, desk, monitor, the grant's clock), `TakeoverMonitor`, `OverlayViewModel+ComputerUse` (the cards and the session turn), `Views/ComputerUseCardViews` (`HandPressCatcher`, the thumbnail) |
 | Schedules | `EvieLaunchAgents`, `EvieScheduleStore`, `EvieScheduleRunner`, `EvieScheduleLock`, `EvieScheduleNotifier`, `EvieSchedulesViewModel` |
-| Diagnostics | `EvieDiagnostic`, `EvieDiagnosticRegistry`, `EvieDiagnostics` plus its five subject files |
+| Diagnostics | `EvieDiagnostic`, `EvieDiagnosticRegistry`, `EvieDiagnostics` plus its subject files (`+UISnapshots`: `--ui-snapshots <pasta>` draws the brain chip, an answer card and Settings offscreen to PNG) |
 | Updating | `EvieUpdater`, `EvieBundleSignature` |
 | Views | `Views/`, plus `EvieOverlayView`, `QuickTextEntryView`, `ConversationHistoryView` |
 
@@ -387,20 +505,72 @@ the right shape for whatever is eventually built, and none of it is written.
 
 The native shell resolves model configuration in this order:
 
-1. compiled non-secret defaults;
+1. the compiled built-in profiles (`EvieModelProfileSet.builtIn`): `pc-3090`, the
+   PC gateway's `qwen-daily`, preferred, then `mac-local`, LensVLM on loopback
+   port 38480, started on demand (S3);
 2. versioned JSON at `~/Library/Application Support/Evie/config.json` (or another
-   absolute path selected through `EVIE_CONFIG_FILE`);
-3. supported non-secret environment overrides.
+   absolute path selected through `EVIE_CONFIG_FILE`), schema v2: a list of
+   profiles, a preference order and the Mac-fallback choice;
+3. supported non-secret environment overrides: `EVIE_MODEL_PROFILE` picks the
+   profile in use, and the other `EVIE_MODEL_*` variables override that profile
+   for the run.
 
-Invalid model configuration produces a visible startup error. The loader does not
-read credentials or print configuration. Secrets remain a future Keychain/broker
-concern, never part of the model endpoint file.
+The profile is flattened into the `EvieConfiguration` the client reads. Which
+profile a turn runs on is decided per conversation, before the turn is built
+(v2 S2c, [ADR 0014](adr/0014-model-profiles-per-turn-resolution-failover.md)):
+`EvieBrainResolver` keeps the preferred profile unless it cannot answer — a key
+not saved, known from the keychain alone (`EvieProfileSelector.offlineRung`), or
+the cached probe finding it unreachable, its key refused or its model unknown —
+and then walks the preference order for one that can. The conversation is
+pinned to that profile for the app session. A turn that fails before its first
+delta with an unreachable server, a headers timeout, a refused or missing key,
+or a 502 is rebuilt for the next profile and retried once (`EvieBrainTurn`), and
+the conversation is re-pinned. Every move follows the Mac-fallback choice: off
+never moves, automatic moves, ask asks before waking the Mac brain ("O PC está
+fora. Acordar o cérebro do Mac? (~10 s, ~8 GB de memória)") and a yes holds for
+the session. A profile chosen by the environment is never moved. The overlay's
+brain control can narrow the order to one place
+(`EvieBrainResolver.choose(_:)`: Sempre o PC never moves to the Mac, Sempre o
+Mac wakes it without asking). An explicit popover selection saves first and
+releases the current conversation pin for its next reply (ADR 0021); other pins
+and historical answer labels remain unchanged. Waking a
+`.localOnDemand` profile goes through `LocalBrainStarting`, implemented by
+`EvieLocalBrainLauncher` since v2 S3 (ADR 0015): it starts `mlx_vlm.server` on
+127.0.0.1:38480 with `LocalBrainPolicy`'s argv and offline environment, refuses a
+port held by anything but that server and a start with under 8 GiB free, checks
+before every turn that the listener is the configured executable, and stops it
+after 10 idle minutes or when Evie quits. `Scripts/evie-brain` is the manual
+path to the same server. `EvieTurnPlan` derives the turn
+from the profile: the character budget, the persona's location sentence, tools
+only for a profile that has them (otherwise the folders and the web are searched
+first and the model is asked once with no `tools` key), pictures only with
+vision, and the readiness rung in `TurnOptions`.
+A schema v1 file (one endpoint) is migrated in place: its endpoint becomes the
+profile `custom`, kept after the built-ins and outside the preference order, and
+the original bytes are kept as `config.json.v1.bak`. A file or environment that
+cannot be used — damaged, an unknown schema version, an invalid profile —
+falls back to the built-ins and shows "Configuração local inválida"; launch never
+blocks on it. The loader does not read credentials or print configuration. A
+profile holds a `CredentialReference` (keychain service, account, bound host),
+never a key.
 
-The model settings window writes the same schema with atomic replacement and mode
-`0600`, then swaps the direct client's non-secret settings for the next request.
-Environment variables still override the file after a future relaunch. Endpoint,
-model identity, and context remain visible but read-only in this initial settings
-surface.
+The "Cérebro" settings tab (v2 S2d) edits the preferred profile (the head of the
+preference order), the Mac-fallback choice and each profile's endpoint, model,
+context cap, output cap, default reasoning and sampling, through
+`EvieProfileDraft`; the endpoint is checked live against `ModelTransportPolicy`
+with the profile's own credential. It saves through
+`EvieConfigurationStore.saveProfiles`, which re-reads the file, applies only the
+drafts that changed, never writes an environment override, and writes schema v2
+with atomic replacement and mode `0600`; the resolver then takes the reloaded
+profiles, so the next turn uses them. A damaged file is repaired from the profiles Evie
+launched with, after its bytes are kept as `config.json.damaged.bak` (`0600`); a
+file from a newer schema, or one that cannot be read and so cannot be backed up,
+is left alone and the save fails with the reason. "Testar conexão" runs
+`ModelReadinessProbe.connectionReport(for:)` on the profile as edited: the
+probe's steps (reachable, key accepted, model loaded) with the time each request
+took, and the server's model list for the model field. The tab also saves the PC
+key into Evie's own keychain item, pasted or copied once from the PC
+configuration's item (`EvieModelKeys`); see `docs/SECURITY.md`.
 
 [ADR 0007](adr/0007-local-development-runtime.md) accepts this development-only
 layout:

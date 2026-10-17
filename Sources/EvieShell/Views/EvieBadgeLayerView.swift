@@ -37,6 +37,7 @@ struct EvieBadgeLayerView: NSViewRepresentable {
 
   final class BadgeView: NSView {
     private let circle = CAGradientLayer()
+    private let sheen = CAGradientLayer()
     private let rim = CAShapeLayer()
     private let symbol = CALayer()
     private var configuration: (String, NSColor, CGFloat, Bool)?
@@ -50,6 +51,7 @@ struct EvieBadgeLayerView: NSViewRepresentable {
       wantsLayer = true
       layer = CALayer()
       layer?.addSublayer(circle)
+      circle.addSublayer(sheen)
       circle.addSublayer(rim)
       circle.addSublayer(symbol)
     }
@@ -120,7 +122,9 @@ struct EvieBadgeLayerView: NSViewRepresentable {
         return
       }
       CATransaction.begin()
-      CATransaction.setAnimationDuration(0.16)
+      CATransaction.setAnimationDuration(
+        NSWorkspace.shared.accessibilityDisplayShouldReduceMotion ? 0 : 0.16
+      )
       CATransaction.setAnimationTimingFunction(CAMediaTimingFunction(name: .easeOut))
       circle.shadowOpacity = isHovering ? 0.85 : 0.38
       circle.shadowRadius = isHovering ? 11 : 7
@@ -184,13 +188,27 @@ struct EvieBadgeLayerView: NSViewRepresentable {
       circle.frame = bounds
       circle.cornerRadius = diameter / 2
       circle.contentsScale = scale
-      // The same diagonal lift the badge always had.
+      // Static crystal lighting: the compositor animates only the transform
+      // during actual activity, never the material or the shadow.
       circle.startPoint = CGPoint(x: 0, y: 0)
       circle.endPoint = CGPoint(x: 1, y: 1)
       circle.colors = [
-        tint.withAlphaComponent(0.82).cgColor,
+        (tint.blended(withFraction: 0.24, of: .white) ?? tint).cgColor,
         tint.cgColor,
+        (tint.blended(withFraction: 0.16, of: .black) ?? tint).cgColor,
       ]
+      sheen.frame = bounds
+      sheen.cornerRadius = diameter / 2
+      sheen.startPoint = CGPoint(x: 0.15, y: 0)
+      sheen.endPoint = CGPoint(x: 0.75, y: 1)
+      sheen.colors = [
+        NSColor.white.withAlphaComponent(0.36).cgColor,
+        NSColor.white.withAlphaComponent(0.04).cgColor,
+        NSColor.clear.cgColor,
+      ]
+      sheen.locations = [0, 0.42, 1]
+      sheen.contentsScale = scale
+
       circle.shadowColor = tint.cgColor
       circle.shadowOpacity = 0.38
       circle.shadowRadius = 7
@@ -199,7 +217,7 @@ struct EvieBadgeLayerView: NSViewRepresentable {
       rim.frame = bounds
       rim.path = CGPath(ellipseIn: bounds.insetBy(dx: 0.3, dy: 0.3), transform: nil)
       rim.fillColor = nil
-      rim.strokeColor = NSColor.white.withAlphaComponent(0.22).cgColor
+      rim.strokeColor = NSColor.white.withAlphaComponent(0.36).cgColor
       rim.lineWidth = 0.6
       rim.contentsScale = scale
 

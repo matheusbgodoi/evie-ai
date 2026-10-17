@@ -3,7 +3,10 @@ import Testing
 
 @testable import EvieCore
 
-@Suite("Evie mail and calendar scripts")
+// These integration cases address the same Mail/Calendar processes and the
+// system AppleScript compiler. Concurrent cases contend for those shared OS
+// resources; keep every payload and deadline, but give each case exclusive use.
+@Suite("Evie mail and calendar scripts", .serialized)
 struct EvieMailCalendarScriptTests {
   /// The property the whole design rests on.
   ///
@@ -92,6 +95,67 @@ struct EvieMailCalendarScriptTests {
     #expect(EvieAppleScripts.saveMailDraft.contains("save msg"))
   }
 
+  /// What lets the "runs to the end" tests run with the app closed: each script
+  /// asks `application "…" is running` before it addresses the app, and that
+  /// check sends no Apple Event — measured 2026-10-16 with Calendar closed, the
+  /// creating script printed `EVIE_APP_FECHADO`, exit 0, in under a second, and
+  /// Calendar stayed closed. A script that addressed the app first would launch
+  /// it and could wait on the consent prompt instead.
+  @Test("every script asks whether its app is running before it addresses it")
+  func scriptsCheckTheAppBeforeAddressingIt() throws {
+    for script in EvieAppleScripts.all {
+      let check = try #require(script.range(of: "is running) then return \"EVIE_APP_FECHADO\""))
+      let address = try #require(script.range(of: "tell application"))
+      #expect(check.lowerBound < address.lowerBound, "\(script.prefix(60))")
+    }
+  }
+
+  /// A deadline ends the loop early, because the remaining payloads would each
+  /// wait on the same prompt. Those payloads were never checked, so the
+  /// unconditional test must say so instead of passing.
+  @Test("a hostile run cut short by the deadline is an issue, not a pass")
+  func hostileRunStoppedByTheDeadline() throws {
+    let witness = Witness()
+    var attempted: [String] = []
+
+    withKnownIssue("the stub times out on the first payload") {
+      _ = try Self.runHostile(
+        EvieAppleScripts.searchMail, app: .mail, payloads: ["um", "dois", "três"],
+        witness: witness, arguments: { [$0, "3"] },
+        runner: { _, arguments, app in
+          attempted.append(arguments[0])
+          return OsascriptRun(outcome: .timedOut, standardError: "", app: app)
+        }
+      )
+    }
+    #expect(attempted == ["um"])
+  }
+
+  @Test("a hostile run that checks every payload records nothing")
+  func hostileRunCheckingEveryPayload() throws {
+    let witness = Witness()
+
+    let runs = try Self.runHostile(
+      EvieAppleScripts.searchMail, app: .mail, payloads: ["um", "dois"],
+      witness: witness, arguments: { [$0, "3"] },
+      runner: { _, _, app in
+        OsascriptRun(outcome: .exited(0), standardError: "", app: app)
+      }
+    )
+    #expect(runs.map(\.payload) == ["um", "dois"])
+  }
+
+  // MARK: - Through the real osascript
+  //
+  // Each hostile scenario is two tests. The first checks the witness file — the
+  // security claim — and runs in every environment. The second checks that the
+  // script ran to its end, which only holds once Mail or Calendar has answered an
+  // Apple Event or when the app is closed, so it is gated on the grant or a
+  // closed app: on this Mac it runs every time, on a runner whose app is open
+  // without a grant it is reported as skipped instead of as four failures after
+  // 350 s. A trait gates a whole test, which is why the two
+  // halves cannot share one.
+
   /// The end-to-end version of the same claim, run against the real
   /// `osascript` with the real script string.
   ///
@@ -106,22 +170,25 @@ struct EvieMailCalendarScriptTests {
   /// executing is the thing being tested.
   @Test("a hostile search term is data, not code")
   func hostileSearchTermDoesNothing() throws {
-    let witness = FileManager.default.temporaryDirectory
-      .appendingPathComponent("evie-injection-\(UUID().uuidString).txt")
-    try? FileManager.default.removeItem(at: witness)
+    let witness = Witness()
+    _ = try Self.runHostile(
+      EvieAppleScripts.searchMail, app: .mail, payloads: Self.searchPayloads(witness),
+      witness: witness
+    ) { payload in [payload, "3"] }
+  }
 
-    let payloads = [
-      "assunto\"; do shell script \"touch \(witness.path)\"; --",
-      "\"); do shell script \"touch \(witness.path)\"; (\"",
-      "'; do shell script 'touch \(witness.path)'; '",
-    ]
-    for payload in payloads {
-      let exit = try Self.runScript(EvieAppleScripts.searchMail, arguments: [payload, "3"])
-      #expect(exit == 0, "osascript saiu com \(exit) para \(payload)")
-      #expect(
-        !FileManager.default.fileExists(atPath: witness.path),
-        "o payload executou: \(payload)"
-      )
+  @Test(
+    "a hostile search term runs to the end",
+    .enabled(if: LiveAppleEvents.areEnabled(for: .mail), LiveAppleEvents.comment)
+  )
+  func hostileSearchTermCompletes() throws {
+    let witness = Witness()
+    let runs = try Self.runHostile(
+      EvieAppleScripts.searchMail, app: .mail, payloads: Self.searchPayloads(witness),
+      witness: witness
+    ) { payload in [payload, "3"] }
+    for (payload, run) in runs {
+      Self.expectRanToTheEnd(run, payload: payload)
     }
   }
 
@@ -129,20 +196,26 @@ struct EvieMailCalendarScriptTests {
   ///
   /// A word where a year belongs must fail the coercion and take the script down
   /// with it — an error, not a shell.
+  ///
+  /// Not gated: the coercion is the script's first line, before it asks whether
+  /// Calendar is running, so no Apple Event is ever sent and the result is the
+  /// same with or without the grant. Measured on 2026-10-16: exit status 1,
+  /// "Não é possível transformar … em tipo integer. (-1700)". The error number is
+  /// checked too, so a refusal (-1743) could not pass for the coercion.
   @Test("a hostile date argument fails to coerce and runs nothing")
   func hostileDateArgumentDoesNothing() throws {
-    let witness = FileManager.default.temporaryDirectory
-      .appendingPathComponent("evie-injection-\(UUID().uuidString).txt")
-    try? FileManager.default.removeItem(at: witness)
+    let witness = Witness()
 
-    let exit = try Self.runScript(
+    let run = try OsascriptRun.run(
       EvieAppleScripts.readCalendar,
       arguments: [
         "2026; do shell script \"touch \(witness.path)\"", "8", "1", "2026", "8", "2", "5",
-      ]
+      ],
+      app: .calendar
     )
-    #expect(exit != 0, "a coerção deveria falhar")
-    #expect(!FileManager.default.fileExists(atPath: witness.path))
+    #expect(run.outcome != .exited(0), "a coerção deveria falhar")
+    #expect(run.standardError.contains("-1700"), "falhou por outro motivo: \(run.standardError)")
+    #expect(!witness.exists)
   }
 
   /// The same claim for the script that writes, where the stakes are higher.
@@ -163,28 +236,25 @@ struct EvieMailCalendarScriptTests {
   /// `EVIE_AGENDA_NAO_ACHADA`, no file created, and nothing new in the calendar.
   @Test("a hostile event title is data, not code")
   func hostileEventTitleDoesNothing() throws {
-    let witness = FileManager.default.temporaryDirectory
-      .appendingPathComponent("evie-injection-\(UUID().uuidString).txt")
-    try? FileManager.default.removeItem(at: witness)
+    let witness = Witness()
+    _ = try Self.runHostile(
+      EvieAppleScripts.createEvent, app: .calendar, payloads: Self.titlePayloads(witness),
+      witness: witness, arguments: Self.eventArguments
+    )
+  }
 
-    let payloads = [
-      "reunião\"; do shell script \"touch \(witness.path)\"; --",
-      "\"} , summary:\"x\"); do shell script \"touch \(witness.path)\"; (\"",
-      "'; do shell script 'touch \(witness.path)'; '",
-    ]
-    // A name no calendar has, so the script stops before it creates anything.
-    let nowhere = "EVIE-AGENDA-INEXISTENTE-\(UUID().uuidString)"
-    for payload in payloads {
-      let exit = try Self.runScript(
-        EvieAppleScripts.createEvent,
-        arguments: [payload, nowhere, payload]
-          + ["2099", "1", "1", "10", "0", "2099", "1", "1", "11", "0"]
-      )
-      #expect(exit == 0, "osascript saiu com \(exit) para \(payload)")
-      #expect(
-        !FileManager.default.fileExists(atPath: witness.path),
-        "o payload executou: \(payload)"
-      )
+  @Test(
+    "a hostile event title runs to the end",
+    .enabled(if: LiveAppleEvents.areEnabled(for: .calendar), LiveAppleEvents.comment)
+  )
+  func hostileEventTitleCompletes() throws {
+    let witness = Witness()
+    let runs = try Self.runHostile(
+      EvieAppleScripts.createEvent, app: .calendar, payloads: Self.titlePayloads(witness),
+      witness: witness, arguments: Self.eventArguments
+    )
+    for (payload, run) in runs {
+      Self.expectRanToTheEnd(run, payload: payload)
     }
   }
 
@@ -206,63 +276,179 @@ struct EvieMailCalendarScriptTests {
   /// `EVIE_CONTA_NAO_ACHADA`, no file created, and nothing in Sent or Drafts.
   @Test("a hostile subject, body and recipient are data, not code")
   func hostileMessageDoesNothing() throws {
-    let witness = FileManager.default.temporaryDirectory
-      .appendingPathComponent("evie-injection-\(UUID().uuidString).txt")
-    try? FileManager.default.removeItem(at: witness)
-
-    let payloads = [
-      "assunto\"; do shell script \"touch \(witness.path)\"; --",
-      "\"} , subject:\"x\"); do shell script \"touch \(witness.path)\"; (\"",
-      "'; do shell script 'touch \(witness.path)'; '",
-    ]
-    // An address no account has, so the script stops before it composes.
-    let nowhere = "evie-conta-inexistente-\(UUID().uuidString)@exemplo.invalido"
+    let witness = Witness()
     for script in [EvieAppleScripts.sendMail, EvieAppleScripts.saveMailDraft] {
-      for payload in payloads {
-        let exit = try Self.runScript(script, arguments: [payload, payload, nowhere, payload])
-        #expect(exit == 0, "osascript saiu com \(exit) para \(payload)")
-        #expect(
-          !FileManager.default.fileExists(atPath: witness.path),
-          "o payload executou: \(payload)"
-        )
+      _ = try Self.runHostile(
+        script, app: .mail, payloads: Self.messagePayloads(witness), witness: witness,
+        arguments: Self.messageArguments
+      )
+    }
+  }
+
+  @Test(
+    "a hostile subject, body and recipient run to the end",
+    .enabled(if: LiveAppleEvents.areEnabled(for: .mail), LiveAppleEvents.comment)
+  )
+  func hostileMessageCompletes() throws {
+    let witness = Witness()
+    for script in [EvieAppleScripts.sendMail, EvieAppleScripts.saveMailDraft] {
+      let runs = try Self.runHostile(
+        script, app: .mail, payloads: Self.messagePayloads(witness), witness: witness,
+        arguments: Self.messageArguments
+      )
+      for (payload, run) in runs {
+        Self.expectRanToTheEnd(run, payload: payload)
       }
     }
   }
 
   /// A word where an hour belongs must fail the coercion and take the script
   /// down with it, exactly as it does for the reading calendar script.
+  ///
+  /// Not gated, for the reason the date test gives: every coercion comes before
+  /// the running check, so no Apple Event is sent. Measured on 2026-10-16: exit
+  /// status 1 with -1700.
   @Test("a hostile time argument fails to coerce and creates nothing")
   func hostileTimeArgumentDoesNothing() throws {
-    let witness = FileManager.default.temporaryDirectory
-      .appendingPathComponent("evie-injection-\(UUID().uuidString).txt")
-    try? FileManager.default.removeItem(at: witness)
+    let witness = Witness()
 
-    let exit = try Self.runScript(
+    let run = try OsascriptRun.run(
       EvieAppleScripts.createEvent,
       arguments: ["Teste", "Pessoal", ""]
         + [
           "2099", "1", "1", "10; do shell script \"touch \(witness.path)\"", "0",
           "2099", "1", "1", "11", "0",
-        ]
+        ],
+      app: .calendar
     )
 
-    #expect(exit != 0, "a coerção deveria falhar")
-    #expect(!FileManager.default.fileExists(atPath: witness.path))
+    #expect(run.outcome != .exited(0), "a coerção deveria falhar")
+    #expect(run.standardError.contains("-1700"), "falhou por outro motivo: \(run.standardError)")
+    #expect(!witness.exists)
+  }
+}
+
+// MARK: - The hostile inputs and how they are run
+
+extension EvieMailCalendarScriptTests {
+  /// A file a payload would create if it ever ran. Its absence is the claim.
+  fileprivate struct Witness {
+    let url = FileManager.default.temporaryDirectory
+      .appendingPathComponent("evie-injection-\(UUID().uuidString).txt")
+
+    var path: String { url.path }
+    var exists: Bool { FileManager.default.fileExists(atPath: url.path) }
   }
 
-  /// Runs a script the way the client does, and reports only the exit status.
+  fileprivate static func searchPayloads(_ witness: Witness) -> [String] {
+    [
+      "assunto\"; do shell script \"touch \(witness.path)\"; --",
+      "\"); do shell script \"touch \(witness.path)\"; (\"",
+      "'; do shell script 'touch \(witness.path)'; '",
+    ]
+  }
+
+  fileprivate static func titlePayloads(_ witness: Witness) -> [String] {
+    [
+      "reunião\"; do shell script \"touch \(witness.path)\"; --",
+      "\"} , summary:\"x\"); do shell script \"touch \(witness.path)\"; (\"",
+      "'; do shell script 'touch \(witness.path)'; '",
+    ]
+  }
+
+  fileprivate static func messagePayloads(_ witness: Witness) -> [String] {
+    [
+      "assunto\"; do shell script \"touch \(witness.path)\"; --",
+      "\"} , subject:\"x\"); do shell script \"touch \(witness.path)\"; (\"",
+      "'; do shell script 'touch \(witness.path)'; '",
+    ]
+  }
+
+  /// A name no calendar has, so the script stops before it creates anything.
+  fileprivate static func eventArguments(_ payload: String) -> [String] {
+    let nowhere = "EVIE-AGENDA-INEXISTENTE-\(UUID().uuidString)"
+    return [payload, nowhere, payload] + ["2099", "1", "1", "10", "0", "2099", "1", "1", "11", "0"]
+  }
+
+  /// An address no account has, so the script stops before it composes.
+  fileprivate static func messageArguments(_ payload: String) -> [String] {
+    let nowhere = "evie-conta-inexistente-\(UUID().uuidString)@exemplo.invalido"
+    return [payload, payload, nowhere, payload]
+  }
+
+  /// Runs every payload and checks the witness after each one, in every
+  /// environment. The runs come back so a gated test can read their status too.
   ///
-  /// The `--` is what separates the program from its arguments. Without it,
-  /// `osascript` reads the first argument as another of its own options.
-  private static func runScript(_ script: String, arguments: [String]) throws -> Int32 {
-    let process = Process()
-    process.executableURL = URL(fileURLWithPath: "/usr/bin/osascript")
-    process.arguments = ["-e", script, "--"] + arguments
-    process.standardOutput = FileHandle.nullDevice
-    process.standardError = FileHandle.nullDevice
-    try process.run()
-    process.waitUntilExit()
-    return process.terminationStatus
+  /// Stops after a run that hit the deadline: that one was waiting on the consent
+  /// prompt, and the next would wait on the same prompt for another ten seconds.
+  /// The payloads left out were never checked, which is recorded as an issue:
+  /// the witness claim holds only for the payloads that ran.
+  ///
+  /// `runner` is the real `osascript` except in the tests of this loop.
+  fileprivate static func runHostile(
+    _ script: String,
+    app: EvieAppleApp,
+    payloads: [String],
+    witness: Witness,
+    sourceLocation: SourceLocation = #_sourceLocation,
+    arguments: (String) -> [String],
+    runner: (String, [String], EvieAppleApp) throws -> OsascriptRun = {
+      try OsascriptRun.run($0, arguments: $1, app: $2)
+    }
+  ) throws -> [(payload: String, run: OsascriptRun)] {
+    var runs: [(payload: String, run: OsascriptRun)] = []
+    for payload in payloads {
+      let run = try runner(script, arguments(payload), app)
+      #expect(!witness.exists, "o payload executou: \(payload)", sourceLocation: sourceLocation)
+      runs.append((payload, run))
+      if run.outcome == .timedOut {
+        break
+      }
+    }
+    if runs.count < payloads.count {
+      Issue.record(
+        Comment(
+          rawValue: "o osascript não terminou em 10 s (provavelmente a pergunta de Automação "
+            + "do macOS para o \(app.displayName)); \(payloads.count - runs.count) de "
+            + "\(payloads.count) payloads ficaram sem verificar"
+        ),
+        sourceLocation: sourceLocation
+      )
+    }
+    return runs
+  }
+
+  /// The gated half. A missing grant is reported as the precondition it is, not
+  /// as "osascript saiu com 1", so a forced run says what to fix.
+  fileprivate static func expectRanToTheEnd(
+    _ run: OsascriptRun,
+    payload: String,
+    sourceLocation: SourceLocation = #_sourceLocation
+  ) {
+    switch run.outcome {
+    case .timedOut:
+      Issue.record(
+        Comment(
+          rawValue: "pré-condição não atendida: o osascript não terminou em 10 s, "
+            + "provavelmente esperando a pergunta de Automação do macOS"
+        ),
+        sourceLocation: sourceLocation
+      )
+    case .exited where run.lacksAppleEventsGrant:
+      Issue.record(
+        Comment(
+          rawValue: "pré-condição não atendida: sem permissão de Apple Events para o "
+            + "\(run.app.displayName): \(run.standardError)"
+        ),
+        sourceLocation: sourceLocation
+      )
+    case .exited(let status):
+      #expect(
+        status == 0,
+        "osascript saiu com \(status) para \(payload): \(run.standardError)",
+        sourceLocation: sourceLocation
+      )
+    }
   }
 }
 

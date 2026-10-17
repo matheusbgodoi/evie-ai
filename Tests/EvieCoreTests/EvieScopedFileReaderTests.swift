@@ -161,6 +161,34 @@ struct EvieScopedFileReaderTests {
     #expect(!EvieScopedFileReader.isDenied("environment.md"))
   }
 
+  /// APFS opens `.SSH` as `.ssh`, so the denylist has to compare the way the
+  /// disk does. Before this, every one of these slipped through.
+  @Test("letter case, width and decomposed accents do not get a name past the denylist")
+  func deniedNamesAreFolded() {
+    #expect(EvieScopedFileReader.isDenied(".SSH"))
+    #expect(EvieScopedFileReader.isDenied(".Env.local"))
+    #expect(EvieScopedFileReader.isDenied(".ENV"))
+    #expect(EvieScopedFileReader.isDenied("LIBRARY"))
+    #expect(EvieScopedFileReader.isDenied("Servidor.PEM"))
+    // "Li" + U+0300 COMBINING GRAVE: a decomposed accent on a denied name.
+    #expect(EvieScopedFileReader.isDenied("Li\u{0300}brary"))
+    #expect(EvieScopedFileReader.isDenied("ke\u{0301}ychains"))
+    #expect(!EvieScopedFileReader.isDenied("Environment.md"))
+  }
+
+  @Test("a differently cased denied folder is refused on disk, not only by name")
+  func caseVariantRefusedOnDisk() throws {
+    let root = try makeRoot([".ssh/x": "chave privada\n"])
+    defer { try? FileManager.default.removeItem(at: root) }
+
+    #expect(throws: EvieScopedFileReader.ReaderError.denied(".SSH")) {
+      _ = try EvieScopedFileReader().read(root: root, relativePath: ".SSH/x")
+    }
+    #expect(throws: EvieScopedFileReader.ReaderError.denied(".SSH")) {
+      _ = try EvieScopedFileReader().readData(root: root, relativePath: ".SSH/x")
+    }
+  }
+
   /// Granting the whole home folder must not hand over Mail, Messages, browser
   /// cookies, or the OAuth tokens applications leave in Application Support.
   @Test("the Library folder is refused, so a home grant does not include it")

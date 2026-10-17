@@ -56,13 +56,19 @@ public struct EviePreferencesStore: Sendable {
       return (EviePreferences(), .unsupportedSchemaVersion(document.schemaVersion))
     }
 
+    let defaults = EviePreferences()
     var preferences = EviePreferences(
       appearance: document.appearance ?? EvieAppearancePreferences(),
       shortcuts: document.shortcuts ?? EvieShortcutPreferences(),
       voice: document.voice ?? EvieVoicePreferences(),
-      fileChangesEnabled: document.fileChangesEnabled ?? false,
-      autoApproveChanges: document.autoApproveChanges ?? false,
-      webSearchEnabled: document.webSearchEnabled ?? false
+      brainChoice: document.brainChoice ?? defaults.brainChoice,
+      fileChangesEnabled: document.fileChangesEnabled ?? defaults.fileChangesEnabled,
+      autoApproveChanges: document.autoApproveChanges ?? defaults.autoApproveChanges,
+      webSearchEnabled: document.webSearchEnabled ?? defaults.webSearchEnabled,
+      mailAndCalendarEnabled: document.mailAndCalendarEnabled ?? defaults.mailAndCalendarEnabled,
+      computerUseEnabled: document.computerUseEnabled ?? defaults.computerUseEnabled,
+      computerUseConsentGiven: document.computerUseConsentGiven ?? false,
+      savesDocumentsWhenAsked: document.savesDocumentsWhenAsked ?? defaults.savesDocumentsWhenAsked
     )
 
     do {
@@ -92,9 +98,14 @@ public struct EviePreferencesStore: Sendable {
       appearance: preferences.appearance,
       shortcuts: preferences.shortcuts,
       voice: preferences.voice,
+      brainChoice: preferences.brainChoice,
       fileChangesEnabled: preferences.fileChangesEnabled,
       autoApproveChanges: preferences.autoApproveChanges,
-      webSearchEnabled: preferences.webSearchEnabled
+      webSearchEnabled: preferences.webSearchEnabled,
+      mailAndCalendarEnabled: preferences.mailAndCalendarEnabled,
+      computerUseEnabled: preferences.computerUseEnabled,
+      computerUseConsentGiven: preferences.computerUseConsentGiven,
+      savesDocumentsWhenAsked: preferences.savesDocumentsWhenAsked
     )
     let encoder = JSONEncoder()
     encoder.outputFormatting = [.prettyPrinted, .sortedKeys, .withoutEscapingSlashes]
@@ -158,17 +169,34 @@ extension EviePreferencesStore {
       case appearance
       case shortcuts
       case voice
+      case brainChoice = "brain_choice"
       case fileChangesEnabled = "file_changes_enabled"
       case autoApproveChanges = "auto_approve_changes"
       case webSearchEnabled = "web_search_enabled"
+      case mailAndCalendarEnabled = "mail_and_calendar_enabled"
+      case computerUseEnabled = "computer_use_enabled"
+      case computerUseConsentGiven = "computer_use_consent_given"
+      case savesDocumentsWhenAsked = "saves_documents_when_asked"
     }
 
     let schemaVersion: Int
     let appearance: EvieAppearancePreferences?
     let shortcuts: EvieShortcutPreferences?
     let voice: EvieVoicePreferences?
+    let brainChoice: EvieBrainChoice?
     let fileChangesEnabled: Bool?
     let autoApproveChanges: Bool?
     let webSearchEnabled: Bool?
+    /// Absent in every file written before 2026-10-16, when the switch was
+    /// declared on `EviePreferences` but never named here, so it was dropped on
+    /// save and read back as off on every launch.
+    let mailAndCalendarEnabled: Bool?
+    /// Absent in every file written before S5c (2026-10-16): read as on, the
+    /// switch's default.
+    let computerUseEnabled: Bool?
+    /// Absent before S5d (2026-10-16): the consent was never given.
+    let computerUseConsentGiven: Bool?
+    /// Missing keys use the current owner-selected default (ADR 0022).
+    let savesDocumentsWhenAsked: Bool?
   }
 }

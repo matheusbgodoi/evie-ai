@@ -3,18 +3,20 @@ import SwiftUI
 
 /// The colours that separate "you are talking" from "Evie is talking".
 ///
-/// These are the system colours the interface has always used. Only one value is
-/// substituted, and only in light appearance: `.mint` resolves to 1.82:1 against
-/// the HUD surface there, below the 3:1 WCAG asks of a graphical object, which
-/// made "listening" almost invisible on a light desktop. Dark appearance — where
-/// it measures 9:1 — is untouched.
+/// `.mint` resolves to 1.82:1 against the HUD surface in light appearance, below
+/// the 3:1 WCAG asks of a graphical object, which made "listening" almost
+/// invisible on a light desktop; there it is replaced by a darker teal, and dark
+/// appearance — where it measures 9:1 — is untouched. Evie's own voice is the
+/// violet pair `docs/UI_UX.md` documents (`#7149E9` light, `#9577EE` dark). It was
+/// `.pink` in code until 2026-10-16 while the document already said violet; the
+/// document was the decision and the code is what changed.
 enum EvieVoiceTint {
-  static let input = adaptive(
-    light: NSColor(srgbRed: 0x0D / 255, green: 0x77 / 255, blue: 0x70 / 255, alpha: 1),
-    dark: NSColor(Color.mint)
+  static let input = Color(
+    nsColor: EviePalette.adaptive(light: EviePalette.rgb(0x0D7770), dark: NSColor(Color.mint))
   )
-  static let output = Color.pink
-  static let idle = Color.indigo
+  /// The same violet as the screen presence glow (`EviePalette.violet`).
+  static let output = Color(nsColor: EviePalette.violet)
+  static let idle = Color(nsColor: EviePalette.violet)
 
   static func color(for direction: WaveformDirection?) -> Color {
     switch direction {
@@ -22,14 +24,6 @@ enum EvieVoiceTint {
     case .output: output
     case nil: idle
     }
-  }
-
-  private static func adaptive(light: NSColor, dark: NSColor) -> Color {
-    Color(
-      nsColor: NSColor(name: nil) { appearance in
-        appearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua ? dark : light
-      }
-    )
   }
 }
 
@@ -39,9 +33,6 @@ enum EvieVoiceTint {
 /// larger size. At thirty points the sparkle is simply the better mark: it is a
 /// vector, so it stays crisp, and the system animates it for free.
 struct EvieMarkView: View {
-  /// One half-cycle of the breathing motion.
-  private static let breathPeriod: TimeInterval = 2.6
-
   var state: EvieVisualState
   var waveformSamples: [CGFloat] = []
   var diameter: CGFloat = 30
@@ -61,7 +52,8 @@ struct EvieMarkView: View {
   }
 
   private var isMoving: Bool {
-    isAnimating && !reduceMotion
+    isAnimating && !reduceMotion && state != .ready && state != .completed
+      && state != .awaitingApproval && state != .error
   }
 
   var body: some View {

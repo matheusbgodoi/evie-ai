@@ -187,7 +187,7 @@ extension EvieMemoryStore.MemoryError: LocalizedError {
       "Essa lembrança é longa demais — guarde a frase, e o resto no Obsidian."
     case .full:
       "Ela já guarda o máximo de \(EvieMemoryStore.maximumEntries) lembranças. "
-        + "Apague alguma em Configurações › Memória."
+        + "Apague alguma em \(EvieSettingsSection.knowledge.path) › Memória."
     }
   }
 }

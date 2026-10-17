@@ -21,8 +21,7 @@ struct EvieWebClient: EvieWebSearching, Sendable {
     "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 "
     + "(KHTML, like Gecko) Version/18.0 Safari/605.1.15"
 
-  /// A page larger than this is truncated as it arrives rather than after, so a
-  /// hostile server cannot make Evie hold a gigabyte in memory.
+  /// Enforced during transfer by the bounded public-web transport.
   static let maximumDownloadBytes = 4 * 1_024 * 1_024
 
   var timeout: TimeInterval = 20
@@ -141,57 +140,15 @@ struct EvieWebClient: EvieWebSearching, Sendable {
   /// local network trusts it.
   static func validate(_ address: String) -> URL? {
     guard let url = URL(string: address.trimmingCharacters(in: .whitespacesAndNewlines)),
-      let scheme = url.scheme?.lowercased(),
-      scheme == "https" || scheme == "http",
-      let host = url.host?.lowercased()
-    else {
-      return nil
-    }
-
-    let blockedHosts: Set<String> = [
-      "localhost", "127.0.0.1", "0.0.0.0", "::1", "[::1]",
-      "169.254.169.254", "metadata.google.internal",
-    ]
-    guard !blockedHosts.contains(host), !host.hasSuffix(".local") else {
-      return nil
-    }
-    // Literal private ranges. A hostname that resolves to one is not caught here
-    // and is the reason this is a guard rather than a guarantee.
-    let privatePrefixes = ["10.", "192.168.", "127.", "169.254."]
-    guard !privatePrefixes.contains(where: { host.hasPrefix($0) }) else {
-      return nil
-    }
-    if host.hasPrefix("172.") {
-      let second = host.split(separator: ".").dropFirst().first.flatMap { Int($0) } ?? 0
-      guard !(16...31).contains(second) else {
-        return nil
-      }
-    }
+      EviePublicWebFetcher.accepts(url)
+    else { return nil }
     return url
   }
 }
 
 extension EvieWebClient {
   fileprivate func fetchText(_ request: URLRequest) async throws -> String {
-    let data: Data
-    let response: URLResponse
-    do {
-      (data, response) = try await URLSession.shared.data(for: request)
-    } catch {
-      throw WebError.offline
-    }
-    guard let http = response as? HTTPURLResponse else {
-      throw WebError.offline
-    }
-    guard (200...299).contains(http.statusCode) else {
-      throw WebError.rejected(http.statusCode)
-    }
-    let bounded = data.prefix(Self.maximumDownloadBytes)
-    guard let text = String(data: bounded, encoding: .utf8)
-      ?? String(data: bounded, encoding: .isoLatin1)
-    else {
-      throw WebError.notReadable
-    }
-    return text
+    try await EviePublicWebFetcher().text(
+      for: request, maximumBytes: Self.maximumDownloadBytes, timeout: timeout)
   }
 }

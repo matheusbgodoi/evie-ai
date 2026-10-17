@@ -21,9 +21,16 @@ public struct EvieFileToolbox: Sendable {
   public static let maximumSearchResults = 20
 
   public var reader: EvieScopedFileReader
+  /// The home folder the well-known aliases (`mesa`, `documentos`,
+  /// `downloads`, `obsidian`) are resolved against. Absent means no alias is
+  /// understood and `list_roots` suggests nothing: the schedule runner and the
+  /// diagnostics see exactly the identifiers they were given. Only the shell's
+  /// own turn sets it, and tests set it to a temporary folder.
+  public var home: URL?
 
-  public init(reader: EvieScopedFileReader = EvieScopedFileReader()) {
+  public init(reader: EvieScopedFileReader = EvieScopedFileReader(), home: URL? = nil) {
     self.reader = reader
+    self.home = home
   }
 
   /// How many text files a content search will open. The Obsidian vault this was
@@ -43,6 +50,7 @@ public struct EvieFileToolbox: Sendable {
     case searchFiles = "search_files"
     case searchContent = "search_content"
     case fileInfo = "file_info"
+    case analyzeFolder = "analyze_folder"
   }
 
   /// What the model is told it can do.
@@ -57,8 +65,9 @@ public struct EvieFileToolbox: Sendable {
         name: ToolName.listRoots.rawValue,
         summary: """
           Lista as pastas que o Matheus autorizou, com o identificador de cada \
-          uma. Chame primeiro, sempre: nenhuma outra ferramenta funciona sem um \
-          identificador vindo daqui.
+          uma, e os apelidos mesa, documentos e downloads. Chame primeiro, \
+          sempre: nenhuma outra ferramenta funciona sem um identificador ou \
+          apelido vindo daqui.
           """,
         parameters: []
       ),
@@ -175,6 +184,33 @@ public struct EvieFileToolbox: Sendable {
           ),
         ]
       ),
+      EvieToolDefinition(
+        name: ToolName.analyzeFolder.rawValue,
+        summary: """
+          Faz uma visão geral de uma pasta de uma vez: quantos arquivos de cada \
+          tipo, quanto ocupam, os mais novos e os mais antigos, alguns nomes e o \
+          começo de alguns documentos (PDF, Word, RTF, texto). Use quando ele \
+          pedir para analisar uma pasta ou perguntar o que tem nela.
+          """,
+        parameters: [
+          EvieToolParameter(
+            name: "root_id",
+            type: .string,
+            summary: "Identificador ou apelido da pasta, vindo de list_roots.",
+            isRequired: true
+          ),
+          EvieToolParameter(
+            name: "path",
+            type: .string,
+            summary: "Subpasta, relativa à pasta autorizada. Deixe vazio para a raiz."
+          ),
+          EvieToolParameter(
+            name: "documents",
+            type: .integer,
+            summary: "Quantos documentos ler o começo, de 0 a 8. Padrão 4."
+          ),
+        ]
+      ),
     ]
   }
 
@@ -183,7 +219,17 @@ public struct EvieFileToolbox: Sendable {
   /// Never throws. A failure the model can read — a wrong identifier, a file that
   /// is not there — is worth more than an exception, because the model can
   /// correct itself from a sentence and cannot from silence.
-  public func execute(_ call: EvieToolCall, roots: [EvieFileRoot]) -> EvieToolResult {
+  ///
+  /// - Parameter correctingNearMisses: whether a `search_content` term that
+  ///   matches nothing gets one retry with the nearest word the files hold
+  ///   (`EvieNearestTerm`). On for the person's own words; for a term the model
+  ///   wrote, only when its family is known to misspell them
+  ///   (`ModelFamily.misspellsSearchTerms`).
+  public func execute(
+    _ call: EvieToolCall,
+    roots: [EvieFileRoot],
+    correctingNearMisses: Bool = true
+  ) -> EvieToolResult {
     guard let tool = ToolName(rawValue: call.name) else {
       return failure(call, "Não existe uma ferramenta chamada \(call.name).")
     }
@@ -212,11 +258,27 @@ public struct EvieFileToolbox: Sendable {
       }
     case .searchContent:
       return withRoot(call, arguments: arguments, roots: roots) { root in
-        try searchContent(root: root, query: arguments["query"] ?? "")
+        try searchContent(
+          root: root,
+          query: arguments["query"] ?? "",
+          correctingNearMisses: correctingNearMisses
+        )
       }
     case .fileInfo:
       return withRoot(call, arguments: arguments, roots: roots) { root in
         try fileInfo(root: root, path: arguments["path"] ?? "")
+      }
+    case .analyzeFolder:
+      return withRoot(call, arguments: arguments, roots: roots) { root in
+        let path = normalise(arguments["path"] ?? "")
+        let requested = arguments["documents"].flatMap { Int($0) }
+        return try EvieFolderAnalyzer(reader: reader)
+          .analyze(
+            root: root.url,
+            relativePath: path,
+            extracts: requested ?? EvieFolderAnalyzer.defaultExtracts
+          )
+          .overview(of: label(root: root, path: path))
       }
     }
   }
@@ -224,7 +286,41 @@ public struct EvieFileToolbox: Sendable {
 
 extension EvieFileToolbox {
   fileprivate func listRoots(_ call: EvieToolCall, roots: [EvieFileRoot]) -> EvieToolResult {
-    guard !roots.isEmpty else {
+    var sections: [String] = []
+    if !roots.isEmpty {
+      sections.append(
+        "Pastas autorizadas (id e nome):\n"
+          + roots.map { "\($0.id)  \($0.displayName)" }.joined(separator: "\n")
+      )
+    }
+
+    if let home {
+      let reachable = EvieSuggestedRoot.allCases.compactMap { suggestion -> String? in
+        guard let location = suggestion.location(in: roots, home: home),
+          location.id == suggestion.alias
+        else {
+          return nil
+        }
+        return "\(suggestion.alias)  \(suggestion.displayName)"
+      }
+      if !reachable.isEmpty {
+        sections.append(
+          "Apelidos que também servem de root_id:\n" + reachable.joined(separator: "\n")
+        )
+      }
+      let ungranted = EvieSuggestedRoot.ungranted(in: roots, home: home)
+      if !ungranted.isEmpty {
+        sections.append(
+          """
+          Ainda não autorizadas: \(ungranted.map(\.alias).joined(separator: ", ")). Se ele \
+          pedir algo lá, use o apelido como root_id: aparece um cartão para ele \
+          permitir com um clique, e então ele pede de novo.
+          """
+        )
+      }
+    }
+
+    guard !sections.isEmpty else {
       return success(
         call,
         """
@@ -233,9 +329,7 @@ extension EvieFileToolbox {
         """
       )
     }
-
-    let lines = roots.map { "\($0.id)  \($0.displayName)" }
-    return success(call, "Pastas autorizadas (id e nome):\n" + lines.joined(separator: "\n"))
+    return success(call, sections.joined(separator: "\n\n"))
   }
 
   fileprivate func listFolder(root: EvieFileRoot, path: String) throws -> String {
@@ -247,7 +341,7 @@ extension EvieFileToolbox {
     var lines = listing.entries.map { entry in
       entry.isDirectory
         ? "\(entry.name)/"
-        : "\(entry.name)  \(describeSize(entry.byteSize))"
+        : "\(entry.name)  \(Self.describeSize(entry.byteSize))"
     }
     if listing.hasMore {
       lines.append("… e mais itens além dos \(listing.entries.count) primeiros.")
@@ -261,12 +355,38 @@ extension EvieFileToolbox {
   }
 
   fileprivate func readFile(root: EvieFileRoot, path: String) throws -> String {
+    if EvieDocumentText.isExtracted(path) {
+      return try readDocument(root: root, path: path)
+    }
     let excerpt = try reader.read(root: root.url, relativePath: normalise(path))
     let header =
       excerpt.isTruncated
-      ? "Começo de \(path) (\(describeSize(excerpt.byteSize)) no total, cortado):"
+      ? "Começo de \(path) (\(Self.describeSize(excerpt.byteSize)) no total, cortado):"
       : "Conteúdo de \(path):"
     return header + "\n" + excerpt.text
+  }
+
+  /// A PDF, Word or RTF file, read for its text. A PDF with no text layer —
+  /// a scan — says so rather than pretending it is empty.
+  fileprivate func readDocument(root: EvieFileRoot, path: String) throws -> String {
+    let data = try reader.readData(root: root.url, relativePath: normalise(path))
+    guard
+      let extract = EvieDocumentText.extract(
+        from: data,
+        fileExtension: (path as NSString).pathExtension
+      )
+    else {
+      return """
+        \(path) não tem texto que eu consiga tirar daqui — pode ser um PDF \
+        escaneado. Se ele anexar o arquivo na conversa, eu leio a imagem das páginas.
+        """
+    }
+    let pages = extract.pageCount.map { ", \($0) página(s)" } ?? ""
+    let header =
+      extract.isTruncated
+      ? "Começo do texto de \(path) (\(Self.describeSize(data.count))\(pages), cortado):"
+      : "Texto de \(path) (\(Self.describeSize(data.count))\(pages)):"
+    return header + "\n" + extract.text
   }
 
   fileprivate func fileInfo(root: EvieFileRoot, path: String) throws -> String {
@@ -286,7 +406,7 @@ extension EvieFileToolbox {
 
     var parts = [entry.isDirectory ? "pasta" : "arquivo"]
     if !entry.isDirectory {
-      parts.append(describeSize(entry.byteSize))
+      parts.append(Self.describeSize(entry.byteSize))
     }
     if let modified = entry.modifiedAt {
       parts.append("modificado em \(Self.dateFormatter.string(from: modified))")
@@ -364,7 +484,13 @@ extension EvieFileToolbox {
     guard let identifier = arguments["root_id"], !identifier.isEmpty else {
       return failure(call, "Faltou root_id. Chame list_roots para obter os identificadores.")
     }
-    guard let root = roots.first(where: { $0.id == identifier }) else {
+    let root: EvieFileRoot
+    switch EvieSuggestedRoot.lookup(identifier, in: roots, home: home) {
+    case .granted(let found):
+      root = found
+    case .notGranted(let suggestion):
+      return failure(call, Self.notGrantedMessage(suggestion))
+    case .unknown:
       return failure(
         call,
         """
@@ -384,7 +510,7 @@ extension EvieFileToolbox {
   }
 
   /// Reader failures, said in a way that tells the model what to do next.
-  fileprivate static func describe(
+  static func describe(
     _ error: EvieScopedFileReader.ReaderError,
     in root: EvieFileRoot
   ) -> String {
@@ -413,7 +539,32 @@ extension EvieFileToolbox {
       A pasta \(root.displayName) não está acessível agora. Talvez tenha sido \
       movida, renomeada, ou seja um disco que não está conectado.
       """
+    case .tooLarge(let path):
+      "\(path) é grande demais para eu abrir aqui (mais de 16 MB)."
     }
+  }
+
+  /// What the model hears when it names a well-known folder that has not been
+  /// granted. The card is the shell's job; this sentence makes sure the model
+  /// says the right thing about it instead of claiming it looked.
+  static func notGrantedMessage(_ suggestion: EvieSuggestedRoot) -> String {
+    """
+    \(suggestion.displayName) ainda não está autorizada. Apareceu um cartão para o \
+    Matheus permitir com um clique ("\(suggestion.grantTitle)"). Diga isso a ele em \
+    uma frase e que, depois de permitir, é só pedir de novo. Não diga que olhou.
+    """
+  }
+
+  /// The well-known folder a call names that has not been granted, so the
+  /// shell can offer the card. `nil` for every other call.
+  public func requestedSuggestion(in call: EvieToolCall, roots: [EvieFileRoot]) -> EvieSuggestedRoot? {
+    let arguments = (try? call.arguments()) ?? [:]
+    guard let identifier = arguments["root_id"] ?? arguments["destination"],
+      case .notGranted(let suggestion) = EvieSuggestedRoot.lookup(identifier, in: roots, home: home)
+    else {
+      return nil
+    }
+    return suggestion
   }
 
   fileprivate func success(_ call: EvieToolCall, _ content: String) -> EvieToolResult {
@@ -425,7 +576,7 @@ extension EvieFileToolbox {
   }
 
   /// The model writes `/Downloads/x`, `./x`, and `x` for the same thing.
-  fileprivate func normalise(_ path: String) -> String {
+  func normalise(_ path: String) -> String {
     var trimmed = path.trimmingCharacters(in: .whitespacesAndNewlines)
     while trimmed.hasPrefix("./") {
       trimmed.removeFirst(2)
@@ -439,12 +590,12 @@ extension EvieFileToolbox {
     return trimmed
   }
 
-  fileprivate func label(root: EvieFileRoot, path: String) -> String {
+  func label(root: EvieFileRoot, path: String) -> String {
     let normalised = normalise(path)
     return normalised.isEmpty ? root.displayName : "\(root.displayName)/\(normalised)"
   }
 
-  fileprivate func describeSize(_ bytes: Int?) -> String {
+  static func describeSize(_ bytes: Int?) -> String {
     guard let bytes else {
       return "tamanho desconhecido"
     }
@@ -454,17 +605,20 @@ extension EvieFileToolbox {
     if bytes < 1_024 * 1_024 {
       return "\(bytes / 1_024) KB"
     }
-    return String(format: "%.1f MB", Double(bytes) / (1_024 * 1_024))
+    if bytes < 1_024 * 1_024 * 1_024 {
+      return String(format: "%.1f MB", Double(bytes) / (1_024 * 1_024))
+    }
+    return String(format: "%.1f GB", Double(bytes) / (1_024 * 1_024 * 1_024))
   }
 
   /// Case and accents both get in the way of finding a file by name in
   /// Portuguese, so neither is allowed to matter.
-  fileprivate static func fold(_ text: String) -> String {
+  static func fold(_ text: String) -> String {
     text.folding(options: [.diacriticInsensitive, .caseInsensitive], locale: Locale(identifier: "pt_BR"))
       .trimmingCharacters(in: .whitespacesAndNewlines)
   }
 
-  fileprivate static let dateFormatter: DateFormatter = {
+  static let dateFormatter: DateFormatter = {
     let formatter = DateFormatter()
     formatter.locale = Locale(identifier: "pt_BR")
     formatter.dateFormat = "d 'de' MMMM 'de' yyyy"
@@ -485,16 +639,23 @@ extension EvieFileToolbox {
   /// Bounded in every direction that can run away, and it says so when it stops
   /// early — a search that silently gave up looks exactly like a search that
   /// found nothing.
-  fileprivate func searchContent(root: EvieFileRoot, query: String) throws -> String {
+  fileprivate func searchContent(
+    root: EvieFileRoot,
+    query: String,
+    correctingNearMisses: Bool
+  ) throws -> String {
     let needle = Self.fold(query)
     guard needle.count >= 2 else {
       return "Preciso de pelo menos duas letras para procurar."
     }
     let found = try scan(root: root, needle: needle, query: query)
-    if found.matches.isEmpty, let near = EvieNearestTerm.best(of: found.nearMisses) {
+    if correctingNearMisses, found.matches.isEmpty,
+      let near = EvieNearestTerm.best(of: found.nearMisses)
+    {
       // The term does not appear and something one letter away does. See
-      // `EvieNearestTerm`: this is not a hypothetical typo, it is what the model
-      // sends when it is asked about `cluemed`.
+      // `EvieNearestTerm`: this is not a hypothetical typo, it is what Gemma
+      // sends when it is asked about `cluemed`, and what a person types in a
+      // hurry.
       let retry = try scan(root: root, needle: near, query: near)
       if !retry.matches.isEmpty {
         return render(retry, query: near, corrected: query, root: root)

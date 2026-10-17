@@ -1,3 +1,4 @@
+import AVFoundation
 import EvieCore
 import SwiftUI
 
@@ -9,13 +10,15 @@ import SwiftUI
 struct VoiceSettingsView: View {
   @ObservedObject var viewModel: EviePreferencesViewModel
   @ObservedObject var wakeListener: EvieWakeListener
+  @StateObject private var nativeVoices = NativeVoiceCatalogModel()
+  @State private var showsWakeTraining = false
 
   private var voice: EvieVoicePreferences {
     viewModel.preferences.voice
   }
 
   private var voices: [EvieVoiceOption] {
-    EvieSpeechOutput.availableVoices()
+    nativeVoices.options
   }
 
   /// Says plainly whether the cloned engine is available, and what it costs.
@@ -32,8 +35,7 @@ struct VoiceSettingsView: View {
       .foregroundStyle(.secondary)
     } else {
       Label(
-        "Motor de voz clonada desligado — só as vozes do sistema aparecem. "
-          + "Ligue com Scripts/evie-voice start.",
+        "Voz nativa: usa o macOS, sem iniciar o motor de voz clonada.",
         systemImage: "powerplug"
       )
       .font(.caption)
@@ -92,6 +94,16 @@ struct VoiceSettingsView: View {
         captionRow(
           "Separe variantes com ponto e vírgula — a vírgula faz parte da frase. "
             + "Mínimo de \(EvieWakePhrase.minimumPhraseCharacters) letras."
+        )
+
+        Button {
+          showsWakeTraining = true
+        } label: {
+          Label("Calibrar cinco chamadas de “Evie”…", systemImage: "waveform.badge.mic")
+        }
+        captionRow(
+          "Ensina quais variantes da palavra o reconhecedor escuta quando você diz “Evie”. "
+            + "Você grava e confere cinco amostras; o áudio não é salvo."
         )
 
         // The only honest way to tune this. "Evie" is not a Portuguese word, so
@@ -208,6 +220,12 @@ struct VoiceSettingsView: View {
               set: { viewModel.selectVoice(key: $0) }
             )
           ) {
+            Text("Automática · melhor voz nativa instalada").tag("system:")
+            if let selected = voice.voiceIdentifier,
+              !voices.contains(where: { $0.id == selected }), voice.clonedVoiceID == nil
+            {
+              Text("Voz anterior indisponível · escolha outra").tag("system:\(selected)")
+            }
             if !viewModel.clonedVoices.isEmpty {
               Section("Clonadas") {
                 ForEach(viewModel.clonedVoices) { cloned in
@@ -229,6 +247,26 @@ struct VoiceSettingsView: View {
           )
 
           engineStatus
+          if let selected = voice.voiceIdentifier,
+            !voices.contains(where: { $0.id == selected }), voice.clonedVoiceID == nil
+          {
+            Label(
+              "A voz selecionada não está disponível para este aplicativo. A Evie usa a melhor voz nativa instalada até você escolher outra.",
+              systemImage: "exclamationmark.triangle"
+            )
+            .font(.caption).foregroundStyle(.orange)
+          }
+          Button("Gerenciar vozes do macOS…") { NativeVoiceCatalog.openSystemVoiceSettings() }
+          captionRow(
+            "Baixe vozes aprimoradas ou premium nos Ajustes do Sistema. Elas aparecem aqui quando o macOS as disponibiliza ao aplicativo."
+          )
+
+          DisclosureGroup("Voz Pessoal da Apple") {
+            Text(nativeVoices.personalVoiceStatus).font(.caption).foregroundStyle(.secondary)
+            captionRow(
+              "A Voz Pessoal usa um caminho de reprodução diferente e não aparece neste seletor. A calibração de cinco chamadas ajusta o reconhecimento de “Evie”; ela não cria uma Voz Pessoal."
+            )
+          }
 
           VStack(alignment: .leading, spacing: 7) {
             LabeledContent("Velocidade") {
@@ -263,11 +301,10 @@ struct VoiceSettingsView: View {
         Text("A voz dela")
       } footer: {
         Text(
-          "As vozes naturais da Siri aparecem no sistema mas o macOS não deixa um "
-            + "aplicativo de terceiros usá-las, então a lista do sistema é o que sobra "
-            + "e soa datada. Uma voz clonada é criada uma vez e vira um arquivo: a "
-            + "referência não é reenviada a cada fala. Medido aqui: 2,3 s até o "
-            + "primeiro som contra 0,6 s da voz do sistema."
+          "A lista mostra apenas vozes que o macOS permite usar neste aplicativo. "
+            + "“Aprimorada” e “premium” são os níveis informados pela Apple; "
+            + "a disponibilidade das vozes da Siri é controlada pelo sistema. "
+            + "A voz nativa não precisa de um modelo de voz separado da Evie."
         )
         .font(.caption)
         .foregroundStyle(.secondary)
@@ -288,8 +325,16 @@ struct VoiceSettingsView: View {
     }
     .formStyle(.grouped)
     .task {
+      nativeVoices.refresh()
       await viewModel.refreshVoiceEngine()
     }
+    .onReceive(
+      NotificationCenter.default.publisher(
+        for: AVSpeechSynthesizer.availableVoicesDidChangeNotification)
+    ) { _ in
+      nativeVoices.refresh()
+    }
+    .sheet(isPresented: $showsWakeTraining) { NativeWakeTrainingView() }
   }
 
   /// Spelled out rather than enforced silently: the switch the user cannot turn

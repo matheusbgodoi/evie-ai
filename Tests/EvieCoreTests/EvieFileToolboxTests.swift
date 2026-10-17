@@ -13,8 +13,8 @@ struct EvieFileToolboxTests {
 
     #expect(
       names == [
-        "file_info", "list_folder", "list_roots", "read_file", "search_content",
-        "search_files",
+        "analyze_folder", "file_info", "list_folder", "list_roots", "read_file",
+        "search_content", "search_files",
       ]
     )
     #expect(names.count == EvieFileToolbox.ToolName.allCases.count)

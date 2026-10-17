@@ -1,0 +1,447 @@
+#!/bin/zsh
+
+# Starts and stops the brain that runs on this Mac: LensVLM under the installed
+# mlx-vlm server, on loopback only.
+#
+# Evie starts the same server herself when a turn needs the Mac brain and stops
+# it after ten idle minutes or when she quits (ADR 0015). This script is the
+# manual way in, for measuring and for recovery, and it launches exactly what
+# Evie launches: the same executable, argv, environment, pid file and log, and
+# a key made for this launch (ADR 0017), kept 0600 in brain.key beside the pid
+# file and handed to the server in its environment, never in an argv.
+#
+# A server this script starts is taken over by Evie when she launches or first
+# uses it: from then on her idle timer and her quit stop it too.
+
+set -euo pipefail
+zmodload zsh/datetime
+
+readonly EVIE_SUPPORT_DIR="${EVIE_SUPPORT_DIR_OVERRIDE:-${HOME}/Library/Application Support/Evie}"
+readonly EVIE_BRAIN_RUNTIME_DIR="${EVIE_SUPPORT_DIR}/Runtime"
+readonly EVIE_BRAIN_PID_FILE="${EVIE_BRAIN_RUNTIME_DIR}/brain.pid"
+readonly EVIE_BRAIN_LOG="${EVIE_BRAIN_RUNTIME_DIR}/brain.log"
+readonly EVIE_BRAIN_KEY_FILE="${EVIE_BRAIN_RUNTIME_DIR}/brain.key"
+
+# Manual recovery defaults remain legacy 32K, without optional memory controls.
+# The installed app reads its configured profile; this script does not read or
+# silently replace that configuration. Override these for a measured profile.
+# The executable must stay absolute, never looked up on $PATH.
+readonly EVIE_BRAIN_EXECUTABLE="${EVIE_BRAIN_EXECUTABLE:-${HOME}/.local/bin/mlx_vlm.server}"
+readonly EVIE_BRAIN_MODEL="${EVIE_BRAIN_MODEL:-mlx-community/LensVLM-9B-OptiQ-4bit}"
+readonly EVIE_BRAIN_PORT="${EVIE_BRAIN_PORT:-38480}"
+readonly EVIE_BRAIN_MAX_KV="${EVIE_BRAIN_MAX_KV:-32768}"
+readonly EVIE_BRAIN_KV_BITS="${EVIE_BRAIN_KV_BITS:-}"
+readonly EVIE_BRAIN_PREFILL_STEP_SIZE="${EVIE_BRAIN_PREFILL_STEP_SIZE:-}"
+readonly EVIE_BRAIN_CACHE_LIMIT_MB="${EVIE_BRAIN_CACHE_LIMIT_MB:-}"
+# Exact bridge to LocalBrainPolicy.boundedBootstrap, protected by argv parity
+# tests. It runs the unmodified installed CLI, with no dependency fork.
+readonly EVIE_BRAIN_BOOTSTRAP="import sys,runpy;import mlx.core as mx;server=sys.argv.pop(1);cache=int(sys.argv.pop(1));mx.set_cache_limit(cache);sys.argv[0]=server;runpy.run_path(server,run_name='__main__')"
+# Measured cold start on 2026-10-16 was well under this (see
+# docs/MACOS_RUNTIME.md); the same bound Evie's launcher waits.
+readonly EVIE_BRAIN_READY_SECONDS="${EVIE_BRAIN_READY_SECONDS:-90}"
+
+readonly EVIE_BRAIN_HEALTH_URL="http://127.0.0.1:${EVIE_BRAIN_PORT}/health"
+
+function usage() {
+  print "Usage: Scripts/evie-brain <start|stop|status|health>"
+  print ""
+  print "  start   Load ${EVIE_BRAIN_MODEL} and serve it on 127.0.0.1:${EVIE_BRAIN_PORT}"
+  print "  stop    Shut it down and release its memory"
+  print "  status  Report whether it runs, its pid and resident memory"
+  print "  health  Print the server's /health answer (exit 1 when it does not answer)"
+}
+
+# The argv Evie's launcher builds (LocalBrainPolicy.makeArguments): loopback
+# only, the KV cache capped to the client's 32K context, one sequence at a time
+# so that cap is also the memory cap, and no --api-key: the key goes in the
+# environment, since every process of this user can read an argv.
+function server_arguments() {
+  reply=(
+    --model "${EVIE_BRAIN_MODEL}"
+    --host 127.0.0.1
+    --port "${EVIE_BRAIN_PORT}"
+    --max-kv-size "${EVIE_BRAIN_MAX_KV}"
+    --max-num-seqs 1
+  )
+  if [[ -n "${EVIE_BRAIN_KV_BITS}" ]]; then
+    reply+=(--kv-bits "${EVIE_BRAIN_KV_BITS}")
+  fi
+  if [[ -n "${EVIE_BRAIN_PREFILL_STEP_SIZE}" ]]; then
+    reply+=(--prefill-step-size "${EVIE_BRAIN_PREFILL_STEP_SIZE}")
+  fi
+  if [[ -n "${EVIE_BRAIN_CACHE_LIMIT_MB}" ]]; then
+    reply=(-I -c "${EVIE_BRAIN_BOOTSTRAP}" "${EVIE_BRAIN_EXECUTABLE}" \
+      "$(( EVIE_BRAIN_CACHE_LIMIT_MB * 1048576 ))" "${reply[@]}")
+  fi
+}
+
+function launch_executable() {
+  if [[ -z "${EVIE_BRAIN_CACHE_LIMIT_MB}" ]]; then
+    print -r -- "${EVIE_BRAIN_EXECUTABLE}"
+    return 0
+  fi
+  local head
+  IFS= read -r head < "${EVIE_BRAIN_EXECUTABLE}"
+  [[ "${head}" == '#!'* ]] || return 1
+  local -a interpreter_words=(${=head[3,-1]})
+  (( ${#interpreter_words} == 1 )) || return 1
+  [[ "${interpreter_words[1]}" == /*/(python*|Python*) && -x "${interpreter_words[1]}" ]] || return 1
+  print -r -- "${interpreter_words[1]}"
+}
+
+# The environment Evie's launcher passes (LocalBrainPolicy.makeEnvironment):
+# nothing inherited but the account basics and where the model cache is, so a
+# stray MLX_VLM_SERVER_API_KEY or MAX_KV_SIZE in the caller's shell cannot
+# change the server, and HF_HUB_OFFLINE=1 so a wrong model id fails instead of
+# downloading. The key is added at launch, read from the key file.
+function server_environment() {
+  reply=(
+    "HOME=${HOME}"
+    "PATH=/usr/bin:/bin:/usr/sbin:/sbin"
+    "HF_HUB_OFFLINE=1"
+  )
+  local name
+  for name in USER LOGNAME TMPDIR LANG HF_HOME HF_HUB_CACHE; do
+    if [[ -n "${(P)name:-}" ]]; then
+      reply+=("${name}=${(P)name}")
+    fi
+  done
+}
+
+function require_configuration() {
+  if [[ "${EVIE_BRAIN_EXECUTABLE}" != /* ]]; then
+    print -u2 "EVIE_BRAIN_EXECUTABLE must be an absolute path: ${EVIE_BRAIN_EXECUTABLE}"
+    return 1
+  fi
+  if [[ ! -x "${EVIE_BRAIN_EXECUTABLE}" ]]; then
+    print -u2 "The Mac brain's server is not installed at:"
+    print -u2 "  ${EVIE_BRAIN_EXECUTABLE}"
+    print -u2 "Install mlx-vlm with uv (see docs/MACOS_RUNTIME.md), or set EVIE_BRAIN_EXECUTABLE."
+    return 1
+  fi
+  if [[ "${EVIE_BRAIN_PORT}" != <-> || "${EVIE_BRAIN_MAX_KV}" != <-> ]]; then
+    print -u2 "EVIE_BRAIN_PORT and EVIE_BRAIN_MAX_KV must be whole numbers."
+    return 1
+  fi
+  if [[ -n "${EVIE_BRAIN_KV_BITS}" && "${EVIE_BRAIN_KV_BITS}" != (2|3|4|6|8) ]]; then
+    print -u2 "EVIE_BRAIN_KV_BITS must be 2, 3, 4, 6 or 8."
+    return 1
+  fi
+  local value
+  for value in "${EVIE_BRAIN_PREFILL_STEP_SIZE}" "${EVIE_BRAIN_CACHE_LIMIT_MB}"; do
+    if [[ -n "${value}" ]] && { [[ "${value}" != <-> ]] || (( ${#value} > 13 || value <= 0 || value > 8796093022207 )); }; then
+      print -u2 "Optional memory limits must be positive, representable whole numbers."
+      return 1
+    fi
+  done
+  if ! launch_executable >/dev/null; then
+    print -u2 "Bounded MLX launch requires the CLI's absolute Python shebang, without env/PATH or flags."
+    return 1
+  fi
+}
+
+function ensure_directories() {
+  umask 077
+  mkdir -p "${EVIE_BRAIN_RUNTIME_DIR}"
+  chmod 700 "${EVIE_SUPPORT_DIR}" "${EVIE_BRAIN_RUNTIME_DIR}"
+}
+
+# 32 bytes from /dev/urandom as 64 lowercase hex digits, the shape
+# LocalBrainKeyFile.makeKey gives and LocalBrainKeyFile.read accepts.
+function make_key() {
+  /usr/bin/od -An -tx1 -N32 /dev/urandom | /usr/bin/tr -d ' \n'
+}
+
+# Writes the key 0600 (the umask is 077 by then) and renames it into place.
+function write_key() {
+  local key="$1"
+  local partial="${EVIE_BRAIN_KEY_FILE}.$$"
+  print -r -- "${key}" > "${partial}"
+  chmod 600 "${partial}"
+  mv -f "${partial}" "${EVIE_BRAIN_KEY_FILE}"
+}
+
+# The pid file and the key that went with it: the key opens nothing once the
+# server is gone.
+function forget_server() {
+  rm -f "${EVIE_BRAIN_PID_FILE}" "${EVIE_BRAIN_KEY_FILE}"
+}
+
+# curl with the key as a header given on stdin, so it is never in curl's argv;
+# without a key file, without the header (and mlx-vlm answers 401).
+function curl_brain() {
+  local key=""
+  if [[ -f "${EVIE_BRAIN_KEY_FILE}" ]]; then
+    key=$(<"${EVIE_BRAIN_KEY_FILE}")
+  fi
+  if [[ -n "${key}" ]]; then
+    print -r -- "header = \"Authorization: Bearer ${key}\"" \
+      | /usr/bin/curl --config - "$@"
+  else
+    /usr/bin/curl "$@"
+  fi
+}
+
+function health_answers() {
+  curl_brain --fail --silent --max-time 3 "${EVIE_BRAIN_HEALTH_URL}" >/dev/null 2>&1
+}
+
+function process_is_running() {
+  local process_pid="$1"
+  local process_state
+  kill -0 "${process_pid}" 2>/dev/null || return 1
+  process_state=$(ps -p "${process_pid}" -o state= 2>/dev/null) || return 1
+  [[ "${process_state}" != Z* ]]
+}
+
+# The value argparse ends up with for an option: the last one given, as
+# "--opt value", "--opt=value" or an abbreviation of at least four characters
+# ("--hos"), as LocalBrainPolicy.lastValue reads it.
+function last_option_value() {
+  local option="$1"
+  shift
+  local value="" argument name
+  while (( $# > 0 )); do
+    argument="$1"
+    shift
+    name="${argument%%=*}"
+    if (( ${#name} >= 4 )) && [[ "${option}" == "${name}"* ]]; then
+      if [[ "${argument}" == *=* ]]; then
+        value="${argument#*=}"
+      elif (( $# > 0 )); then
+        value="$1"
+        shift
+      fi
+    fi
+  done
+  print -r -- "${value}"
+}
+
+# Whether every TCP socket the pid listens on is 127.0.0.1 or ::1. A wildcard
+# (lsof prints "*:port") or a real interface is reachable from the network. A
+# server still loading listens on nothing yet, which exposes nothing.
+function listens_only_on_loopback() {
+  local process_pid="$1"
+  local line address
+  for line in ${(f)"$(/usr/sbin/lsof -nP -a -p "${process_pid}" -iTCP -sTCP:LISTEN -Fn 2>/dev/null)"}; do
+    [[ "${line}" == n* ]] || continue
+    address="${line#n}"
+    address="${address%:*}"
+    [[ "${address}" == "127.0.0.1" || "${address}" == "[::1]" ]] || return 1
+  done
+  return 0
+}
+
+# Whether the pid is this brain and not a process that reused its number, nor
+# a server started by hand on every interface: its argv names the configured
+# executable as the program or as the script its interpreter runs, the last
+# --port is the configured one and the last --host is 127.0.0.1 (the server's
+# own default is 0.0.0.0), and it listens on loopback only. The same rules as
+# LocalBrainPolicy.argumentsIdentifyServer and listensOnlyOnLoopback.
+function is_our_server() {
+  local process_pid="$1"
+  local command_line
+  command_line=$(ps -ww -p "${process_pid}" -o command= 2>/dev/null) || return 1
+  local -a options
+  # ps does not quote arguments containing spaces. Match the exact bootstrap as
+  # one raw prefix before splitting the ordinary CLI options, never any -c code.
+  local image="${command_line%% *}"
+  local wrapper_prefix="${image} -I -c ${EVIE_BRAIN_BOOTSTRAP} ${EVIE_BRAIN_EXECUTABLE} "
+  if [[ "${image}" == /*/(python*|Python*) && "${command_line}" == "${wrapper_prefix}"* ]]; then
+    local remainder="${command_line#${wrapper_prefix}}"
+    local cache_bytes="${remainder%% *}"
+    [[ "${cache_bytes}" == <-> ]] && (( ${#cache_bytes} <= 19 && cache_bytes > 0 )) || return 1
+    options=(${=remainder#* })
+  else
+    local -a words=(${=command_line})
+    local program=${words[(ie)${EVIE_BRAIN_EXECUTABLE}]}
+    (( program <= 2 )) || return 1
+    options=("${(@)words[program+1,-1]}")
+  fi
+  [[ "$(last_option_value --port "${options[@]}")" == "${EVIE_BRAIN_PORT}" ]] || return 1
+  [[ "$(last_option_value --host "${options[@]}")" == "127.0.0.1" ]] || return 1
+  listens_only_on_loopback "${process_pid}"
+}
+
+# The pid in the pid file when it is still this brain; a stale file is removed.
+function recorded_pid() {
+  [[ -f "${EVIE_BRAIN_PID_FILE}" ]] || return 1
+  local server_pid
+  server_pid=$(<"${EVIE_BRAIN_PID_FILE}")
+  if [[ "${server_pid}" == <-> ]] && process_is_running "${server_pid}" \
+    && is_our_server "${server_pid}"; then
+    print -r -- "${server_pid}"
+    return 0
+  fi
+  forget_server
+  return 1
+}
+
+function listener_pid() {
+  /usr/sbin/lsof -nP -iTCP:"${EVIE_BRAIN_PORT}" -sTCP:LISTEN -t 2>/dev/null | head -1 || true
+}
+
+function start() {
+  require_configuration
+  ensure_directories
+
+  local server_pid
+  if server_pid=$(recorded_pid); then
+    if health_answers; then
+      print "The Mac brain is already running (PID ${server_pid})."
+      return 0
+    fi
+    print -u2 "The Mac brain (PID ${server_pid}) is still starting; see Scripts/evie-brain status."
+    return 1
+  fi
+
+  local port_owner
+  port_owner=$(listener_pid)
+  if [[ -n "${port_owner}" ]]; then
+    print -u2 "Port ${EVIE_BRAIN_PORT} is held by another process (PID ${port_owner}); refusing to start."
+    return 1
+  fi
+
+  server_arguments
+  local -a arguments=("${reply[@]}")
+  local executable
+  executable=$(launch_executable)
+  server_environment
+  local -a environment=("${reply[@]}")
+
+  # Appended to rather than truncated: the previous run's failure is often the
+  # only record of why this one is happening. Past 10 MB it is moved aside,
+  # as Evie's launcher does.
+  if [[ -f "${EVIE_BRAIN_LOG}" ]] && (( $(stat -f %z "${EVIE_BRAIN_LOG}") > 10 * 1024 * 1024 )); then
+    mv -f "${EVIE_BRAIN_LOG}" "${EVIE_BRAIN_LOG}.1"
+  fi
+  touch "${EVIE_BRAIN_LOG}"
+  chmod 600 "${EVIE_BRAIN_LOG}"
+  print -r -- "--- $(date -u +%Y-%m-%dT%H:%M:%SZ) Scripts/evie-brain start" >> "${EVIE_BRAIN_LOG}"
+
+  write_key "$(make_key)"
+
+  local started_at=${EPOCHREALTIME}
+  # nohup, `env -i` and sh all exec, so $! is the server's own pid. sh reads
+  # the key from the file into the environment, so it is never in an argv.
+  nohup /usr/bin/env -i "${environment[@]}" /bin/sh -c \
+    'MLX_VLM_SERVER_API_KEY=$(/bin/cat "$1") && export MLX_VLM_SERVER_API_KEY && shift && exec "$@"' \
+    evie-brain "${EVIE_BRAIN_KEY_FILE}" "${executable}" "${arguments[@]}" \
+    >> "${EVIE_BRAIN_LOG}" 2>&1 </dev/null &
+  server_pid=$!
+  print -r -- "${server_pid}" > "${EVIE_BRAIN_PID_FILE}"
+  chmod 600 "${EVIE_BRAIN_PID_FILE}"
+
+  print "Waking the Mac brain (PID ${server_pid}) — about 8 GB of memory…"
+  local attempt
+  for attempt in {1..${EVIE_BRAIN_READY_SECONDS}}; do
+    if ! process_is_running "${server_pid}"; then
+      forget_server
+      print -u2 "The Mac brain exited during startup. Last lines of ${EVIE_BRAIN_LOG}:"
+      tail -20 "${EVIE_BRAIN_LOG}" >&2
+      return 1
+    fi
+    if health_answers; then
+      if [[ "$(listener_pid)" != "${server_pid}" ]]; then
+        print -u2 "/health answered, but not from PID ${server_pid}; stopping it."
+        stop_pid "${server_pid}" || true
+        return 1
+      fi
+      local elapsed=$(( EPOCHREALTIME - started_at ))
+      printf 'The Mac brain is ready at http://127.0.0.1:%s/v1 (PID %s, %.1f s).\n' \
+        "${EVIE_BRAIN_PORT}" "${server_pid}" "${elapsed}"
+      return 0
+    fi
+    sleep 1
+  done
+
+  print -u2 "The Mac brain did not answer within ${EVIE_BRAIN_READY_SECONDS} s; stopping it."
+  print -u2 "Inspect ${EVIE_BRAIN_LOG}"
+  stop_pid "${server_pid}" || true
+  return 1
+}
+
+# SIGTERM, then SIGKILL after five seconds: the pid was checked to be this
+# brain, and a model that ignores TERM would otherwise keep its 8 GB.
+function stop_pid() {
+  local server_pid="$1"
+  kill -TERM "${server_pid}" 2>/dev/null || true
+  local attempt
+  for attempt in {1..50}; do
+    if ! process_is_running "${server_pid}"; then
+      forget_server
+      return 0
+    fi
+    sleep 0.1
+  done
+  kill -KILL "${server_pid}" 2>/dev/null || true
+  for attempt in {1..20}; do
+    if ! process_is_running "${server_pid}"; then
+      forget_server
+      return 0
+    fi
+    sleep 0.1
+  done
+  print -u2 "PID ${server_pid} did not exit after SIGKILL."
+  return 1
+}
+
+function stop() {
+  local server_pid
+  if ! server_pid=$(recorded_pid); then
+    local port_owner
+    port_owner=$(listener_pid)
+    if [[ -n "${port_owner}" ]] && is_our_server "${port_owner}"; then
+      server_pid="${port_owner}"
+    else
+      print "The Mac brain is not running; nothing was stopped."
+      return 0
+    fi
+  fi
+  if stop_pid "${server_pid}"; then
+    print "The Mac brain stopped; its memory is released."
+    return 0
+  fi
+  return 1
+}
+
+function status() {
+  local server_pid
+  if server_pid=$(recorded_pid); then
+    local resident_kib
+    resident_kib=$(ps -o rss= -p "${server_pid}" 2>/dev/null | tr -d ' ' || true)
+    if health_answers; then
+      print "The Mac brain: ready at http://127.0.0.1:${EVIE_BRAIN_PORT}/v1 (PID ${server_pid})"
+    else
+      print "The Mac brain: PID ${server_pid} is starting or not answering"
+    fi
+    if [[ -n "${resident_kib}" ]]; then
+      print "Resident memory: $(( resident_kib / 1024 )) MB"
+    fi
+    return 0
+  fi
+  local port_owner
+  port_owner=$(listener_pid)
+  if [[ -n "${port_owner}" ]]; then
+    print "The Mac brain: stopped; port ${EVIE_BRAIN_PORT} is held by PID ${port_owner}"
+    return 1
+  fi
+  print "The Mac brain: stopped"
+  return 1
+}
+
+function health() {
+  curl_brain --fail --silent --show-error --max-time 3 "${EVIE_BRAIN_HEALTH_URL}"
+  print
+}
+
+case "${1:-}" in
+  start) start ;;
+  stop) stop ;;
+  status) status ;;
+  health) health ;;
+  *)
+    usage
+    exit 64
+    ;;
+esac

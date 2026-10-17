@@ -55,14 +55,15 @@ extension EvieDiagnostics {
     ]
     var capabilities = EvieCapabilitySnapshot.textOnly
     capabilities.readsLocalFiles = true
-    let configuration = (try? EvieConfigurationLoader().load()) ?? EvieConfiguration()
+    let profile = EvieConfigurationLoader().loadWithDiagnostics().loaded.activeProfile
+    let configuration = profile.configuration
 
     let question = "manda o rascunho-antigo.txt pro lixo"
     print("pergunta: \(question)")
     print("a mensagem dele pede mudança: \(EvieChangeIntent.isPresent(in: question))")
 
     do {
-      let outcome = try await EvieAgentLoop(offersChanges: true).run(
+      let outcome = try await EvieAgentLoop(offersChanges: true, modelFamily: profile.family).run(
         messages: [
           ChatMessage(
             role: .system,
@@ -71,7 +72,7 @@ extension EvieDiagnostics {
           ChatMessage(role: .user, content: question),
         ],
         roots: roots,
-        client: TurboFieldfareClient(configuration: configuration),
+        client: ModelClientFactory.live.makeClient(configuration: configuration),
         emit: { event in
           if case .status(let message) = event { print("   · \(message)") }
         }

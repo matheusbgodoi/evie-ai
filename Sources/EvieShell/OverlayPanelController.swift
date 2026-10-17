@@ -13,6 +13,9 @@ final class OverlayPanelController: NSObject {
   private var widthAtDragStart: CGFloat?
   private var isApplyingGeometry = false
   private var isDismissing = false
+  /// Called as the overlay is summoned, before it can become key, while the
+  /// app in front is still the one the person was using.
+  var onPresent: (() -> Void)?
 
   init(
     viewModel: OverlayViewModel,
@@ -112,6 +115,7 @@ final class OverlayPanelController: NSObject {
   /// second — long enough to read as motion, short enough never to be in the way
   /// of typing.
   private func present(makingKey: Bool) {
+    onPresent?()
     cancelDismissal()
     let wasVisible = panel.isVisible
     updateGeometry(reselectScreen: true)

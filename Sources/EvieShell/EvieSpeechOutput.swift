@@ -10,9 +10,11 @@ struct EvieVoiceOption: Identifiable, Hashable, Sendable {
   var isEnhanced: Bool
   /// Lower sorts first. Not shown; it only decides the default and the order.
   var rank: Int = 0
+  var qualityLabel: String? = nil
 
   var displayName: String {
-    isEnhanced ? "\(name) · natural" : name
+    if let qualityLabel { return "\(name) · \(qualityLabel)" }
+    return isEnhanced ? "\(name) · aprimorada" : name
   }
 }
 
@@ -62,6 +64,7 @@ final class EvieSpeechOutput: ObservableObject {
   private var prefetchTask: Task<SynthesisedAudio, Never>?
   private var levels: [CGFloat] = []
   private var engineFormat: AVAudioFormat?
+  private var nativeCollector: NativeSpeechBufferCollector?
   /// Rebuilt when the quality preference changes, since the step count is what
   /// the engine is asked for per phrase.
   private var clonedEngine = EvieOmniVoiceClient()
@@ -76,7 +79,7 @@ final class EvieSpeechOutput: ObservableObject {
 
   /// Which engine speaks.
   enum Voice: Hashable, Sendable {
-    /// A voice built into macOS. Instant, free, and audibly synthetic.
+    /// A public macOS voice. Quality follows the installed system voice.
     case system(identifier: String?)
     /// A voice cloned by the local voice engine. Costs a running 2.4 GB model
     /// and roughly 1.4 times the audio's own duration to produce.
@@ -144,31 +147,7 @@ final class EvieSpeechOutput: ObservableObject {
   /// are ordinary speech; the `eloquence` family are the novelty voices, which
   /// are fine to pick and wrong to default to.
   static func availableVoices(matching language: String = "pt-BR") -> [EvieVoiceOption] {
-    AVSpeechSynthesisVoice.speechVoices()
-      .filter { $0.language == language }
-      .filter { AVSpeechSynthesisVoice(identifier: $0.identifier) != nil }
-      .map { voice in
-        EvieVoiceOption(
-          id: voice.identifier,
-          name: voice.name,
-          isEnhanced: voice.quality != .default,
-          rank: rank(of: voice)
-        )
-      }
-      .sorted { left, right in
-        left.rank == right.rank ? left.name < right.name : left.rank < right.rank
-      }
-  }
-
-  private static func rank(of voice: AVSpeechSynthesisVoice) -> Int {
-    if voice.quality != .default {
-      return 0
-    }
-    if voice.identifier.contains(".voice.") {
-      // `compact` reads better than `super-compact`, and both beat novelty.
-      return voice.identifier.contains("super-compact") ? 2 : 1
-    }
-    return 3
+    NativeVoiceCatalog.options(language: language)
   }
 
   static var preferredVoiceIdentifier: String? {
@@ -196,6 +175,9 @@ final class EvieSpeechOutput: ObservableObject {
         identifier.flatMap(AVSpeechSynthesisVoice.init(identifier:))
         ?? Self.preferredVoiceIdentifier.flatMap(AVSpeechSynthesisVoice.init(identifier:))
       guard systemVoice != nil else {
+        onBlockFailed?()
+        onSpeakingChanged?(false)
+        onFinished?()
         return
       }
     case .cloned:
@@ -225,6 +207,7 @@ final class EvieSpeechOutput: ObservableObject {
           return
         }
         let produced = await pending?.value.buffers
+        guard !Task.isCancelled else { return }
         // Started before this block plays, not after.
         pending = prefetch(
           index + 1 < blocks.count ? blocks[index + 1] : nil,
@@ -259,6 +242,7 @@ final class EvieSpeechOutput: ObservableObject {
         }
         await play(buffers)
       }
+      guard !Task.isCancelled else { return }
       finish()
     }
   }
@@ -318,6 +302,8 @@ final class EvieSpeechOutput: ObservableObject {
     // engine busy for whatever is asked next.
     prefetchTask?.cancel()
     prefetchTask = nil
+    nativeCollector?.cancel()
+    nativeCollector = nil
     publishTask?.cancel()
     publishTask = nil
 
@@ -459,11 +445,28 @@ extension EvieSpeechOutput {
     utterance.voice = voice
     utterance.rate = Float(rate)
 
-    return await withCheckedContinuation { continuation in
-      let collector = BufferCollector(continuation: continuation)
-      synthesizer.write(utterance) { buffer in
-        collector.receive(buffer)
+    let collector = NativeSpeechBufferCollector()
+    nativeCollector = collector
+    let deadline = Task { @MainActor [weak self] in
+      do { try await Task.sleep(for: .seconds(20)) } catch { return }
+      guard self?.nativeCollector === collector else { return }
+      collector.cancel()
+      self?.synthesizer.stopSpeaking(at: .immediate)
+    }
+    defer {
+      deadline.cancel()
+      if nativeCollector === collector { nativeCollector = nil }
+    }
+    return await withTaskCancellationHandler {
+      await withCheckedContinuation { continuation in
+        guard collector.begin(continuation), !Task.isCancelled else {
+          collector.cancel()
+          return
+        }
+        synthesizer.write(utterance) { buffer in collector.receive(buffer) }
       }
+    } onCancel: {
+      collector.cancel()
     }
   }
 
@@ -508,12 +511,10 @@ extension EvieSpeechOutput {
   }
 
   fileprivate func finish() {
-    guard isSpeaking else {
-      return
-    }
+    let playedAudio = isSpeaking
     stop()
+    if !playedAudio { onSpeakingChanged?(false) }
     onFinished?()
-    onSpeakingChanged?(false)
   }
 
   fileprivate func startPublishing() {
@@ -533,44 +534,5 @@ extension EvieSpeechOutput {
         self.onLevels?(updated)
       }
     }
-  }
-}
-
-/// Gathers the synthesiser's buffers and resumes once it sends the empty one that
-/// marks the end.
-///
-/// The callback arrives off the main actor. `AVAudioPCMBuffer` predates
-/// `Sendable`, so the collection is guarded by a lock and the buffers are only
-/// ever touched inside it; the continuation is resumed exactly once.
-private final class BufferCollector: @unchecked Sendable {
-  private let lock = NSLock()
-  private var buffers: [AVAudioPCMBuffer] = []
-  private var hasFinished = false
-  private let continuation: CheckedContinuation<[AVAudioPCMBuffer]?, Never>
-
-  init(continuation: CheckedContinuation<[AVAudioPCMBuffer]?, Never>) {
-    self.continuation = continuation
-  }
-
-  func receive(_ buffer: AVAudioBuffer) {
-    guard let pcm = buffer as? AVAudioPCMBuffer else {
-      return
-    }
-
-    lock.lock()
-    guard !hasFinished else {
-      lock.unlock()
-      return
-    }
-    guard pcm.frameLength > 0 else {
-      hasFinished = true
-      let collected = buffers
-      buffers = []
-      lock.unlock()
-      continuation.resume(returning: collected)
-      return
-    }
-    buffers.append(pcm)
-    lock.unlock()
   }
 }

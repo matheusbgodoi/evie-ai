@@ -97,6 +97,18 @@ enum EvieDiagnosticRegistry {
       await EvieDiagnostics.voiceEngineCheck()
     },
 
+    // Wakes the Mac brain the way a turn does, asks it about a red square
+    // through the real client, and stops it again, so the launcher's checks,
+    // the request body and the shutdown are exercised without the overlay.
+    EvieDiagnostic.terminating(
+      flag: "--brain-check",
+      usage: "--brain-check [--idle]",
+      summary: "acorda o cérebro do Mac como a Evie acorda, pergunta uma vez e desliga"
+        + " (--idle: espera o desligamento por ociosidade, ~10 min)"
+    ) { arguments in
+      await EvieDiagnostics.brainCheck(waitForIdleUnload: arguments.contains("--idle"))
+    },
+
     // Speaks one sentence out loud through the whole path — synthesis, playback,
     // and metering — and reports what happened. You hear it; the file says
     // whether the level was real.
@@ -338,6 +350,164 @@ enum EvieDiagnosticRegistry {
       await EvieDiagnostics.schedulesCheck()
     },
 
+    // Plays every state of the screen indicator on the main display, so it can
+    // be looked at without an agent. Captures nothing, posts no input and
+    // starts no coordinator, so it asks for no permission at all.
+    EvieDiagnostic.terminating(
+      flag: "--presence-demo",
+      usage: "--presence-demo [segundos] [--reduced-motion] [--with-esc]",
+      summary: "mostra cada estado do indicador de tela, sem capturar nada"
+    ) { arguments in
+      await ScreenPresenceDemo.run(
+        hold: arguments.number() ?? 2,
+        reducedMotion: arguments.contains("--reduced-motion"),
+        takesEscape: arguments.contains("--with-esc")
+      )
+    },
+
+    // Draws a magenta marker in one of Evie's own windows and checks that her
+    // capture leaves it out, against a control capture that finds it. Asks for
+    // no permission: without Screen Recording it says so and stops.
+    EvieDiagnostic.terminating(
+      flag: "--presence-excluded",
+      usage: "--presence-excluded [--timing]",
+      summary: "confere que as janelas da Evie ficam fora das capturas dela"
+    ) { arguments in
+      await PresenceExclusionCheck.run(timing: arguments.contains("--timing"))
+    },
+
+    // Reads the front app's accessibility list the way a computer-use step
+    // does, and prints it as the model would read it. Captures no pixels,
+    // posts no event and asks for no permission.
+    EvieDiagnostic.terminating(
+      flag: "--cu-observe",
+      usage: "--cu-observe [segundos] [--tela]",
+      summary: "lista os elementos do app da frente como a Evie os vê, sem capturar a tela"
+    ) { arguments in
+      await ComputerObserveCheck.run(
+        delay: arguments.number() ?? 0,
+        wholeScreen: arguments.contains("--tela")
+      )
+    },
+
+    // The input executor end to end on a TextEdit it opens itself: three
+    // typing routes, the read-back, close without saving, focus and
+    // clipboard given back. Refuses while TextEdit is open, captures no
+    // pixels and asks for no permission.
+    EvieDiagnostic.terminating(
+      flag: "--cu-selftest",
+      summary: "abre o TextEdit, digita um texto de teste pela Evie, confere e fecha sem salvar"
+    ) { _ in
+      await ComputerSelfTest.run()
+    },
+
+    EvieDiagnostic.terminating(
+      flag: "--research-check",
+      summary: "testa uma questão sintética no modelo real e num clipboard isolado"
+    ) { _ in
+      await EvieDiagnostics.researchCheck()
+    },
+    EvieDiagnostic.terminating(
+      flag: "--context-check",
+      summary: "valida compactação com modelo real e histórico somente sintético"
+    ) { _ in
+      let report = await EvieContextCheck.run()
+      let encoder = JSONEncoder()
+      encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
+      do {
+        let output = String(decoding: try encoder.encode(report), as: UTF8.self)
+        EvieDiagnostics.writeLog([output], named: "context-check.json")
+      } catch {
+        EvieDiagnostics.writeLog(
+          ["Encoding failed: \(error.localizedDescription)"], named: "context-check.json")
+      }
+    },
+    EvieDiagnostic.terminating(
+      flag: "--wake-lifecycle-check",
+      summary: "valida que desarmar a escuta fecha o microfone mesmo durante ativação"
+    ) { _ in
+      let report = await NativeWakeLifecycleCheck.run()
+      let encoder = JSONEncoder()
+      encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
+      do {
+        let output = String(decoding: try encoder.encode(report), as: UTF8.self)
+        EvieDiagnostics.writeLog([output], named: "wake-lifecycle-check.json")
+      } catch {
+        EvieDiagnostics.writeLog(
+          ["Encoding failed: \(error.localizedDescription)"], named: "wake-lifecycle-check.json")
+      }
+    },
+    EvieDiagnostic.terminating(
+      flag: "--native-voice-check",
+      summary: "valida síntese e cancelamento de voz nativa sem reproduzir áudio"
+    ) { _ in
+      let report = await NativeVoiceCheck.run(
+        installSpeechAssets: CommandLine.arguments.contains("--install-speech-assets"))
+      let encoder = JSONEncoder()
+      encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
+      do {
+        let output = String(decoding: try encoder.encode(report), as: UTF8.self)
+        EvieDiagnostics.writeLog([output], named: "native-voice-check.json")
+      } catch {
+        EvieDiagnostics.writeLog(
+          ["Encoding failed: \(error.localizedDescription)"], named: "native-voice-check.json")
+      }
+    },
+    EvieDiagnostic.terminating(
+      flag: "--native-apple-check",
+      summary: "valida App Intents, metadados e disponibilidade nativa sem pedir permissões"
+    ) { _ in
+      let report = await NativeAppleCheck.report()
+      let encoder = JSONEncoder()
+      encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
+      do {
+        let data = try encoder.encode(report)
+        let output = String(decoding: data, as: UTF8.self)
+        print(output)
+        EvieDiagnostics.writeLog([output], named: "native-apple-check.json")
+      } catch {
+        EvieDiagnostics.writeLog(
+          ["Encoding failed: \(error.localizedDescription)"], named: "native-apple-check.json")
+      }
+    },
+    EvieDiagnostic.immediate(
+      flag: "--permissions-check",
+      summary: "registra permissões reais sem solicitar acesso ou ler dados pessoais"
+    ) { _ in
+      let report = EviePermissionsAudit.report()
+      for line in report { print(line) }
+      EvieDiagnostics.writeLog(report, named: "permissions-check.log")
+    },
+    EvieDiagnostic.terminating(
+      flag: "--research-validation",
+      usage: "--research-validation <fixture.app>",
+      summary: "valida visão, clipboard e ações num formulário nativo isolado",
+      requiredArguments: 1
+    ) { arguments in
+      await ResearchValidation.run(fixturePath: arguments.value())
+    },
+
+    EvieDiagnostic.terminating(
+      flag: "--research-agent-validation",
+      usage: "--research-agent-validation <fixture.app>",
+      summary: "valida planejamento real do agente em um formulário nativo isolado",
+      requiredArguments: 1
+    ) { arguments in
+      await ResearchValidation.run(fixturePath: arguments.value(), agentPlansActions: true)
+    },
+
+    // Draws the brain chip, an answer card and the settings window into
+    // windows that are never shown, so a change to them can be looked at
+    // without launching the app or touching the screen.
+    EvieDiagnostic.terminating(
+      flag: "--ui-snapshots",
+      usage: "--ui-snapshots <pasta>",
+      summary: "desenha o chip do cérebro, um cartão e os ajustes fora da tela, em PNG",
+      requiredArguments: 1
+    ) { arguments in
+      await EvieDiagnostics.uiSnapshots(directory: arguments.value())
+    },
+
     // Acted on by the coordinator once the application is up, not here — the
     // window it opens needs the running app. Listed so `--help` is the whole
     // truth about what the shell answers to.
@@ -345,13 +515,19 @@ enum EvieDiagnosticRegistry {
       flag: "--open-settings",
       summary: "abre a janela de ajustes (a Evie não tem ícone no Dock)"
     ),
+    EvieDiagnostic(
+      flag: "--request-permissions",
+      summary: "abre o guia e solicita uma vez as permissões ainda não pedidas ao macOS"
+    ),
   ]
 
   /// The first diagnostic on the command line, with the arguments that follow it.
   ///
   /// Entries with no runner are skipped rather than matched, so a flag handled
   /// elsewhere in the application cannot swallow the launch.
-  static func match(_ arguments: [String]) -> (diagnostic: EvieDiagnostic, arguments: EvieDiagnosticArguments)? {
+  static func match(_ arguments: [String]) -> (
+    diagnostic: EvieDiagnostic, arguments: EvieDiagnosticArguments
+  )? {
     for diagnostic in all where diagnostic.run != nil {
       guard let index = arguments.firstIndex(of: diagnostic.flag),
         index + diagnostic.requiredArguments < arguments.count
@@ -371,11 +547,12 @@ enum EvieDiagnosticRegistry {
       "  " + diagnostic.usage.padding(toLength: width, withPad: " ", startingAt: 0)
         + "  " + diagnostic.summary
     }
-    return ([
-      "evie-shell — verificações que este projeto faz em si mesmo",
-      "",
-      "Uso: evie-shell <flag> [argumentos]",
-      "",
-    ] + lines).joined(separator: "\n")
+    return
+      ([
+        "evie-shell — verificações que este projeto faz em si mesmo",
+        "",
+        "Uso: evie-shell <flag> [argumentos]",
+        "",
+      ] + lines).joined(separator: "\n")
   }
 }

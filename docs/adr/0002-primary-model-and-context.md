@@ -1,6 +1,8 @@
 # ADR 0002: Gemma/TurboFieldfare primary candidate at 64K FP16 KV
 
-- Status: Accepted for planning; Phase 1 validation required
+- Status: Accepted for planning; Phase 1 validation required; superseded in part
+  by [ADR 0013](0013-authenticated-tailnet-model-transport.md) (the primary model
+  is chosen per profile, `qwen-daily` on the PC by default)
 - Date: 2026-08-04
 
 ## Context

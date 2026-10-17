@@ -1,0 +1,157 @@
+{
+  "checked_date": "2026-10-17",
+  "hardware": {
+    "device": "Apple M5",
+    "unified_memory_bytes": 25769803776,
+    "metal_recommended_working_set_bytes": 19069665280
+  },
+  "model": {
+    "id": "mlx-community/LensVLM-9B-OptiQ-4bit",
+    "cached_revision": "9e3d1de1d65ed7a301cdeed4b58e70a461a02463"
+  },
+  "runtime": {
+    "mlx_vlm_version": "0.7.8",
+    "kv_bits": 8,
+    "prefill_step_size": 512,
+    "max_num_seqs": 1,
+    "allocator_cache_limit_bytes": 268435456,
+    "apc_enabled": false,
+    "configured_experimental_context_tokens": 262144,
+    "qualified_operational_context_tokens": 131072,
+    "sampling": {
+      "temperature": 0,
+      "top_p": 1,
+      "enable_thinking": false,
+      "context_management": []
+    }
+  },
+  "final_vision_request": {
+    "prompt_tokens_local_template": 126952,
+    "usage": {
+      "prompt_tokens": 127527,
+      "completion_tokens": 38,
+      "total_tokens": 127565,
+      "prompt_tokens_details": {
+        "cached_tokens": 0
+      }
+    },
+    "reply_max_tokens": 256,
+    "success": true,
+    "answer": "LIMA-7319,AZUL-4826,MESA-9053,VIDRO-1648,ZEBRA4817",
+    "finish_reason": "stop",
+    "error": null,
+    "headroom_abort": false,
+    "min_system_free_percent": 10
+  },
+  "final_vision_metrics": {
+    "timestamp_unix": 1792208198.475626,
+    "endpoint": "/chat/completions",
+    "model": "mlx-community/LensVLM-9B-OptiQ-4bit",
+    "stream": true,
+    "backend": "continuous_batching",
+    "prompt_tokens": 127527,
+    "completion_tokens": 38,
+    "generated_tokens": 38,
+    "reasoning_tokens": 0,
+    "total_tokens": 127565,
+    "prompt_eval_time_s": 385.9927491989438,
+    "prefill_tok_s": 330.3870351571593,
+    "ttft_s": 386.81914308400155,
+    "decode_elapsed_s": 5.491333625002881,
+    "request_elapsed_s": 392.31365154200466,
+    "request_tok_s": 0.09686127375542367,
+    "decode_tok_s": 6.91999477631084,
+    "sliding_decode_tok_s_first_32": 6.73947040003672,
+    "sliding_decode_tok_s_first_64": 6.737889650618449,
+    "sliding_decode_tok_s_last_32": 6.676365822442318,
+    "sliding_decode_tok_s_last_64": 6.737889650618449,
+    "peak_memory_gb": 14.81909225,
+    "finish_reason": "stop",
+    "image_count": 1,
+    "audio_count": 0,
+    "structured_output": false,
+    "thinking_enabled": false,
+    "tool_parser": "qwen3_coder",
+    "tool_calls": false,
+    "apc_enabled": false
+  },
+  "image": {
+    "original_size": [
+      512,
+      128
+    ],
+    "transmitted_size": [
+      1536,
+      384
+    ],
+    "resampling": "nearest",
+    "expected_text": "ZEBRA4817",
+    "original_sha256": "162785609a033f5263e99ffb57398fdf1f41a7411a4158a0c09256ae59b2555e",
+    "template_count_excludes_image_expansion": true
+  },
+  "other_runs": [
+    {
+      "configuration": "BF16 KV, no allocator cache cap, target262144",
+      "outcome": "Metal OOM during prefill at72704 of246085 prompt tokens; not qualified",
+      "elapsed_approx_seconds": 323
+    },
+    {
+      "configuration": "KV8, no allocator cache cap, target262144",
+      "outcome": "Aborted owned service for persistent6% free system memory at119296 of261559 prompt tokens; not qualified"
+    },
+    {
+      "configuration": "KV8, cache256MiB, prefill512, text only",
+      "prompt_tokens": 64473,
+      "completion_tokens": 32,
+      "four_codes_correct": true,
+      "finish_reason": "stop",
+      "request_seconds": 139.1663838750028,
+      "mlx_peak_gb": 12.438213414,
+      "min_system_free_percent": 22
+    },
+    {
+      "configuration": "KV8, cache256MiB, prefill512, text only",
+      "prompt_tokens": 128984,
+      "completion_tokens": 32,
+      "four_codes_correct": true,
+      "finish_reason": "stop",
+      "request_seconds": 409.7387202499958,
+      "mlx_peak_gb": 14.848288494,
+      "min_system_free_percent": 8,
+      "headroom_note": "8% was transient; automatic monitor required3consecutive readings below9% to abort; no abort occurred"
+    },
+    {
+      "configuration": "Original512x128 image underBF16 andKV8",
+      "outcome": "OCR baseline failed; hallucinated text. No successful VLM capacity claim from these runs"
+    },
+    {
+      "configuration": "StockMLX strict weight coverage",
+      "expected_total": 1260,
+      "received_total": 1260,
+      "expected_vision": 333,
+      "received_vision": 333,
+      "missing": [],
+      "unexpected": [],
+      "strict_load": true
+    },
+    {
+      "configuration": "Original512x128 image withAPI resize_shape384x1536",
+      "outcome": "Sizing was ignored by BaseImageProcessor; baseline still failed"
+    },
+    {
+      "configuration": "Actual1536x384 PNG bytes underKV8, short5item request",
+      "prompt_tokens": 2585,
+      "completion_tokens": 38,
+      "five_items_correct": true,
+      "request_seconds": 6.229885291002574
+    }
+  ],
+  "interpretation": [
+    "The qualified limit is the largest accepted rung in this bounded experiment, not proof of the absolute architectural or physical maximum. No196608run was made.",
+    "Experimental server budget262144 differs from the adopted131072 operational cap; the final real request fits131072 with requested output reservation256.",
+    "MLX peak is process cumulative mx.get_peak_memory, reported by runtime metrics; RSS is not used as GPU capacity.",
+    "Minimum system free percentage is a5second sampled machine-wide measure and varies with other apps; final vision run minimum10% (~2.4GiB) satisfied the monitored floor.",
+    "Four synthetic retrieval needles plus one OCR caption are limited quality checks, not a general task benchmark. No personal screen or conversation content was used.",
+    "Experimental owned services were stopped after validation. Production cap and actual Evie wire integration are validated separately by the integration run."
+  ]
+}

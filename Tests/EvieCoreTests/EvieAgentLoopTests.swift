@@ -93,6 +93,37 @@ struct EvieAgentLoopTests {
     #expect(outcome.answer == "Tem dois arquivos lá.")
   }
 
+  @Test("mail continuation reaches the adapter and rejects invalid offsets before access")
+  func mailPagination() async throws {
+    let apps = PagedMailApps()
+    for name in ["read_mail", "search_mail"] {
+      let client = ScriptedClient(turns: [
+        .tools([
+          EvieToolCall(
+            id: "page", name: name,
+            argumentsJSON: #"{"query":"invoice","offset":80}"#)
+        ]), .text("Done"),
+      ])
+      let outcome = try await EvieAgentLoop(mailAndCalendar: apps).run(
+        messages: [ChatMessage(role: .user, content: "continue")], roots: [], client: client,
+        emit: { _ in })
+      #expect(outcome.appended.first { $0.role == .tool }?.content.contains("offset=160") == true)
+    }
+    #expect(await apps.offsets == [80, 80])
+    let invalid = ScriptedClient(turns: [
+      .tools([
+        EvieToolCall(
+          id: "bad", name: "search_mail",
+          argumentsJSON: #"{"query":"invoice","offset":-1}"#)
+      ]), .text("Done"),
+    ])
+    let outcome = try await EvieAgentLoop(mailAndCalendar: apps).run(
+      messages: [ChatMessage(role: .user, content: "continue")], roots: [], client: invalid,
+      emit: { _ in })
+    #expect(outcome.appended.first { $0.role == .tool }?.content.contains("9999") == true)
+    #expect(await apps.offsets == [80, 80])
+  }
+
   // MARK: - The bounds
 
   /// A model that keeps asking must not keep the user waiting forever.
@@ -721,6 +752,56 @@ struct EvieAgentLoopTests {
   }
 }
 
+// MARK: - The model family
+
+extension EvieAgentLoopTests {
+  @Test("only Gemma's misspelt search term is retried with the word the notes hold")
+  func modelSearchTermCorrectionIsGemmaOnly() async throws {
+    let directory = try Self.familyNotes()
+    defer { try? FileManager.default.removeItem(at: directory) }
+    let root = EvieFileRoot(id: "r1", displayName: "Obsidian", path: directory.path)
+
+    for family in [ModelFamily.gemma, .qwen, .unknown] {
+      let client = ScriptedClient(turns: [
+        .tools([
+          EvieToolCall(
+            id: "c1",
+            name: "search_content",
+            argumentsJSON: #"{"root_id":"r1","query":"cluumed"}"#
+          )
+        ]),
+        .text("Ok."),
+      ])
+      // A question the grounding step does not look up, so the only search is
+      // the model's own.
+      let outcome = try await EvieAgentLoop(modelFamily: family).run(
+        messages: [ChatMessage(role: .user, content: "oi")],
+        roots: [root],
+        client: client,
+        emit: { _ in }
+      )
+
+      let result = try #require(outcome.appended.first { $0.role == .tool }?.content)
+      if family == .gemma {
+        #expect(result.contains("mas achei \"cluemed\""), "\(family): \(result)")
+      } else {
+        #expect(result.contains("Não achei \"cluumed\""), "\(family): \(result)")
+        #expect(!result.contains("mas achei"), "\(family): \(result)")
+      }
+    }
+  }
+
+  /// A note that names the company the way it is spelt.
+  fileprivate static func familyNotes() throws -> URL {
+    let directory = FileManager.default.temporaryDirectory
+      .appendingPathComponent("evie-loop-family-\(UUID().uuidString)", isDirectory: true)
+    try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+    try Data("A Cluemed é o cofre de saúde do paciente.\n".utf8)
+      .write(to: directory.appendingPathComponent("cluemed.md"))
+    return directory
+  }
+}
+
 // MARK: - Doubles
 
 /// A client that replays a fixed script, and records what it was offered.
@@ -761,7 +842,7 @@ private actor ScriptedClient: AgentClient {
     AsyncThrowingStream { continuation in
       Task {
         guard let turn = await record(messages: messages, toolCount: tools.count) else {
-          continuation.finish(throwing: TurboFieldfareClientError.emptyStream)
+          continuation.finish(throwing: ModelClientError.emptyStream)
           return
         }
         switch turn {
@@ -848,5 +929,168 @@ private final class Collector: @unchecked Sendable {
       }
       return nil
     }
+  }
+}
+
+@Suite("Evie agent loop: documents, folders and opening")
+struct EvieAgentLoopFileTests {
+  func documentCall(destination: String) -> EvieToolCall {
+    EvieToolCall(
+      id: "d1",
+      name: "propose_document",
+      argumentsJSON: #"""
+        {"title":"resumo","format":"docx","destination":"\#(destination)","content":"# Resumo"}
+        """#
+    )
+  }
+
+  @Test("the document and open tools are declared only when the shell offers them")
+  func declaration() async throws {
+    let plain = ScriptedClient(turns: [.text("ok")])
+    _ = try await EvieAgentLoop().run(
+      messages: [ChatMessage(role: .user, content: "oi")], roots: [], client: plain,
+      emit: { _ in })
+    let offered = ScriptedClient(turns: [.text("ok")])
+    _ = try await EvieAgentLoop(offersDocuments: true, opener: RecordingOpener()).run(
+      messages: [ChatMessage(role: .user, content: "oi")], roots: [], client: offered,
+      emit: { _ in })
+
+    #expect(await offered.toolsPerCall[0] == (await plain.toolsPerCall[0]) + 3)
+  }
+
+  @Test("a document for a folder not granted yet is held and the folder is requested")
+  func documentForUngrantedFolder() async throws {
+    let home = try FileFixtures.home()
+    let client = ScriptedClient(turns: [
+      .tools([documentCall(destination: "mesa")]),
+      .text("Preparei o resumo; falta você permitir a Mesa."),
+    ])
+
+    let outcome = try await EvieAgentLoop(
+      toolbox: EvieFileToolbox(home: home), offersDocuments: true
+    ).run(
+      messages: [ChatMessage(role: .user, content: "salva um resumo na minha mesa")],
+      roots: [], client: client, emit: { _ in })
+
+    #expect(outcome.documentProposals.map(\.destination) == ["mesa"])
+    #expect(outcome.rootRequests == [.desktop])
+    let result = try #require(outcome.appended.first { $0.role == .tool })
+    #expect(result.content.contains("NADA foi salvo"))
+    // Nothing reached the disk.
+    #expect(
+      try FileManager.default.contentsOfDirectory(
+        atPath: home.appendingPathComponent("Desktop").path
+      ).isEmpty)
+  }
+
+  @Test("a document for a granted folder becomes a card and says nothing was saved")
+  func documentForGrantedFolder() async throws {
+    let home = try FileFixtures.home()
+    let desktop = EvieFileRoot(
+      id: "r1", displayName: "Mesa", path: home.appendingPathComponent("Desktop").path)
+    let client = ScriptedClient(turns: [
+      .tools([documentCall(destination: "mesa")]), .text("Está na tela."),
+    ])
+
+    let outcome = try await EvieAgentLoop(
+      toolbox: EvieFileToolbox(home: home), offersDocuments: true
+    ).run(
+      messages: [ChatMessage(role: .user, content: "escreve um resumo")],
+      roots: [desktop], client: client, emit: { _ in })
+
+    #expect(outcome.documentProposals.count == 1)
+    #expect(outcome.rootRequests.isEmpty)
+    let result = try #require(outcome.appended.first { $0.role == .tool })
+    #expect(result.content.contains("Salvar e Salvar e abrir"))
+  }
+
+  @Test("under the direct-save policy the model is told the file will be written")
+  func directSaveWording() async throws {
+    let home = try FileFixtures.home()
+    let desktop = EvieFileRoot(
+      id: "r1", displayName: "Mesa", path: home.appendingPathComponent("Desktop").path)
+    let client = ScriptedClient(turns: [
+      .tools([documentCall(destination: "r1")]), .text("Vai ficar na Mesa."),
+    ])
+
+    let outcome = try await EvieAgentLoop(
+      toolbox: EvieFileToolbox(home: home), offersDocuments: true, savesDocumentsDirectly: true
+    ).run(
+      messages: [ChatMessage(role: .user, content: "salva um resumo na mesa")],
+      roots: [desktop], client: client, emit: { _ in })
+
+    let result = try #require(outcome.appended.first { $0.role == .tool })
+    #expect(result.content.contains("vai ser gravado"))
+  }
+
+  @Test("an unknown destination is a readable refusal and no proposal")
+  func unknownDestination() async throws {
+    let client = ScriptedClient(turns: [
+      .tools([documentCall(destination: "zz")]), .text("Não achei esse lugar."),
+    ])
+    let outcome = try await EvieAgentLoop(offersDocuments: true).run(
+      messages: [ChatMessage(role: .user, content: "salva")], roots: [], client: client,
+      emit: { _ in })
+
+    #expect(outcome.documentProposals.isEmpty)
+    #expect(
+      outcome.appended.first { $0.role == .tool }?.content.contains("Não existe o destino") == true)
+  }
+
+  @Test("a read tool naming an ungranted alias requests the folder")
+  func readToolRequestsFolder() async throws {
+    let home = try FileFixtures.home()
+    let client = ScriptedClient(turns: [
+      .tools([
+        EvieToolCall(id: "a", name: "analyze_folder", argumentsJSON: #"{"root_id":"downloads"}"#)
+      ]),
+      .text("Preciso que você permita os Downloads."),
+    ])
+
+    let outcome = try await EvieAgentLoop(toolbox: EvieFileToolbox(home: home)).run(
+      messages: [ChatMessage(role: .user, content: "analisa a pasta Downloads")],
+      roots: [], client: client, emit: { _ in })
+
+    #expect(outcome.rootRequests == [.downloads])
+  }
+
+  @Test("open_file runs through the opener and lands on the transcript")
+  func opensThroughTheLoop() async throws {
+    let folder = try FileFixtures.directory("loop-open")
+    try FileFixtures.write(FileFixtures.pdf(text: "x"), to: folder.appendingPathComponent("a.pdf"))
+    let root = EvieFileRoot(id: "r1", displayName: "Mesa", path: folder.path)
+    let opener = RecordingOpener()
+    let collector = Collector()
+    let client = ScriptedClient(turns: [
+      .tools([
+        EvieToolCall(
+          id: "o", name: "open_file", argumentsJSON: #"{"root_id":"r1","path":"a.pdf"}"#)
+      ]),
+      .text("Abri."),
+    ])
+
+    let outcome = try await EvieAgentLoop(opener: opener).run(
+      messages: [ChatMessage(role: .user, content: "abre o a.pdf")], roots: [root],
+      client: client, emit: { collector.append($0) })
+
+    #expect(outcome.fileActions.map(\.summary) == ["Abri a.pdf"])
+    #expect(await opener.opened.count == 1)
+    #expect(collector.statuses().contains("Abrindo a.pdf…"))
+  }
+}
+
+private actor PagedMailApps: EvieMailCalendarReading {
+  var offsets: [Int] = []
+  func readMail(count: Int, unreadOnly: Bool) async throws -> [EvieMailMessage] { [] }
+  func searchMail(term: String, count: Int) async throws -> [EvieMailMessage] { [] }
+  func readCalendar(from: Date, to: Date, limit: Int) async throws -> [EvieCalendarEvent] { [] }
+  func listCalendars() async throws -> [String] { [] }
+  func listMailAccounts() async throws -> [String] { [] }
+  func readMailPage(count: Int, unreadOnly: Bool, offset: Int) async throws -> EvieMailPage {
+    offsets.append(offset)
+    return EvieMailPage(messages: [], offset: offset, scannedCount: 80, nextOffset: offset + 80)
+  }
+  func searchMailPage(term: String, count: Int, offset: Int) async throws -> EvieMailPage {
+    try await readMailPage(count: count, unreadOnly: false, offset: offset)
   }
 }

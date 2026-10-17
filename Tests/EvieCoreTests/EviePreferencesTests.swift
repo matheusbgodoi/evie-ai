@@ -5,6 +5,41 @@ import Testing
 
 @Suite("Evie preferences")
 struct EviePreferencesTests {
+  @Test("owner defaults enable capabilities without forging consent or retaining raw audio")
+  func ownerCapabilityDefaults() throws {
+    let defaults = EviePreferences()
+    #expect(defaults.fileChangesEnabled && defaults.autoApproveChanges)
+    #expect(defaults.webSearchEnabled && defaults.mailAndCalendarEnabled)
+    #expect(defaults.computerUseEnabled && defaults.savesDocumentsWhenAsked)
+    #expect(defaults.voice.wakeWordEnabled && defaults.voice.pushToTalkEnabled)
+    #expect(defaults.voice.speechOutputEnabled && defaults.voice.speaksTypedAnswers)
+    #expect(defaults.voice.callModeEnabled)
+    #expect(!defaults.computerUseConsentGiven)
+    #expect(!defaults.voice.retainsRawAudio)
+    let off = try JSONDecoder().decode(
+      EviePreferences.self,
+      from: Data(
+        #"{"web_search_enabled":false,"mail_and_calendar_enabled":false,"file_changes_enabled":false,"auto_approve_changes":false,"computer_use_enabled":false,"saves_documents_when_asked":false,"voice":{"wake_word_enabled":false,"speaks_typed_answers":false,"call_mode_enabled":false}}"#
+          .utf8))
+    #expect(!off.webSearchEnabled && !off.mailAndCalendarEnabled && !off.computerUseEnabled)
+    #expect(!off.fileChangesEnabled && !off.autoApproveChanges && !off.savesDocumentsWhenAsked)
+    #expect(
+      !off.voice.wakeWordEnabled && !off.voice.speaksTypedAnswers && !off.voice.callModeEnabled)
+  }
+
+  @Test("the selected brain survives relaunch and older files use automatic")
+  func brainChoicePersists() throws {
+    let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+    defer { try? FileManager.default.removeItem(at: directory) }
+    let file = directory.appendingPathComponent("preferences.json")
+    var preferences = EviePreferences()
+    preferences.brainChoice = .alwaysMac
+    try EviePreferencesStore(fileURL: file).save(preferences)
+    #expect(EviePreferencesStore(fileURL: file).load().brainChoice == .alwaysMac)
+    #expect(
+      try JSONDecoder().decode(EviePreferences.self, from: Data("{}".utf8)).brainChoice
+        == .automatic)
+  }
   @Test("ships a usable default binding for every configurable action")
   func defaultsCoverEveryAction() throws {
     let preferences = EviePreferences()
@@ -19,6 +54,26 @@ struct EviePreferencesTests {
   @Test("default shortcuts do not collide with each other")
   func defaultsHaveNoConflict() {
     #expect(EviePreferences().shortcuts.conflicts().isEmpty)
+  }
+
+  @Test("looking at the screen has its own default, ⌥⇧O, which nothing else uses")
+  func lookAtScreenHasAFreeDefault() throws {
+    let preferences = EviePreferences()
+    let shortcut = try #require(preferences.shortcuts.shortcut(for: .lookAtScreen))
+
+    #expect(shortcut.displayString == "⌥⇧O")
+    #expect(
+      EvieShortcutAction.allCases
+        .filter { $0 != .lookAtScreen }
+        .allSatisfy { preferences.shortcuts.shortcut(for: $0) != shortcut }
+    )
+    // Appended, so the Carbon identifiers of the existing actions keep their
+    // numbers.
+    #expect(
+      Array(EvieShortcutAction.allCases.prefix(9)) == [
+        .toggleOverlay, .quickText, .pushToTalk, .toggleCallMode, .newConversation,
+        .openHistory, .openSettings, .emergencyStop, .lookAtScreen,
+      ])
   }
 
   @Test("reports the exact pair of actions that share a key combination")
@@ -181,15 +236,13 @@ struct EviePreferencesTests {
 
 @Suite("Evie speaks the way she was asked")
 struct EvieSpeaksAnswerTests {
-  /// The default, and the reason it is the default: an answer read aloud to
-  /// something you typed interrupts whatever your hands were doing.
-  @Test("typed questions are answered in writing by default")
+  @Test("typed questions are spoken by default at the owner’s request")
   func typedIsSilentByDefault() {
     let voice = EvieVoicePreferences()
 
     #expect(voice.speechOutputEnabled)
-    #expect(!voice.speaksTypedAnswers)
-    #expect(!voice.speaksAnswer(toSpokenPrompt: false))
+    #expect(voice.speaksTypedAnswers)
+    #expect(voice.speaksAnswer(toSpokenPrompt: false))
   }
 
   @Test("spoken questions are answered out loud")
@@ -265,7 +318,7 @@ struct EviePreferencesCompatibilityTests {
     #expect(preferences.voice.voiceIdentifier == "com.apple.eloquence.pt-BR.Eddy")
     #expect(preferences.appearance.overlayWidth == 576)
     // …and what did not exist yet takes its default.
-    #expect(!preferences.voice.speaksTypedAnswers)
+    #expect(preferences.voice.speaksTypedAnswers)
     #expect(preferences.voice.hiddenVoiceIdentifiers.isEmpty)
   }
 
@@ -277,8 +330,9 @@ struct EviePreferencesCompatibilityTests {
     )
 
     #expect(preferences.voice.wakePhrase == EvieVoicePreferences.defaultWakePhrase)
-    #expect(preferences.appearance.overlayWidth
-      == EvieAppearancePreferences.defaultOverlayWidth)
+    #expect(
+      preferences.appearance.overlayWidth
+        == EvieAppearancePreferences.defaultOverlayWidth)
   }
 
   @Test("what is written today still reads today")
@@ -371,6 +425,108 @@ struct EviePreferencesStoreTests {
     let loaded = EviePreferencesStore(fileURL: fileURL).load()
 
     #expect(loaded == preferences)
+  }
+
+  /// The bug this exists to prevent: the switch was declared on the type and
+  /// encoded by its own `Codable`, but the store writes a separate document that
+  /// never named it, so turning Mail on in Settings lasted until the next launch.
+  @Test("the mail and calendar switch survives a relaunch")
+  func mailAndCalendarSwitchPersists() throws {
+    let fileURL = temporaryFileURL()
+    var preferences = EviePreferences()
+    preferences.mailAndCalendarEnabled = true
+
+    try EviePreferencesStore(fileURL: fileURL).save(preferences)
+    let relaunched = EviePreferencesStore(fileURL: fileURL).loadWithDiagnostics()
+
+    #expect(relaunched.failure == nil)
+    #expect(relaunched.preferences.mailAndCalendarEnabled)
+    #expect(relaunched.preferences == preferences)
+  }
+
+  @Test("the agent-mode switch starts on, and off survives a relaunch")
+  func computerUseSwitchPersists() throws {
+    #expect(EviePreferences().computerUseEnabled)
+    let fileURL = temporaryFileURL()
+    var preferences = EviePreferences()
+    preferences.computerUseEnabled = false
+
+    try EviePreferencesStore(fileURL: fileURL).save(preferences)
+    let relaunched = EviePreferencesStore(fileURL: fileURL).loadWithDiagnostics()
+
+    #expect(relaunched.failure == nil)
+    #expect(!relaunched.preferences.computerUseEnabled)
+    #expect(relaunched.preferences == preferences)
+  }
+
+  @Test("the agent-mode consent starts unseen, and once given survives a relaunch")
+  func computerUseConsentPersists() throws {
+    #expect(!EviePreferences().computerUseConsentGiven)
+    let fileURL = temporaryFileURL()
+    var preferences = EviePreferences()
+    preferences.computerUseConsentGiven = true
+
+    try EviePreferencesStore(fileURL: fileURL).save(preferences)
+    let relaunched = EviePreferencesStore(fileURL: fileURL).loadWithDiagnostics()
+
+    #expect(relaunched.failure == nil)
+    #expect(relaunched.preferences.computerUseConsentGiven)
+    #expect(relaunched.preferences == preferences)
+  }
+
+  @Test(
+    "saving documents directly starts on; explicit off survives and missing keys take the default")
+  func directSavePersists() throws {
+    #expect(EviePreferences().savesDocumentsWhenAsked)
+    let fileURL = temporaryFileURL()
+    var preferences = EviePreferences()
+    preferences.savesDocumentsWhenAsked = false
+
+    try EviePreferencesStore(fileURL: fileURL).save(preferences)
+    let relaunched = EviePreferencesStore(fileURL: fileURL).loadWithDiagnostics()
+    #expect(!relaunched.preferences.savesDocumentsWhenAsked)
+    #expect(relaunched.preferences == preferences)
+
+    let older = temporaryFileURL()
+    try FileManager.default.createDirectory(
+      at: older.deletingLastPathComponent(), withIntermediateDirectories: true)
+    try Data(#"{"schema_version": 1, "auto_approve_changes": true}"#.utf8).write(to: older)
+    #expect(
+      EviePreferencesStore(fileURL: older).loadWithDiagnostics().preferences.savesDocumentsWhenAsked
+    )
+  }
+
+  @Test("a file written before the agent-mode switch existed takes the enabled default")
+  func computerUseSwitchDefaultsOnInOlderFiles() throws {
+    let fileURL = temporaryFileURL()
+    try FileManager.default.createDirectory(
+      at: fileURL.deletingLastPathComponent(), withIntermediateDirectories: true)
+    try Data(#"{"schema_version": 1, "web_search_enabled": true}"#.utf8).write(to: fileURL)
+
+    let loaded = EviePreferencesStore(fileURL: fileURL).loadWithDiagnostics()
+
+    #expect(loaded.failure == nil)
+    #expect(loaded.preferences.webSearchEnabled)
+    #expect(loaded.preferences.computerUseEnabled)
+  }
+
+  @Test("EVIE_COMPUTER_USE=0 turns agent mode off whatever the switch says; nothing turns it on")
+  func computerUseEnvironmentOverride() {
+    var on = EviePreferences()
+    on.computerUseEnabled = true
+    var off = EviePreferences()
+    off.computerUseEnabled = false
+
+    #expect(ComputerUseSwitch.isEnabled(preferences: on, environment: [:]))
+    #expect(!ComputerUseSwitch.isEnabled(preferences: off, environment: [:]))
+    for value in ["0", "false", "off", " 0 "] {
+      #expect(
+        !ComputerUseSwitch.isEnabled(preferences: on, environment: ["EVIE_COMPUTER_USE": value]))
+    }
+    #expect(ComputerUseSwitch.isEnabled(preferences: on, environment: ["EVIE_COMPUTER_USE": "1"]))
+    #expect(!ComputerUseSwitch.isEnabled(preferences: off, environment: ["EVIE_COMPUTER_USE": "1"]))
+    #expect(ComputerUseSwitch.forcedOff(environment: ["EVIE_COMPUTER_USE": "0"]))
+    #expect(!ComputerUseSwitch.forcedOff(environment: [:]))
   }
 
   @Test("a missing file resolves to defaults instead of failing")

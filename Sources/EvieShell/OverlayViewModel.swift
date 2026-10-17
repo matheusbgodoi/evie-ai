@@ -56,6 +56,10 @@ final class OverlayViewModel: ObservableObject {
   func dismissCommandMenu() {
     isCommandMenuDismissed = true
   }
+  @Published var isCompactingConversation = false
+  @Published var contextUsageDescription: String?
+  let contextCompaction = EvieConversationCompaction()
+  var contextResetTask: Task<Void, Never>?
   @Published private(set) var activeConversationID = UUID()
   // Not `private(set)`: the turn machinery that writes this lives in a sibling
   // file now, and `private(set)` is scoped to the file. Still internal, so
@@ -121,9 +125,10 @@ final class OverlayViewModel: ObservableObject {
   /// which. One closure rather than two because it is one decision about one
   /// message, and two closures is how the sending one ends up called by the code
   /// that meant to draft.
-  var onMailApproved: (
-    @MainActor (EvieMailProposal, Bool) async -> EvieMailReceipt
-  )?
+  var onMailApproved:
+    (
+      @MainActor (EvieMailProposal, Bool) async -> EvieMailReceipt
+    )?
   /// The skills installed right now, asked for per turn so a skill dropped into
   /// the folder works on the next question rather than the next launch.
   var installedSkills: @MainActor () -> [EvieSkill] = { [] }
@@ -190,7 +195,34 @@ final class OverlayViewModel: ObservableObject {
   /// question, not on the next launch.
   var grantedRoots: @MainActor () -> [EvieFileRoot] = { [] }
 
-  var agentClient: any AgentClient
+  /// Picks the brain for each turn, before the turn builds anything. Every turn
+  /// asks it; nothing here holds a client of its own.
+  let brainResolver: EvieBrainResolver
+  /// The current turn's brain, which the status line, the error card and the
+  /// answer's label name ("· no seu PC", "O cérebro do Mac não respondeu",
+  /// "Qwen 3.8 · no seu PC"). Set when a turn resolves its brain and again
+  /// when it fails over (`adoptAnsweringBrain`); before the first turn, the
+  /// preferred profile.
+  var answeringProfile: EvieModelProfile
+  var answeringLocation: ModelLocation {
+    answeringProfile.location
+  }
+  /// The chip in the input bar: the brain the next question goes to, whether
+  /// it can answer, and whether agent mode is on (`OverlayViewModel+Brain`).
+  @Published var brainChip: EvieBrainChip
+  /// The chip's last refresh, so an older probe answering late cannot
+  /// overwrite a newer one.
+  var brainChipGeneration: UInt64 = 0
+  /// Switches agent mode from the chip's menu. Set by the coordinator, which
+  /// saves the preference; nil leaves the item out.
+  var onSetAgentMode: (@MainActor (Bool) -> Void)?
+  var onSetBrainReasoning: (@MainActor (String, ReasoningLevel) -> Void)?
+  var onBrainChoiceChanged: (@MainActor (EvieBrainChoice) throws -> Void)?
+  var onSetWebSearch: (@MainActor (Bool) -> Void)?
+  /// Opens Settings on a section, from the chip's menu.
+  var onOpenSettingsSection: (@MainActor (EvieSettingsSection) -> Void)?
+  /// The wake question on screen and the turn waiting for its answer.
+  var pendingWake: (card: UUID, answer: CheckedContinuation<Bool, Never>)?
   var capabilities: EvieCapabilitySnapshot
   let conversationStore: EvieConversationStore
   var conversation: [ChatMessage]
@@ -209,17 +241,64 @@ final class OverlayViewModel: ObservableObject {
   var pendingSkills: [UUID: EvieSkill] = [:]
   var pendingEvents: [UUID: EvieCalendarEventProposal] = [:]
   var pendingMail: [UUID: EvieMailProposal] = [:]
+  /// Folder suggestions, documents and saved files waiting on a button
+  /// (`OverlayViewModel+Documents`).
+  var fileCards = EvieFileCards()
+  /// Grants one well-known folder after "Permitir". Set by the coordinator.
+  var grantSuggestedRoot: (@MainActor (EvieSuggestedRoot) -> Bool)?
+  /// "Salvar direto quando eu pedir explicitamente", read when he asks.
+  var savesDocumentsWhenAsked: @MainActor () -> Bool = { false }
   let visionDescriber = EvieVisionDescriber()
+  /// Looks at the screen: permission, the presence glow, the capture. Set by
+  /// the coordinator; `nil` in a build that cannot capture.
+  var screenLook: EvieScreenLook?
+  /// A separate research turn shares the observer/executor and must not race
+  /// a chat turn, a one-shot capture or a second agent session.
+  var isResearchBusy: @MainActor () -> Bool = { false }
+  /// Opens Privacy & Security › Screen & System Audio Recording.
+  var openScreenRecordingSettings: (@MainActor () -> Void)?
+  /// A capture taken with the shortcut, waiting for the question it belongs
+  /// to. Memory only, and dropped when the overlay closes or the conversation
+  /// changes.
+  var pendingScreen: CapturedScreen?
+  var screenLookTask: Task<Void, Never>?
+  /// The exact messages the newest turn with a picture sent, replayed on the
+  /// next turns so the PC's cache keeps the picture (`EvieSentPictureTurn`).
+  /// The only place a picture outlives its turn, and only in memory.
+  var sentPictureTurn: EvieSentPictureTurn?
+  /// What the turn in flight sent with its picture, kept once it is answered.
+  var sendingPictureTurn: EvieSentPictureTurn?
+  /// The recognised text and description of the last capture, for a brain
+  /// that cannot see it; kept so a retry on another brain does not read the
+  /// screen twice.
+  var screenFallbackText: (imageID: UUID, text: String?)?
+  /// Agent mode on this Mac: the parts a session runs with. Set by the
+  /// coordinator; `nil` in a build that cannot act.
+  var computerUse: ComputerUseHost?
+  /// How the next spoken question reached Evie, set by the coordinator when
+  /// the microphone opens: only push-to-talk or a click may start a session.
+  var spokenOrigin: ComputerUseRequestOrigin = .clickedMark
+  /// "Controlar o Mac…" was chosen: the next request is a session goal.
+  var asksForComputerGoal = false
+  /// The session card on screen, and the goal its Começar would start.
+  var pendingSession: (card: UUID, goal: String)?
+  /// Whether the one-time consent was accepted, and recording that it was.
+  var computerUseConsentGiven: @MainActor () -> Bool = { false }
+  var onComputerUseConsent: (@MainActor () -> Void)?
+  /// "Para", said or typed while a session runs: the same as Parar.
+  var onStopRequested: (@MainActor () -> Void)?
   /// Ceiling on how much document text one turn may carry, so a long PDF cannot
   /// silently push the actual question out of the model's context.
   static let attachmentCharacterLimit = 20_000
 
   init(
-    agentClient: any AgentClient,
+    brainResolver: EvieBrainResolver,
     conversationStore: EvieConversationStore = EvieConversationStore(),
     capabilities: EvieCapabilitySnapshot = .textOnly
   ) {
-    self.agentClient = agentClient
+    self.brainResolver = brainResolver
+    answeringProfile = brainResolver.configuration.activeProfile
+    brainChip = EvieBrainChip(profile: brainResolver.configuration.activeProfile)
     self.conversationStore = conversationStore
     self.capabilities = capabilities
     conversation = [
@@ -255,30 +334,44 @@ final class OverlayViewModel: ObservableObject {
     activeRequestID != nil
   }
 
-  /// What the interface calls the thing that answers.
+  /// Where the thing that answers listens, for diagnostics only.
   ///
-  /// Evie never shows the model name, the server product, or a host and port:
-  /// they are implementation detail, and a loopback address on screen only
-  /// invites confusion. The raw endpoint stays available for the diagnostics
-  /// section of Settings.
+  /// The overlay names the model and its place ("Qwen 3.8 · PC", from the
+  /// profile) — the owner asked to see which brain answers — but never the
+  /// server product or a host and port: a loopback address on screen only
+  /// invites confusion. The raw endpoint stays in Settings › Avançado.
   var diagnosticEndpointDescription: String {
-    let configuration = agentClient.configuration
+    let configuration = configuration
     let defaultPort = configuration.endpoint.scheme?.lowercased() == "https" ? 443 : 80
     return
       "\(configuration.endpoint.host ?? "127.0.0.1"):\(configuration.endpoint.port ?? defaultPort)"
   }
 
+  /// The preferred profile's configuration — the one Settings edits. A turn
+  /// may run on another, which its brain decides.
   var configuration: EvieConfiguration {
-    agentClient.configuration
+    brainResolver.configuration.configuration
   }
 
-  func applyConfiguration(_ configuration: EvieConfiguration) {
-    agentClient = TurboFieldfareClient(configuration: configuration)
+  func applyConfiguration(_ loaded: EvieLoadedConfiguration, environment: [String: String]) {
+    brainResolver.adopt(loaded, environment: environment)
     secondaryText = "Novos ajustes serão usados na próxima pergunta"
+    refreshBrainChip()
     onLayoutInvalidated?()
   }
 
+  func resetContextCompaction() {
+    contextUsageDescription = nil
+    isCompactingConversation = false
+    let previous = contextResetTask
+    contextResetTask = Task { [contextCompaction] in
+      await previous?.value
+      await contextCompaction.reset()
+    }
+  }
+
   func startNewConversation() {
+    resetContextCompaction()
     if hasActiveRequest {
       cancelCurrentInteraction()
     }
@@ -298,17 +391,20 @@ final class OverlayViewModel: ObservableObject {
     attachmentSlots = []
     // Belongs to the conversation being left, which already holds it on disk.
     conversationMedia = []
+    forgetScreenPictures()
     visualState = .ready
     primaryText = "Nova conversa"
     secondaryText = "O histórico anterior continua salvo somente neste Mac"
     quickText = ""
     pendingPrompt = nil
     isQuickTextEntryPresented = true
+    refreshBrainChip()
     onLayoutInvalidated?()
   }
 
   @discardableResult
   func openConversation(id: UUID) async -> Bool {
+    resetContextCompaction()
     if hasActiveRequest {
       cancelCurrentInteraction()
     }
@@ -326,6 +422,7 @@ final class OverlayViewModel: ObservableObject {
       // Carried forward, or saving the reopened conversation would drop every
       // file it had — the record is rewritten whole on each save.
       conversationMedia = stored.media
+      forgetScreenPictures()
       conversation =
         [ChatMessage(role: .system, content: systemPrompt)]
         + stored.messages
@@ -338,6 +435,7 @@ final class OverlayViewModel: ObservableObject {
       quickText = ""
       pendingPrompt = nil
       isQuickTextEntryPresented = true
+      refreshBrainChip()
       onLayoutInvalidated?()
       return true
     } catch {
@@ -393,7 +491,10 @@ final class OverlayViewModel: ObservableObject {
     isQuickTextEntryPresented = true
     visualState = .ready
     primaryText = "Digite um comando"
-    secondaryText = "Tudo acontece neste Mac"
+    secondaryText = "Anexe arquivos ou prints pelo clipe"
+    // Opening the field is when the chip is looked at: the cached probe is
+    // used while fresh, so this is free most of the time.
+    refreshBrainChip()
     onLayoutInvalidated?()
     return true
   }
@@ -469,7 +570,9 @@ final class OverlayViewModel: ObservableObject {
             EvieDocumentAttachment(
               name: slot.url.lastPathComponent,
               pages: pages,
-              visualDescription: seen
+              visualDescription: seen,
+              imagePart: Self.isImage(slot.url)
+                ? Self.imagePart(at: slot.url, maxLongEdge: pictureLongEdge) : nil
             )
           )
         )
@@ -484,6 +587,27 @@ final class OverlayViewModel: ObservableObject {
         )
       }
     }
+  }
+
+  /// The longer edge a picture is cut to for the brain this conversation's
+  /// next turn most likely runs on (`ScreenCapturePlan.longEdge(for:)`).
+  var pictureLongEdge: Int {
+    ScreenCapturePlan.longEdge(
+      for: brainResolver.expectedProfile(for: activeConversationID).location
+    )
+  }
+
+  /// An attached picture as the model is sent it: read from the file once,
+  /// downscaled, re-encoded as JPEG in memory without its metadata.
+  static func imagePart(at url: URL, maxLongEdge: Int) -> EvieImagePart? {
+    guard let data = try? Data(contentsOf: url) else {
+      return nil
+    }
+    return try? ScreenshotEncoding.imagePart(
+      fromImageData: data,
+      maxLongEdge: maxLongEdge,
+      origin: .attachment
+    )
   }
 
   /// A small picture of a file, for the chip.
@@ -613,7 +737,6 @@ final class OverlayViewModel: ObservableObject {
     attachmentSlots.removeAll { $0.id == id }
     onLayoutInvalidated?()
   }
-
 
   /// The microphone is open. This is only ever called after capture actually
   /// started, so the listening indicator can never be shown over a closed
@@ -764,6 +887,10 @@ final class OverlayViewModel: ObservableObject {
     }
 
     isQuickTextEntryPresented = false
+    // A capture nobody asked about goes with the overlay.
+    pendingScreen = nil
+    screenLookTask?.cancel()
+    screenLookTask = nil
     presentReadyState()
     onDismissRequested?()
   }
@@ -783,7 +910,17 @@ final class OverlayViewModel: ObservableObject {
     if prompt.isEmpty, attachmentSlots.contains(where: { $0.prepared != nil || $0.isPreparing }) {
       prompt = "Dá uma olhada nisso."
     }
-    guard !prompt.isEmpty, !hasActiveRequest else {
+    // The same for a capture taken with the shortcut: it asks its own question.
+    if prompt.isEmpty, pendingScreen != nil {
+      prompt = "O que tem na minha tela?"
+    }
+    // "Para" while Evie acts on the Mac stops her, said or typed.
+    if computerUse?.isRunning == true, ComputerUseStopCommand.isStop(prompt) {
+      quickText = ""
+      onStopRequested?()
+      return
+    }
+    guard !prompt.isEmpty, !hasActiveRequest, !isResearchBusy() else {
       NSSound.beep()
       return
     }
@@ -799,7 +936,31 @@ final class OverlayViewModel: ObservableObject {
     }
 
     let requestID = UUID()
-    let userMessage = ChatMessage(role: .user, content: prompt)
+    // A look at the screen: a capture taken with the shortcut, or a question
+    // that asks for one in his own words. A command never looks, and leaves a
+    // held capture for the next question.
+    let isCommand =
+      EvieVaultSearchCommand.query(in: prompt) != nil
+      || EvieWebCommand.question(in: prompt) != nil
+      || EviePlanCommand.question(in: prompt) != nil
+    // An instruction to act on the Mac becomes the session card, or the
+    // reason there can be none; no model is asked.
+    if !isCommand, attachmentSlots.isEmpty, offerComputerUse(for: prompt) {
+      return
+    }
+    let looksAtScreen =
+      !isCommand && (pendingScreen != nil || EvieScreenIntent.isPresent(in: prompt))
+    let heldScreen = looksAtScreen ? pendingScreen : nil
+    if looksAtScreen {
+      pendingScreen = nil
+    }
+    let looksAtWindow = heldScreen == nil && EvieScreenIntent.asksForWindow(in: prompt)
+    // Saved with "📷 captura da tela" when the screen goes with it; the picture
+    // itself is never saved.
+    let userMessage = ChatMessage(
+      role: .user,
+      content: EvieTurnPictures.storedQuestion(prompt, showsScreen: looksAtScreen)
+    )
     // The card is keyed on the question, not on a fresh identifier, because the
     // question is the one thing both this path and the restoring path know.
     // They used to disagree — a live card got a new UUID while a restored one
@@ -807,15 +968,15 @@ final class OverlayViewModel: ObservableObject {
     // finished. That put "Ver 1 mensagem anterior" on screen after every answer,
     // and pressing it added a second copy of the turn just given.
     let artifactID = userMessage.id
-    let evidence = takeAttachmentEvidence(for: userMessage.id)
+    let attachments = takeAttachments(for: userMessage.id)
     // What the person attached is the subject of the question. Looking anything
-    // up is slower and answers a different question.
-    let carriesAttachment = evidence != nil
-    let requestMessages = conversationPrefix(
-      adding: userMessage,
-      evidence: evidence
-    )
-    let client = agentClient
+    // up is slower and answers a different question. The screen is the same.
+    let carriesAttachment =
+      attachments.evidence != nil || !attachments.pictures.isEmpty || looksAtScreen
+    // The prompt is built later, once the turn knows which brain it runs on:
+    // the budget, the persona, the tools and the pictures all depend on it.
+    let conversationID = activeConversationID
+    let spoken = lastPromptWasSpoken
 
     activeRequestID = requestID
     activeArtifactID = artifactID
@@ -872,6 +1033,9 @@ final class OverlayViewModel: ObservableObject {
     // Read from his own message, not from the model's decision: a proposal that
     // came out of a document must still stop at a button.
     let heAskedForAChange = EvieChangeIntent.isPresent(in: prompt)
+    // The same rule for a new document (ADR 0019): his own words, and the
+    // switch read now, when he asks.
+    let heAskedToSave = savesDocumentsWhenAsked() && EvieDocumentIntent.isPresent(in: prompt)
 
     // `/plano` is a different shape of turn: several model calls in a row rather
     // than one, minutes rather than seconds. It is a typed command and never a
@@ -902,81 +1066,102 @@ final class OverlayViewModel: ObservableObject {
         return
       }
       requestTask = Task { @MainActor [weak self] in
-        await self?.runWebOnlyTurn(
-          question: asked,
-          requestID: requestID,
-          userMessage: userMessage,
-          roots: roots,
-          web: web,
-          client: client
-        )
+        await self?.runTurn(
+          conversation: conversationID,
+          requestID: requestID
+        ) { [weak self] brain in
+          try await self?.runWebOnlyTurn(
+            question: asked,
+            requestID: requestID,
+            userMessage: userMessage,
+            roots: roots,
+            web: web,
+            on: brain
+          )
+        }
       }
       return
     }
 
     if let asked = EviePlanCommand.question(in: prompt) {
       requestTask = Task { @MainActor [weak self] in
-        await self?.runPlan(
-          question: asked,
-          requestID: requestID,
-          userMessage: userMessage,
-          roots: roots,
-          web: web,
-          client: client
-        )
+        await self?.runTurn(
+          conversation: conversationID,
+          requestID: requestID
+        ) { [weak self] brain in
+          await self?.runPlan(
+            question: asked,
+            requestID: requestID,
+            userMessage: userMessage,
+            roots: roots,
+            web: web,
+            plan: EvieTurnPlan(brain),
+            client: brain.client
+          )
+        }
       }
       return
     }
 
+    let prepared = PreparedTurn(
+      requestID: requestID,
+      userMessage: userMessage,
+      evidence: attachments.evidence,
+      pictures: attachments.pictures,
+      screen: heldScreen,
+      carriesAttachment: carriesAttachment,
+      spoken: spoken,
+      roots: roots,
+      web: web,
+      apps: apps,
+      offersChanges: changePolicy.offers,
+      autoApprovesChanges: changePolicy.autoApproves && heAskedForAChange,
+      asksAboutFiles: EvieFileIntent.isPresent(in: prompt),
+      savesDocumentsDirectly: heAskedToSave
+    )
     requestTask = Task { @MainActor [weak self] in
-      do {
-        guard !roots.isEmpty || web != nil || apps != nil else {
-          for try await event in client.stream(messages: requestMessages) {
-            try Task.checkCancellation()
-            self?.receive(event, requestID: requestID, userMessage: userMessage)
-          }
+      guard let self else { return }
+      var turn = prepared
+      // Captured now, before the brain is resolved: the screen as it was when
+      // he asked, not after a probe or a wake.
+      if looksAtScreen, turn.screen == nil {
+        guard
+          let screen = await lookForTurn(
+            looksAtWindow ? .frontWindow : .screenUnderPointer,
+            requestID: requestID
+          )
+        else {
           return
         }
-
-        // Captured again, weakly, rather than reaching for the enclosing `self`:
-        // the loop's callback is `@Sendable` and runs off this actor, so it may
-        // not close over the outer closure's mutable binding.
-        let outcome = try await EvieAgentLoop(
-          web: web,
-          mailAndCalendar: apps,
-          vault: self?.retrieveFromVault,
-          offersChanges: changePolicy.offers
-        ).run(
-          messages: requestMessages,
-          roots: roots,
-          client: client,
-          carriesAttachment: carriesAttachment
-        ) { [weak self] event in
-          await self?.receiveDuringLoop(event, requestID: requestID)
-        }
-        try Task.checkCancellation()
-        self?.finishLoop(
-          outcome,
-          requestID: requestID,
-          userMessage: userMessage,
-          autoApproveChanges: changePolicy.autoApproves && heAskedForAChange
-        )
-      } catch is CancellationError {
-        self?.finishCancellation(requestID: requestID)
-      } catch {
-        self?.finishFailure(error, requestID: requestID)
+        turn.screen = screen
+      }
+      await runTurn(conversation: conversationID, requestID: requestID) { [weak self] brain in
+        try await self?.answer(turn, on: brain)
       }
     }
   }
 
   func cancelCurrentInteraction() {
+    resetContextCompaction()
     guard activeRequestID != nil else {
+      return
+    }
+    // A session is stopped as Parar stops it: the grant first, and its end
+    // card keeps the log of what was done.
+    if computerUse?.isRunning == true {
+      if let onStopRequested {
+        onStopRequested()
+      } else {
+        stopComputerUse()
+      }
       return
     }
 
     activeRequestID = nil
     requestTask?.cancel()
     requestTask = nil
+    screenLookTask?.cancel()
+    screenLookTask = nil
     interactionState.apply(
       .failed(
         EvieFailure(
@@ -1018,12 +1203,32 @@ final class OverlayViewModel: ObservableObject {
   }
 
   func dismissArtifact(_ id: UUID) {
+    // Closing the wake question is a no; leaving the turn waiting on a card
+    // that is gone would hang it.
+    settleWake(id, accepted: false)
+    dismissFileCard(id)
+    // Closing a confirmation is a no; closing the session card starts nothing.
+    dismissComputerUseCard(id)
     artifacts.removeAll { $0.id == id }
     onLayoutInvalidated?()
   }
 
   func performArtifactAction(_ id: UUID, action: ArtifactActionModel) {
     guard let artifact = artifacts.first(where: { $0.id == id }) else {
+      return
+    }
+
+    if action.id == "screen-settings" {
+      openScreenRecordingSettings?()
+      return
+    }
+
+    if action.id.hasPrefix("brain-wake:") || action.id.hasPrefix("brain-stay:") {
+      settleWake(id, accepted: action.id.hasPrefix("brain-wake:"))
+      return
+    }
+
+    if handleFileCardAction(id, action: action) {
       return
     }
 

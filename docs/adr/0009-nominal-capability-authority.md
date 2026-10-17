@@ -1,6 +1,11 @@
 # ADR 0009: nominal read/propose/commit with process-local authority
 
-Status: Accepted for the policy-broker foundation
+Status: Accepted for the policy-broker foundation; amended by
+[ADR 0016](0016-in-process-computer-use-executor-under-agent-mode-grant.md) (one
+narrow in-process executor, for computer use, until `evied` exists) and by
+[ADR 0019](0019-saving-a-new-document-when-asked.md) (a new document saved when
+the person's own message asks, under an opt-in switch; opening and revealing a
+file without a card)
 
 Date: 2026-08-04
 

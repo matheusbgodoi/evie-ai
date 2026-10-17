@@ -1,0 +1,37 @@
+#!/bin/zsh
+set -euo pipefail
+
+readonly repository="${0:A:h:h}"
+typeset diagnostic="--research-validation"
+typeset report_name="research-validation.log"
+if [[ "${1:-}" == "--agent" ]]; then
+  shift
+  diagnostic="--research-agent-validation"
+  report_name="research-agent-validation.log"
+fi
+readonly evie_app="${1:-${repository}/.build/release/Evie.app}"
+readonly report_path="${HOME}/Library/Logs/Evie/${report_name}"
+if [[ ! -d "${evie_app}" ]]; then
+  print -u2 -- "Compile o bundle primeiro: Scripts/evie-app build"
+  exit 1
+fi
+readonly fixture_app="$("${repository}/Scripts/research-fixture")"
+readonly started_marker="$(mktemp "${TMPDIR:-/tmp}/evie-research-started.XXXXXX")"
+trap 'rm -f "${started_marker}"' EXIT
+open -n "${evie_app}" --args "${diagnostic}" "${fixture_app}"
+
+# A new report is written atomically only when the diagnostic finishes.
+# Every wait is bounded and outside the normal, always-on app process.
+for attempt in {1..720}; do
+  if [[ -f "${report_path}" && "${report_path}" -nt "${started_marker}" ]]; then
+    cat "${report_path}"
+    # The diagnostic has already terminated its own fixture. Remove only the
+    # temporary bundle this script created, never an installed application.
+    rm -rf -- "${fixture_app:h}"
+    rg -q '^RESULTADO: passou$' "${report_path}"
+    exit $?
+  fi
+  sleep 0.25
+done
+print -u2 -- "O diagnóstico não concluiu em 180 s. Bundle da fixture preservado: ${fixture_app}"
+exit 1

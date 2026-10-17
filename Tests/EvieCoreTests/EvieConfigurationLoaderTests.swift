@@ -12,7 +12,9 @@ struct EvieConfigurationLoaderTests {
 
     #expect(configuration.endpoint == EvieConfiguration.defaultEndpoint)
     #expect(configuration.model == EvieConfiguration.defaultModel)
-    #expect(configuration.contextWindowTokens == 65_536)
+    // The built-in PC profile's client cap since schema v2; it was Gemma's
+    // 65536 before.
+    #expect(configuration.contextWindowTokens == 200_704)
   }
 
   @Test("environment overrides the local file")
@@ -35,8 +37,11 @@ struct EvieConfigurationLoaderTests {
       """
     )
     let loader = EvieConfigurationLoader(fileURL: fileURL)
+    // A v1 file now becomes the inactive profile "custom", so the run selects it
+    // by name; the precedence being tested is unchanged.
     let configuration = try loader.load(
       environment: [
+        "EVIE_MODEL_PROFILE": "custom",
         "EVIE_MODEL_NAME": "environment-model",
         "EVIE_MODEL_CONTEXT": "65536",
         "EVIE_MODEL_MAX_COMPLETION": "4096",

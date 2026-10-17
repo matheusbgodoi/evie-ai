@@ -26,6 +26,9 @@ struct EvieOverlayView: View {
       onArtifactAction: { id, action in
         viewModel.performArtifactAction(id, action: action)
       },
+      onArtifactHandAction: { id, action, press in
+        viewModel.performArtifactPress(id, action: action, press: press)
+      },
       quickText: viewModel.isQuickTextEntryPresented ? $viewModel.quickText : nil,
       onSubmitQuickText: viewModel.isQuickTextEntryPresented
         ? { viewModel.submitTypedText() }
@@ -44,7 +47,26 @@ struct EvieOverlayView: View {
       onDismissCommands: { viewModel.dismissCommandMenu() },
       attachments: viewModel.attachmentSlots,
       onRemoveAttachment: { viewModel.removeAttachment(id: $0) },
-      onPasteAttachment: { viewModel.pasteAttachment() }
+      onPasteAttachment: { viewModel.pasteAttachment() },
+      brainChip: brainChip
+    )
+  }
+
+  private var brainChip: BrainChipModel {
+    BrainChipModel(
+      chip: viewModel.brainChip,
+      menu: viewModel.brainMenu,
+      onChoose: { viewModel.chooseBrain($0) },
+      onTestConnection: { viewModel.testBrainConnection() },
+      onNewConversation: { viewModel.startNewConversation() },
+      onSetAgentMode: viewModel.onSetAgentMode.map { set in { set($0) } },
+      onOpenSettings: viewModel.onOpenSettingsSection.map { open in { open($0) } },
+      onSetReasoning: { viewModel.onSetBrainReasoning?(viewModel.brainChip.profile.id, $0) },
+      webEnabled: viewModel.isWebSearchEnabled(),
+      onSetWebSearch: viewModel.onSetWebSearch.map { set in { set($0) } },
+      isBusy: viewModel.hasActiveRequest || viewModel.isResearchBusy(),
+      contextUsage: viewModel.contextUsageDescription,
+      isCompacting: viewModel.isCompactingConversation
     )
   }
 }

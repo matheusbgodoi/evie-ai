@@ -52,9 +52,9 @@ struct RootsSettingsView: View {
       } footer: {
         Text(
           """
-          A Evie só enxerga o que estiver dentro destas pastas. Ela lê, nunca \
-          escreve nem apaga. Senhas, chaves e credenciais continuam fora do \
-          alcance mesmo dentro de uma pasta autorizada.
+          A Evie só enxerga o que estiver dentro destas pastas. Ela lê; criar, \
+          mover ou apagar só acontece por um cartão seu. Senhas, chaves e \
+          credenciais continuam fora do alcance mesmo dentro de uma pasta autorizada.
           """
         )
         .font(.footnote)
@@ -78,14 +78,16 @@ struct RootsSettingsView: View {
           Text(
             """
             Ela lê suas notas para responder — engenharia, Cluemed, Keymatic, o que \
-            estiver escrito lá. Nunca escreve, nunca edita, nunca apaga: não existe \
-            ferramenta capaz disso.
+            estiver escrito lá. Nunca edita nem apaga uma nota; uma nota nova só \
+            com um clique seu.
             """
           )
           .font(.footnote)
           .foregroundStyle(.secondary)
         }
       }
+
+      DocumentSettingsSection(viewModel: viewModel)
 
       Section {
         Toggle(

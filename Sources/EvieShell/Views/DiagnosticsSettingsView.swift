@@ -7,28 +7,24 @@ import SwiftUI
 /// address. When something is broken those values are exactly what you need, so
 /// they live here rather than nowhere.
 struct DiagnosticsSettingsView: View {
-  var modelName: String
-  var endpoint: String
-  var contextWindowTokens: Int
+  /// The profile in use, with this run's environment overrides.
+  var profile: EvieModelProfile
   var preferencesPath: String
   var configurationPath: String
 
   var body: some View {
     Form {
       Section {
-        copyableRow("Modelo", value: modelName)
-        copyableRow("Endereço local", value: endpoint)
-        LabeledContent("Janela do servidor", value: "\(contextWindowTokens.formatted()) tokens")
+        copyableRow("Modelo", value: profile.model)
+        copyableRow("Endereço", value: profile.endpoint.absoluteString)
+        LabeledContent("Contexto", value: profile.contextLine)
+        LabeledContent("Onde roda", value: profile.location.placeDescription)
       } header: {
-        Text("Motor")
+        Text("Motor: \(profile.displayName)")
       } footer: {
-        Text(
-          "O endereço fica em 127.0.0.1, ou seja, só este Mac alcança. A porta 38433 "
-            + "foi escolhida fora do registro da IANA e abaixo da faixa efêmera do macOS, "
-            + "para nunca esbarrar em outro projeto seu."
-        )
-        .font(.caption)
-        .foregroundStyle(.secondary)
+        Text(footer)
+          .font(.caption)
+          .foregroundStyle(.secondary)
       }
 
       Section {
@@ -58,14 +54,31 @@ struct DiagnosticsSettingsView: View {
           "Teste de ponta a ponta",
           command: "Scripts/evie-runtime smoke"
         )
+        commandRow(
+          "Importar a chave do PC pelo Terminal",
+          command: "Scripts/evie-app import-pc-key"
+        )
       }
     }
     .formStyle(.grouped)
   }
 
+  /// What the address means, for the brain in use. It used to name 127.0.0.1 and
+  /// port 38433 whatever the configuration said.
+  private var footer: String {
+    switch profile.location {
+    case .yourPC:
+      "O endereço é o gateway do seu PC na sua rede Tailscale, por https. A chave fica no "
+        + "Keychain deste Mac e só vai para esse endereço. Teste em Configurações › Cérebro."
+    case .thisMac:
+      "O endereço fica neste Mac (\(profile.endpoint.host ?? "127.0.0.1")), ou seja, só este Mac "
+        + "alcança; nada da conversa sai daqui."
+    }
+  }
+
   /// LabeledContent, not a hand-built HStack: this is exactly the read-only
-  /// value it is for, and it lines these rows up with the "Janela do servidor"
-  /// row above that already used it.
+  /// value it is for, and it lines these rows up with the "Contexto" row above
+  /// that already used it.
   private func copyableRow(_ title: String, value: String) -> some View {
     LabeledContent(title) {
       HStack(spacing: 6) {

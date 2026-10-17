@@ -29,6 +29,9 @@ public enum EvieMailCalendar {
   /// ceiling is low on purpose and the default lower still.
   public static let defaultMessageCount = 8
   public static let maximumMessageCount = 20
+  public static let maximumMailCandidates = 80
+  public static let maximumMailboxIndex = 10_000
+  public static let mailPageMarker = "EVIE_MAIL_PAGE"
   public static let maximumEventCount = 40
   /// How many events the script gathers before it stops.
   ///
@@ -131,6 +134,26 @@ public struct EvieMailMessage: Hashable, Sendable {
   }
 }
 
+/// One bounded inbox window. A missing scanned count denotes a legacy adapter.
+public struct EvieMailPage: Equatable, Sendable {
+  public var messages: [EvieMailMessage]
+  public var offset: Int
+  public var scannedCount: Int?
+  public var nextOffset: Int?
+  public var reachedIndexLimit: Bool
+
+  public init(
+    messages: [EvieMailMessage], offset: Int = 0, scannedCount: Int? = nil,
+    nextOffset: Int? = nil, reachedIndexLimit: Bool = false
+  ) {
+    self.messages = messages
+    self.offset = offset
+    self.scannedCount = scannedCount
+    self.nextOffset = nextOffset
+    self.reachedIndexLimit = reachedIndexLimit
+  }
+}
+
 /// One event.
 public struct EvieCalendarEvent: Hashable, Sendable {
   public var title: String
@@ -175,146 +198,207 @@ public struct EvieCalendarEvent: Hashable, Sendable {
 /// `EvieMailCalendarScriptTests` asserts these strings contain no interpolation,
 /// so the property is checked by the suite rather than remembered.
 public enum EvieAppleScripts {
-  /// Recent messages from the inbox.
-  ///
-  /// Reached by `message i of inbox` rather than by taking a list and indexing
-  /// it. They are not the same: measured here, `messages of inbox` then `item 1`
-  /// returned a message from 13:09 while `message 1 of inbox` returned the one
-  /// from 21:44 — the list is in the mailbox's own order, and only the indexed
-  /// form is newest first.
-  ///
-  /// The unread case cannot use that trick, because `whose read status is false`
-  /// has to produce the filtered set first. It costs about seven seconds against
-  /// this inbox and it is the only correct way to ask.
+  /// Bounded indexed inbox window; inputs remain values in argv.
   public static let readMail = """
     on run argv
-    	set wanted to (item 1 of argv) as integer
-    	set unreadOnly to ((item 2 of argv) is "unread")
-    	set fs to (character id 31)
-    	set rs to (character id 30)
-    	if not (application "Mail" is running) then return "EVIE_APP_FECHADO"
-    	set output to ""
-    	tell application "Mail"
-    		if unreadOnly then
-    			set pool to (messages of inbox whose read status is false)
-    			set total to count of pool
-    			if total > wanted then set total to wanted
-    			repeat with i from 1 to total
-    				set m to item i of pool
-    				set theSender to ""
-    				set theSubject to ""
-    				set theBox to ""
-    				set theBody to ""
-    				set stamp to ""
-    				try
-    					set theSender to sender of m
-    				end try
-    				try
-    					set theSubject to subject of m
-    				end try
-    				try
-    					set theBox to name of mailbox of m
-    				end try
-    				try
-    					set dr to date received of m
-    					set stamp to ((year of dr) as string) & "-" & ((month of dr as integer) as string) & "-" & ((day of dr) as string) & "-" & ((hours of dr) as string) & "-" & ((minutes of dr) as string)
-    				end try
-    				try
-    					set theBody to text 1 thru 400 of (content of m)
-    				on error
-    					try
-    						set theBody to content of m
-    					end try
-    				end try
-    				set output to output & theSender & fs & theSubject & fs & stamp & fs & theBox & fs & theBody & rs
-    			end repeat
-    		else
-    			repeat with i from 1 to wanted
-    				try
-    					set m to message i of inbox
-    				on error
-    					exit repeat
-    				end try
-    				set theSender to ""
-    				set theSubject to ""
-    				set theBox to ""
-    				set theBody to ""
-    				set stamp to ""
-    				try
-    					set theSender to sender of m
-    				end try
-    				try
-    					set theSubject to subject of m
-    				end try
-    				try
-    					set theBox to name of mailbox of m
-    				end try
-    				try
-    					set dr to date received of m
-    					set stamp to ((year of dr) as string) & "-" & ((month of dr as integer) as string) & "-" & ((day of dr) as string) & "-" & ((hours of dr) as string) & "-" & ((minutes of dr) as string)
-    				end try
-    				try
-    					set theBody to text 1 thru 400 of (content of m)
-    				on error
-    					try
-    						set theBody to content of m
-    					end try
-    				end try
-    				set output to output & theSender & fs & theSubject & fs & stamp & fs & theBox & fs & theBody & rs
-    			end repeat
-    		end if
-    	end tell
-    	return output
+      set wanted to (item 1 of argv) as integer
+      set unreadOnly to ((item 2 of argv) is "unread")
+      set startOffset to 0
+      if (count of argv) ≥ 3 then set startOffset to (item 3 of argv) as integer
+      if startOffset < 0 or startOffset ≥ 10000 then error "Offset fora do intervalo 0...9999."
+      if wanted < 1 or wanted > 20 then error "Quantidade fora do intervalo 1...20."
+      set lastIndex to startOffset + 80
+      if lastIndex > 10000 then set lastIndex to 10000
+      set fs to (character id 31)
+      set rs to (character id 30)
+      if not (application "Mail" is running) then return "EVIE_APP_FECHADO"
+      set output to ""
+      set scanned to 0
+      set found to 0
+      set nextOffset to -1
+      set hitLimit to 0
+      tell application "Mail"
+        set firstIndex to startOffset + 1
+        set windowEnd to lastIndex
+        try
+          set firstSubject to subject of message firstIndex of inbox
+        on error reason number code
+          if code is -1719 or code is -1728 then return "EVIE_MAIL_PAGE" & fs & 0 & fs & -1 & fs & 0 & rs
+          error reason number code
+        end try
+        try
+          set lastSubject to subject of message lastIndex of inbox
+        on error reason number code
+          if code is not -1719 and code is not -1728 then error reason number code
+          set lowerBound to firstIndex
+          set upperBound to lastIndex - 1
+          repeat while lowerBound < upperBound
+            set middleIndex to (lowerBound + upperBound + 1) div 2
+            try
+              set middleSubject to subject of message middleIndex of inbox
+              set lowerBound to middleIndex
+            on error reason number code
+              if code is not -1719 and code is not -1728 then error reason number code
+              set upperBound to middleIndex - 1
+            end try
+          end repeat
+          set lastIndex to lowerBound
+        end try
+        set boundedSubjects to (subject of messages firstIndex thru lastIndex of inbox) as list
+        if unreadOnly then set boundedReadStatus to (read status of messages firstIndex thru lastIndex of inbox) as list
+        repeat with i from firstIndex to lastIndex
+          set candidateSubject to item (i - startOffset) of boundedSubjects
+          set scanned to scanned + 1
+          set matches to true
+          if unreadOnly then set matches to ((item (i - startOffset) of boundedReadStatus) is false)
+          if matches then
+            set m to message i of inbox
+            set theSender to ""
+            set theSubject to ""
+            set theBox to ""
+            set theBody to ""
+            set stamp to ""
+            try
+              set theSender to sender of m
+            end try
+            try
+              set theSubject to subject of m
+            end try
+            try
+              set theBox to name of mailbox of m
+            end try
+            try
+              set dr to date received of m
+              set stamp to ((year of dr) as string) & "-" & ((month of dr as integer) as string) & "-" & ((day of dr) as string) & "-" & ((hours of dr) as string) & "-" & ((minutes of dr) as string)
+            end try
+            try
+              set theBody to text 1 thru 400 of (content of m)
+            on error
+              try
+                set theBody to content of m
+              end try
+            end try
+            set output to output & theSender & fs & theSubject & fs & stamp & fs & theBox & fs & theBody & rs
+            set found to found + 1
+          end if
+          if found ≥ wanted then exit repeat
+        end repeat
+        set examinedThrough to startOffset + scanned
+        if examinedThrough ≥ 10000 then
+          set hitLimit to 1
+        else if examinedThrough < lastIndex then
+          set nextOffset to examinedThrough
+        else if lastIndex is windowEnd then
+          try
+            set probeSubject to subject of message (examinedThrough + 1) of inbox
+            set nextOffset to examinedThrough
+          on error reason number code
+            if code is not -1719 and code is not -1728 then error reason number code
+          end try
+        end if
+      end tell
+      return output & "EVIE_MAIL_PAGE" & fs & scanned & fs & nextOffset & fs & hitLimit & rs
     end run
     """
 
-  /// Messages whose subject contains a term.
-  ///
-  /// The term is `item 1 of argv` and reaches Mail as a value in a comparison.
-  /// It is never part of the program.
+  /// Bounded indexed inbox window; inputs remain values in argv.
   public static let searchMail = """
     on run argv
-    	set term to item 1 of argv
-    	set wanted to (item 2 of argv) as integer
-    	set fs to (character id 31)
-    	set rs to (character id 30)
-    	if not (application "Mail" is running) then return "EVIE_APP_FECHADO"
-    	set output to ""
-    	tell application "Mail"
-    		set pool to (messages of inbox whose subject contains term)
-    		set total to count of pool
-    		if total > wanted then set total to wanted
-    		repeat with i from 1 to total
-    			set m to item i of pool
-    			set theSender to ""
-    			set theSubject to ""
-    			set theBox to ""
-    			set theBody to ""
-    			set stamp to ""
-    			try
-    				set theSender to sender of m
-    			end try
-    			try
-    				set theSubject to subject of m
-    			end try
-    			try
-    				set theBox to name of mailbox of m
-    			end try
-    			try
-    				set dr to date received of m
-    				set stamp to ((year of dr) as string) & "-" & ((month of dr as integer) as string) & "-" & ((day of dr) as string) & "-" & ((hours of dr) as string) & "-" & ((minutes of dr) as string)
-    			end try
-    			try
-    				set theBody to text 1 thru 400 of (content of m)
-    			on error
-    				try
-    					set theBody to content of m
-    				end try
-    			end try
-    			set output to output & theSender & fs & theSubject & fs & stamp & fs & theBox & fs & theBody & rs
-    		end repeat
-    	end tell
-    	return output
+      set term to item 1 of argv
+      set wanted to (item 2 of argv) as integer
+      set startOffset to 0
+      if (count of argv) ≥ 3 then set startOffset to (item 3 of argv) as integer
+      if startOffset < 0 or startOffset ≥ 10000 then error "Offset fora do intervalo 0...9999."
+      if wanted < 1 or wanted > 20 then error "Quantidade fora do intervalo 1...20."
+      set lastIndex to startOffset + 80
+      if lastIndex > 10000 then set lastIndex to 10000
+      set fs to (character id 31)
+      set rs to (character id 30)
+      if not (application "Mail" is running) then return "EVIE_APP_FECHADO"
+      set output to ""
+      set scanned to 0
+      set found to 0
+      set nextOffset to -1
+      set hitLimit to 0
+      tell application "Mail"
+        set firstIndex to startOffset + 1
+        set windowEnd to lastIndex
+        try
+          set firstSubject to subject of message firstIndex of inbox
+        on error reason number code
+          if code is -1719 or code is -1728 then return "EVIE_MAIL_PAGE" & fs & 0 & fs & -1 & fs & 0 & rs
+          error reason number code
+        end try
+        try
+          set lastSubject to subject of message lastIndex of inbox
+        on error reason number code
+          if code is not -1719 and code is not -1728 then error reason number code
+          set lowerBound to firstIndex
+          set upperBound to lastIndex - 1
+          repeat while lowerBound < upperBound
+            set middleIndex to (lowerBound + upperBound + 1) div 2
+            try
+              set middleSubject to subject of message middleIndex of inbox
+              set lowerBound to middleIndex
+            on error reason number code
+              if code is not -1719 and code is not -1728 then error reason number code
+              set upperBound to middleIndex - 1
+            end try
+          end repeat
+          set lastIndex to lowerBound
+        end try
+        set boundedSubjects to (subject of messages firstIndex thru lastIndex of inbox) as list
+        repeat with i from firstIndex to lastIndex
+          set candidateSubject to item (i - startOffset) of boundedSubjects
+          set scanned to scanned + 1
+          set matches to (candidateSubject contains term)
+          if matches then
+            set m to message i of inbox
+            set theSender to ""
+            set theSubject to ""
+            set theBox to ""
+            set theBody to ""
+            set stamp to ""
+            try
+              set theSender to sender of m
+            end try
+            try
+              set theSubject to subject of m
+            end try
+            try
+              set theBox to name of mailbox of m
+            end try
+            try
+              set dr to date received of m
+              set stamp to ((year of dr) as string) & "-" & ((month of dr as integer) as string) & "-" & ((day of dr) as string) & "-" & ((hours of dr) as string) & "-" & ((minutes of dr) as string)
+            end try
+            try
+              set theBody to text 1 thru 400 of (content of m)
+            on error
+              try
+                set theBody to content of m
+              end try
+            end try
+            set output to output & theSender & fs & theSubject & fs & stamp & fs & theBox & fs & theBody & rs
+            set found to found + 1
+          end if
+          if found ≥ wanted then exit repeat
+        end repeat
+        set examinedThrough to startOffset + scanned
+        if examinedThrough ≥ 10000 then
+          set hitLimit to 1
+        else if examinedThrough < lastIndex then
+          set nextOffset to examinedThrough
+        else if lastIndex is windowEnd then
+          try
+            set probeSubject to subject of message (examinedThrough + 1) of inbox
+            set nextOffset to examinedThrough
+          on error reason number code
+            if code is not -1719 and code is not -1728 then error reason number code
+          end try
+        end if
+      end tell
+      return output & "EVIE_MAIL_PAGE" & fs & scanned & fs & nextOffset & fs & hitLimit & rs
     end run
     """
 
@@ -650,6 +734,42 @@ extension EvieMailCalendar {
       .filter { $0.count >= 5 }
   }
 
+  public static func resolveMailOffset(_ value: String?) throws -> Int {
+    guard let value else { return 0 }
+    guard let offset = Int(value), (0..<maximumMailboxIndex).contains(offset) else {
+      throw EvieMailCalendarError.failed(.mail, "Offset deve ser um inteiro entre 0 e 9999.")
+    }
+    return offset
+  }
+
+  public static func parseMailPage(_ output: String, offset: Int) throws -> EvieMailPage {
+    _ = try resolveMailOffset(String(offset))
+    let rows = output.split(separator: recordSeparator, omittingEmptySubsequences: true)
+    guard let last = rows.last else {
+      throw EvieMailCalendarError.failed(.mail, "Mail não informou a janela consultada.")
+    }
+    let fields = last.trimmingCharacters(in: .whitespacesAndNewlines)
+      .split(separator: fieldSeparator, omittingEmptySubsequences: false)
+    guard fields.count == 4, fields[0] == Substring(mailPageMarker),
+      let scanned = Int(fields[1]), (0...maximumMailCandidates).contains(scanned),
+      scanned <= maximumMailboxIndex - offset,
+      let next = Int(fields[2]),
+      next == -1 || (scanned > 0 && next == offset + scanned && next < maximumMailboxIndex),
+      let capped = Int(fields[3]), capped == 0 || capped == 1,
+      (capped == 1) == (offset + scanned == maximumMailboxIndex),
+      capped == 0 || next == -1
+    else {
+      throw EvieMailCalendarError.failed(.mail, "Mail devolveu metadados de paginação inválidos.")
+    }
+    let messages = parseMessages(rows.dropLast().joined(separator: String(recordSeparator)))
+    guard messages.count <= maximumMessageCount, messages.count <= scanned else {
+      throw EvieMailCalendarError.failed(.mail, "Mail excedeu o limite da página.")
+    }
+    return EvieMailPage(
+      messages: messages, offset: offset, scannedCount: scanned,
+      nextOffset: next == -1 ? nil : next, reachedIndexLimit: capped == 1)
+  }
+
   public static func parseMessages(_ output: String) -> [EvieMailMessage] {
     records(in: output).map { fields in
       EvieMailMessage(
@@ -737,11 +857,37 @@ extension EvieMailCalendar {
     return formatter
   }()
 
+  public static func describe(_ page: EvieMailPage, unreadOnly: Bool) -> String {
+    describe(page.messages, unreadOnly: unreadOnly) + "\n" + describeMailScope(page)
+  }
+
+  public static func describe(_ page: EvieMailPage, matching term: String) -> String {
+    describe(page.messages, matching: term) + "\n" + describeMailScope(page)
+  }
+
+  private static func describeMailScope(_ page: EvieMailPage) -> String {
+    var text = "Consulta parcial da caixa de entrada, a partir da posição \(page.offset + 1). "
+    if let scanned = page.scannedCount {
+      text += "Examinei \(scanned) candidatos nesta janela (máximo 80). "
+    }
+    text +=
+      "Não conclua ausência de mensagens fora desta janela. A ordem e as posições podem mudar se novos e-mails chegarem."
+    if let next = page.nextOffset {
+      text +=
+        " next_offset=\(next). Para continuar a consulta, use offset=\(next) na mesma ferramenta."
+    }
+    if page.reachedIndexLimit {
+      text +=
+        " Atingido o limite operacional de 10.000 posições; mensagens além dele não foram examinadas."
+    }
+    return text
+  }
+
   public static func describe(_ messages: [EvieMailMessage], unreadOnly: Bool) -> String {
     guard !messages.isEmpty else {
       return unreadOnly
-        ? "Não há mensagem não lida na caixa de entrada."
-        : "A caixa de entrada está vazia."
+        ? "Nenhuma mensagem não lida encontrada nesta consulta parcial."
+        : "Nenhuma mensagem retornada nesta consulta parcial da caixa de entrada."
     }
     let lines = messages.enumerated().map { index, message in
       describeMessage(message, index: index)
@@ -752,7 +898,7 @@ extension EvieMailCalendar {
 
   public static func describe(_ messages: [EvieMailMessage], matching term: String) -> String {
     guard !messages.isEmpty else {
-      return "Nenhuma mensagem com \"\(term)\" no assunto."
+      return "Nenhuma mensagem com \"\(term)\" no assunto nesta consulta parcial."
     }
     let lines = messages.enumerated().map { index, message in
       describeMessage(message, index: index)
@@ -942,6 +1088,8 @@ extension EvieMailCalendar {
 public protocol EvieMailCalendarReading: Sendable {
   func readMail(count: Int, unreadOnly: Bool) async throws -> [EvieMailMessage]
   func searchMail(term: String, count: Int) async throws -> [EvieMailMessage]
+  func readMailPage(count: Int, unreadOnly: Bool, offset: Int) async throws -> EvieMailPage
+  func searchMailPage(term: String, count: Int, offset: Int) async throws -> EvieMailPage
   func readCalendar(from: Date, to: Date, limit: Int) async throws -> [EvieCalendarEvent]
   /// The calendars that accept events, by name. Still reading: it is what lets a
   /// proposal name the calendar it will land in before anybody agrees to it.
@@ -950,6 +1098,24 @@ public protocol EvieMailCalendarReading: Sendable {
   /// what lets a card name the account a message would leave from before anybody
   /// agrees to send it.
   func listMailAccounts() async throws -> [String]
+}
+
+extension EvieMailCalendarReading {
+  public func readMailPage(count: Int, unreadOnly: Bool, offset: Int) async throws -> EvieMailPage {
+    guard offset == 0 else {
+      throw EvieMailCalendarError.failed(
+        .mail, "Este adaptador não oferece continuação de páginas.")
+    }
+    return EvieMailPage(messages: try await readMail(count: count, unreadOnly: unreadOnly))
+  }
+
+  public func searchMailPage(term: String, count: Int, offset: Int) async throws -> EvieMailPage {
+    guard offset == 0 else {
+      throw EvieMailCalendarError.failed(
+        .mail, "Este adaptador não oferece continuação de páginas.")
+    }
+    return EvieMailPage(messages: try await searchMail(term: term, count: count))
+  }
 }
 
 /// Creating the one thing Evie may create.
@@ -1059,6 +1225,11 @@ public enum EvieMailCalendarTool: String, CaseIterable, Sendable {
               """
           ),
           EvieToolParameter(
+            name: "offset", type: .integer,
+            summary:
+              "Posição inicial de 0 a 9999; padrão 0. Cada consulta examina até 80 candidatos. Continue usando o next offset informado no resultado; nunca interprete uma página vazia como ausência em toda a caixa."
+          ),
+          EvieToolParameter(
             name: "unread_only",
             type: .boolean,
             summary: "true para ver só as não lidas. Sem isto, vêm todas."
@@ -1073,6 +1244,11 @@ public enum EvieMailCalendarTool: String, CaseIterable, Sendable {
           Devolve os mesmos campos de read_mail. Só leitura.
           """,
         parameters: [
+          EvieToolParameter(
+            name: "offset", type: .integer,
+            summary:
+              "Posição inicial de 0 a 9999; padrão 0. Cada consulta examina até 80 candidatos. Continue usando o next offset informado no resultado; nunca interprete uma página vazia como ausência em toda a caixa."
+          ),
           EvieToolParameter(
             name: "query",
             type: .string,

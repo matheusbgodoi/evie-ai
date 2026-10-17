@@ -11,6 +11,8 @@ enum ArtifactKind: String, Hashable {
   case image
   case workflow
   case approval
+  /// Agent mode on the Mac: the session card, a confirmation, the log.
+  case computer
   case error
 
   var title: String {
@@ -24,6 +26,7 @@ enum ArtifactKind: String, Hashable {
     case .image: "Imagem"
     case .workflow: "Automação"
     case .approval: "Aprovação"
+    case .computer: "Controle do Mac"
     case .error: "Erro"
     }
   }
@@ -39,6 +42,7 @@ enum ArtifactKind: String, Hashable {
     case .image: "photo.fill"
     case .workflow: "point.3.connected.trianglepath.dotted"
     case .approval: "hand.raised.fill"
+    case .computer: "cursorarrow.click.2"
     case .error: "exclamationmark.triangle.fill"
     }
   }
@@ -54,6 +58,8 @@ enum ArtifactKind: String, Hashable {
     case .image: .pink
     case .workflow: .orange
     case .approval: .orange
+    // The presence's acting amber, so the card reads as the same act.
+    case .computer: Color(nsColor: EviePresenceTint.acting)
     case .error: .red
     }
   }
@@ -82,6 +88,37 @@ struct ArtifactActionModel: Identifiable, Hashable {
   /// happens on screen and there is no way to tell a press that worked from one
   /// that missed.
   var isConfirmed = false
+  /// Pressed only by a hand: an AppKit button that reads the event behind
+  /// the click, never takes the keyboard, and reports how it was pressed
+  /// (`ComputerUserPress`), so Evie's own clicks and keys cannot answer
+  /// her questions. For the computer-use cards.
+  var needsHand = false
+}
+
+/// A screen picture on a card, with the place an action would land marked
+/// on it. Decoded once; in memory only, like every picture of a session.
+struct ArtifactThumbnail: Hashable {
+  let id: UUID
+  let image: NSImage
+  /// Fractions of the picture's width and height (0…1).
+  let mark: CGRect?
+
+  init?(_ picture: EvieImagePart, mark: CGRect?) {
+    guard let image = NSImage(data: picture.data) else {
+      return nil
+    }
+    id = picture.id
+    self.image = image
+    self.mark = mark
+  }
+
+  static func == (lhs: Self, rhs: Self) -> Bool {
+    lhs.id == rhs.id && lhs.mark == rhs.mark
+  }
+
+  func hash(into hasher: inout Hasher) {
+    hasher.combine(id)
+  }
 }
 
 struct ArtifactCardModel: Identifiable, Hashable {
@@ -104,6 +141,10 @@ struct ArtifactCardModel: Identifiable, Hashable {
   }
   var detail: String? = nil
   var source: String? = nil
+  /// Which model wrote it and where: "Qwen 3.8 · no seu PC". Set when the
+  /// turn resolves its brain; nil for a card restored from history, which
+  /// does not record one.
+  var brainLabel: String? = nil
   var isExpanded = false
   /// True between asking and the first words of the answer.
   ///
@@ -114,6 +155,7 @@ struct ArtifactCardModel: Identifiable, Hashable {
   var isLoading = false
   var isSensitive = false
   var actions: [ArtifactActionModel] = []
+  var thumbnail: ArtifactThumbnail? = nil
 
   /// Whether this card is asking something rather than reporting something.
   ///
@@ -129,6 +171,8 @@ struct ArtifactCardView: View {
   var onToggleExpanded: (() -> Void)? = nil
   var onDismiss: (() -> Void)? = nil
   var onAction: ((ArtifactActionModel) -> Void)? = nil
+  /// A press on an action that `needsHand`, with how it was made.
+  var onHandAction: ((ArtifactActionModel, ComputerUserPress) -> Void)? = nil
   /// How tall this card's text is, measured by SwiftUI on the last pass.
   var readingHeight: CGFloat?
   var onReadingHeightChanged: ((CGFloat) -> Void)?
@@ -167,6 +211,9 @@ struct ArtifactCardView: View {
         if let question = artifact.question, !question.isEmpty {
           askedRow(question)
         }
+        if let thumbnail = artifact.thumbnail {
+          ComputerActionThumbnailView(thumbnail: thumbnail, tint: artifact.kind.tint)
+        }
         if artifact.isSensitive {
           sensitivePreview
         } else {
@@ -195,7 +242,6 @@ struct ArtifactCardView: View {
     .scrollBounceBehavior(.basedOnSize)
     .frame(height: readingBoxHeight)
   }
-
 
   var body: some View {
     GlassSurface(
@@ -245,10 +291,7 @@ struct ArtifactCardView: View {
 
       VStack(alignment: .leading, spacing: 1) {
         if artifact.isExpanded {
-          Text(artifact.kind.title.uppercased())
-            .font(.system(size: 9, weight: .bold))
-            .foregroundStyle(artifact.kind.tint)
-            .tracking(0.75)
+          kindLine
         }
 
         if artifact.isLoading {
@@ -275,6 +318,25 @@ struct ArtifactCardView: View {
 
       if onDismiss != nil {
         iconButton(symbol: "xmark", label: "Fechar", action: { onDismiss?() })
+      }
+    }
+  }
+
+  /// "RESPOSTA" and, beside it, the brain that wrote it — quiet, in the same
+  /// small caps line, so it is there when looked for and never competes with
+  /// the answer.
+  private var kindLine: some View {
+    HStack(spacing: 5) {
+      Text(artifact.kind.title.uppercased())
+        .font(.system(size: 9, weight: .bold))
+        .foregroundStyle(artifact.kind.tint)
+        .tracking(0.75)
+      if let brainLabel = artifact.brainLabel {
+        Text(brainLabel)
+          .font(.system(size: 9.5, weight: .medium))
+          .foregroundStyle(.tertiary)
+          .lineLimit(1)
+          .accessibilityLabel("Respondido por \(brainLabel)")
       }
     }
   }
@@ -330,37 +392,68 @@ struct ArtifactCardView: View {
       Spacer(minLength: 0)
 
       ForEach(artifact.actions) { action in
-        Button {
-          onAction?(action)
-        } label: {
-          Label {
-            Text(action.title)
-          } icon: {
-            if action.isBusy {
-              EvieThinkingIndicator(tint: artifact.kind.tint)
-            } else if action.isConfirmed {
-              Image(systemName: "checkmark.circle.fill")
-                .foregroundStyle(.green)
-                .transition(.scale.combined(with: .opacity))
-            } else if let systemImage = action.systemImage {
-              Image(systemName: systemImage)
-            }
-          }
-          .font(.caption.weight(.semibold))
-          .padding(.horizontal, 10)
-          .padding(.vertical, 7)
+        if action.needsHand {
+          handButton(action)
+        } else {
+          plainButton(action)
         }
-        .buttonStyle(.plain)
-        .foregroundStyle(actionForeground(action.role))
-        .animation(reduceMotion ? nil : .snappy(duration: 0.2), value: action.isConfirmed)
-        .background(actionBackground(action.role), in: Capsule())
-        .overlay {
-          Capsule()
-            .strokeBorder(actionBorder(action.role), lineWidth: 0.6)
-        }
-        .accessibilityLabel(action.title)
       }
     }
+  }
+
+  /// The label every action shows, whichever way it is pressed.
+  private func actionLabel(_ action: ArtifactActionModel) -> some View {
+    Label {
+      Text(action.title)
+    } icon: {
+      if action.isBusy {
+        EvieThinkingIndicator(tint: artifact.kind.tint)
+      } else if action.isConfirmed {
+        Image(systemName: "checkmark.circle.fill")
+          .foregroundStyle(.green)
+          .transition(.scale.combined(with: .opacity))
+      } else if let systemImage = action.systemImage {
+        Image(systemName: systemImage)
+      }
+    }
+    .font(.caption.weight(.semibold))
+    .padding(.horizontal, 10)
+    .padding(.vertical, 7)
+  }
+
+  /// No SwiftUI `Button`: one can be pressed from the keyboard once it has
+  /// focus, and its action cannot see the event. The press catcher on top
+  /// takes the click and says how it was made.
+  private func handButton(_ action: ArtifactActionModel) -> some View {
+    actionLabel(action)
+      .foregroundStyle(actionForeground(action.role))
+      .background(actionBackground(action.role), in: Capsule())
+      .overlay {
+        Capsule()
+          .strokeBorder(actionBorder(action.role), lineWidth: 0.6)
+      }
+      .overlay {
+        HandPressCatcher(title: action.title) { press in
+          onHandAction?(action, press)
+        }
+      }
+  }
+
+  private func plainButton(_ action: ArtifactActionModel) -> some View {
+    Button {
+      onAction?(action)
+    } label: {
+      actionLabel(action)
+    }
+    .buttonStyle(.plain)
+    .foregroundStyle(actionForeground(action.role))
+    .animation(reduceMotion ? nil : .snappy(duration: 0.2), value: action.isConfirmed)
+    .background(actionBackground(action.role), in: Capsule())
+    .overlay {
+      Capsule()
+        .strokeBorder(actionBorder(action.role), lineWidth: 0.6)
+    }
+    .accessibilityLabel(action.title)
   }
 
   /// A different mark for "I looked it up" and "I am going from memory", because
@@ -415,7 +508,6 @@ struct ArtifactCardView: View {
     }
   }
 }
-
 
 /// Three dots that travel while she is thinking.
 ///

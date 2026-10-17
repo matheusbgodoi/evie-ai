@@ -1,0 +1,27 @@
+#!/bin/zsh
+set -euo pipefail
+readonly repository="${0:A:h:h}"
+readonly scratch="$(mktemp -d "${TMPDIR:-/tmp}/evie-settings-validation.XXXXXX")"
+trap 'rm -f "${scratch}/validate"; rmdir "${scratch}"' EXIT
+# Build once with Scripts/test or swift build before running this standalone VM
+# regression. It links the existing core and never starts a SwiftPM build.
+typeset -a core_link_arguments core_objects
+if [[ -f "${repository}/.build/debug/EvieCore.o" ]]; then
+  core_link_arguments=(-I "${repository}/.build/debug" "${repository}/.build/debug/EvieCore.o")
+elif [[ -f "${repository}/.build/debug/libEvieCore.a" ]]; then
+  core_link_arguments=(-I "${repository}/.build/debug" -L "${repository}/.build/debug" -lEvieCore)
+else
+  # The traditional SwiftPM driver emits individual core objects instead.
+  core_objects=("${repository}"/.build/debug/EvieCore.build/*.o(N))
+  if (( ${#core_objects} == 0 )); then
+    print -u2 -- "Build the debug package with Scripts/test before this validation."
+    exit 1
+  fi
+  core_link_arguments=(-I "${repository}/.build/debug/Modules" "${core_objects[@]}")
+fi
+xcrun swiftc -parse-as-library -swift-version 6 -warnings-as-errors \
+  "${core_link_arguments[@]}" \
+  "${repository}/Sources/EvieShell/ModelSettingsViewModel.swift" \
+  "${repository}/evals/fixtures/ModelSettingsKeyValidation.swift" \
+  -o "${scratch}/validate"
+"${scratch}/validate"

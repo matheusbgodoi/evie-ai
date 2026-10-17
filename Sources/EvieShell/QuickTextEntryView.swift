@@ -27,6 +27,8 @@ struct QuickTextEntryView: View {
   /// Returns true when the clipboard held something worth attaching, so an
   /// ordinary text paste still happens when it did not.
   var onPasteAttachment: (() -> Bool)? = nil
+  /// The brain the question will go to, beside the field it is typed in.
+  var brainChip: BrainChipModel? = nil
 
   private var isShowingCommands: Bool {
     !commandSuggestions.isEmpty
@@ -239,6 +241,10 @@ struct QuickTextEntryView: View {
             return .handled
           }
           .accessibilityLabel("Comando para Evie")
+
+        if let brainChip {
+          BrainChipView(model: brainChip)
+        }
 
         if let onBrowseForFiles {
           EvieGlowButton(

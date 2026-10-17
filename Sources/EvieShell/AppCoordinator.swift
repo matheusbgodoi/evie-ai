@@ -10,11 +10,27 @@ final class AppCoordinator: NSObject {
   private let preferencesStore: EviePreferencesStore
   private var preferences: EviePreferences
   private let preferencesLoadFailure: EviePreferencesStore.LoadFailure?
+  /// The `EVIE_*` variables Evie launched with. Settings edits and reloads the
+  /// profile they resolve to: `EVIE_MODEL_PROFILE`, or the preferred one.
   private let configurationEnvironment: [String: String]
   private let viewModel: OverlayViewModel
   private let chrome: OverlayChromeModel
   private let panelController: OverlayPanelController
   private let startupConfigurationError: (any Error)?
+  /// What Evie launched with. Its profiles are what the settings pane repairs a
+  /// damaged file from.
+  private let startupConfiguration: EvieLoadedConfiguration
+  /// Picks each conversation's brain before its turn is built, and the next
+  /// one when the first fails before answering.
+  private let brainResolver: EvieBrainResolver
+  /// Kept warm from launch, so the first turn's resolver reads an answer
+  /// instead of waiting on a probe.
+  private let readinessRefresher: EvieReadinessRefresher
+  /// The Mac brain's process: held here so quitting stops it.
+  private let localBrainLauncher: EvieLocalBrainLauncher
+  /// The resolver's readiness cache, refreshed when a key is saved in Settings
+  /// so the next turn does not wait 30 s to learn the PC now accepts it.
+  private let modelReadiness: ModelReadinessCache
   private var hotKeyController: GlobalHotKeyController?
   private var statusItem: NSStatusItem?
   private var settingsWindowController: SettingsWindowController?
@@ -33,6 +49,8 @@ final class AppCoordinator: NSObject {
   private let updater = EvieUpdater()
   private let mediaStore = EvieMediaStore()
   private let wakeListener = EvieWakeListener()
+  private var wakeListeningTask: Task<Void, Never>?
+  private var wakeSuppressedByStop = false
   /// Owned here, not by the settings window: its `reload()` sweeps orphan
   /// LaunchAgents, and that has to happen at launch rather than the first time
   /// somebody opens a pane.
@@ -48,12 +66,96 @@ final class AppCoordinator: NSObject {
   /// coordinator does not. Every use is inside an availability check.
   private var transcription: AnyObject?
   private var historyWindowController: ConversationHistoryWindowController?
+  /// The guide's "Cérebro" row. Held here, not only by the guide, so a key
+  /// saved in Settings can drop a test result the new key makes stale.
+  private lazy var guideBrainStep = EvieGuideBrainStep(
+    configuration: { [brainResolver] in brainResolver.configuration },
+    probe: ModelClientFactory.live.makeReadinessProbe()
+  )
+  /// One checklist shared by the first-run window and the Settings pane, so a
+  /// permission granted in one shows as granted in the other. Lazy because it
+  /// asks the coordinator's own `audioCapture` for the microphone.
+  private lazy var permissionGuide = PermissionGuideViewModel(
+    items: PermissionGuideViewModel.standardItems(
+      audioCapture: audioCapture,
+      pcKey: EvieGuidePCKeyStep(
+        keys: .live,
+        configuration: { [brainResolver] in brainResolver.configuration },
+        onKeySaved: { [weak self] profile in self?.modelKeySaved(for: profile) }
+      ),
+      brain: guideBrainStep
+    ),
+    store: PermissionGuideStore(
+      fileURL: preferencesStore.fileURL
+        .deletingLastPathComponent()
+        .appendingPathComponent("permission-guide.json", isDirectory: false)
+    ),
+    isBundled: EvieAudioCapture.isBundled
+  )
+  private var permissionGuideWindowController: PermissionGuideWindowController?
+  /// The glow and pill that say Evie is looking at the screen. Nothing is
+  /// captured unless it is composited on the display being captured.
+  private lazy var screenPresence = ScreenPresence()
+  private lazy var screenCapture = ScreenCaptureService()
+  private lazy var screenPermission = ScreenPermission(guide: permissionGuide)
+  private lazy var researchMode: ResearchModeController = {
+    let controller = ResearchModeController(
+      brainResolver: brainResolver,
+      look: EvieScreenLook(
+        capturer: screenCapture, indicator: screenPresence, permission: screenPermission),
+      host: computerUse)
+    controller.isOtherInteractionBusy = { [weak self] in
+      guard let self else { return true }
+      return NativeWakeTrainingAccess.isActive || viewModel.hasActiveRequest
+        || audioCapture.isCapturing || isInCall
+        || viewModel.screenLookTask != nil || viewModel.pendingSession != nil
+    }
+    controller.onPrepare = { [weak self] in
+      guard let self else { return }
+      speechOutput.stop()
+      wakeListener.disarm()
+      panelController.hide()
+      Task { [focusCoordinator] in await focusCoordinator.restore() }
+    }
+    controller.onStateChange = { [weak self] in
+      self?.updateWakeListening()
+      self?.refreshMenuShortcuts()
+    }
+    controller.onConfirmation = { [weak self] request in
+      self?.viewModel.presentConfirmation(request)
+      self?.panelController.showPassive()
+    }
+    controller.onCloseConfirmation = { [weak self] id in
+      self?.viewModel.closeConfirmation(id)
+      self?.panelController.hide()
+    }
+    return controller
+  }()
+  /// The app the person was in when the overlay opened, which an agent
+  /// session acts in and hands the front back to when it is stopped.
+  private let focusCoordinator = FocusCoordinator()
+  private lazy var accessibilityPermission = AccessibilityPermission(guide: permissionGuide)
+  /// Agent mode's parts: the session's broker and executor, the pause, the
+  /// confirmation desk, the takeover monitor and the grant's clock.
+  private lazy var computerUse = ComputerUseHost(
+    presence: screenPresence,
+    focus: focusCoordinator,
+    screenPermission: screenPermission,
+    accessibility: accessibilityPermission,
+    preferences: { [weak self] in
+      self?.preferences ?? EviePreferences(computerUseEnabled: false)
+    }
+  )
+  /// The Cérebro tab's model while the settings window exists, so a key
+  /// imported from the guide shows as saved there too.
+  private weak var modelSettings: ModelSettingsViewModel?
   private weak var visibilityMenuItem: NSMenuItem?
 
   override init() {
     let processEnvironment = ProcessInfo.processInfo.environment
     let supportedEnvironmentNames = [
       "EVIE_CONFIG_FILE",
+      "EVIE_MODEL_PROFILE",
       "EVIE_MODEL_ENDPOINT",
       "EVIE_MODEL_NAME",
       "EVIE_MODEL_CONTEXT",
@@ -77,22 +179,22 @@ final class AppCoordinator: NSObject {
       resolvedFileResult = .failure(error)
     }
 
+    // A file or environment that cannot be used falls back to the built-in
+    // profiles — the PC — and the reason is shown once the overlay is up.
     let loadResult:
       (
-        configuration: EvieConfiguration,
+        loaded: EvieLoadedConfiguration,
         fileURL: URL,
         error: (any Error)?
       )
     switch resolvedFileResult {
     case .success(let configurationFileURL):
-      do {
-        let configuration = try configurationLoader.load(environment: configurationEnvironment)
-        loadResult = (configuration, configurationFileURL, nil)
-      } catch {
-        loadResult = (EvieConfiguration(), configurationFileURL, error)
-      }
+      let (loaded, failure) = configurationLoader.loadWithDiagnostics(
+        environment: configurationEnvironment
+      )
+      loadResult = (loaded, configurationFileURL, failure)
     case .failure(let error):
-      loadResult = (EvieConfiguration(), configurationLoader.fileURL, error)
+      loadResult = (.builtIn, configurationLoader.fileURL, error)
     }
 
     let conversationStore = EvieConversationStore()
@@ -102,8 +204,24 @@ final class AppCoordinator: NSObject {
         .appendingPathComponent("preferences.json", isDirectory: false)
     )
     let preferencesResult = preferencesStore.loadWithDiagnostics()
+    // Whether each brain can answer now, kept for 30 s, and read by the
+    // resolver on every turn.
+    let modelReadiness = ModelReadinessCache(
+      probe: ModelClientFactory.live.makeReadinessProbe()
+    )
+    // Starts LensVLM on this Mac when a turn needs it, and stops it after ten
+    // idle minutes or when Evie quits.
+    let localBrainLauncher = EvieLocalBrainLauncher()
+    let brainResolver = EvieBrainResolver(
+      configuration: loadResult.loaded,
+      environment: configurationEnvironment,
+      factory: .live,
+      readiness: modelReadiness,
+      localBrain: localBrainLauncher
+    )
+    brainResolver.choose(preferencesResult.preferences.brainChoice)
     let viewModel = OverlayViewModel(
-      agentClient: TurboFieldfareClient(configuration: loadResult.configuration),
+      brainResolver: brainResolver,
       conversationStore: conversationStore,
       capabilities: Self.capabilities(
         for: preferencesResult.preferences,
@@ -124,6 +242,14 @@ final class AppCoordinator: NSObject {
     self.viewModel = viewModel
     self.chrome = chrome
     startupConfigurationError = loadResult.error
+    startupConfiguration = loadResult.loaded
+    self.brainResolver = brainResolver
+    self.localBrainLauncher = localBrainLauncher
+    self.modelReadiness = modelReadiness
+    readinessRefresher = EvieReadinessRefresher(
+      cache: modelReadiness,
+      profile: loadResult.loaded.activeProfile
+    )
     panelController = OverlayPanelController(
       viewModel: viewModel,
       chrome: chrome,
@@ -132,6 +258,18 @@ final class AppCoordinator: NSObject {
     )
     super.init()
 
+    brainResolver.askToWake = { [weak self] question in
+      guard let self else { return false }
+      if researchMode.isRunning { panelController.showPassive() }
+      return await viewModel.askToWake(question)
+    }
+    brainResolver.onWaking = { [weak viewModel] waking in
+      viewModel?.showLocalBrainWaking(waking)
+    }
+    // A server a crash left behind, or one the script started, is taken over
+    // so it unloads like any other; a stale pid file is removed.
+    localBrainLauncher.reconcilePIDFile(for: loadResult.loaded.profiles)
+    panelController.onPresent = { [focusCoordinator] in focusCoordinator.recordFrontmost() }
     viewModel.grantedRoots = { [rootsViewModel] in rootsViewModel.roots }
     viewModel.memories = { [memoryViewModel] in memoryViewModel.entries }
     viewModel.installedSkills = { [skillsViewModel] in skillsViewModel.skills }
@@ -152,6 +290,12 @@ final class AppCoordinator: NSObject {
     viewModel.isWebSearchEnabled = { [weak self] in self?.preferences.webSearchEnabled ?? false }
     viewModel.isMailAndCalendarEnabled = { [weak self] in
       self?.preferences.mailAndCalendarEnabled ?? false
+    }
+    viewModel.grantSuggestedRoot = { [rootsViewModel] suggestion in
+      rootsViewModel.grantSuggested(suggestion)
+    }
+    viewModel.savesDocumentsWhenAsked = { [weak self] in
+      self?.preferences.savesDocumentsWhenAsked ?? false
     }
     viewModel.fileChangePolicy = { [weak self] in
       guard let self else { return (false, false) }
@@ -247,6 +391,14 @@ final class AppCoordinator: NSObject {
       preferencesDidChange(updated)
       try? preferencesStore.save(updated)
     }
+    rootsViewModel.savesDocumentsWhenAsked = preferences.savesDocumentsWhenAsked
+    rootsViewModel.onDocumentPolicyChanged = { [weak self] savesWhenAsked in
+      guard let self else { return }
+      var updated = preferences
+      updated.savesDocumentsWhenAsked = savesWhenAsked
+      preferencesDidChange(updated)
+      try? preferencesStore.save(updated)
+    }
     rootsViewModel.onChange = { [weak self] roots in
       guard let self else { return }
       viewModel.applyCapabilities(
@@ -272,6 +424,9 @@ final class AppCoordinator: NSObject {
     // offer to look, and the moment a folder is authorised she must know she
     // can. Claiming either wrongly is the fastest way to make her useless.
     capabilities.readsLocalFiles = hasGrantedFolders
+    // The shell's own turns always offer documents, opening and the folders a
+    // click away (ADR 0019); the schedule runner builds its own snapshot.
+    capabilities.worksWithDocuments = true
     // Declared unconditionally: the tool is always offered, so the persona may
     // always tell her to use it.
     capabilities.calculates = true
@@ -325,7 +480,7 @@ final class AppCoordinator: NSObject {
       // Resetting the visuals is not done here: `onSpeakingChanged` covers both
       // ways speaking can end, and this one only covers running out.
       if isInCall {
-        startListening()
+        startListening(origin: .callMode)
       }
     }
     viewModel.onAnswerReady = { [weak self] answer in
@@ -378,7 +533,7 @@ final class AppCoordinator: NSObject {
       // Called by name, so the answer follows the way the question was asked:
       // she comes, she opens the microphone, and she speaks the reply.
       panelController.showQuickText()
-      startListening()
+      startListening(origin: .wakeWord)
     }
 
     do {
@@ -396,6 +551,109 @@ final class AppCoordinator: NSObject {
     // Armed at launch if that is what the preference says, so being able to call
     // her by name does not depend on having opened settings this session.
     updateWakeListening()
+    readinessRefresher.start()
+    viewModel.screenLook = EvieScreenLook(
+      capturer: screenCapture,
+      indicator: screenPresence,
+      permission: screenPermission
+    )
+    viewModel.openScreenRecordingSettings = { [weak self] in
+      self?.screenPermission.openSettings()
+    }
+    // Parar on the pill, or Esc during an agent session: the same as the
+    // emergency shortcut.
+    screenPresence.onStop = { [weak self] in
+      self?.stopEverything()
+    }
+    // Agent mode: the pill's pause and Continuar hold and release the loop,
+    // the grant's end stops it, and "para" is Parar.
+    let computerUse = computerUse
+    viewModel.computerUse = computerUse
+    screenPresence.onPause = { [weak computerUse] in computerUse?.presencePaused() }
+    screenPresence.onResume = { [weak computerUse] in computerUse?.presenceResumed() }
+    computerUse.onExpired = { [weak self] in
+      guard let self else { return }
+      if researchMode.isRunning { researchMode.stop() } else { stopComputerUseSession() }
+    }
+    viewModel.isResearchBusy = { [weak self] in
+      (self?.researchMode.isRunning ?? false) || NativeWakeTrainingAccess.isActive
+    }
+    viewModel.onStopRequested = { [weak self] in self?.stopEverything() }
+    viewModel.computerUseConsentGiven = { [weak self] in
+      self?.preferences.computerUseConsentGiven ?? false
+    }
+    viewModel.onComputerUseConsent = { [weak self] in self?.recordComputerUseConsent() }
+    // The brain chip's menu: agent mode on and off without opening Settings,
+    // and Settings opened on the section a line of the menu is about.
+    viewModel.onSetAgentMode = { [weak self] enabled in self?.setAgentMode(enabled) }
+    NativeWakeTrainingAccess.store = EvieWakeEnrollmentStore(
+      fileURL: preferencesStore.fileURL.deletingLastPathComponent().appendingPathComponent(
+        "wake-enrollment.json"))
+    NativeWakeTrainingAccess.onAcquire = { [weak self] in
+      guard let self else { throw NativeAppleError.notReady }
+      guard !viewModel.hasActiveRequest, !researchMode.isArmed, !researchMode.isRunning,
+        !audioCapture.isCapturing, !isInCall, !computerUse.isRunning,
+        viewModel.pendingSession == nil, viewModel.screenLookTask == nil
+      else { throw NativeAppleError.busy }
+      wakeListeningTask?.cancel()
+      wakeListeningTask = nil
+      speechOutput.stop()
+      wakeListener.disarm()
+    }
+    NativeWakeTrainingAccess.onRelease = { [weak self] in self?.updateWakeListening() }
+    NativeWakeTrainingAccess.onSaved = { [weak self] in
+      guard let self else { throw NativeAppleError.notReady }
+      var updated = preferences
+      updated.voice.wakePhrase = "Evie"
+      updated.voice.wakeWordEnabled = true
+      try preferencesStore.save(updated)
+      wakeSuppressedByStop = false
+      preferencesDidChange(updated)
+    }
+    NativeAppleActions.handle = { [weak self] request in
+      guard let self else { throw NativeAppleError.notReady }
+      guard !NativeWakeTrainingAccess.isActive, !viewModel.hasActiveRequest, !researchMode.isArmed,
+        !researchMode.isRunning,
+        viewModel.screenLookTask == nil, !computerUse.isRunning, !audioCapture.isCapturing,
+        !isInCall, viewModel.pendingSession == nil
+      else { throw NativeAppleError.busy }
+      switch request {
+      case .openConversation: openQuickText()
+      case .prepareQuestion(let text):
+        guard viewModel.quickText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+          throw NativeAppleError.busy
+        }
+        openQuickText()
+        viewModel.quickText = text
+      case .captureScreen: lookAtScreen()
+      }
+    }
+    viewModel.onSetBrainReasoning = { [weak self] id, level in
+      self?.setBrainReasoning(level, profileID: id)
+    }
+    viewModel.onBrainChoiceChanged = { [weak self] choice in
+      guard let self else { throw CancellationError() }
+      var updated = preferences
+      updated.brainChoice = choice
+      try preferencesStore.save(updated)
+      preferencesDidChange(updated)
+      researchMode.brainChoiceDidChange()
+    }
+    viewModel.onSetWebSearch = { [weak self] enabled in
+      guard let self else { return }
+      var updated = preferences
+      updated.webSearchEnabled = enabled
+      do {
+        try preferencesStore.save(updated)
+        preferencesDidChange(updated)
+      } catch {
+        viewModel.presentRuntimeError(title: "Não consegui mudar a pesquisa web", error: error)
+      }
+    }
+    viewModel.onOpenSettingsSection = { [weak self] section in
+      self?.openSettings(on: section)
+    }
+    viewModel.showAgentMode(isAgentModeOn)
     attachMediaLifecycle()
     buildVaultIndexIfMissing()
 
@@ -415,6 +673,19 @@ final class AppCoordinator: NSObject {
     } else {
       openQuickText()
     }
+
+    // After the overlay, so the checklist is the window in front on a first
+    // launch rather than something the overlay covers.
+    if permissionGuide.opensAtLaunch {
+      openPermissionGuide()
+    }
+    if CommandLine.arguments.contains("--request-permissions") {
+      openPermissionGuide()
+      Task { [permissionGuide] in
+        await permissionGuide.requestAvailablePermissions()
+        EvieDiagnostics.writeLog(EviePermissionsAudit.report(), named: "permissions-check.log")
+      }
+    }
   }
 
   /// Diagnostics for `--presentation-check`. Not used by the running application.
@@ -431,10 +702,24 @@ final class AppCoordinator: NSObject {
   }
 
   func stop() {
+    wakeSuppressedByStop = true
+    wakeListeningTask?.cancel()
+    wakeListener.disarm()
+    NativeWakeTrainingAccess.stop()
+    NativeWakeTrainingAccess.onAcquire = nil
+    NativeWakeTrainingAccess.onRelease = nil
+    NativeWakeTrainingAccess.onSaved = nil
+    NativeAppleActions.handle = nil
+    readinessRefresher.stop()
+    // Its 8 GB are not left behind for a process nobody will ask again.
+    // `prepareForTermination` has normally stopped it already; this is the
+    // last chance, and quit cannot wait here.
+    localBrainLauncher.stopWithoutWaiting()
     audioCapture.stop()
     speechOutput.stop()
     viewModel.cancelCurrentInteraction()
     hotKeyController = nil
+    researchMode.shutdown()
     if let statusItem {
       NSStatusBar.system.removeStatusItem(statusItem)
     }
@@ -446,9 +731,17 @@ final class AppCoordinator: NSObject {
   }
 
   func prepareForTermination() async {
+    wakeSuppressedByStop = true
+    wakeListeningTask?.cancel()
+    wakeListener.disarm()
+    NativeWakeTrainingAccess.stop()
+    researchMode.shutdown()
     audioCapture.stop()
     speechOutput.stop()
     viewModel.cancelCurrentInteraction()
+    // At most the five-second grace: SIGKILL, if it comes to that, is sent
+    // and not waited on.
+    await localBrainLauncher.stop(waiting: .graceOnly)
     await viewModel.waitForHistoryPersistence()
   }
 }
@@ -491,6 +784,42 @@ extension AppCoordinator {
       shortcut: .toggleCallMode
     )
 
+    add(
+      to: menu, title: "Olhar a tela", action: #selector(lookAtScreen),
+      shortcut: .lookAtScreen)
+    // A button to start a session, beside push-to-talk: no shortcut, so a
+    // key can never begin one by itself.
+    let controlItem = NSMenuItem(
+      title: "Controlar o Mac…", action: #selector(controlTheMac), keyEquivalent: "")
+    controlItem.target = self
+    menu.addItem(controlItem)
+    // The switch itself, checked while it is on, so the mode can be turned
+    // off from wherever the menu bar is.
+    let agentItem = NSMenuItem(
+      title: "Modo agente", action: #selector(toggleAgentModeFromMenu), keyEquivalent: "")
+    agentItem.target = self
+    agentItem.state = isAgentModeOn ? .on : .off
+    agentItem.isEnabled = !ComputerUseSwitch.forcedOff(
+      environment: ProcessInfo.processInfo.environment)
+    menu.addItem(agentItem)
+
+    menu.addItem(.separator())
+    add(
+      to: menu, title: researchMode.isArmed ? "Desativar pesquisa" : "Ativar pesquisa…",
+      action: #selector(toggleResearchMode), shortcut: .toggleResearchMode)
+    let researchRun = add(
+      to: menu, title: "Executar tarefa de pesquisa", action: #selector(runResearchTask),
+      shortcut: .runResearchTask)
+    researchRun.isEnabled = researchMode.isArmed && !researchMode.isRunning
+    let researchStatus = NSMenuItem(
+      title: String(researchMode.status.prefix(100)), action: nil, keyEquivalent: "")
+    researchStatus.isEnabled = false
+    menu.addItem(researchStatus)
+    let researchWindow = NSMenuItem(
+      title: "Pesquisa e medições…", action: #selector(showResearchWindow), keyEquivalent: "")
+    researchWindow.target = self
+    menu.addItem(researchWindow)
+
     menu.addItem(.separator())
 
     add(
@@ -510,7 +839,9 @@ extension AppCoordinator {
     add(
       to: menu, title: "Parar tudo agora", action: #selector(stopEverythingFromMenu),
       shortcut: .emergencyStop)
-    add(to: menu, title: "Configurações…", action: #selector(openSettings), shortcut: .openSettings)
+    add(
+      to: menu, title: "Configurações…", action: #selector(openSettingsFromMenu),
+      shortcut: .openSettings)
 
     menu.addItem(.separator())
 
@@ -588,12 +919,47 @@ extension AppCoordinator {
   }
 
   @objc fileprivate func openQuickText() {
+    guard !NativeWakeTrainingAccess.isActive else { return }
+    wakeSuppressedByStop = false
+    updateWakeListening()
     if viewModel.beginQuickText() {
       panelController.showQuickText()
     } else {
       panelController.showPassive()
     }
     updateToggleMenuTitle()
+  }
+
+  /// Captures the screen under the pointer for the next question. The
+  /// overlay opens first; it is left out of the capture anyway.
+  @objc fileprivate func lookAtScreen() {
+    openQuickText()
+    viewModel.captureScreenForNextQuestion()
+  }
+
+  @objc fileprivate func toggleResearchMode() {
+    focusCoordinator.recordFrontmost()
+    researchMode.toggle()
+  }
+
+  @objc fileprivate func runResearchTask() {
+    researchMode.run()
+  }
+
+  @objc fileprivate func showResearchWindow() {
+    focusCoordinator.recordFrontmost()
+    researchMode.showWindow()
+  }
+
+  /// The next request, said or typed, becomes a session goal; its card
+  /// still needs a click on Começar.
+  @objc fileprivate func controlTheMac() {
+    openQuickText()
+    viewModel.askForComputerGoal()
+  }
+
+  @objc fileprivate func toggleAgentModeFromMenu() {
+    setAgentMode(!preferences.computerUseEnabled)
   }
 
   @objc fileprivate func newConversation() {
@@ -647,16 +1013,49 @@ extension AppCoordinator {
     NSApp.terminate(nil)
   }
 
-  @objc fileprivate func openSettings() {
+  fileprivate func openPermissionGuide() {
+    if permissionGuideWindowController == nil {
+      permissionGuideWindowController = PermissionGuideWindowController(
+        viewModel: permissionGuide,
+        folders: rootsViewModel
+      )
+    }
+    permissionGuideWindowController?.present()
+  }
+
+  /// A key was saved, from Settings or from the guide. Everything that showed
+  /// the old state reads it again: the readiness cache, so the next turn does
+  /// not wait 30 s to learn the PC now accepts it; the guide's rows; the
+  /// Cérebro tab's key status.
+  private func modelKeySaved(for profile: EvieModelProfile) {
+    Task { [modelReadiness] in await modelReadiness.refresh(profile) }
+    guideBrainStep.forgetResult()
+    permissionGuide.refresh()
+    modelSettings?.refreshKeyStatus()
+  }
+
+  @objc fileprivate func openSettingsFromMenu() {
+    openSettings()
+  }
+
+  /// Opens Settings, on `section` when one is given.
+  fileprivate func openSettings(on section: EvieSettingsSection? = nil) {
     if settingsWindowController == nil {
       let modelViewModel = ModelSettingsViewModel(
-        configuration: viewModel.configuration,
+        loaded: brainResolver.configuration,
+        repairBaseline: startupConfiguration.profiles,
         store: configurationStore,
         loader: configurationLoader,
-        environment: configurationEnvironment
-      ) { [weak self] configuration in
-        self?.viewModel.applyConfiguration(configuration)
-      }
+        environment: configurationEnvironment,
+        onSave: { [weak self] loaded in
+          guard let self else { return }
+          viewModel.applyConfiguration(loaded, environment: configurationEnvironment)
+        },
+        onKeySaved: { [weak self] profile in
+          self?.modelKeySaved(for: profile)
+        }
+      )
+      modelSettings = modelViewModel
       let preferencesViewModel = EviePreferencesViewModel(
         preferences: preferences,
         store: preferencesStore,
@@ -697,11 +1096,12 @@ extension AppCoordinator {
         updater: updater,
         wakeListener: wakeListener,
         schedulesViewModel: schedulesViewModel,
+        permissionGuide: permissionGuide,
         preferencesPath: preferencesStore.fileURL.path,
         configurationPath: configurationStore.fileURL.path
       )
     }
-    settingsWindowController?.present()
+    settingsWindowController?.present(section: section)
   }
 
   /// Routes a global shortcut to the thing it names.
@@ -722,7 +1122,7 @@ extension AppCoordinator {
       openSettings()
     case (.pushToTalk, .pressed):
       isHoldingToTalk = true
-      startListening()
+      startListening(origin: .pushToTalk)
     case (.pushToTalk, .released):
       guard isHoldingToTalk else {
         break
@@ -733,6 +1133,12 @@ extension AppCoordinator {
       toggleCallMode()
     case (.emergencyStop, .pressed):
       stopEverything()
+    case (.lookAtScreen, .pressed):
+      lookAtScreen()
+    case (.toggleResearchMode, .pressed):
+      toggleResearchMode()
+    case (.runResearchTask, .pressed):
+      runResearchTask()
     default:
       break
     }
@@ -763,7 +1169,7 @@ extension AppCoordinator {
     isInCall = true
     chrome.setCallMode(true)
     viewModel.presentCallSurface()
-    startListening()
+    startListening(origin: .callMode)
   }
 
   fileprivate func leaveCall() {
@@ -783,7 +1189,7 @@ extension AppCoordinator {
     if audioCapture.isCapturing {
       stopListening()
     } else {
-      startListening()
+      startListening(origin: .clickedMark)
     }
   }
 
@@ -792,9 +1198,8 @@ extension AppCoordinator {
   /// Reads the text with its markup already resolved, so no asterisk or hash is
   /// ever pronounced.
   fileprivate func speak(_ answer: EvieRichText) {
-    // Speaking follows how the question was asked. Answering out loud something
-    // that was typed interrupts whatever the person was doing with their hands,
-    // which is why the switch that forces it is off by default.
+    // Speech follows the saved voice preferences, including the owner's
+    // enabled default for reading typed answers (ADR 0022).
     guard
       preferences.voice.speaksAnswer(
         toSpokenPrompt: viewModel.answeringSpokenPrompt,
@@ -869,10 +1274,16 @@ extension AppCoordinator {
     return .system(identifier: firstVisible?.id)
   }
 
-  fileprivate func startListening() {
+  /// Opens the microphone. `origin` is how it was opened, which decides
+  /// whether what is heard may start an agent-mode session: push-to-talk
+  /// and a click may, the wake word and a call may not.
+  fileprivate func startListening(origin: ComputerUseRequestOrigin) {
+    guard !researchMode.isRunning, !NativeWakeTrainingAccess.isActive else { return }
+    wakeSuppressedByStop = false
     guard !audioCapture.isCapturing else {
       return
     }
+    viewModel.spokenOrigin = origin
     // Only one thing may hold the microphone. Arming and a real turn are the
     // same device, and two owners is a hang inside coreaudiod rather than an
     // error anybody could act on.
@@ -958,6 +1369,15 @@ extension AppCoordinator {
   /// Once audio exists this also closes the microphone and cuts playback; the
   /// shortcut is registered now so the reflex is already in the user's hands.
   fileprivate func stopEverything() {
+    wakeSuppressedByStop = true
+    NativeWakeTrainingAccess.stop()
+    wakeListeningTask?.cancel()
+    wakeListeningTask = nil
+    wakeListener.disarm()
+    researchMode.stop()
+    // A session first: the grant is revoked and its task cancelled before
+    // anything else here, or any indicator, moves.
+    let stoppedSession = stopComputerUseSession()
     isHoldingToTalk = false
     if isInCall {
       isInCall = false
@@ -969,9 +1389,45 @@ extension AppCoordinator {
     Task { @MainActor [weak self] in
       await self?.cancelTranscription()
     }
+    guard !stoppedSession else {
+      // The overlay stays: its card shows what the session did.
+      updateToggleMenuTitle()
+      return
+    }
     viewModel.cancelCurrentInteraction()
     panelController.hide()
     updateToggleMenuTitle()
+  }
+
+  /// Stops an agent session, if one runs — Parar, Esc, ⌥⇧Esc, "para", or the
+  /// grant running out — and gives the front back to the app the person was
+  /// in. Returns whether one ran.
+  @discardableResult
+  fileprivate func stopComputerUseSession() -> Bool {
+    guard viewModel.stopComputerUse() else {
+      return false
+    }
+    Task { @MainActor [weak self] in
+      guard let self else { return }
+      await focusCoordinator.restore()
+      panelController.showPassive()
+      updateToggleMenuTitle()
+    }
+    return true
+  }
+
+  /// The first session's Começar accepted the consent on its card.
+  fileprivate func recordComputerUseConsent() {
+    var updated = preferences
+    updated.computerUseConsentGiven = true
+    do {
+      try preferencesStore.save(updated)
+    } catch {
+      // Not saved: the consent is shown again next launch, which is the safe
+      // way to fail.
+      viewModel.presentRuntimeWarning("Não consegui guardar o seu aceite do modo agente.")
+    }
+    preferencesDidChange(updated)
   }
 
   /// The shortcut does what the mark does, and switches the mode on first if it
@@ -1048,13 +1504,22 @@ extension AppCoordinator {
   }
 
   fileprivate func updateWakeListening() {
-    guard preferences.voice.wakeWordEnabled, !audioCapture.isCapturing, !isInCall else {
+    wakeListeningTask?.cancel()
+    wakeListeningTask = nil
+    guard preferences.voice.wakeWordEnabled, !wakeSuppressedByStop,
+      !NativeWakeTrainingAccess.isActive, !audioCapture.isCapturing, !isInCall,
+      !researchMode.isArmed, !researchMode.isRunning
+    else {
       wakeListener.disarm()
       return
     }
-    Task { @MainActor [weak self] in
-      guard let self else { return }
-      await wakeListener.arm(phrases: preferences.voice.wakePhrase)
+    wakeListeningTask = Task { @MainActor [weak self] in
+      guard let self, !Task.isCancelled, !wakeSuppressedByStop,
+        !NativeWakeTrainingAccess.isActive, !researchMode.isArmed
+      else { return }
+      await wakeListener.arm(
+        phrases: preferences.voice.wakePhrase,
+        enrollment: NativeWakeTrainingAccess.enrollment(for: preferences.voice.wakePhrase))
     }
   }
 
@@ -1077,10 +1542,42 @@ extension AppCoordinator {
     }
   }
 
+  /// Whether agent mode is in effect: the switch, unless the environment
+  /// forced it off for this launch.
+  fileprivate var isAgentModeOn: Bool {
+    ComputerUseSwitch.isEnabled(
+      preferences: preferences, environment: ProcessInfo.processInfo.environment)
+  }
+
+  /// The agent-mode switch, from the chip's menu or the menu bar: saved, then
+  /// applied like any other preference, and said on the status line — the
+  /// same words Settings uses.
+  fileprivate func setAgentMode(_ enabled: Bool) {
+    guard enabled != preferences.computerUseEnabled else {
+      return
+    }
+    var updated = preferences
+    updated.computerUseEnabled = enabled
+    do {
+      try preferencesStore.save(updated)
+    } catch {
+      viewModel.presentRuntimeError(title: "Não consegui mudar o modo agente", error: error)
+      return
+    }
+    preferencesDidChange(updated)
+    viewModel.presentRuntimeWarning(ComputerUseCopy.switchMessage(enabled: enabled))
+  }
+
   fileprivate func preferencesDidChange(_ updated: EviePreferences) {
+    viewModel.objectWillChange.send()
     let appearanceChanged = updated.appearance != preferences.appearance
     let shortcutsChanged = updated.shortcuts != preferences.shortcuts
     preferences = updated
+    brainResolver.choose(updated.brainChoice)
+    if !isAgentModeOn { stopComputerUseSession() }
+    if !isAgentModeOn, researchMode.isRunning, researchMode.destination == .controlMac {
+      researchMode.stop(message: "Modo agente desativado · pesquisa interrompida")
+    }
     speechOutput.setQualitySteps(updated.voice.resolvedQualitySteps)
 
     if appearanceChanged {
@@ -1096,10 +1593,28 @@ extension AppCoordinator {
     }
     updateWakeListening()
     refreshMenuShortcuts()
+    viewModel.showAgentMode(isAgentModeOn)
     preferencesViewModel?.adopt(updated)
     viewModel.applyCapabilities(
       Self.capabilities(for: updated, hasGrantedFolders: !rootsViewModel.roots.isEmpty)
     )
+  }
+
+  fileprivate func setBrainReasoning(_ level: ReasoningLevel, profileID: String) {
+    guard !viewModel.hasActiveRequest, !researchMode.isRunning else { return }
+    do {
+      _ = try configurationStore.saveProfiles(
+        reading: configurationLoader, environment: configurationEnvironment,
+        otherwise: startupConfiguration.profiles
+      ) { profiles, _ in
+        try profiles.updateProfile(id: profileID) { $0.defaultReasoning = level }
+      }
+      let loaded = try configurationLoader.loadProfiles(environment: configurationEnvironment)
+      viewModel.applyConfiguration(loaded, environment: configurationEnvironment)
+      try modelSettings?.adoptReasoning(level, profileID: profileID)
+    } catch {
+      viewModel.presentRuntimeError(title: "Não consegui mudar o raciocínio", error: error)
+    }
   }
 
   /// Re-registers every shortcut and reports the ones the system refused.

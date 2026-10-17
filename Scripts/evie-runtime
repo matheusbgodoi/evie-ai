@@ -22,9 +22,12 @@ readonly EVIE_SERVER_LOG="${EVIE_LOG_DIR}/turbo-fieldfare-server.log"
 readonly EVIE_HEALTH_URL="http://127.0.0.1:${EVIE_PORT}/health"
 readonly EVIE_MODELS_URL="http://127.0.0.1:${EVIE_PORT}/v1/models"
 readonly EVIE_CHAT_URL="http://127.0.0.1:${EVIE_PORT}/v1/chat/completions"
+readonly EVIE_ENDPOINT="http://127.0.0.1:${EVIE_PORT}/v1"
+# Tests point this at a stand-in so they can check what would be opened.
+readonly EVIE_APP_SCRIPT="${EVIE_APP_SCRIPT_OVERRIDE:-${EVIE_SCRIPT_DIR}/evie-app}"
 
 function usage() {
-  print "Usage: Scripts/evie-runtime <doctor|setup|configure|verify|start|stop|status|smoke|launch>"
+  print "Usage: Scripts/evie-runtime <doctor|setup|configure|verify|start|stop|status|smoke|launch|launch-custom>"
 }
 
 function ensure_directories() {
@@ -144,6 +147,13 @@ function doctor() {
   print "Doctor found no installation blockers."
 }
 
+# Seeds config.json (schema v2) when it is missing, and never touches an existing
+# one. The first two profiles are the app's built-ins and must match
+# `EvieModelProfileSet.builtIn` in Sources/EvieCore/EvieModelProfile.swift, which
+# a test in EvieModelProfileTests checks. The third, "custom", is the Gemma this
+# script serves: present so it can be chosen with EVIE_MODEL_PROFILE=custom, but
+# not in preference_order, so the PC stays the default — the same shape a
+# migrated v1 file gets. jq builds the JSON so the home path is escaped.
 function configure() {
   ensure_directories
   if [[ -e "${EVIE_CONFIG_FILE}" ]]; then
@@ -152,19 +162,89 @@ function configure() {
   fi
 
   umask 077
-  print -r -- '{
-  "schema_version": 1,
-  "model": {
-    "endpoint": "http://127.0.0.1:38433/v1",
-    "name": "gemma-4-26b-a4b-it",
-    "context_tokens": 65536,
-    "max_completion_tokens": 4096,
-    "temperature": 0.2,
-    "top_p": 0.95,
-    "stop_sequences": [],
-    "request_timeout_seconds": 300
-  }
-}' > "${EVIE_CONFIG_FILE}"
+  /usr/bin/jq -n \
+    --arg mac_executable "${HOME}/.local/bin/mlx_vlm.server" \
+    --arg gemma_endpoint "${EVIE_ENDPOINT}" \
+    --arg gemma_model "${EVIE_MODEL_ID}" \
+    --argjson gemma_context "${EVIE_CONTEXT_TOKENS}" \
+    '{
+      schema_version: 2,
+      preference_order: ["pc-3090", "mac-local"],
+      mac_fallback: "ask",
+      profiles: [
+        {
+          id: "pc-3090",
+          display_name: "PC RTX 3090",
+          endpoint: "https://models.example.invalid/v1",
+          model: "qwen-daily",
+          context_tokens: 200704,
+          server_context_tokens: 200704,
+          max_completion_tokens: 16384,
+          capabilities: {vision: true, tools: true},
+          thinking_style: "templateKwargs",
+          default_reasoning: "off",
+          credential: {
+            service: "com.matheusbgodoi.evie.model",
+            account: "pc-3090",
+            bound_host: "models.example.invalid"
+          },
+          runtime: {kind: "remoteGateway"},
+          location: "yourPC",
+          family: "qwen",
+          coordinate_convention: "normalized1000",
+          stop_sequences: [],
+          request_timeout_seconds: 900
+        },
+        {
+          id: "mac-local",
+          display_name: "Mac local",
+          endpoint: "http://127.0.0.1:38480/v1",
+          model: "mlx-community/LensVLM-9B-OptiQ-4bit",
+          temperature: 0,
+          top_p: 1,
+          context_tokens: 131072,
+          server_context_tokens: 131072,
+          max_completion_tokens: 2048,
+          capabilities: {vision: true, tools: false},
+          thinking_style: "topLevel",
+          default_reasoning: "off",
+          runtime: {
+            kind: "localOnDemand",
+            launcher: "mlxVLM",
+            executable: $mac_executable,
+            port: 38480,
+            max_kv_size: 131072,
+            kv_bits: 8,
+            prefill_step_size: 512,
+            metal_cache_limit_mb: 256
+          },
+          location: "thisMac",
+          family: "qwen",
+          coordinate_convention: "normalized1000",
+          stop_sequences: [],
+          request_timeout_seconds: 900
+        },
+        {
+          id: "custom",
+          display_name: "Personalizado",
+          endpoint: $gemma_endpoint,
+          model: $gemma_model,
+          context_tokens: $gemma_context,
+          max_completion_tokens: 4096,
+          capabilities: {vision: false, tools: true},
+          thinking_style: "none",
+          default_reasoning: "off",
+          runtime: {kind: "remoteGateway"},
+          location: "thisMac",
+          family: "gemma",
+          coordinate_convention: "pixels",
+          temperature: 0.2,
+          top_p: 0.95,
+          stop_sequences: [],
+          request_timeout_seconds: 300
+        }
+      ]
+    }' > "${EVIE_CONFIG_FILE}"
   chmod 600 "${EVIE_CONFIG_FILE}"
   print "Created local configuration: ${EVIE_CONFIG_FILE}"
 }
@@ -419,27 +499,43 @@ function smoke() {
   print "Streaming completion finished with [DONE]."
 }
 
+# Hands Evie herself to `Scripts/evie-app run`, and starts no model.
+#
+# This used to build `evie-shell` and run the bare binary from here, and that
+# is exactly the launch TCC cannot work with: an executable started from a
+# terminal is attributed to the terminal, so the microphone hangs, and Screen
+# Recording or Accessibility granted "to Evie" would land on Terminal instead —
+# which over-authorises everything else that ever runs in it. The bare binary
+# is never run any more; the installed, signed bundle is opened through Launch
+# Services or nothing is.
+#
+# It also used to start the loopback Gemma first. Since v2 the default brain is
+# the PC, so that cost about 15 GB of memory for a server the default profile
+# never asks; `launch-custom` is the explicit way to have both.
 function launch() {
-  start
-  local shell_binary_directory
-  shell_binary_directory=$(swift build \
-    --package-path "${EVIE_REPOSITORY_DIR}" \
-    -c release \
-    --show-bin-path)
-  local shell_binary="${shell_binary_directory}/evie-shell"
+  exec "${EVIE_APP_SCRIPT}" run
+}
 
-  if [[ ! -x "${shell_binary}" ]] \
-    || find "${EVIE_REPOSITORY_DIR}/Package.swift" "${EVIE_REPOSITORY_DIR}/Sources" \
-      -type f -newer "${shell_binary}" -print -quit | grep -q .
+# Starts the Gemma this script serves and opens Evie on the `custom` profile.
+#
+# The profile is chosen through EVIE_MODEL_PROFILE, which `open` passes on to the
+# app (measured on macOS 27.2). The configuration is checked before anything
+# starts: a file with no `custom` profile, or one pointing somewhere other than
+# this server, would make Evie fall back to the built-ins and leave 15 GB
+# resident for nothing.
+function launch_custom() {
+  ensure_directories
+  configure
+  if ! /usr/bin/jq -e --arg endpoint "${EVIE_ENDPOINT}" \
+    '.profiles | any(.id == "custom" and .endpoint == $endpoint)' \
+    "${EVIE_CONFIG_FILE}" >/dev/null 2>&1
   then
-    swift build \
-      --package-path "${EVIE_REPOSITORY_DIR}" \
-      -c release \
-      --product evie-shell \
-      -Xswiftc -warnings-as-errors
+    print -u2 "${EVIE_CONFIG_FILE} has no \"custom\" profile at ${EVIE_ENDPOINT},"
+    print -u2 "so Evie would not use the server this command starts. Nothing was started."
+    return 1
   fi
-
-  "${shell_binary}"
+  start
+  EVIE_MODEL_PROFILE=custom exec "${EVIE_APP_SCRIPT}" run
 }
 
 if (( $# != 1 )); then
@@ -457,6 +553,7 @@ case "$1" in
   status) status ;;
   smoke) smoke ;;
   launch) launch ;;
+  launch-custom) launch_custom ;;
   *)
     usage
     exit 64

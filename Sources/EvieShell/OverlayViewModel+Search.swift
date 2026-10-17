@@ -55,6 +55,8 @@ extension OverlayViewModel {
     // his own notes, quoted; handing them to the next turn as something Evie
     // said would strip the fence that keeps note text data rather than
     // instruction, and reading six passages out loud is unbearable.
+    // "Somente local" stays here, alone among the status lines: a note search
+    // reads this Mac's index and asks no brain anything.
     settle(
       summary: found.isEmpty
         ? "Nada nas anotações · somente local"
@@ -72,28 +74,44 @@ extension OverlayViewModel {
     userMessage: ChatMessage,
     roots: [EvieFileRoot],
     web: any EvieWebSearching,
-    client: any AgentClient
-  ) async {
-    let messages = conversationPrefix(adding: ChatMessage(role: .user, content: question))
-    do {
-      // No vault, because the whole point is not to consult it. Passing it and
-      // ignoring the result would still pay for the retrieval.
-      let outcome = try await EvieAgentLoop(web: web, vault: nil, offersChanges: false)
-        .run(
-          messages: messages,
-          roots: roots,
-          client: client,
-          skipsNotes: true
-        ) { [weak self] event in
-          await self?.receiveDuringLoop(event, requestID: requestID)
-        }
-      try Task.checkCancellation()
-      finishLoop(outcome, requestID: requestID, userMessage: userMessage)
-    } catch is CancellationError {
-      finishCancellation(requestID: requestID)
-    } catch {
-      finishFailure(error, requestID: requestID)
+    on brain: ResolvedBrain
+  ) async throws {
+    let plan = EvieTurnPlan(brain)
+    let messages = try await conversationPrefix(
+      adding: ChatMessage(role: .user, content: question),
+      plan: plan, client: brain.client
+    )
+    // No vault, because the whole point is not to consult it. Passing it and
+    // ignoring the result would still pay for the retrieval. A capture still
+    // replayed from an earlier turn — as pixels, or as the text sent beside
+    // them once they are a marker (`derivedFromPicture`) — keeps the model
+    // away from the web tools: the search runs first, on the question's own
+    // words.
+    let offersTools =
+      plan.route(
+        hasRoots: !roots.isEmpty,
+        searchesTheWeb: true,
+        readsMailAndCalendar: false,
+        carriesPicture: EvieTurnPlan.carriesPicture(messages)
+      ) == .agentLoop(offersTools: true)
+    let outcome = try await EvieAgentLoop(
+      web: web,
+      vault: nil,
+      offersChanges: false,
+      offersTools: offersTools,
+      readiness: plan.readiness,
+      modelFamily: plan.profile.family
+    )
+    .run(
+      messages: messages,
+      roots: roots,
+      client: brain.client,
+      skipsNotes: true
+    ) { [weak self] event in
+      await self?.receiveDuringLoop(event, requestID: requestID)
     }
+    try Task.checkCancellation()
+    finishLoop(outcome, requestID: requestID, userMessage: userMessage)
   }
 
   enum SearchCommandFailure: LocalizedError {

@@ -192,6 +192,14 @@ extension OverlayViewModel {
       primaryText = "Recebendo resposta…"
       updateActiveArtifact(with: streamedResponse)
 
+    case .reasoningDelta:
+      // Only the fact that she is thinking reaches the screen. The text is never
+      // shown, never spoken, and never part of the answer that is saved.
+      visualState = .thinking
+      if primaryText != "Evie está pensando…" {
+        primaryText = "Evie está pensando…"
+      }
+
     case .status(let message):
       secondaryText = message
 
@@ -200,7 +208,9 @@ extension OverlayViewModel {
       onLayoutInvalidated?()
 
     case .usage(let usage):
-      secondaryText = "\(usage.totalTokens) tokens · somente local"
+      contextUsageDescription = Self.contextUsageLabel(
+        tokens: usage.promptTokens, capacity: answeringProfile.contextTokens, estimated: false)
+      secondaryText = "\(usage.totalTokens) tokens · \(answeringLocation.statusTag)"
 
     case .completed(let message, _):
       guard let userMessage else {
@@ -209,7 +219,7 @@ extension OverlayViewModel {
       let content = message.content.trimmingCharacters(in: .whitespacesAndNewlines)
       if content.isEmpty {
         finishFailure(
-          TurboFieldfareClientError.emptyStream,
+          ModelClientError.emptyStream,
           requestID: requestID
         )
         return
@@ -222,14 +232,15 @@ extension OverlayViewModel {
         activeConversationTitle = Self.title(for: userMessage.content)
       }
       conversation.append(userMessage)
+      keepSentPictures(of: userMessage)
       conversation.append(message)
       persistConversation()
       visualState = .completed
       primaryText = "Resposta concluída"
       if let usage = interactionState.usage {
-        secondaryText = "\(usage.totalTokens) tokens · somente local"
+        secondaryText = "\(usage.totalTokens) tokens · \(answeringLocation.statusTag)"
       } else {
-        secondaryText = "Processado localmente"
+        secondaryText = answeringLocation.processedLine
       }
       activeRequestID = nil
       activeArtifactID = nil
@@ -325,7 +336,7 @@ extension OverlayViewModel {
         title: wasAutomatic ? "Feito, sem te perguntar" : "Feito",
         summary: wasAutomatic
           ? report + "\n\nVocê pediu isso na sua mensagem, e a aprovação automática "
-            + "está ligada. Desligue em Configurações › O que ela sabe."
+            + "está ligada. Desligue em \(EvieSettingsSection.filesAndFolders.path)."
           : report,
         isExpanded: true
       )
@@ -595,7 +606,8 @@ extension OverlayViewModel {
     _ outcome: EvieAgentLoop.Outcome,
     requestID: UUID,
     userMessage: ChatMessage,
-    autoApproveChanges: Bool = false
+    autoApproveChanges: Bool = false,
+    savesDocumentsDirectly: Bool = false
   ) {
     guard activeRequestID == requestID else {
       return
@@ -606,7 +618,7 @@ extension OverlayViewModel {
       finishFailure(
         outcome.exhausted
           ? EvieAgentLoopFailure.exhausted
-          : TurboFieldfareClientError.emptyStream,
+          : ModelClientError.emptyStream,
         requestID: requestID
       )
       return
@@ -638,11 +650,16 @@ extension OverlayViewModel {
         presentChangeProposal(change)
       }
     }
+    // Documents, folders to permit and files opened. Never routed through
+    // `autoApproveChanges`: a document has its own, narrower policy.
+    presentFileOutcome(
+      outcome, question: userMessage.content, savesDirectly: savesDocumentsDirectly)
     onAnswerReady?(EvieRichText(answer))
     if conversation.count == 1 {
       activeConversationTitle = Self.title(for: userMessage.content)
     }
     conversation.append(userMessage)
+    keepSentPictures(of: userMessage)
     conversation.append(contentsOf: outcome.appended)
     persistConversation()
 
@@ -650,8 +667,8 @@ extension OverlayViewModel {
     primaryText = "Resposta concluída"
     secondaryText =
       outcome.toolCallCount == 1
-      ? "Olhei em 1 lugar · somente local"
-      : "Olhei em \(outcome.toolCallCount) lugares · somente local"
+      ? "Olhei em 1 lugar · \(answeringLocation.statusTag)"
+      : "Olhei em \(outcome.toolCallCount) lugares · \(answeringLocation.statusTag)"
     activeRequestID = nil
     activeArtifactID = nil
     streamedResponse = ""
@@ -682,13 +699,17 @@ extension OverlayViewModel {
     let failure = EvieFailure(
       kind: .backend,
       message: error.localizedDescription,
-      recoverySuggestion:
-        "O modelo local não respondeu. Abra Configurações › Diagnóstico para conferir o motor."
+      recoverySuggestion: answeringLocation.failureRecovery
     )
     finishFailure(failure, requestID: requestID)
   }
 
-  func finishFailure(_ failure: EvieFailure, requestID: UUID) {
+  func finishFailure(
+    _ failure: EvieFailure,
+    requestID: UUID,
+    title: String = "Não consegui responder agora",
+    actions: [ArtifactActionModel] = []
+  ) {
     guard activeRequestID == requestID else {
       return
     }
@@ -704,19 +725,21 @@ extension OverlayViewModel {
       artifacts[index] = ArtifactCardModel(
         id: artifactID,
         kind: .error,
-        title: "Não consegui responder agora",
+        title: title,
         summary: failure.message,
         detail: failure.recoverySuggestion,
-        isExpanded: true
+        isExpanded: true,
+        actions: actions
       )
     } else {
       artifacts.append(
         ArtifactCardModel(
           kind: .error,
-          title: "Não consegui responder agora",
+          title: title,
           summary: failure.message,
           detail: failure.recoverySuggestion,
-            isExpanded: true
+          isExpanded: true,
+          actions: actions
         )
       )
     }
@@ -816,38 +839,60 @@ extension OverlayViewModel {
     return formatter.string(from: now)
   }
 
+  static func contextUsageLabel(tokens: Int, capacity: Int, estimated: Bool) -> String {
+    let percent = Double(tokens) / Double(max(1, capacity)) * 100
+    let count = tokens.formatted(.number.locale(Locale(identifier: "pt_BR")))
+    let ratio = percent.formatted(
+      .number.precision(.fractionLength(1)).locale(Locale(identifier: "pt_BR")))
+    return
+      "\(estimated ? "~" : "")\(count) tokens · \(ratio)% (\(estimated ? "estimativa" : "servidor"))"
+  }
+
+  func showContextCompactionProgress(completed: Int, total: Int, request: UUID?, conversation: UUID)
+  {
+    guard activeRequestID == request, activeConversationID == conversation else { return }
+    isCompactingConversation = true
+    secondaryText = "Organizando o contexto da conversa… \(completed)/\(total)"
+    onLayoutInvalidated?()
+  }
+
+  /// Everything this turn adds after the history, built for `plan`'s brain:
+  /// the persona says where that brain runs and names only tools it has, the
+  /// history is trimmed to its budget, and pictures go only if it takes them.
   func conversationPrefix(
     adding userMessage: ChatMessage,
-    evidence: ChatMessage? = nil
-  ) -> [ChatMessage] {
-    // The day may have turned over since this conversation started. Rebuilding
-    // costs a string comparison — `refreshSystemPrompt` returns early when the
-    // text is unchanged — and the prompt now carries only the date, so it is
-    // unchanged for a whole day and the cached prefix survives.
-    refreshSystemPrompt()
-    var prefix = conversation
-    let characterBudget = max(
-      8_000,
-      (agentClient.configuration.contextWindowTokens
-        - agentClient.configuration.maxCompletionTokens) * 2
+    evidence: ChatMessage? = nil,
+    pictures: EvieTurnPictures = EvieTurnPictures(),
+    plan: EvieTurnPlan, client: any AgentClient
+  ) async throws -> [ChatMessage] {
+    // Rebuilt every turn, which costs a string: the date in it may have turned
+    // over, and the brain may differ from the last turn's. Within a
+    // conversation both stay put, so the first bytes — and the server's cached
+    // prefix — do too. The newest turn with a picture is replayed as it was
+    // sent, so the cache reaches past its picture.
+    var history = sentPictureTurn?.replay(conversation) ?? conversation
+    let persona = ChatMessage(
+      role: .system,
+      content: Self.systemPrompt(
+        for: plan.capabilities(from: capabilities),
+        remembering: memories()
+      )
     )
-    let tailLength = userMessage.content.count + (evidence?.content.count ?? 0)
-
-    while prefix.count > 1,
-      prefix.reduce(0, { $0 + $1.content.count }) + tailLength > characterBudget
-    {
-      removeOldestTurn(from: &prefix)
+    if history.first?.role == .system {
+      history[0] = persona
+    } else {
+      history.insert(persona, at: 0)
     }
-    // Skills are instructions, so they go with the instructions — at the front,
-    // before any turn of the conversation. Putting them next to the question
-    // instead would place guidance after the conversation started, which this
-    // server refuses, and would read as something the user said.
-    if let guidance = EvieSkillLibrary.guidance(
+    // Skills are instructions, so they stay a system message here — and they go
+    // just before the question, after every earlier turn. The client sends any
+    // system message after the first as a `<system-context>` block on the next
+    // user message, which every server here accepts, so the guidance lands
+    // after everything the server has cached: the prompt and the history keep
+    // their bytes whether a skill matched this turn or not. At the front, as it
+    // used to be, it changed the prefix from the second message on.
+    let guidance = EvieSkillLibrary.guidance(
       for: EvieSkillLibrary.matching(userMessage.content, in: installedSkills())
-    ) {
-      let position = prefix.first?.role == .system ? 1 : 0
-      prefix.insert(ChatMessage(role: .system, content: guidance), at: position)
-    }
+    ).map { ChatMessage(role: .system, content: $0) }
 
     // The exact time rides with the question rather than sitting in the system
     // prompt. Up there it would change every minute and break the cached prefix
@@ -856,12 +901,59 @@ extension OverlayViewModel {
     // at, which is both true and what keeps the prefix stable.
     let asked = ChatMessage(
       role: .user,
-      content: "[\(Self.timestamp())] \(EvieBrevityPreamble.annotated(userMessage.content))"
+      content: plan.question(userMessage.content, askedAt: Self.timestamp())
     )
 
     // Evidence goes immediately before the question so the model reads the
-    // document, then what is being asked about it.
-    return prefix + [evidence, asked].compactMap { $0 }
+    // document, then what is being asked about it. Pictures ride on the
+    // question itself, after a note that their text is data; a brain that
+    // cannot see gets their text, fenced, just before it.
+    let tail =
+      [guidance, evidence].compactMap { $0 } + plan.pictureTail(asking: asked, with: pictures)
+    let pictured = EvieTurnPlan.keepingNewestPictures(
+      history + tail, sees: plan.profile.capabilities.vision)
+    let request = activeRequestID
+    let conversationID = activeConversationID
+    await contextResetTask?.value
+    try Task.checkCancellation()
+    defer {
+      if activeRequestID == request { isCompactingConversation = false }
+    }
+    let prepared = try await contextCompaction.prepare(
+      history: Array(pictured.prefix(history.count)), tail: Array(pictured.suffix(tail.count)),
+      budget: plan.characterBudget, client: client,
+      targetID:
+        "\(conversationID)|\(plan.profile.id)|\(plan.profile.model)|\(plan.profile.contextTokens)|\(plan.profile.endpoint.absoluteString)",
+      onProgress: { [weak self] completed, total in
+        await self?.showContextCompactionProgress(
+          completed: completed, total: total,
+          request: request, conversation: conversationID)
+      })
+    try Task.checkCancellation()
+    guard activeRequestID == request, activeConversationID == conversationID else {
+      throw CancellationError()
+    }
+    contextUsageDescription = Self.contextUsageLabel(
+      tokens: prepared.estimatedInputTokens, capacity: plan.profile.contextTokens, estimated: true)
+    let messages = plan.prefix(prepared.messages, then: [])
+    if !pictures.isEmpty, plan.profile.capabilities.vision {
+      sendingPictureTurn = EvieSentPictureTurn(
+        questionID: userMessage.id,
+        sent: Array(messages.suffix(tail.count))
+      )
+    }
+    return messages
+  }
+
+  /// Once a turn with a picture has its answer, what it sent becomes the turn
+  /// replayed from now on. A turn that failed or was cancelled leaves the
+  /// earlier one in place.
+  func keepSentPictures(of question: ChatMessage) {
+    guard let sending = sendingPictureTurn, sending.questionID == question.id else {
+      return
+    }
+    sentPictureTurn = sending
+    sendingPictureTurn = nil
   }
 
   /// Consumes the pending attachments into one message, bounded so a long
@@ -872,14 +964,20 @@ extension OverlayViewModel {
       .contains(url.pathExtension.lowercased())
   }
 
-  func takeAttachmentEvidence(for messageID: UUID? = nil) -> ChatMessage? {
+  /// Consumes the pending attachments: documents become one evidence message,
+  /// bounded so a long PDF cannot crowd out the question itself; pictures
+  /// become `EvieTurnPictures`, sent as images to a brain that sees and as
+  /// their text and description to one that does not.
+  func takeAttachments(for messageID: UUID? = nil) -> (
+    evidence: ChatMessage?, pictures: EvieTurnPictures
+  ) {
     // Only what finished preparing. A slot still being read, or one that failed,
     // is not evidence — and the send path waits for the first kind before
     // getting here, so arriving with one is a genuine failure rather than a race.
     let attachments = attachmentSlots.compactMap(\.prepared)
     guard !attachments.isEmpty else {
       attachmentSlots = []
-      return nil
+      return (nil, EvieTurnPictures())
     }
     // Kept before the file is forgotten. What reaches the model is the text
     // pulled out of a picture; a conversation that says "a imagem mostra uma
@@ -894,46 +992,265 @@ extension OverlayViewModel {
         conversationMedia.append(stored)
       }
     }
-    let pages = attachments.flatMap(\.pages)
-    // What was seen goes first, because it says what kind of thing this is
-    // before the recognised text arrives. A wall of OCR with no frame around it
-    // is how a chart becomes a list of stray numbers.
-    let seen = attachments.compactMap { attachment -> String? in
-      guard let description = attachment.visualDescription else {
-        return nil
-      }
-      return "\(attachment.name): \(description)"
-    }
     attachmentSlots = []
 
-    var evidence = ""
-    if !seen.isEmpty {
-      evidence += """
-        <<<O QUE A EVIE VIU NA IMAGEM — descrição, não texto extraído>>>
-        \(seen.joined(separator: "\n"))
-        <<<FIM DA DESCRIÇÃO>>>
-
-
-        """
+    let pictured = attachments.filter { $0.imagePart != nil }
+    let documents = attachments.filter { $0.imagePart == nil }
+    let pictures = EvieTurnPictures(
+      images: pictured.compactMap(\.imagePart),
+      textFallback: Self.bounded(Self.evidence(of: pictured))
+    )
+    let evidence = Self.bounded(Self.evidence(of: documents)).map {
+      ChatMessage(role: .user, content: $0)
     }
-    evidence += pages.promptEvidence
-    if evidence.count > Self.attachmentCharacterLimit {
-      let cut = evidence.index(evidence.startIndex, offsetBy: Self.attachmentCharacterLimit)
-      evidence = String(evidence[..<cut])
-      evidence +=
-        "\n<<<CORTADO AQUI — o documento é maior do que cabe nesta conversa>>>"
-    }
-    return ChatMessage(role: .user, content: evidence)
+    return (evidence, pictures)
   }
 
-  func removeOldestTurn(from messages: inout [ChatMessage]) {
-    guard messages.count > 1 else {
+  /// What was seen first, because it says what kind of thing this is before
+  /// the recognised text arrives.
+  static func evidence(of attachments: [EvieDocumentAttachment]) -> String? {
+    EvieTurnPictures.fallbackEvidence(
+      seen: attachments.compactMap { attachment in
+        attachment.visualDescription.map { (name: attachment.name, description: $0) }
+      },
+      read: attachments.flatMap(\.pages)
+    )
+  }
+
+  /// Cut at `attachmentCharacterLimit`, with a visible marker.
+  static func bounded(_ evidence: String?) -> String? {
+    guard var evidence, evidence.count > attachmentCharacterLimit else {
+      return evidence
+    }
+    let cut = evidence.index(evidence.startIndex, offsetBy: attachmentCharacterLimit)
+    evidence = String(evidence[..<cut])
+    evidence += "\n<<<CORTADO AQUI — o documento é maior do que cabe nesta conversa>>>"
+    return evidence
+  }
+}
+
+// MARK: - The brain a turn runs on
+
+/// What a typed or spoken question carries into its turn, fixed when it is
+/// sent, before the brain is known.
+struct PreparedTurn {
+  let requestID: UUID
+  let userMessage: ChatMessage
+  let evidence: ChatMessage?
+  /// Pasted or attached pictures.
+  let pictures: EvieTurnPictures
+  /// The capture of the screen this question is about, taken before the turn
+  /// resolves its brain.
+  var screen: CapturedScreen?
+  let carriesAttachment: Bool
+  let spoken: Bool
+  let roots: [EvieFileRoot]
+  let web: (any EvieWebSearching)?
+  let apps: (any EvieMailCalendarReading)?
+  let offersChanges: Bool
+  let autoApprovesChanges: Bool
+  /// `EvieFileIntent`: the question is about his files, so it goes to the
+  /// tools even with no folder granted.
+  let asksAboutFiles: Bool
+  /// His own message asked to save and the switch is on (ADR 0019); a
+  /// picture in the request still cancels it.
+  let savesDocumentsDirectly: Bool
+}
+
+extension OverlayViewModel {
+  /// Resolves the conversation's brain, runs `attempt` on it — and once more
+  /// on the next brain if it failed before the model said anything — and ends
+  /// the turn when `attempt` throws.
+  func runTurn(
+    conversation: UUID,
+    requestID: UUID,
+    attempt: (ResolvedBrain) async throws -> Void
+  ) async {
+    let brain = await brainResolver.resolve(conversation: conversation)
+    // Whatever happens next, the Mac brain's idle clock counts from the end
+    // of this turn.
+    defer { brainResolver.turnEnded(conversation: conversation) }
+    // Cancelled while the probe or the wake question was pending.
+    guard activeRequestID == requestID, !Task.isCancelled else {
       return
     }
-
-    messages.remove(at: 1)
-    if messages.count > 1, messages[1].role == .assistant {
-      messages.remove(at: 1)
+    adoptAnsweringBrain(brain)
+    showBrainNotice(brain.notice)
+    do {
+      try await EvieBrainTurn.run(
+        conversation: conversation,
+        on: brain,
+        resolver: brainResolver,
+        onSwitch: { next in
+          adoptAnsweringBrain(next)
+          showBrainNotice(next.notice)
+        },
+        attempt: attempt
+      )
+      brainTurnEnded(answered: true)
+    } catch is CancellationError {
+      finishCancellation(requestID: requestID)
+    } catch {
+      finishFailure(error, requestID: requestID)
+      brainTurnEnded(answered: false)
     }
+  }
+
+  /// An ordinary question on `brain`, built from scratch for it.
+  func answer(_ turn: PreparedTurn, on brain: ResolvedBrain) async throws {
+    let plan = EvieTurnPlan(brain)
+    let looking = turn.screen != nil
+    let pictures = await pictures(for: turn, on: plan)
+    try Task.checkCancellation()
+    let requestMessages = try await conversationPrefix(
+      adding: turn.userMessage,
+      evidence: turn.evidence,
+      pictures: pictures,
+      plan: plan, client: brain.client
+    )
+    let requestID = turn.requestID
+    if looking, plan.profile.capabilities.vision {
+      // Most of the wait is the picture being read before the first word.
+      secondaryText = EvieScreenLookCopy.analysing(on: plan.profile.location)
+      onLayoutInvalidated?()
+    }
+
+    // A capture replayed from an earlier turn counts, and so does a picture's
+    // text on a brain that cannot see it — the messages `pictureTail` built
+    // carry `derivedFromPicture`: none of it rides with tools or auto-approves.
+    let carriesPicture = !pictures.isEmpty || EvieTurnPlan.carriesPicture(requestMessages)
+
+    switch plan.route(
+      hasRoots: !turn.roots.isEmpty,
+      searchesTheWeb: turn.web != nil,
+      readsMailAndCalendar: turn.apps != nil,
+      looksAtScreen: looking,
+      carriesPicture: carriesPicture,
+      asksAboutFiles: turn.asksAboutFiles
+    ) {
+    case .directStream:
+      // Pinned at submit time, like the rest of the turn: a spoken question
+      // gets a spoken-length answer.
+      for try await event in brain.client.stream(
+        messages: requestMessages,
+        tools: [],
+        options: plan.options(spoken: turn.spoken, looking: looking)
+      ) {
+        try Task.checkCancellation()
+        receive(event, requestID: requestID, userMessage: turn.userMessage)
+      }
+
+    case .agentLoop(let offersTools):
+      let savesDirectly = EvieTurnPlan.savesDocumentsDirectly(
+        turn.savesDocumentsDirectly, carriesPicture: carriesPicture)
+      // Captured weakly: the loop's callback is `@Sendable` and runs off this
+      // actor.
+      let outcome = try await EvieAgentLoop(
+        toolbox: EvieFileToolbox(home: Self.homeURL),
+        web: turn.web,
+        mailAndCalendar: offersTools ? turn.apps : nil,
+        vault: retrieveFromVault,
+        offersChanges: turn.offersChanges,
+        offersTools: offersTools,
+        readiness: plan.readiness,
+        modelFamily: plan.profile.family,
+        offersDocuments: true,
+        savesDocumentsDirectly: savesDirectly,
+        opener: EvieWorkspaceOpener()
+      ).run(
+        messages: requestMessages,
+        roots: turn.roots,
+        client: brain.client,
+        carriesAttachment: turn.carriesAttachment
+      ) { [weak self] event in
+        await self?.receiveDuringLoop(event, requestID: requestID)
+      }
+      try Task.checkCancellation()
+      finishLoop(
+        outcome,
+        requestID: requestID,
+        userMessage: turn.userMessage,
+        autoApproveChanges: EvieTurnPlan.autoApprovesChanges(
+          turn.autoApprovesChanges, carriesPicture: carriesPicture),
+        savesDocumentsDirectly: savesDirectly
+      )
+    }
+  }
+
+  /// "Acordando o cérebro do Mac…" on the status line while the Mac brain
+  /// starts, cleared when it is up unless something else was said meanwhile.
+  func showLocalBrainWaking(_ waking: Bool) {
+    showBrainWaking(waking)
+    if waking {
+      secondaryText = EvieBrainResolver.wakingStatus
+    } else if secondaryText == EvieBrainResolver.wakingStatus {
+      secondaryText = nil
+    }
+    onLayoutInvalidated?()
+  }
+
+  /// Says that the turn runs somewhere other than the preferred brain, and why.
+  func showBrainNotice(_ notice: String?) {
+    guard let notice else {
+      return
+    }
+    secondaryText = notice
+    onLayoutInvalidated?()
+  }
+
+  /// Puts the wake question on screen and waits for the answer. Cancelling the
+  /// turn, or closing the card, is a no.
+  func askToWake(_ question: EvieBrainWakeQuestion) async -> Bool {
+    // One turn runs at a time, so an earlier question still waiting has lost
+    // its turn.
+    if let earlier = pendingWake {
+      settleWake(earlier.card, accepted: false)
+    }
+    let card = UUID()
+    artifacts.append(
+      ArtifactCardModel(
+        id: card,
+        kind: .approval,
+        title: question.text,
+        summary: "Enquanto estiver acordado, ele ocupa essa memória deste Mac. "
+          + "A conversa continua nele até você começar outra.",
+        isExpanded: true,
+        actions: [
+          ArtifactActionModel(
+            id: "brain-wake:\(card.uuidString)",
+            title: "Acordar o Mac",
+            systemImage: "power",
+            role: .primary
+          ),
+          ArtifactActionModel(
+            id: "brain-stay:\(card.uuidString)",
+            title: "Agora não",
+            systemImage: "xmark",
+            role: .secondary
+          ),
+        ]
+      )
+    )
+    onLayoutInvalidated?()
+    return await withTaskCancellationHandler {
+      await withCheckedContinuation { continuation in
+        pendingWake = (card, continuation)
+      }
+    } onCancel: {
+      Task { @MainActor [weak self] in
+        self?.settleWake(card, accepted: false)
+      }
+    }
+  }
+
+  /// Answers the wake question on `card`, if it is the one waiting.
+  func settleWake(_ card: UUID, accepted: Bool) {
+    guard let pending = pendingWake, pending.card == card else {
+      return
+    }
+    pendingWake = nil
+    artifacts.removeAll { $0.id == card }
+    onLayoutInvalidated?()
+    pending.answer.resume(returning: accepted)
   }
 }

@@ -8,28 +8,30 @@ struct EvieConfigurationStoreTests {
   @Test("round-trips model preferences through the loader")
   func roundTrip() throws {
     let fileURL = temporaryFileURL()
-    let configuration = EvieConfiguration(
-      endpoint: URL(string: "http://127.0.0.1:9999/v1")!,
-      model: "local-test-model",
-      contextWindowTokens: 32_768,
-      maxCompletionTokens: 2_048,
-      temperature: 0.35,
-      topP: 0.8,
-      stopSequences: ["STOP"],
-      requestTimeout: 45
-    )
+    var profiles = EvieModelProfileSet.builtIn
+    try profiles.updateProfile(id: "pc-3090") { profile in
+      profile.endpoint = URL(string: "http://127.0.0.1:9999/v1")!
+      profile.model = "local-test-model"
+      profile.contextTokens = 32_768
+      profile.maxCompletionTokens = 2_048
+      profile.temperature = 0.35
+      profile.topP = 0.8
+      profile.stopSequences = ["STOP"]
+      profile.requestTimeout = 45
+    }
 
-    try EvieConfigurationStore(fileURL: fileURL).save(configuration)
-    let loaded = try EvieConfigurationLoader(fileURL: fileURL).load(environment: [:])
+    try EvieConfigurationStore(fileURL: fileURL).save(profiles)
+    let loaded = try EvieConfigurationLoader(fileURL: fileURL).loadProfiles(environment: [:])
 
-    #expect(loaded == configuration)
+    #expect(loaded.profiles == profiles)
+    #expect(loaded.configuration == profiles.preferredProfile.configuration)
   }
 
   @Test("restricts the configuration directory and file to the current user")
   func permissions() throws {
     let fileURL = temporaryFileURL()
 
-    try EvieConfigurationStore(fileURL: fileURL).save(EvieConfiguration())
+    try EvieConfigurationStore(fileURL: fileURL).save(.builtIn)
 
     let fileAttributes = try FileManager.default.attributesOfItem(atPath: fileURL.path)
     let directoryAttributes = try FileManager.default.attributesOfItem(
@@ -42,11 +44,16 @@ struct EvieConfigurationStoreTests {
   @Test("does not write an invalid configuration")
   func rejectsInvalidConfiguration() throws {
     let fileURL = temporaryFileURL()
-    var configuration = EvieConfiguration()
-    configuration.temperature = 3
+    var profiles = EvieModelProfileSet.builtIn
+    try profiles.updateProfile(id: "pc-3090") { $0.temperature = 3 }
 
-    #expect(throws: EvieConfiguration.ValidationError.invalidTemperature) {
-      try EvieConfigurationStore(fileURL: fileURL).save(configuration)
+    #expect(
+      throws: EvieModelProfileSet.ValidationError.invalidProfile(
+        id: "pc-3090",
+        reason: .invalidTemperature
+      )
+    ) {
+      try EvieConfigurationStore(fileURL: fileURL).save(profiles)
     }
     #expect(!FileManager.default.fileExists(atPath: fileURL.path))
   }
@@ -59,13 +66,13 @@ struct EvieConfigurationStoreTests {
       withIntermediateDirectories: true
     )
     try Data("{not-valid-json".utf8).write(to: fileURL)
-    var baseline = EvieConfiguration()
-    baseline.temperature = 0.15
+    var baseline = EvieModelProfileSet.builtIn
+    try baseline.updateProfile(id: "pc-3090") { $0.temperature = 0.15 }
 
     try EvieConfigurationStore(fileURL: fileURL).save(baseline)
-    let repaired = try EvieConfigurationLoader(fileURL: fileURL).load(environment: [:])
+    let repaired = try EvieConfigurationLoader(fileURL: fileURL).loadProfiles(environment: [:])
 
-    #expect(repaired == baseline)
+    #expect(repaired.profiles == baseline)
     let attributes = try FileManager.default.attributesOfItem(atPath: fileURL.path)
     #expect((attributes[.posixPermissions] as? NSNumber)?.intValue == 0o600)
   }

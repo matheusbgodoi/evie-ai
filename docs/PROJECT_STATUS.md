@@ -1,6 +1,262 @@
 # Project status
 
-Last updated: 2026-08-08
+Last updated: 2026-10-17
+
+## Final integrated v2 candidate — 2026-10-17
+
+Source integration is in the isolated `v2-research` worktree. The final candidate
+combines brain controls, research, native voice/AppIntents, visual identity,
+context compaction and the executor/network/persistence corrections. The exact
+continuation anchor remains
+[EVIE_RESEARCH_DELIVERY](implementation/EVIE_RESEARCH_DELIVERY.md).
+This is a source/evidence checkpoint, not a claim that final installation,
+publication or a release has already occurred.
+
+### Context and current contracts
+
+- PC/Qwen operational context: **200,704 tokens**, with output and framing
+  reserved from that capacity. The architectural model limit is not the
+  operational budget.
+- LensVLM: **131,072 tokens qualified** on the target Mac, synchronized between
+  client context and runtime KV cap. Runtime controls: eight-bit KV, prefill step
+  512, MLX allocator cache 256 MiB and profile timeout 900 seconds. The synthetic
+  run used **127,527 input + 38 output tokens**, retrieved **5/5 target items**,
+  retained **2.4 GiB minimum sampled free memory** (10% margin), and reached **13.8 GiB
+  MLX-reported peak memory** over **392.31 seconds**. This is measured workload
+  evidence, not a claim that every workload or architectural ceiling fits.
+  See [MODEL_TUNING](MODEL_TUNING.md) and the release notes.
+- [Adaptive compaction](CONVERSATION_CONTEXT.md) keeps the complete visible
+  history, summarizes only a prepared in-memory request and never silently cuts
+  the current question. Summaries are fallible data and preserve visual origin;
+  cache/revocation are bound to conversation, profile and budget.
+- Compact brain controls apply explicit model changes to the next turn of the
+  same conversation. Profiles support local/remote endpoints and custom labels.
+  Saving a key preserves other drafts and fresh file changes field by field.
+- Research has two configurable shortcuts, a revocable 15-minute lease and
+  bounded clipboard/answer-entry routes. Native voice selection/calibration and
+  public AppIntents do not use private Siri services. Enabled capabilities still
+  require real OS permission and the existing action authority.
+- The local launcher reuses only compatible model/memory options and reconciles
+  changed options on next use. Web DNS/redirects are pinned to public addresses
+  separately from the private model transport. Current decisions are ADRs
+  **0020–0027**; earlier records below are historical where they differ.
+
+### Executed evidence, with scope
+
+- Earlier complete checkpoint: **1,454 tests / 134 suites passed**, with one
+  intentional known-issue fixture in Mail timeout coverage. This precedes the
+  last changes and is not substituted for the final full-suite run.
+- Executor/policy/broker/clipboard: **112 tests passed** after reproduced red
+  runs. Guards cover focus/ownership/secure-field changes after awaits and per
+  input step. A synchronous check and the OS input event are not an atomic OS API.
+- Signed release checkpoint: build with warnings as errors in **210.54 s**;
+  generated metadata for **3 AppIntents / 3 AppShortcuts**; actual perform routing,
+  busy/not-ready/Unicode guards passed. This checkpoint precedes the final freeze.
+- Native synthetic screen→Qwen→named clipboard→real executor→independent
+  field/radio fixture readback: **68**, **4 actions**, **43.743 s** total, no
+  general clipboard use or auto-approved confirmation. The run predates the last
+  restrictive answer-entry policy; the final signed bundle rerun is a separate gate.
+- Context probe through the real PC client: **46,247 → 16,374 characters** inside
+  a **32,768-character** request budget, current question identical, old synthetic
+  fact retained and next preparation cache reused. This is one observed semantic
+  case, not a proof that every summary preserves every fact.
+- Web/compaction integrated checkpoint: **23 tests / 3 suites passed in 4.238 s**;
+  live synthetic Swift.org search/read passed in **1.900 s**, six results and
+  ten prohibited destinations refused. Stream/gzip, DNS cancellation/pinning,
+  redirects and real transport interruption have isolated regressions.
+- Settings remained responsive in the real-view-model regression while an
+  attributes lookup was deliberately blocked for 250 ms. The old implementation
+  failed this case; the serial coalesced worker and cached guide update passed.
+  Focused status/guide/key/rebase coverage: 38 tests / 4 suites passed.
+- [Settings boundary regression](MODEL_SETTINGS_VALIDATION.md): stale-write bug
+  reproduced before the fix; **3 field-rebase tests** and real view-model/JSON
+  cases passed, including edits during await and refused newer schema. Keychain
+  storage is in memory in this regression, not a personal Keychain dialog test.
+- [Local launcher boundary regression](LOCAL_BRAIN_VALIDATION.md): actual OS
+  processes, HTTP bearer enforcement, per-launch key rotation, 32K/A→64K/B and
+  model-only restart, same-profile reuse, foreign listener preserved, real MLX
+  **256 MiB** allocator bootstrap; **7.70 s** including standalone compilation.
+  No model weights are loaded by that fixture.
+- Native voice diagnostic exercised actual AVFoundation buffers and SpeechAnalyzer
+  on synthetic audio; temporary five-transcription persistence passed. The wake
+  lifecycle race was reproduced red and corrected green against the real microphone,
+  without recording audio/transcripts. User calibration still needs five real calls.
+- Public ancestry scan: **132 commits** checked for the owner's private host and
+  tailnet identifiers. Existing repository image OCR: **20 PNG/JPEG**, no matches
+  and no OCR errors for the private patterns held only in memory. The final
+  snapshot, reachable ancestry and signed artifact are checked separately.
+
+### Draft final gates — replace with executed evidence before publishing
+
+- Final full-suite result: **1,545 tests in 146 suites passed (23.913 s), with one intentional known timeout-injection issue**.
+- Final resource/energy measurements, including conditions: **VALOR_FINAL_A_INSERIR**.
+- LensVLM qualification: completed at 131,072 tokens with the measured controls
+  above; the final full-suite run covers the synchronized source defaults.
+- Signed final bundle build, latest restrictive research fixture rerun,
+  installation/open-state check and public release: not recorded complete here.
+- Publication must use the sanitized tree parented by existing public main,
+  excluding private local v2 ancestors. Runtime endpoints remain outside git
+  and the bundle. Final tree/artifact/ancestry scan results belong in the ledger.
+
+## Historical checkpoints before the integrated 2026-10-17 delivery
+
+The entries below preserve earlier implementation decisions, test results and
+then-open work. Their defaults, limitations and pending lists describe those
+checkpoints; the current contracts and final validation are recorded above.
+
+### Original Evie v2 checkpoint (manual QA still owed at that time)
+
+Evie v2 is specified in `docs/design/2026-10-16-evie-v2-design.md`, whose
+"as implemented" notes under each slice are the detailed record. Every slice in
+its order — S8a, S1a–S1b, S2a–S2d, S3, S4, S5a–S5d, S6-core, S6-shell, S7,
+S8b — is implemented on branch `v2` (2026-10-16), with the review and
+queued-security fixes listed in the WORKLOG. Full `Scripts/test` on 2026-10-16
+(M5 24 GB, macOS 27.2, Xcode 27.1): 1377 tests in 123 suites passed, 1 known
+issue. ADRs 0013–0018 record the durable decisions.
+
+### Branch `v2-files`: files and documents (2026-10-16)
+
+Built in the worktree `evie-ai-files` from `v2` at `b97686a`, not yet merged.
+Evie works like a command-line agent for everyday file tasks inside the same
+authority model (ADR 0019): Mesa, Documentos, Downloads and the iCloud Obsidian
+vault as one-click grants (card, first-run guide, Settings); `analyze_folder`;
+document text in `read_file`; `propose_document` (`.md`, `.txt`, `.rtf`,
+`.docx`, `.pdf`, new files only, Salvar / Salvar e abrir) with the opt-in
+"Salvar direto quando eu pedir explicitamente"; `open_file` (documents only,
+from an allowlist) and `reveal_in_finder`; file requests routed to the tools
+with nothing granted. Three security findings from review fixed on the branch
+(folded denylist; `open_file` allowlist; no `public.content` fallback). Full
+`Scripts/test`: 1414 tests in 129 suites passed, 1 known issue (the existing
+Mail one). **Owed:** manual QA on the installed app — the grant card and the
+macOS prompt for each TCC folder, a `.docx` opened in Word and Pages, direct
+save on and off, and a real model turn for each of the five routing requests.
+Settings hook for the sidebar redesign: embed
+`DocumentSettingsSection(viewModel: rootsViewModel)` in "Arquivos e pastas".
+
+### What is done
+
+- **The PC is the default brain.** `qwen-daily` on the owner's RTX 3090,
+  reached over https on his tailnet through an exact allowlist, with a key bound
+  to that host, kept in Evie's own login-keychain item and never in a file
+  (ADR 0013; `Configurações › Cérebro` or `Scripts/evie-app import-pc-key`).
+  Measured: text in about 2 s with thinking off; a byte-identical history prefix
+  is served from the PC's cache.
+- **The Mac brain is the fallback.** LensVLM 9B under `mlx_vlm.server` 0.7.8 on
+  `127.0.0.1:38480`, started on demand with a per-launch key, only after asking
+  ("O PC está fora. Acordar o cérebro do Mac? (~10 s, ~8 GB de memória)") unless
+  the owner chose automatic, and unloaded after 10 minutes idle (ADRs 0014,
+  0015, 0017). It sees but declares no tools: folders and the web are searched
+  before it is asked. A conversation keeps its brain; it switches only on a
+  failure before the first word.
+- **"Olha a tela".** A clear request in his words, or ⌥⇧O, captures the screen
+  (or the front window) with Evie's windows left out, in memory only, behind the
+  violet glow: 1024 px for the PC (first token ~26 s, the projector runs on the
+  PC's CPU), 1280 px for the Mac (3–6 s). One picture per PC request; a picture,
+  or text read off one, never rides with tools or auto-approves a change.
+- **Which brain answers, on screen.** A chip in the input bar names the brain
+  the next question goes to ("Qwen 3.8 · PC", "LensVLM · Mac") with a dot for
+  ready, cold or waking, and unreachable; its menu pins Automático, Sempre o PC
+  or Sempre o Mac for new conversations (through `EvieBrainResolver.choose`),
+  tests the connection and switches agent mode. Every answer card names its
+  model and place ("Qwen 3.8 · no seu PC").
+- **Agent mode.** "Deixar a Evie controlar o Mac" (Configurações › Tela e modo
+  agente, off by default since 2026-10-16; ADR 0018's switch;
+  `EVIE_COMPUTER_USE=0` forces it off), also on the brain chip's menu and as
+  "Modo agente" in the menu bar; the chip shows an amber "Agente" while it is
+  on. Settings is a sidebar window in the style of System Settings. A session starts only from a typed request, push-to-talk or a
+  click — never the wake word — through a card a hand must press, and runs on
+  the PC only, for at most 15 minutes and 25 actions (ADR 0016, amending 0009).
+  Code refuses the denied apps (System Settings, Keychain Access, terminals,
+  Shortcuts, Script Editor, Automator, Installer, password managers), password
+  fields and secure input, stale observations, Evie's own windows and points on
+  another app's window; it asks before confirm-word buttons, Return almost
+  everywhere, browser buttons, launcher shortcuts, ⌘Q/⌘W-class chords, the
+  delete class, opening links and reading the clipboard. Real input pauses the
+  session; Parar, Esc, ⌥⇧Esc, "para" and the grant's end stop it.
+- **The indicator.** `ScreenPresence` shows every capture and every action:
+  violet glow while seeing, a reticle while observing, amber edge, highlight and
+  ghost cursor while acting, a "Digitando…" chip, gray when paused, and a pill
+  with the brain, the step and Parar. No capture happens before the glow is
+  composited on that display; no setting turns it off.
+- **S8b.** The osascript tests are opt-in integration tests for their exit
+  codes; `EvieBrevityPreamble` and the model-written half of `EvieNearestTerm`
+  apply only to `.gemma` profiles; skill guidance reaches every family as
+  `<system-context>`; the per-brain copy is complete. The checklist's eval cases
+  are in `evals/README.md` § "v2 checklist coverage".
+
+### What needs manual QA by the owner
+
+None of these could be done without the installed app and a person at the Mac
+(no agent launched the app UI, to keep its permission prompts with the owner):
+
+- **Install and permissions (S7):** `Scripts/evie-app install`, rebuild twice
+  and confirm the TCC grants survive; a first run on an empty
+  `~/Library/Application Support/Evie`; the first-run guide's rows, including
+  "Chave do PC" (the import's keychain prompt) and "Cérebro" (Testar conexão).
+  [VERIFY] whether the key item is read without a prompt after a rebuild.
+- **Brains (S2d, S3):** with no key, "sem chave", then the import, then three
+  green rungs; with the PC off, `.ask` shows the wake card and `.automatic`
+  answers from the Mac with a notice; the in-app "Acordando o cérebro do Mac…".
+- **The screen (S4, S6):** Safari plus a PDF answered in one look with Evie's
+  overlay absent; ⌥⇧O; the Screen Recording card; the Mac profile; every
+  indicator state on the internal and an external display, over a full-screen
+  app, with Reduce Motion, and the CPU budget in a release build.
+- **Brain chip and Settings (2026-10-16):** see the WORKLOG entry "the brain
+  on screen, Settings as a sidebar" for the list — the chip's menu opening from
+  the non-activating overlay, its ticks, the sidebar's width and selection in a
+  real window, and the old 660 × 580 saved frame growing to 860 × 640.
+- **Speed:** the installed `config.json` (written 2026-10-16 21:51) sets
+  `default_reasoning` to `xhigh` for both brains, so every answer thinks at
+  "Máximo" before its first word; the built-in is off. The chip's menu shows
+  "Raciocínio: Máximo…" and opens Configurações › Cérebro, where the owner can
+  set it back to Desligado. Evie did not change the file.
+- **Agent mode (S5d):** eval cases 26–28 — the Notas script, "copia esse
+  parágrafo", Esc and the mouse pause, a real password field, Mail's Send,
+  Spotlight + "Terminal" + Return, and Raycast / Alfred panels where installed;
+  the local `NSEvent` monitor live; whether a VoiceOver user can approve.
+
+### Host-side issues to report (not Evie's to fix)
+
+Found during the v2 design pass; rechecked read-only on 2026-10-16 where this Mac
+could see them, without reading any secret:
+
+- **`THINKING_SAMPLER` has `min_p` 0.0** in the PC stack's `gateway-edge.py`
+  (seen in the local clone `~/Developer/local-ai-3090-stack`), which regresses
+  that stack's ADR-004 sampler guard against long-generation degeneration. The
+  owner's call: `min_p = 0.05`.
+- **Stale `PROFILES`** (`qwen-turbo`, `qwen-quality`) in `local-ai-control.py`
+  (both clones) and in the "Carregar turbo / qualidade" buttons of
+  `iot-home-control/windows/shutdown_server.py`: aliases the gateway no longer
+  serves.
+- **The Pico Wake-on-LAN endpoint** listens on plain HTTP (port 8080 behind a
+  router port-forward, per `pico/config.example.py`) on the public internet with
+  a short key. The real key's length was not re-read.
+- **The `com.crias.omlx` LaunchAgent is broken:** its `ProgramArguments` name
+  `…/Local Studio/runtime/venvs/omlx-latest/bin/omlx`, which no longer exists.
+  A process it started earlier (`omlx-server`, since 08:29 on 2026-10-16) still
+  listens on `127.0.0.1:8477`, so it will fail at the next login. Evie never
+  uses that port. Whether to remove the plist is the owner's choice.
+- The stale 22-character key in the PC stack's `opencode.json` (not re-read).
+- An "Acordar PC" button in Evie is deferred: its credentials and domain are not
+  on this Mac.
+
+### Open engineering items
+
+- The executor's half of queued finding #11: per-event front-app and
+  secure-input checks (11b), the window owner before every CGEvent pointer
+  action (11c), a confirmation for `clipboard_write` (11d).
+- The tool-result fence (`EvieTool.swift`) still uses fixed markers without
+  neutralising.
+- A known timing-sensitive test is being fixed in the Fix phase.
+- `tools-mac-lensvlm-001` (eval case 12) gates tools on the Mac; last measured
+  failing (malformed XML), not rerun.
+- [VERIFY] items left in the design doc: the 160×44-point launcher panel
+  estimate, the scroll direction with natural scrolling, the 300 ms settle in
+  every app, the `.screenSaver` level over full-screen apps.
+
+**Next action:** reinstall (`Scripts/evie-app install`) so the owner gets the
+brain chip and the new Settings, check them by hand as listed above, and decide
+the reasoning level; then the Fix phase (11b–11d and the timing test).
 
 ## Repository hygiene
 
@@ -11,6 +267,9 @@ prepared; remote
 branches and tags still require an explicit force-update after review.
 
 ## Current phase
+
+*Written before v2; where it disagrees with the v2 section above (the brain, the
+loopback port, what leaves the Mac), the v2 section holds.*
 
 **Phase 1 inference validation is still open. Phase 2 native-shell work is far
 past prototyping, and Phase 3 and Phase 4 have been overtaken by working code.**
@@ -96,9 +355,17 @@ logs also remain under `~/Library`.
 
 - `EvieCore` provides backend-neutral messages, phases, artifacts, reducer state,
   configuration, and an `AgentClient` protocol.
-- `TurboFieldfareClient` streams Chat Completions from
-  `http://127.0.0.1:38433/v1`, requires loopback, supports cancellation, and can
-  declare tools and reassemble the calls the model asks for. It never executes
+- `OpenAICompatibleClient` (renamed from `TurboFieldfareClient` on 2026-10-16)
+  streams Chat Completions from the profile in use — by default, since v2 S2a,
+  the PC gateway's `qwen-daily` (`EvieModelProfileSet.builtIn`) — supports
+  cancellation, and can declare tools and reassemble the calls the model asks
+  for. Since v2 S1a it passes every endpoint through `ModelTransportPolicy`
+  (loopback over http, or https to the allowlisted PC gateway with a key bound to
+  that host, ADR 0013), reads that key from the login keychain, never sends it
+  over http, and refuses redirects. Every client is built by `ModelClientFactory`.
+  Since S1b each request carries `TurnOptions` (reasoning, output cap,
+  readiness), reasoning streams as `.reasoningDelta` and is never shown, and
+  images travel as data-URL content parts that are never persisted. It never executes
   one — that is `EvieAgentLoop`'s job, outside the client, so prompt injection
   cannot reach an executor through the transport. Its byte-level SSE framing
   preserves empty event separators across arbitrary transport fragmentation and
@@ -171,8 +438,9 @@ logs also remain under `~/Library`.
 - `evie-shell` is a SwiftUI/AppKit menu-bar executable with a transparent floating
   `NSPanel`, quick text, a "/" command menu, attachment chips, answer cards that
   scroll inside themselves, a history window, and a settings window.
-- The composition root talks directly to TurboFieldfare only for this reversible
-  slice. ADR 0006 records why this is not the future trust/lifecycle boundary.
+- The composition root talks directly to the model server only for this
+  reversible slice. ADR 0006 records why this is not the future trust/lifecycle
+  boundary; ADR 0013 replaces its loopback-only and no-credential clauses.
 - `EvieConfigurationLoader` applies built-in defaults, an optional versioned local
   JSON file, then supported environment overrides; invalid settings surface an
   actionable startup error and no credential is read or printed.
@@ -409,6 +677,72 @@ readiness only; they are not the Phase 1 performance suite.
   618 tests run on one machine. A macOS 27 runner image closes this.
 
 ## Next recommended action
+
+**Evie v2, on branch `v2`** (spec: `docs/design/2026-10-16-evie-v2-design.md`).
+Done as of 2026-10-16: S8a, S8b item 1 (the osascript tests are gated), S1a
+(transport rename, policy, keychain credentials, one client factory) and S1b
+(per-turn options, thinking parameters, images as content parts, reasoning kept
+apart from the answer, truncation detection, `ModelClientError`, deadlines) and
+S2a (config schema v2 with model profiles, v1 migration with a `.v1.bak`, a v2
+store and settings save, `evie-runtime configure` seeding v2). The default and
+every fallback is now the built-in PC profile (`qwen-daily`), whose key
+reference is Evie's own keychain item; that item is created by S2d's import.
+S2c (per-turn brain resolver and failover, ADR 0014) is done: each conversation
+is resolved before its turn is built and pinned to its brain, a missing PC key
+or a PC the probe finds out moves a new conversation to the Mac profile, and a
+turn that fails before its first delta is rebuilt for the next brain and retried
+once, all under the Mac-fallback choice (`.ask` asks "O PC está fora. Acordar o
+cérebro do Mac? (~10 s, ~8 GB de memória)"). This replaces the launch-time move
+of review finding #1. Measured in S1b: the PC gateway
+sends its response headers only with the first chunk, so the headers deadline is
+a first-token deadline. Verified in S2a: `qwen-daily` reports a 200704-token
+context window and 32768 max tokens; port 38480 is free. S2b (readiness probe
+and 30 s cache, refreshed at launch, on activation and on network changes) is
+done; verified in S2b: `/health` sits at the gateway's origin and needs no key,
+and `/v1/models` reports `loadState`/`active` per alias. Findings #1 (the
+interim above), #5, #6, #7 and #8 of the 2026-10-16 adversarial review are fixed
+(see the WORKLOG). S2d is done (2026-10-16): Configurações › Cérebro picks the
+preferred brain and the Mac fallback, edits each profile with the endpoint
+checked live, runs "Testar conexão" (three steps with times), and saves the PC
+key into Evie's own keychain item, pasted or imported once from
+`local-ai-3090`; `Scripts/evie-app import-pc-key` does the import from a
+terminal; the status line and error card name the brain that answered. Still
+owed for S2d: its manual QA (fresh install → "sem chave", import, three green
+steps; PC off with `.automatic` and `.ask`), which needs `Scripts/evie-app
+install`, and two [VERIFY]s on whether macOS prompts when Evie reads her item
+after a rebuild or after the script created it (`docs/SECURITY.md`). S3 is done (2026-10-16, ADR 0015): `mlx_vlm.server` 0.7.8 serves
+LensVLM's images (the pre-check's option 1), and `EvieLocalBrainLauncher` starts
+it on demand on 127.0.0.1:38480 ("Acordando o cérebro do Mac…", ready in about
+6 s with the weights cached), checks that the listener is the configured server
+before every turn, refuses a held port or under 8 GiB free, and stops it after
+10 idle minutes or at quit; `Scripts/evie-brain` is the manual path and
+`evie-shell --brain-check [--idle]` the command-line QA. Measured: footprint
+8,148–8,243 MB, 0.3% CPU idle, a tiny-image answer in about 2.1 s. Requests to
+it send `context_management: []`, since 0.7.8 otherwise compacts the
+conversation itself. Still owed for S3: the in-app status line and ask card
+(UI not launched), a start with the weights not in the page cache, and the
+LensVLM tool-call eval (tools stay off). The first-run guide's key and brain
+rows (S7) are done (2026-10-16). S4 (screen perception) is done (2026-10-16; see
+"Evie v2" above). S5a (the pure computer-use core in `EvieCore`, ADR 0016) and
+S5b (observe-only), S5c (the input executor, ADR 0018) and S5d (the cards,
+takeover and kill switches) are done (2026-10-16). Next: S8b and the Fix phase.
+
+**Evie v2, S7 (packaging, install, permissions) — partly done on `v2-packaging`,
+2026-10-16, merged into `v2` the same day.** Signing is pinned to the "Evie Dev"
+certificate's SHA-1 with the designated requirement asserted; `install` opens
+`~/Applications/Evie.app`, `run` opens only that copy and `evie-runtime launch`
+hands over to it, starting no model (the loopback Gemma for the `custom`
+profile is `evie-runtime launch-custom`); the first-run permission checklist
+has its five system rows. The v2 config seeding came with S2a on `v2`. The
+"Chave do PC" row (attributes-only status, "Importar" from `local-ai-3090`) and
+the "Cérebro" row (Testar conexão) are in, on `v2`, 2026-10-16, so a first
+launch can import the key and test the PC without visiting Settings. The bundle
+from `Scripts/evie-app build` passes `codesign --verify --deep --strict` and
+carries the pinned designated requirement (2026-10-16). Open: the manual QA in
+`docs/MACOS_RUNTIME.md` (grants surviving two rebuilds, a first run on an empty
+support directory, each row's button, the import prompt), which needs the owner
+to run `Scripts/evie-app install` — nothing is installed in `~/Applications` on
+this Mac today, and Evie's own key item does not exist yet.
 
 Two things, in this order, and they are the two things between here and a release.
 

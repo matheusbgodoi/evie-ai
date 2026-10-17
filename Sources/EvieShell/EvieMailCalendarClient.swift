@@ -29,21 +29,29 @@ struct EvieMailCalendarClient:
   static let maximumOutputBytes = 512 * 1_024
 
   func readMail(count: Int, unreadOnly: Bool) async throws -> [EvieMailMessage] {
-    let output = try await run(
-      EvieAppleScripts.readMail,
-      arguments: [String(count), unreadOnly ? "unread" : "all"],
-      app: .mail
-    )
-    return EvieMailCalendar.parseMessages(output)
+    try await readMailPage(count: count, unreadOnly: unreadOnly, offset: 0).messages
   }
 
   func searchMail(term: String, count: Int) async throws -> [EvieMailMessage] {
+    try await searchMailPage(term: term, count: count, offset: 0).messages
+  }
+
+  func readMailPage(count: Int, unreadOnly: Bool, offset: Int) async throws -> EvieMailPage {
+    _ = try EvieMailCalendar.resolveMailOffset(String(offset))
+    let output = try await run(
+      EvieAppleScripts.readMail,
+      arguments: [String(count), unreadOnly ? "unread" : "all", String(offset)], app: .mail
+    )
+    return try EvieMailCalendar.parseMailPage(output, offset: offset)
+  }
+
+  func searchMailPage(term: String, count: Int, offset: Int) async throws -> EvieMailPage {
+    _ = try EvieMailCalendar.resolveMailOffset(String(offset))
     let output = try await run(
       EvieAppleScripts.searchMail,
-      arguments: [term, String(count)],
-      app: .mail
+      arguments: [term, String(count), String(offset)], app: .mail
     )
-    return EvieMailCalendar.parseMessages(output)
+    return try EvieMailCalendar.parseMailPage(output, offset: offset)
   }
 
   func readCalendar(from: Date, to: Date, limit: Int) async throws -> [EvieCalendarEvent] {

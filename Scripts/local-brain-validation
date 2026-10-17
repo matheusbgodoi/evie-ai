@@ -1,0 +1,41 @@
+#!/bin/zsh
+set -euo pipefail
+readonly repository="${0:A:h:h}"
+readonly scratch="$(mktemp -d "${TMPDIR:-/tmp}/evie-brain-validation.XXXXXX")"
+# The executable cleans every process it launches before this directory is removed.
+trap 'python3 -c '\''import pathlib,shutil,sys; p=pathlib.Path(sys.argv[1]); shutil.rmtree(p)'\'' "${scratch}"' EXIT
+readonly installed_cli="${EVIE_BRAIN_EXECUTABLE:-${HOME}/.local/bin/mlx_vlm.server}"
+readonly fixture_cli="${scratch}/fixture-cli"
+python3 - "${installed_cli}" "${repository}/evals/fixtures/LocalBrainServer.py" "${fixture_cli}" <<'PY'
+from pathlib import Path
+import os
+import sys
+head = Path(sys.argv[1]).read_text().splitlines()[0]
+if not head.startswith('#!/') or len(head[2:].split()) != 1:
+    raise SystemExit('Installed MLX CLI needs an absolute Python shebang')
+output = Path(sys.argv[3])
+output.write_text(head + '\n' + Path(sys.argv[2]).read_text())
+os.chmod(output, 0o700)
+PY
+typeset -a core_link_arguments core_objects
+if [[ -f "${repository}/.build/debug/EvieCore.o" ]]; then
+  core_link_arguments=(-I "${repository}/.build/debug" "${repository}/.build/debug/EvieCore.o")
+elif [[ -f "${repository}/.build/debug/libEvieCore.a" ]]; then
+  core_link_arguments=(-I "${repository}/.build/debug" -L "${repository}/.build/debug" -lEvieCore)
+else
+  core_objects=("${repository}"/.build/debug/EvieCore.build/*.o(N))
+  if (( ${#core_objects} == 0 )); then
+    print -u2 -- "Build the debug package with Scripts/test before this validation."
+    exit 1
+  fi
+  core_link_arguments=(-I "${repository}/.build/debug/Modules" "${core_objects[@]}")
+fi
+xcrun swiftc -parse-as-library -swift-version 6 -warnings-as-errors \
+  "${core_link_arguments[@]}" \
+  "${repository}/Sources/EvieShell/EvieLocalBrainLauncher.swift" \
+  "${repository}/Sources/EvieShell/EvieProcessInspector.swift" \
+  "${repository}/Sources/EvieShell/EvieVoiceEngineLauncher.swift" \
+  "${repository}/Sources/EvieShell/EvieOmniVoiceClient.swift" \
+  "${repository}/evals/fixtures/LocalBrainValidation.swift" \
+  -o "${scratch}/validate"
+"${scratch}/validate" "${fixture_cli}" "${scratch}/state"

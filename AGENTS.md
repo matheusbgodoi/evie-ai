@@ -53,20 +53,13 @@ history.
 
 ## Toolchain constraints on this Mac
 
-The target machine has the macOS Command Line Tools without full Xcode. Two
-consequences bind every UI change:
-
-- **Do not use `@State`.** In the macOS 26+ SDK it is a macro, and the
-  `SwiftUIMacros` plugin ships only with Xcode; the build fails with
-  `external macro implementation type 'SwiftUIMacros.StateMacro' could not be
-  found`. `@Environment`, `@Binding`, `@FocusState`, `@ObservedObject`,
-  `@StateObject`, and `@Published` are unaffected. Put transient view state in an
-  observable object instead.
-- **There is no Metal toolchain.** `.colorEffect`, `.layerEffect`, and
-  `.distortionEffect` with a custom shader cannot be compiled here.
-
-Run `Scripts/test` rather than `swift test`: it supplies the Swift Testing macro
-plugin and rpaths that SwiftPM does not discover under Command Line Tools.
+Xcode 27.1 is installed and selected (verified 2026-10-16). `@State` and
+`@Observable` compile in EvieShell (`swiftc -typecheck`, macOS 26 target, and a
+SwiftPM build of a view using both). Metal shaders are allowed but not needed;
+the `metal` compiler additionally needs `xcodebuild -downloadComponent
+MetalToolchain`, which was not installed on 2026-10-16. CI builds EvieCore
+against the macOS 26.5 SDK, so no macOS-27-only API goes in EvieCore.
+`Scripts/test` remains the entry point.
 
 ## Engineering contract
 

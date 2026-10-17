@@ -7,38 +7,38 @@ import SwiftUI
 /// where the signature is checked, so "baixar" and "instalar" are deliberately
 /// not one button — what is being confirmed at the end is replacing the
 /// application, and by then Evie can say who signed the replacement.
+///
+/// A `Section`, not a `Form`: it is drawn in Settings › Geral under the summary,
+/// the way System Settings keeps Software Update in General.
 struct UpdateSettingsView: View {
   @ObservedObject var updater: EvieUpdater
 
   var body: some View {
-    Form {
-      Section {
-        LabeledContent("Versão instalada") {
-          Text(EvieUpdater.installedVersion?.description ?? "desconhecida")
-            .foregroundStyle(.secondary)
-        }
-        LabeledContent("Última verificação") {
-          Text(
-            updater.lastChecked.map {
-              $0.formatted(date: .abbreviated, time: .shortened)
-            } ?? "nunca"
-          )
+    Section {
+      LabeledContent("Versão instalada") {
+        Text(EvieUpdater.installedVersion?.description ?? "desconhecida")
           .foregroundStyle(.secondary)
-        }
-        status
-      } header: {
-        Text("Atualizações")
-      } footer: {
+      }
+      LabeledContent("Última verificação") {
         Text(
-          "A Evie só instala um download assinado com o mesmo certificado desta "
-            + "cópia. Uma release adulterada, ou uma conta do GitHub invadida, não "
-            + "consegue produzir essa assinatura."
+          updater.lastChecked.map {
+            $0.formatted(date: .abbreviated, time: .shortened)
+          } ?? "nunca"
         )
-        .font(.footnote)
         .foregroundStyle(.secondary)
       }
+      status
+    } header: {
+      Text("Atualizações")
+    } footer: {
+      Text(
+        "A Evie só instala um download assinado com o mesmo certificado desta "
+          + "cópia. Uma release adulterada, ou uma conta do GitHub invadida, não "
+          + "consegue produzir essa assinatura."
+      )
+      .font(.footnote)
+      .foregroundStyle(.secondary)
     }
-    .formStyle(.grouped)
     .task { await updater.check() }
   }
 
