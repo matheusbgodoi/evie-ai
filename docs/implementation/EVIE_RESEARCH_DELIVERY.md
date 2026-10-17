@@ -6,6 +6,25 @@ Updated: 2026-10-17 (America/Sao_Paulo). This file is the continuation anchor.
 
 **AUTHORITATIVE CURRENT HANDOFF — 2026-10-17:**
 
+- PUBLIC MAIN is now `086c0e58f74062f8881152234f89521fda40f936`, source/docs
+  candidate, and its automatic CI39007942714 passed ALL3 jobs. Core1501+55=1556,
+  7.123s+13.512s; settings/clipboard/voice15; shell84.05s/capturecompile/docs.
+  Private code/checkpoint51bd remains unchanged; current docs reporting commits
+  contain no production/test/script/workflow changes. This follow-up docs commit
+  belongs on delivery branch ONLY; do not manufacture another main release cut.
+- Root foregrounded existing SecurityAgent alert using public System Events,
+  no fields read/filled. Refreshed input-tool owner action request accepted;
+  still no reply, count1. Wait for actual owner authorization. Do not ask for
+  password in chat or obtain same secret elsewhere. No final PC run passed.
+- Main/code, signed installed candidate, all CI/native/UI and archive preparation
+  are complete. v2.0.0 TAG/RELEASE NOT CREATED. Single external prerequisite:
+  owner authorizes that macOS Keychain prompt. After that run the three livePC
+  diagnostics below; fixes if any → finaldocs/releasecut/publicmainCI → tag/upload/
+  downloadverify/PCnormalready → goalcomplete. Never report completion early.
+- Original main worktree remains untouched; worktree clean after this docs commit.
+  Agents idle; no UI/diagnostic/model work currently running. Main CI logs
+  `/tmp/evie-final-main-ci6.log`; prior code CI5log retained. Archive/proofsbelow.
+
 - Production source is frozen at private source checkpoint51bd2c1 / sanitized
   publicba17474. The current reporting commit changes docs only. Use git log/ref
   discovery for its own ID; never push private worktree ancestry.

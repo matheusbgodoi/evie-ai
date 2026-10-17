@@ -72,7 +72,7 @@ may lose details, and estimated tokens remain labeled as estimates. See
 [current release gates](docs/PROJECT_STATUS.md).
 
 The signed candidate is installed on the target Mac. All **1,556 behavioral
-tests** and all three [hosted CI jobs](https://github.com/matheusbgodoi/evie-ai/actions/runs/39007625804)
+tests** and all three [hosted CI jobs](https://github.com/matheusbgodoi/evie-ai/actions/runs/39007942714)
 passed; native voice, real Shortcuts and measured resource results are documented.
 This public source is a release candidate. Final live-PC verification needs the
 owner to authorize the legitimate macOS Keychain prompt; a final tag/release is
