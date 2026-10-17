@@ -120,6 +120,10 @@ public final class EvieAgentModeBroker {
     var spentObservationIDs: Set<String> = []
     var issued: [UUID: Issued] = [:]
     var pending: [UUID: Pending] = [:]
+    /// A chord that may open a launcher was committed, and no observation
+    /// since has shown that none is open: Return and a typed newline ask
+    /// first until one does (`ComputerActionPolicy.showsNoLauncher`).
+    var launcherMayBeOpen = false
   }
 
   private let policy: ComputerActionPolicy
@@ -201,6 +205,9 @@ public final class EvieAgentModeBroker {
     }
     current.latestObservationID = observation.id
     current.pending.removeAll()
+    if current.launcherMayBeOpen, ComputerActionPolicy.showsNoLauncher(observation) {
+      current.launcherMayBeOpen = false
+    }
     session = current
     return true
   }
@@ -254,7 +261,10 @@ public final class EvieAgentModeBroker {
     }
 
     let clearance: ComputerActionPolicy.Clearance
-    switch policy.evaluate(action, observation: observation, live: live, goal: grant.goal) {
+    switch policy.evaluate(
+      action, observation: observation, live: live, goal: grant.goal,
+      afterLauncherChord: current.launcherMayBeOpen)
+    {
     case .refused(let reason):
       return .refused(reason)
     case .cleared(let cleared):
@@ -416,6 +426,9 @@ public final class EvieAgentModeBroker {
     }
     current.issued[proposal.requestID] = Issued(proposal: proposal, action: action)
     current.spentObservationIDs.insert(proposal.revision.value)
+    if case .pressKeys(let chord) = action, chord.mayOpenLauncher {
+      current.launcherMayBeOpen = true
+    }
     current.budget.recordAction(at: now())
     session = current
     return .commit(commit)

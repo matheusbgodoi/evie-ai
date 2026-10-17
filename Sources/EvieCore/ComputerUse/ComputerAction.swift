@@ -195,6 +195,13 @@ public struct KeyChord: Sendable, Hashable {
     key == "return"
   }
 
+  /// Space held with any modifier: ⌘Espaço opens Spotlight, and the person
+  /// may have bound ⌥Espaço, ⌃Espaço or a hyper key to Raycast, Alfred or
+  /// another launcher Evie cannot know of. A bare Space is a keystroke.
+  public var mayOpenLauncher: Bool {
+    key == "space" && !modifiers.isEmpty
+  }
+
   /// The chord as macOS shows it: "⌘Q", "⇧⌘⌫", "⌘Espaço".
   public var symbol: String {
     modifiers.sorted().map(\.symbol).joined() + (Self.keySymbols[key] ?? key.uppercased())
@@ -275,6 +282,23 @@ public struct AXElementSummary: Sendable, Equatable {
   }
 }
 
+/// One window on the window server's list, as it reports it: the process
+/// that owns it, where it is, and its level (0 for a normal window; higher
+/// for panels, the Dock, the menu bar and launchers).
+public struct ComputerWindowSummary: Sendable, Equatable {
+  public let owner: ComputerAppIdentity
+  /// In global Core Graphics points.
+  public let frame: CGRect
+  /// `kCGWindowLayer`.
+  public let layer: Int
+
+  public init(owner: ComputerAppIdentity, frame: CGRect, layer: Int) {
+    self.owner = owner
+    self.frame = frame
+    self.layer = layer
+  }
+}
+
 /// What the loop saw before an action: the frame the model's coordinates are
 /// relative to, the app in front, its accessible elements and Evie's own
 /// windows, all read by code.
@@ -298,6 +322,12 @@ public struct ComputerObservation: Sendable, Equatable {
   /// point and refuses when it moved: every box and point of this observation
   /// was measured against it.
   public let windowFrame: CGRect?
+  /// Every visible window on screen at observation time, front to back,
+  /// Evie's own passed over; `nil` when the list was not read. The point an
+  /// action lands on is judged by the app whose window holds it, and an open
+  /// launcher is found here by its owner, since its panel floats over an app
+  /// that stays in front.
+  public let windows: [ComputerWindowSummary]?
   /// The capture, when this step needed pixels; an AX-only observation has none.
   public let image: EvieImagePart?
 
@@ -312,6 +342,7 @@ public struct ComputerObservation: Sendable, Equatable {
     focusedElementIndex: Int? = nil,
     evieWindowFrames: [CGRect] = [],
     windowFrame: CGRect? = nil,
+    windows: [ComputerWindowSummary]? = nil,
     image: EvieImagePart? = nil
   ) {
     self.id = id
@@ -324,6 +355,7 @@ public struct ComputerObservation: Sendable, Equatable {
     self.focusedElementIndex = focusedElementIndex
     self.evieWindowFrames = evieWindowFrames
     self.windowFrame = windowFrame
+    self.windows = windows
     self.image = image
   }
 
@@ -333,6 +365,12 @@ public struct ComputerObservation: Sendable, Equatable {
 
   public var focusedElement: AXElementSummary? {
     focusedElementIndex.flatMap(element(index:))
+  }
+
+  /// The frontmost listed window holding `point`, the one a click there
+  /// reaches; `nil` when none does or the list was not read.
+  public func window(at point: CGPoint) -> ComputerWindowSummary? {
+    windows?.first { $0.frame.contains(point) }
   }
 
   /// The innermost element under a grid point: the smallest box holding it,

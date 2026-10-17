@@ -1,5 +1,51 @@
 # Work log
 
+## 2026-10-16 — v2 Fix phase: launchers, Return, the Finder and a point's owner (queued findings #9–#11)
+
+- Completed (policy half of #11; the executor's 11b–11d stay queued):
+  - `Sources/EvieCore/ComputerUse/ComputerAction.swift`: `ComputerWindowSummary`
+    (owner, global frame, layer), `ComputerObservation.windows` (nil when not
+    read) and `window(at:)`, `KeyChord.mayOpenLauncher` (Space with a modifier).
+  - `ComputerActionPolicy.swift`: every chord with Space asks;
+    `openLauncher(in:)` (front app, or the owner of a panel-sized window —
+    ≥ 160×44 pt, an estimate) and `showsNoLauncher`; Return and a typed newline
+    ask while a launcher is open, after a chord with Space (`afterLauncherChord`)
+    and everywhere but `returnInsertsLineBundleIDs` (TextEdit, Notas, Stickies,
+    Pages, Numbers, Keynote); `fileBrowserBundleIDs`: double click and ⌘O/⌘↓
+    ask; `ownerRefusal`: the denylist and Evie on the owner of every target
+    point, and a grid point must be on the observed app's window.
+  - `EvieAgentModeBroker`: `launcherMayBeOpen`, set when a Space chord is
+    committed, cleared by a registered observation that `showsNoLauncher`.
+  - `ComputerScreenLocating.windows()` (EvieCore protocol; the shell's
+    `ComputerScreenLocator` reads `CGWindowListCopyWindowInfo` with each pid's
+    `NSRunningApplication`); `ComputerObserver` fills `windows`.
+- Read 2026-10-16 on this Mac (M5 24 GB, macOS 27.2), a read-only window-list
+  probe in the scratchpad (no permission, no input): raised windows were
+  PrimoDock (`dev.oprimo.PrimoDock`, layer 25, 1800×177), Stage Manager strips
+  (`com.apple.WindowManager`, layer 19), the menu bar (layer 24, no bundle) and
+  desktop widgets (`com.apple.notificationcenterui`, negative layers). So on this
+  Mac a chord with Space keeps Return asking for the rest of its session; the
+  agent opens apps with `open_app`, which needs none.
+- Tests: "Computer action policy" +12 (6+10+6+3 parameterised cases; a double
+  click on "Esvaziar Lixo" stays `.delete`), "Computer observer" +2; fixtures
+  gained `windows`. Every new policy test failed before
+  the change (21 issues). No existing assertion changed.
+- Docs: ADR 0016 § Notes (the rules and the everyday flows that now ask),
+  `docs/SECURITY.md` § Computer use, design doc (S5a and S5c notes),
+  `evals/README.md` case 24, CHANGELOG, PROJECT_STATUS.
+- Checks: `swift build` (no warnings); `Scripts/test --filter
+  "Computer|EvieAgentModeBroker|ObservationFormatter|AccessibilitySnapshot|ClipboardSession"`
+  (231 tests in 16 suites passed); full `Scripts/test`, twice: 1344 tests in
+  119 suites passed, 1 known issue (1323 before this phase's three commits).
+- Open: the [VERIFY] of the panel size against Spotlight's, Raycast's and
+  Alfred's panels live; the executor's 11b (front app and secure input before
+  each event), 11c (`windowOwner(at:)` before every CGEvent pointer action,
+  element fallbacks included) and 11d (`clipboard_write` confirmation); a
+  launcher focused without a raised window is not detected (the keyboard-focus
+  owner was not used).
+- Next: the executor half of #11 (11b–11d), then the manual QA in the installed
+  app.
+
 ## 2026-10-16 — v2 Fix phase: picture-derived text counts as a picture (queued finding #8)
 
 - Completed: `ChatMessage.derivedFromPicture` (in memory; not in

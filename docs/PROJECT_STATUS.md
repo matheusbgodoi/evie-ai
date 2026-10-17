@@ -108,6 +108,19 @@ tests (1323 in 119 suites). Not done: the manual QA in the installed app
 Return), which needs a person at the Mac. Next: S8b and the Fix phase (queued
 policy findings #9, #10, #11's Finder half).
 
+**Fix phase, security findings #6–#11 (2026-10-16):** the document fences
+neutralise markers split by invisible characters or drawn with lookalikes, and
+a file name stays on one capped line (#6, #7); text read off a picture counts as
+the picture, so it never rides with tools or auto-approves (#8); agent mode asks
+before every chord with Space, before Return and typed newlines everywhere but
+TextEdit, Notas, Stickies, Pages, Numbers and Keynote, while a launcher is open
+(found by its window's owner) or may be, and before a double click or ⌘O/⌘↓ in
+the Finder, and judges a point by the app whose window holds it (#9–#11, policy
+half; ADR 0016 § Notes lists the flows that now ask). Open: the executor's half
+of #11 (11b per-event front-app and secure-input checks, 11c the window owner
+before every CGEvent pointer action, 11d a confirmation for `clipboard_write`);
+the launcher panel size [VERIFY] live.
+
 Next for this area after S5b: S5
 drives observing, `lookAt`, `willClick`/`didClick` and typing, posts every
 synthetic event inside `postingSyntheticInput { … }` (which releases the Esc

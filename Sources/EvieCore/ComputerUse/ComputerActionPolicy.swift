@@ -85,10 +85,49 @@ public struct ComputerActionPolicy: Sendable {
   ]
 
   /// Launchers: Return opens whatever they have selected, which is how
-  /// "⌘Espaço, Terminal, Return" would get around the denylist.
+  /// "⌘Espaço, Terminal, Return" would get around the denylist. Their panel
+  /// floats over the app in front, which stays in front, so an open one is
+  /// found by the owner of a window on screen (`openLauncher(in:)`).
   public static let launcherBundleIDs: Set<String> = [
     "com.apple.Spotlight", "com.raycast.macos", "com.runningwithcrayons.Alfred",
     "at.obdev.LaunchBar",
+  ]
+
+  /// Raised windows that are the system's own furniture — the Dock, Stage
+  /// Manager's strips, notifications, the menu bar's extras — and never a
+  /// launcher's panel.
+  static let systemShellBundleIDs: Set<String> = [
+    "com.apple.dock", "com.apple.WindowManager", "com.apple.notificationcenterui",
+    "com.apple.controlcenter", "com.apple.systemuiserver", "com.apple.TextInputMenuAgent",
+    "com.apple.TextInputSwitcher",
+  ]
+
+  /// File browsers: a double click or ⌘O there opens the file, and an app,
+  /// a `.command`, `.sh` or `.app` runs — the Terminal itself among them,
+  /// which the denylist keeps out only while it is not opened from here.
+  public static let fileBrowserBundleIDs: Set<String> = [
+    "com.apple.finder", "com.cocoatech.PathFinder", "com.binarynights.ForkLift",
+    "com.binarynights.ForkLift-3", "com.eltima.cmd1",
+  ]
+
+  /// The apps where Return is asked about only for the reasons that hold
+  /// everywhere (a launcher, a confirm-word button in the window): Apple's
+  /// note and document apps, where Return starts a new line, a new paragraph
+  /// or the next cell, and nothing in them sends, runs or opens on it.
+  ///
+  /// Everywhere else Return and a typed newline ask first. A chat app sends
+  /// on Return (WhatsApp, Telegram, Mensagens, Slack, Discord, Teams, and
+  /// Mail's compose with ⌘Return), its button rarely says "Enviar" and is
+  /// often not a button at all; a code editor may have a terminal pane; the
+  /// Finder renames; and an unknown app is unknown. Kept short on purpose:
+  /// writing a note or a document is the everyday case the owner asks for
+  /// ("escreve … numa nota nova"), and these apps cover it. Left out: code
+  /// editors and Obsidian (an integrated terminal, or a plugin that runs
+  /// commands), Reminders (a shared list is other people's), browsers (asked
+  /// about in any case).
+  public static let returnInsertsLineBundleIDs: Set<String> = [
+    "com.apple.TextEdit", "com.apple.Notes", "com.apple.Stickies", "com.apple.iWork.Pages",
+    "com.apple.iWork.Numbers", "com.apple.iWork.Keynote",
   ]
 
   /// The verbs of the spec's list (enviar|send|comprar|pagar|excluir|apagar|
@@ -119,11 +158,14 @@ public struct ComputerActionPolicy: Sendable {
   ///
   /// `goal` is the person's own request, from the gesture that began the
   /// session; an app it does not name is asked about before it is opened.
+  /// `afterLauncherChord` is the broker's memory that a chord which may open
+  /// a launcher was carried out and no observation since has shown none open.
   public func evaluate(
     _ action: ComputerAction,
     observation: ComputerObservation,
     live: ComputerLiveState,
-    goal: String
+    goal: String,
+    afterLauncherChord: Bool = false
   ) -> Decision {
     switch action {
     case .openApp(let name, let url):
@@ -166,7 +208,8 @@ public struct ComputerActionPolicy: Sendable {
         )
       )
     case .click, .moveMouse, .drag, .typeText, .pressKeys, .scroll, .paste:
-      return evaluateOnScreen(action, observation: observation, live: live)
+      return evaluateOnScreen(
+        action, observation: observation, live: live, afterLauncherChord: afterLauncherChord)
     }
   }
 
@@ -206,7 +249,8 @@ public struct ComputerActionPolicy: Sendable {
   private func evaluateOnScreen(
     _ action: ComputerAction,
     observation: ComputerObservation,
-    live: ComputerLiveState
+    live: ComputerLiveState,
+    afterLauncherChord: Bool
   ) -> Decision {
     if action.targets.contains(where: { $0.observationID != observation.id }) {
       return .refused(
@@ -262,6 +306,9 @@ public struct ComputerActionPolicy: Sendable {
       if observation.evieWindowFrames.contains(where: { $0.contains(point) }) {
         return .refused("Esse ponto cai numa janela da própria Evie.")
       }
+      if let refusal = Self.ownerRefusal(at: point, of: target, in: observation, appName: appName) {
+        return .refused(refusal)
+      }
       let hit: AXElementSummary?
       if case .element(_, let index) = target {
         hit = observation.element(index: index)
@@ -274,7 +321,91 @@ public struct ComputerActionPolicy: Sendable {
       hits.append(hit)
     }
 
-    return .cleared(classify(action, hits: hits, observation: observation, appName: appName))
+    return .cleared(
+      classify(
+        action, hits: hits, observation: observation, appName: appName,
+        afterLauncherChord: afterLauncherChord))
+  }
+
+  /// Why `point` may not be acted on, judged by the app whose window holds
+  /// it rather than by the app in front: a click lands on whatever window
+  /// is there — the Dock, a third-party dock, another app's floating panel,
+  /// the Terminal beside the window observed. Nothing when the window list
+  /// was not read; the executor checks the owner again before it posts.
+  ///
+  /// A denied app (or Evie) is refused under any target. A grid point must
+  /// also be on a window of the app observed. A listed element is that app's
+  /// own and is pressed through Accessibility, which goes to the element
+  /// whatever covers it — a sandboxed app's save panel is a system service's
+  /// window — so another owner there is not refused here.
+  static func ownerRefusal(
+    at point: CGPoint,
+    of target: ComputerAction.Target,
+    in observation: ComputerObservation,
+    appName: String
+  ) -> String? {
+    guard observation.windows != nil else {
+      return nil
+    }
+    let front = observation.frontApp
+    let owner = observation.window(at: point)?.owner
+    if let owner, owner.processID != front.processID {
+      let ownerName = ComputerScreenText.sanitized(owner.name, limit: 60)
+      if owner.bundleID == evieBundleID {
+        return "Esse ponto cai numa janela da própria Evie."
+      }
+      if isDenied(bundleID: owner.bundleID, names: [owner.name]) {
+        return deniedMessage(ownerName)
+      }
+      if case .normalized = target {
+        return "Esse ponto cai numa janela do \(ownerName), não do \(appName). "
+          + "Para agir nele, traga-o para a frente com open_app e olhe a tela de novo."
+      }
+    }
+    if owner == nil, case .normalized = target {
+      return "Esse ponto não fica numa janela do \(appName). Olhe a tela de novo."
+    }
+    return nil
+  }
+
+  // MARK: - Launchers
+
+  /// The launcher whose panel is open on `observation`: the app in front if
+  /// it is one, else the owner of a panel-sized window on screen. Its
+  /// menu-bar icon is not an open launcher.
+  public static func openLauncher(in observation: ComputerObservation) -> ComputerAppIdentity? {
+    if launcherBundleIDs.contains(observation.frontApp.bundleID ?? "") {
+      return observation.frontApp
+    }
+    return observation.windows?.first { window in
+      launcherBundleIDs.contains(window.owner.bundleID ?? "") && isPanelSized(window.frame)
+    }?.owner
+  }
+
+  /// Whether `observation` shows, positively, that no launcher is open: its
+  /// windows were read, no known launcher's panel is among them, and no other
+  /// app has a panel-sized window raised over the normal ones — which is how
+  /// a launcher Evie does not know of would look. The system's own raised
+  /// windows (the Dock, notifications) do not count.
+  public static func showsNoLauncher(_ observation: ComputerObservation) -> Bool {
+    guard let windows = observation.windows, openLauncher(in: observation) == nil else {
+      return false
+    }
+    return !windows.contains { window in
+      guard let bundleID = window.owner.bundleID else {
+        // The window server's own (the menu bar), which no app controls.
+        return false
+      }
+      return window.layer > 0 && window.owner.processID != observation.frontApp.processID
+        && !systemShellBundleIDs.contains(bundleID) && isPanelSized(window.frame)
+    }
+  }
+
+  /// Bigger than a menu-bar icon: a launcher's search bar is several hundred
+  /// points wide and taller than the menu bar (an estimate from the apps'
+  /// usual sizes; 24–39 points is the menu bar on this Mac).
+  static func isPanelSized(_ frame: CGRect) -> Bool {
+    frame.width >= 160 && frame.height >= 44
   }
 
   /// Whether an on-screen action needs the person first, and whether it is
@@ -283,7 +414,8 @@ public struct ComputerActionPolicy: Sendable {
     _ action: ComputerAction,
     hits: [AXElementSummary?],
     observation: ComputerObservation,
-    appName: String
+    appName: String,
+    afterLauncherChord: Bool
   ) -> Clearance {
     func cleared(
       _ summary: String,
@@ -300,15 +432,23 @@ public struct ComputerActionPolicy: Sendable {
     }
     let bundleID = observation.frontApp.bundleID ?? ""
     let inBrowser = Self.browserBundleIDs.contains(bundleID)
+    let inFileBrowser = Self.fileBrowserBundleIDs.contains(bundleID)
 
     switch action {
-    case .click(_, let button, _):
+    case .click(_, let button, let count):
       let element = hits.first ?? nil
       let title = element.map { ComputerScreenText.sanitized($0.title, limit: 80) } ?? ""
       let named = title.isEmpty ? "num ponto da tela" : "em “\(title)”"
       let summary = "Clicar \(named) no \(appName)"
+      // A double click in a file browser opens what is there, and an app or
+      // a script starts.
+      let opensFile =
+        inFileBrowser && count >= 2
+        ? "Dar um clique duplo \(named) no \(appName)? Isso abre o que estiver ali, "
+          + "e um app ou um script começa a rodar."
+        : nil
       guard button == .left, let element else {
-        return cleared(summary)
+        return cleared(summary, ask: opensFile)
       }
       let words = Self.words(element.title)
       if Self.emptiesTrash(words) {
@@ -317,6 +457,9 @@ public struct ComputerActionPolicy: Sendable {
           ask: "Apagar de vez: clicar em “\(title)” no \(appName)? Não dá para desfazer.",
           operation: .delete
         )
+      }
+      if let opensFile {
+        return cleared(summary, ask: opensFile)
       }
       if !words.isDisjoint(with: Self.confirmWords) {
         let role = Self.roleSuffix(element.role)
@@ -353,7 +496,10 @@ public struct ComputerActionPolicy: Sendable {
     case .typeText(let text):
       let summary = "Digitar \(text.count) caracteres no \(appName)"
       if text.contains(where: \.isNewline) {
-        return cleared(summary, ask: returnConfirmation(observation, appName: appName))
+        return cleared(
+          summary,
+          ask: returnConfirmation(
+            observation, appName: appName, afterLauncherChord: afterLauncherChord))
       }
       return cleared(summary)
 
@@ -369,8 +515,18 @@ public struct ComputerActionPolicy: Sendable {
       if let meaning = Self.riskyChordMeaning(chord) {
         return cleared(summary, ask: "Usar \(chord.symbol) no \(appName)? \(meaning)")
       }
+      if inFileBrowser, Self.opensSelection(chord) {
+        return cleared(
+          summary,
+          ask: "Usar \(chord.symbol) no \(appName)? Isso abre o que estiver selecionado, "
+            + "e um app ou um script começa a rodar."
+        )
+      }
       if chord.isReturn {
-        return cleared(summary, ask: returnConfirmation(observation, appName: appName))
+        return cleared(
+          summary,
+          ask: returnConfirmation(
+            observation, appName: appName, afterLauncherChord: afterLauncherChord))
       }
       return cleared(summary)
 
@@ -382,18 +538,34 @@ public struct ComputerActionPolicy: Sendable {
     }
   }
 
-  /// Return submits whatever the window treats as its default — a form, a
-  /// launcher's choice, a dialog's "Excluir" — and which button that is does
-  /// not show in the focused element. So Return is asked about in a browser,
-  /// in a launcher, and wherever a confirm-word button is on screen.
-  private func returnConfirmation(_ observation: ComputerObservation, appName: String) -> String? {
+  /// Return submits whatever the window treats as its default — a message,
+  /// a form, a launcher's choice, a dialog's "Excluir" — and which that is
+  /// does not show in the focused element. So Return (a key, or a newline
+  /// typed) asks first: in a browser; while a launcher is open, or may be
+  /// after a chord with Space; wherever a confirm-word button is on screen;
+  /// and in every app but the note and document apps where it only starts a
+  /// line (`returnInsertsLineBundleIDs`).
+  private func returnConfirmation(
+    _ observation: ComputerObservation,
+    appName: String,
+    afterLauncherChord: Bool
+  ) -> String? {
     let bundleID = observation.frontApp.bundleID ?? ""
     if Self.browserBundleIDs.contains(bundleID) {
       return "Apertar Return no \(appName)? Num navegador, Return pode enviar um formulário, "
         + "e a página escolhe o nome dos botões."
     }
-    if Self.launcherBundleIDs.contains(bundleID) {
-      return "Apertar Return no \(appName)? Isso abre o que estiver selecionado."
+    if let launcher = Self.openLauncher(in: observation) {
+      if launcher.processID == observation.frontApp.processID {
+        return "Apertar Return no \(appName)? Isso abre o que estiver selecionado."
+      }
+      let launcherName = ComputerScreenText.sanitized(launcher.name, limit: 60)
+      return "Apertar Return com o \(launcherName) aberto? Return abre o que estiver "
+        + "selecionado nele, fora do \(appName)."
+    }
+    if afterLauncherChord {
+      return "Apertar Return no \(appName)? O atalho com Espaço de antes pode ter aberto um "
+        + "lançador, e Return abriria o que estiver selecionado nele."
     }
     let candidates = [observation.focusedElement].compactMap { $0 }
       + observation.elements.filter { Self.pressableRoles.contains($0.role) }
@@ -404,6 +576,10 @@ public struct ComputerActionPolicy: Sendable {
       let title = ComputerScreenText.sanitized(confirmable.title, limit: 80)
       return "Apertar Return no \(appName)? Há “\(title)” nesta janela, "
         + "e Return pode acioná-lo."
+    }
+    if !Self.returnInsertsLineBundleIDs.contains(bundleID) {
+      return "Apertar Return no \(appName)? Em muitos apps Return envia uma mensagem ou "
+        + "confirma o que estiver na tela."
     }
     return nil
   }
@@ -419,8 +595,11 @@ public struct ComputerActionPolicy: Sendable {
       return "Isso fecha o app."
     case "w" where modifiers.contains(.command):
       return "Isso fecha a janela."
-    case "space" where modifiers.contains(.command):
+    case "space" where modifiers == [.command]:
       return "Isso abre o Spotlight."
+    case "space" where chord.mayOpenLauncher:
+      return "Um atalho com Espaço pode abrir um lançador (Spotlight, Raycast, Alfred), e o "
+        + "que ele abrir roda fora deste app."
     case "escape" where modifiers.isSuperset(of: [.command, .option]):
       return "Isso abre Forçar Encerrar."
     case "tab" where modifiers.contains(.command):
@@ -428,6 +607,11 @@ public struct ComputerActionPolicy: Sendable {
     default:
       return nil
     }
+  }
+
+  /// ⌘O and ⌘↓ (with or without ⌥): "Abrir" in a file browser.
+  private static func opensSelection(_ chord: KeyChord) -> Bool {
+    chord.modifiers.contains(.command) && (chord.key == "o" || chord.key == "down")
   }
 
   // MARK: - Opening an app

@@ -112,6 +112,7 @@ struct ComputerExecutorTests {
     /// Mail's, unless a test puts another app's window under the point.
     var owner: Int32? = ComputerUseFixture.mail.processID
     func windowOwner(at point: CGPoint) -> Int32? { owner }
+    func windows() -> [ComputerWindowSummary] { [] }
     func secureInputEnabled() -> Bool { false }
 
     static func p(_ point: CGPoint) -> String {

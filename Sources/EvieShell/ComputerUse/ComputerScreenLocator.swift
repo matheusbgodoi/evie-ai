@@ -68,12 +68,41 @@ final class ComputerScreenLocator: ComputerScreenLocating {
     }?.owner
   }
 
+  /// The same list, every visible window with the app that owns it: the
+  /// policy judges a point by its window's owner and finds an open
+  /// launcher's panel by its owner. A process with no running application
+  /// (the window server's menu bar) keeps the owner name the list gives.
+  func windows() -> [ComputerWindowSummary] {
+    let own = ProcessInfo.processInfo.processIdentifier
+    var owners: [pid_t: ComputerAppIdentity] = [:]
+    func owner(of window: WindowInfo) -> ComputerAppIdentity {
+      if let known = owners[window.owner] {
+        return known
+      }
+      let app = NSRunningApplication(processIdentifier: window.owner)
+      let identity = ComputerAppIdentity(
+        bundleID: app?.bundleIdentifier,
+        name: app?.localizedName ?? window.ownerName ?? "processo \(window.owner)",
+        processID: window.owner
+      )
+      owners[window.owner] = identity
+      return identity
+    }
+    return Self.onScreenWindows().compactMap { window in
+      guard window.owner != own, window.alpha > 0 else {
+        return nil
+      }
+      return ComputerWindowSummary(owner: owner(of: window), frame: window.bounds, layer: window.layer)
+    }
+  }
+
   func secureInputEnabled() -> Bool {
     IsSecureEventInputEnabled()
   }
 
   private struct WindowInfo {
     let owner: pid_t
+    let ownerName: String?
     let layer: Int
     let alpha: Double
     let bounds: CGRect
@@ -97,6 +126,7 @@ final class ComputerScreenLocator: ComputerScreenLocating {
       }
       return WindowInfo(
         owner: owner,
+        ownerName: window[kCGWindowOwnerName] as? String,
         layer: window[kCGWindowLayer] as? Int ?? 0,
         alpha: window[kCGWindowAlpha] as? Double ?? 1,
         bounds: bounds

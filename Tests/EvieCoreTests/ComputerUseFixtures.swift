@@ -25,6 +25,17 @@ enum ComputerUseFixture {
     name: "Spotlight",
     processID: 504
   )
+  static let textEdit = ComputerAppIdentity(
+    bundleID: "com.apple.TextEdit",
+    name: "TextEdit",
+    processID: 505
+  )
+  static let terminal = ComputerAppIdentity(
+    bundleID: "com.apple.Terminal",
+    name: "Terminal",
+    processID: 506
+  )
+  static let dock = ComputerAppIdentity(bundleID: "com.apple.dock", name: "Dock", processID: 507)
 
   /// A 1512×982-point display sent as a 1024×665 image.
   static let frame = ScreenGeometry.ObservedFrame(
@@ -72,7 +83,8 @@ enum ComputerUseFixture {
     focused: Int? = 1,
     windowTitle: String? = "Nova mensagem",
     capturedAt: Date = start,
-    windowFrame: CGRect? = nil
+    windowFrame: CGRect? = nil,
+    windows: [ComputerWindowSummary]? = nil
   ) -> ComputerObservation {
     ComputerObservation(
       id: id,
@@ -84,8 +96,18 @@ enum ComputerUseFixture {
       elements: elements,
       focusedElementIndex: focused,
       evieWindowFrames: [evieWindow],
-      windowFrame: windowFrame
+      windowFrame: windowFrame,
+      windows: windows
     )
+  }
+
+  /// A window of `owner` on the window server's list, in global points.
+  static func window(
+    _ owner: ComputerAppIdentity,
+    _ frame: CGRect = CGRect(x: 0, y: 0, width: 1_512, height: 982),
+    layer: Int = 0
+  ) -> ComputerWindowSummary {
+    ComputerWindowSummary(owner: owner, frame: frame, layer: layer)
   }
 
   static func live(
@@ -105,7 +127,8 @@ enum ComputerUseFixture {
     of app: ComputerAppIdentity,
     button title: String = "OK",
     role: String = "AXButton",
-    id: String = "obs-1"
+    id: String = "obs-1",
+    windows: [ComputerWindowSummary]? = nil
   ) -> ComputerObservation {
     observation(
       id: id,
@@ -119,7 +142,8 @@ enum ComputerUseFixture {
           isSecure: false
         )
       ],
-      focused: nil
+      focused: nil,
+      windows: windows
     )
   }
 
@@ -212,6 +236,7 @@ final class StubComputer: EvieComputerActing {
       focusedElementIndex: screen.focusedElementIndex,
       evieWindowFrames: screen.evieWindowFrames,
       windowFrame: screen.windowFrame,
+      windows: screen.windows,
       image: request.withImage ? ComputerUseFixture.picture() : nil
     )
     last = observation

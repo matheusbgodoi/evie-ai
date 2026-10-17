@@ -66,6 +66,9 @@ public protocol ComputerScreenLocating: AnyObject {
   /// The process owning the frontmost window under `point` (Evie's own
   /// windows passed over), or `nil` when no window is there.
   func windowOwner(at point: CGPoint) -> Int32?
+  /// Every visible window on screen, front to back, Evie's own passed over,
+  /// with the app that owns it (`ComputerObservation.windows`).
+  func windows() -> [ComputerWindowSummary]
   /// `IsSecureEventInputEnabled()`.
   func secureInputEnabled() -> Bool
 }
@@ -203,6 +206,7 @@ public final class ComputerObserver: EvieComputerObserving {
       focusedElementIndex: snapshot.focusedElementIndex,
       evieWindowFrames: locator.evieWindowFrames(),
       windowFrame: windowFrame,
+      windows: locator.windows(),
       image: image
     )
   }

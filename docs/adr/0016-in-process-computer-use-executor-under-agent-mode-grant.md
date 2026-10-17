@@ -157,3 +157,65 @@ description are redacted, as 0009's are.
   lifetime are one number, 15 minutes.
 - When `evied` exists, the broker and the executor move into it; the shell then
   sends typed approval events, and the commit never leaves that process.
+
+## Notes
+
+**2026-10-16, Fix phase (queued security findings #9–#11).** The decision
+stands; the policy above asks first in more places, and judges a point by the
+window that holds it. These rules close three ways around it that the review
+found: a launcher opened by a chord other than ⌘Space, or whose panel floats
+over an app that stays in front; Return sending in a chat app whose button does
+not say "Enviar"; and a double click or ⌘O in the Finder launching a script or a
+denied app, or a click landing on another app's window.
+
+- **Every chord with Space asks first** (⌥Espaço, ⌃Espaço, a hyper key…), since
+  the person may have bound any of them to a launcher. A bare Space does not.
+- **An open launcher is found by the owner of its window.** Each observation
+  carries the window server's list (`ComputerObservation.windows`); a
+  panel-sized window (at least 160×44 points, so not its menu-bar icon) owned by
+  Spotlight, Raycast, Alfred or LaunchBar means Return and a typed newline ask
+  first, whatever app is in front.
+- **After a chord with Space, Return asks until an observation shows no
+  launcher**: the broker remembers the chord, and only an observation whose
+  window list holds neither a known launcher's panel nor another app's
+  panel-sized window raised over the normal ones (the shape of a launcher Evie
+  does not know) clears it. The system's own raised windows (Dock, Stage
+  Manager, notifications, Control Center) do not count.
+- **Return and a typed newline ask first by default.** The exceptions are
+  Apple's note and document apps — TextEdit, Notas, Stickies, Pages, Numbers,
+  Keynote — where Return starts a line or the next cell and nothing sends, runs
+  or opens on it; there Return still asks beside a confirm-word button or with a
+  launcher open. Left out on purpose: code editors and Obsidian (a terminal pane
+  or a command plugin may run what Return submits), Reminders (a shared list is
+  other people's), and every chat or mail app.
+- **In a file browser** (Finder, Path Finder, ForkLift, Commander One) a double
+  click and ⌘O / ⌘↓ (with or without ⌥) ask first, naming what is under the
+  pointer by its accessibility title.
+- **A point is judged by the app whose window holds it**, front to back as the
+  window server lists them. A denied app's window (or Evie's) is refused under
+  any target; a grid point must lie on a window of the app observed, so the
+  Dock, a third-party dock, another app's panel, a banner or the bare desktop are
+  refused. A listed element is the front app's own and is pressed through
+  Accessibility, so another owner over it (a sandboxed app's save panel is a
+  system service's window) is not refused by the policy; the executor's own
+  check before posting a fallback click is queued finding #11c.
+
+**Everyday flows that now ask** (one click on Fazer each):
+- sending or just pressing Return in WhatsApp, Telegram, Mensagens, Slack,
+  Discord, Teams and Mail — which is the point;
+- Return in the Finder (rename), Calculadora, Música, Calendário, a dialog of any
+  app not listed above, and every app Evie does not know;
+- a newline typed into any of those (a two-line text in WhatsApp asks once for
+  the whole text);
+- opening a file or folder in the Finder by double click or ⌘O / ⌘↓ — selecting,
+  dragging (already asked), Quick Look and the sidebar's single clicks do not;
+- ⌘Espaço and any other chord with Space, and the next Return after it while a
+  launcher may be open. On this Mac a third-party dock (PrimoDock, a raised
+  1800×177 window at level 25, read 2026-10-16) looks like an unknown launcher's
+  panel, so after a chord with Space every Return of that session asks. The
+  agent opens apps with `open_app`, which needs no launcher, so this is rare.
+
+Not asked, so the common writing flows stay one step each: typing without a
+newline anywhere; Return and newlines in TextEdit, Notas, Stickies, Pages,
+Numbers and Keynote; single clicks outside browsers and file browsers;
+`open_app` for an app the request named.

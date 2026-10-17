@@ -345,11 +345,22 @@ the takeover monitor and the kill switches put them in the app.
   input ("campo de senha: digite você"); System Settings, Keychain Access, the
   terminals, Shortcuts, Script Editor, Automator, Installer, Passwords and the
   password managers; opening one of those by any name; any link that is not
-  plain `https`.
+  plain `https`. A point is judged by the app whose window holds it (the
+  observation's window list, front to back): a denied app's window is refused
+  under any target, and a grid point on another app's window, the Dock, a
+  third-party dock or the bare desktop is refused (since 2026-10-16, queued
+  finding #11).
 - **Asked first:** confirm-word buttons (enviar, pagar, excluir, …), any Return
-  or button in a browser (a page names its own buttons), Return in a launcher,
-  the quit/close/lock/log-out/switch chords, opening an app the request did not
-  name or any link, and reading the clipboard. The question is built from the
+  or button in a browser (a page names its own buttons), the quit/close/lock/
+  log-out/switch chords, opening an app the request did not name or any link,
+  and reading the clipboard. Since 2026-10-16 (queued findings #9–#11): every
+  chord with Space (any of them may be bound to a launcher); Return and a typed
+  newline while a launcher's panel is open, found by its window's owner rather
+  than the app in front, and after a chord with Space until an observation
+  shows no launcher; Return and a typed newline in every app except TextEdit,
+  Notas, Stickies, Pages, Numbers and Keynote (chat apps send on Return); a
+  double click and ⌘O / ⌘↓ in the Finder and other file browsers. ADR 0016's
+  notes list the everyday flows this asks about. The question is built from the
   accessibility title and the system's app name, never from the model's words.
 - **On-screen text is fenced** with a nonce made for each observation, after the
   screen was read, and cleaned so it cannot close the fence or start a line.

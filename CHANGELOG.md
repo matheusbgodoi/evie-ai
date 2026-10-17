@@ -6,6 +6,18 @@ All notable changes to Evie are documented here. Dates use `YYYY-MM-DD`.
 
 ### Changed
 
+- **Security: agent mode asks before Return almost everywhere, before
+  launcher shortcuts and before opening files in the Finder, and judges a click
+  by the window it lands on.** Return (or a typed line break) now asks first in
+  every app except TextEdit, Notas, Stickies, Pages, Numbers and Keynote, since
+  chat apps send on Return without a button saying "Enviar"; every shortcut with
+  Space asks, and so does Return while a launcher's panel is open (found by who
+  owns the window, not by the app in front) or may be, after such a shortcut; a
+  double click or ⌘O / ⌘↓ in the Finder asks, since it can start a script or an
+  app; and a click on a point is refused when the window there belongs to a
+  denied app, or, for a point on the grid, to any app other than the one
+  observed (the Dock, another app's panel). ADR 0016's notes list the everyday
+  flows that now ask.
 - **Security: text read off a picture is kept away from tools like the
   picture itself.** On a brain that cannot see, a capture's recognised text and
   description, and the replayed turn of an earlier look after a switch to such

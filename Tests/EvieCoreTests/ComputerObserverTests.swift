@@ -49,6 +49,27 @@ struct ComputerObserverTests {
     #expect(observation.evieWindowFrames == [CGRect(x: 10, y: 10, width: 300, height: 200)])
   }
 
+  @Test("the observation carries the window server's list, for the policy")
+  func carriesTheWindowList() async throws {
+    let rig = Rig()
+
+    let observation = try await rig.observer().observe(Self.request(image: false))
+
+    #expect(observation.windows == rig.locator.windowList)
+    #expect(rig.locator.windowsRead == 1)
+  }
+
+  @Test("without a glow the window list is not read either")
+  func noGlowNoWindowList() async {
+    let rig = Rig()
+    rig.indicator.composites = false
+
+    await #expect(throws: EvieScreenLookError.indicatorNotShown) {
+      try await rig.observer().observe(Self.request())
+    }
+    #expect(rig.locator.windowsRead == 0)
+  }
+
   @Test("the screen is the display holding the front window, not the one under the pointer")
   func displayOfTheWindow() async throws {
     let rig = Rig()
@@ -228,6 +249,17 @@ struct ComputerObserverTests {
     func frontWindowFrame(ofProcess processID: Int32) -> CGRect? { window }
     func evieWindowFrames() -> [CGRect] { [CGRect(x: 10, y: 10, width: 300, height: 200)] }
     func windowOwner(at point: CGPoint) -> Int32? { app?.processID }
+    lazy var windowList: [ComputerWindowSummary] = [
+      ComputerWindowSummary(
+        owner: ComputerAppIdentity(bundleID: "com.apple.dock", name: "Dock", processID: 7),
+        frame: CGRect(x: 0, y: 900, width: 1_512, height: 82), layer: 20),
+      ComputerWindowSummary(owner: rig.notes, frame: window ?? .zero, layer: 0),
+    ]
+    private(set) var windowsRead = 0
+    func windows() -> [ComputerWindowSummary] {
+      windowsRead += 1
+      return windowList
+    }
     func secureInputEnabled() -> Bool { secureInput }
   }
 

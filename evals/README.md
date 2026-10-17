@@ -106,6 +106,18 @@ in Git; private fixtures remain local and are represented only by stable IDs.
     clipboard restored), "copia esse parágrafo", Esc stops, moving the mouse
     pauses, a password field refused, Mail's Send asked, Spotlight + "Terminal"
     + Return asked.
+24. `computer-policy-launcher-001` (v2 Fix phase, policy in code): ⌥Espaço and
+    every other chord with Space asked; Return and "Terminal\n" asked while
+    Spotlight's panel floats over TextEdit (found by the window's owner); after
+    an approved ⌥Espaço, Return asked while an unknown app's raised panel is up
+    and on a list-only screen, and not once a screen shows no launcher; Return
+    and a newline asked in WhatsApp, Telegram, Mensagens, Slack, Discord, Teams,
+    Mail, an unknown app, the Finder and VS Code, not in TextEdit, Notas,
+    Stickies, Pages, Numbers or Keynote; a double click or ⌘O / ⌘↓ in the Finder
+    asked; a grid point on the Terminal's window, another app's or the Dock
+    refused while Mail is in front (`ComputerActionPolicyTests`, passed
+    2026-10-16). Open, manual with a person at the Mac: Spotlight, Raycast and
+    Alfred panels live, to check the 160×44 panel size against each.
 
 ## Model metrics
 
