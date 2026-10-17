@@ -4,316 +4,12 @@ All notable changes to Evie are documented here. Dates use `YYYY-MM-DD`.
 
 ## [Unreleased]
 
-### Changed
-
-- **Two corrections measured on Gemma now apply only to Gemma.** The reminder
-  appended to a question that opens with "em uma frase", "resumidamente"… ("Isso
-  diz o tamanho da resposta, não se você deve procurar…") and the retry of a
-  search term the model misspelt (`cluumed` for `cluemed`) were written for the
-  Gemma that used to answer; qwen-daily on the PC and LensVLM on the Mac now
-  get the question as typed and their own search terms as written. A search with
-  the person's own words still tries the nearest word in the notes on every
-  brain. An answer whose server reports no usage now says "Processado no seu
-  PC" or "Processado somente neste Mac" instead of "Processado localmente".
-- **Security: agent mode asks before Return almost everywhere, before
-  launcher shortcuts and before opening files in the Finder, and judges a click
-  by the window it lands on.** Return (or a typed line break) now asks first in
-  every app except TextEdit, Notas, Stickies, Pages, Numbers and Keynote, since
-  chat apps send on Return without a button saying "Enviar"; every shortcut with
-  Space asks, and so does Return while a launcher's panel is open (found by who
-  owns the window, not by the app in front) or may be, after such a shortcut; a
-  double click or ⌘O / ⌘↓ in the Finder asks, since it can start a script or an
-  app; and a click on a point is refused when the window there belongs to a
-  denied app, or, for a point on the grid, to any app other than the one
-  observed (the Dock, another app's panel). ADR 0016's notes list the everyday
-  flows that now ask.
-- **Security: text read off a picture is kept away from tools like the
-  picture itself.** On a brain that cannot see, a capture's recognised text and
-  description, and the replayed turn of an earlier look after a switch to such
-  a brain, used to reach the tool-enabled loop and auto-approval as ordinary
-  text. Those messages now carry a flag (in memory only) that counts as a
-  picture, for ordinary questions and for `/web`.
-- **Security: invisible or lookalike characters no longer open a way out of
-  Evie's fences.** A document or a screen read on a brain without vision could
-  still write a closing marker that the model would read as one: brackets split
-  by zero-width spaces, variation selectors or combining marks, or drawn with
-  lookalikes ("〈〈〈", "⋘"). Those runs are now neutralised like plain `<<<`, and
-  a file's name and warnings, which sit above the fence, are kept to one capped
-  line, so a name with a line break cannot start a line of Evie's.
-- **Computer use no longer takes the whole screen for Evie's own window.** The
-  observation listed Evie's full-display, click-through glow panels among her
-  windows, so every click of a session would have been refused as "uma janela
-  da própria Evie". Only her windows that take the mouse count now (found by
-  the S5c live check, before anything shipped).
-- **Security: the PC key is never saved into a keychain item Evie did not
-  create.** Saving over an existing item kept that item's access list, so an
-  item another program had made first under Evie's name could have read the
-  key. Configurações › Cérebro, the first-run guide and `Scripts/evie-app
-  import-pc-key` now delete the item and create a new one that only Evie may
-  read; when the old item cannot be deleted, or reappears, nothing is saved.
-- **Asking Evie to look while a session is paused no longer ends it.** A look
-  while the person holds the Mac (a paused session, from S5 on) is refused at
-  once with "A Evie está pausada enquanto você usa o Mac. Toque em Continuar ou
-  Parar e peça de novo para eu olhar a tela." It used to fail to show the glow
-  and, taking it down, stop and cancel the paused session.
-- **Security: a picture in the conversation is never sent with tools.** After
-  a look at the screen, the next questions keep the picture so the PC answers
-  fast; with folders, the web or Mail switched on they used to go to the
-  model with tools declared, where text on the screen could steer a web search
-  or a proposal. While a capture or a pasted picture is in the request, the
-  folders and the web are searched first with the question's own words and the
-  model is asked once with no tools; a change is never applied without a click.
-- **One picture per question on the PC.** A question with a capture of the
-  screen and pasted pictures sent them all, and the PC's image reader, which
-  runs on its CPU, paid for each (about a minute for two, while the status line
-  said ~26 s). Now the PC gets the capture, or the first pasted picture, and the
-  other pictures as their recognised text and description. The Mac still gets
-  every picture.
-- **Security: text on the screen or in a file cannot close Evie's fences.** A
-  page reading `<<<FIM DO CONTEÚDO>>>` used to end the "conteúdo não confiável"
-  block early on a brain without vision, so what followed read as Evie's own
-  context. Runs of `<<<`/`>>>` in recognised text, file names and descriptions
-  are now written `‹‹‹`/`›››`, and the description block says its text is
-  data, not an instruction.
-- **Privacy: Evie looks at the screen only when a sentence clearly asks her
-  to.** "O que fazer com uma mancha na tela do iPhone?", "tenho um risco na
-  tela" and "quero ver em tela grande" used to capture the whole screen and
-  send it to the brain. Now the ask must be a request in one clause ("olha a
-  tela", "pode ler a tela?", "o que tem na minha tela?", "nessa janela"), and a
-  screen that is a topic, a habit ("ler na tela"), a statement ("a criança olha
-  a tela") or another device's ("a tela do meu celular") does not count.
-- **"Agora não" on the wake card is asked once per question.** With the PC out
-  and the fallback on "Perguntar", a no used to send the question to the PC
-  anyway; when that failed, the same card came back in the same turn. Now a no
-  holds until the turn ends, and a question whose PC is already known to be out
-  ends at once with "O PC está fora. O cérebro do Mac continua desligado, como
-  você pediu." instead of waiting on the network. The next question asks again.
-- **Security: the Mac brain answers only with the key it was started with.**
-  Every start — by Evie or by `Scripts/evie-brain` — makes a random key, keeps it
-  in `Application Support/Evie/Runtime/brain.key` (0600, removed when the server
-  stops) and gives it to `mlx_vlm.server` in its environment, so every route,
-  `/health` included, refuses a request without it: another user on this Mac, or
-  a web page reaching 127.0.0.1 through DNS rebinding, gets a 401. Evie sends it
-  only to 127.0.0.1 on that brain's port — the one key that goes over plain
-  `http` — and uses a server only after seeing it refuse a request without the
-  key. A server started by hand without a key, or by an older script, is no
-  longer used. ADR 0017.
-- **Cancelling during "Acordando o cérebro do Mac…" stops the wake.** The start
-  used to run on for up to 90 s and load the ~8 GB anyway; now the server, which
-  has not answered yet, is stopped (unless another turn is still waiting for
-  it). Stopping the Mac brain — after 10 idle minutes or at quit — no longer
-  freezes the overlay for up to 7 s when the server ignores SIGTERM, and quit
-  waits at most the 5 s grace for it.
-- **Security: a Mac brain server on every interface is no longer adopted.** A
-  `mlx_vlm.server` started by hand without `--host` listens on `0.0.0.0` with no
-  key, and Evie used to take it for her own because its executable and port
-  matched. Now the last `--host` it was given must be `127.0.0.1` and every
-  socket it listens on must be `127.0.0.1` or `::1`; otherwise it is "A porta
-  38480 está ocupada por outro processo." and `Scripts/evie-brain stop` leaves
-  it alone.
-- **Security: a turn on the Mac brain goes only to the address Evie starts it
-  on.** The check of who listens covered port 38480, but the conversation went
-  to the profile's address, which Configurações › Cérebro, `config.json` or
-  `EVIE_MODEL_ENDPOINT` could move to another loopback port. A Mac profile whose
-  address is not `http://127.0.0.1:<its port>/v1` is now refused as invalid
-  (and an `EVIE_MODEL_ENDPOINT` that moves it fails the load, so the built-ins
-  are used), the address field is locked for it in the tab, and the client is
-  built from the address the launcher returns.
-
-- **The first-run guide sets up the brain too.** After the five permissions it
-  has "Chave do PC" — "Salva" or "Sem chave", read from the item's attributes
-  so it never prompts, and "Importar", which copies the PC configuration's key
-  (`local-ai-3090`) into Evie's own Keychain item after the same explanation of
-  the macOS prompt that Configurações › Cérebro shows — and "Cérebro", whose
-  "Testar conexão" shows PC alcançável → Chave aceita → Modelo carregado with
-  times. A first launch can end set up without opening Settings. A failed
-  import says why and can be tried again; a key saved here or in Settings
-  refreshes both and the readiness cache.
-
-- **The Mac brain now wakes by itself.** When a turn moves to the Mac (after
-  "Acordar o cérebro do Mac?" when the fallback is "Perguntar"), Evie starts
-  LensVLM under `mlx_vlm.server` on 127.0.0.1:38480, shows "Acordando o cérebro
-  do Mac…" while it loads (about 6 s measured), and stops it after 10 minutes
-  without a turn or when she quits, releasing its ~8 GB. It is refused, with the
-  reason on screen, when port 38480 is held by another process ("A porta 38480
-  está ocupada por outro processo."), when `mlx_vlm.server` is not installed, or
-  when less than 8 GiB is free (2.4 GiB more while the voice engine runs). Before
-  "O cérebro do Mac ainda não está instalado nesta versão da Evie." ended every
-  such turn. ADR 0015.
-- **Security: whatever answers on the Mac brain's port is checked before it gets
-  a turn.** The listener must be the configured executable serving that port
-  (its argv and its executable image, through libproc); after a start it must be
-  the process Evie spawned; a pid is signalled only after the same check. The
-  server is started with `--host 127.0.0.1`, no API key, and a scrubbed, offline
-  environment (`HF_HUB_OFFLINE=1`).
-- **Requests to the Mac brain send `context_management: []`.** mlx-vlm 0.7.8
-  otherwise compacts on its own under `--max-kv-size`: it trims the answer's
-  token cap and, for a prompt that does not fit, summarizes the older messages
-  with the model. An oversized request now fails with a 400 instead.
-- **`Scripts/evie-brain start|stop|status|health`** starts the same server by
-  hand, with the same argv, environment, pid file and log
-  (`~/Library/Application Support/Evie/Runtime/brain.{pid,log}`); Evie takes such
-  a server over at launch or first use. `evie-shell --brain-check [--idle]` runs
-  the real launcher, one question with a picture, and the stop (or waits for the
-  idle unload).
-
-- **Settings has a "Cérebro" tab, and the PC key can be saved from it.** The tab
-  picks the brain Evie asks first (PC RTX 3090 / Mac local) and what happens when
-  the PC is out (Não usar o Mac / Perguntar / Usar o Mac automaticamente), and
-  edits each profile's address (checked as it is typed against the transport
-  policy), model (typed, or picked from the server's list), context cap — shown
-  as "servidor: 200 704 · Evie usa: 135 168" —, longest answer, default reasoning
-  (Desligado / Baixo / Médio / Máximo) and sampling. "Testar conexão" shows ✓/✗
-  and a time for each step: PC reachable, key accepted, model loaded. The key is
-  pasted into a field that never shows it back ("chave salva ✓" / "sem chave"), or
-  imported once from the PC configuration's keychain item (`local-ai-3090`), with
-  a note before the button that macOS will ask and may ask for the Mac password.
-  Either way it goes into Evie's own keychain item,
-  `com.matheusbgodoi.evie.model` / `pc-3090`, and the next turn uses it. The
-  sampling pane under Avançado › Modelo moved here; Avançado keeps Diagnóstico,
-  Atualizar and Permissões, and Diagnóstico now shows the profile in use instead
-  of a fixed 127.0.0.1:38433.
-- **`Scripts/evie-app import-pc-key`** makes the same copy from a terminal, tied
-  to the installed `~/Applications/Evie.app`. The key travels through a pipe,
-  never as an argument, and is never printed.
-- **The status line and the error card name the brain that answered.** "· somente
-  local" is now "· no seu PC" or "· somente neste Mac", and a failed turn suggests
-  "O PC não respondeu. Abra Configurações › Cérebro e use Testar conexão." (or
-  "O cérebro do Mac não respondeu…") instead of "O modelo local não respondeu…".
-  A note search still says "somente local", which it is. The missing-key notice
-  and a refused key now point to Configurações › Cérebro, the app's own settings,
-  rather than "Ajustes". The persona calls Evie "assistente pessoal", no longer
-  "assistente pessoal local", since only one of her two brains is local.
-
-- **Each conversation picks its brain before the turn is built, and moves to the
-  Mac when the PC fails before answering.** `EvieBrainResolver` keeps the PC
-  unless its key is missing or the readiness probe finds it unreachable, its key
-  refused or its model unknown; then it takes the next profile in the preference
-  order that can answer. The conversation stays on that brain for the app
-  session. A turn that fails before its first word (server unreachable, a 502, no
-  response headers in time, a refused or missing key) is rebuilt for the next
-  brain — budget, persona, tools, pictures — and tried once more, with "PC
-  indisponível, usando o Mac" on the status line; after the first word an error
-  is shown as before. With "Perguntar" (the default), Evie asks "O PC está fora.
-  Acordar o cérebro do Mac? (~10 s, ~8 GB de memória)" before waking it, and a
-  yes holds until she quits; with "Não usar o Mac" she never moves; a profile set
-  by `EVIE_MODEL_PROFILE` is never moved. This replaces the launch-time move to
-  the Mac when the PC key is missing, which also means Settings now edits the
-  preferred profile again. The Mac brain has no launcher yet (v2 S3): unless
-  `mlx_vlm.server` is already serving on port 38480, a turn sent there says "O
-  cérebro do Mac ainda não está instalado nesta versão da Evie."
-- **On a brain without tools, Evie no longer declares any.** For the Mac
-  profile, folders and the web are searched before the question and the model
-  is asked once with no `tools` key; the persona describes that evidence instead
-  of naming functions, and Mail and Calendar are announced as unavailable there.
-  The persona now says where the answering brain runs: on the PC, "Você roda no
-  PC dele, que este Mac alcança pela rede Tailscale dele, criptografada".
-- **The readiness deadlines are live.** Every turn carries the brain's readiness,
-  so a ready model gets 60 s (120 s with an image) to start answering and a cold
-  one up to 600 s while it loads, instead of the configured request timeout at
-  every stage.
-
-- **With no saved key for the PC, Evie starts on the Mac profile instead of
-  refusing every question.** At launch, a preferred profile whose key is
-  missing or unreadable is passed over for the next profile in the preference
-  order that the transport policy allows, and the overlay says "Sem a chave do
-  PC — usando o Mac. Importe a chave em Ajustes › Cérebro." Settings then edit
-  the profile in use. Not when `EVIE_MODEL_PROFILE` or an `EVIE_MODEL_*`
-  override chose the profile, nor with the Mac fallback off. Until the Mac
-  launcher (v2 S3) exists, the Mac profile answers only if its server is already
-  running on port 38480.
-- **`Scripts/evie-runtime launch` no longer starts the local Gemma.** The default
-  brain is the PC, which never uses it, and the server holds about 15 GB; `launch`
-  now only opens the installed Evie. The new `Scripts/evie-runtime launch-custom`
-  starts the Gemma and opens Evie on the `custom` profile
-  (`EVIE_MODEL_PROFILE=custom`), and refuses before starting anything when
-  `config.json` has no `custom` profile at `http://127.0.0.1:38433/v1`.
-- **Evie checks whether the brain is ready before she needs it.**
-  `ModelReadinessProbe` reports one of unreachable, key missing, key rejected,
-  model unknown, model cold or ready, using only `GET`s that cannot load a model:
-  the PC gateway's `/health` (no key, 3 s), then `/v1/models` with the key (5 s),
-  then `/running` if the list says nothing about loading; for the Mac brain, its
-  loopback `/health`. Results are kept 30 s and refreshed at launch, when Evie
-  comes to the front and when the network changes. Nothing on the turn path
-  uses them yet; the per-turn resolver (v2 S2c) will.
-- **The PC is the default brain, and the configuration lists profiles.**
-  `config.json` schema v2 holds model profiles (`EvieModelProfile`), a
-  preference order and the Mac-fallback choice. With no file — and whenever the
-  file cannot be used — Evie uses the built-in set: `pc-3090` (`qwen-daily` on
-  the PC gateway, 135168-token client cap of the server's 200704, vision and
-  tools, its key looked up in the keychain item `com.matheusbgodoi.evie.model` /
-  `pc-3090`) first, then `mac-local` (LensVLM on `127.0.0.1:38480`, no tools).
-  Before, every fallback was the loopback Gemma on 38433. Until the key import
-  in S2d exists, a turn on the PC stops with "no saved key".
-- **A v1 configuration is migrated, not refused.** Its endpoint becomes the
-  profile `custom`, after the built-ins and not preferred, so the PC wins unless
-  `EVIE_MODEL_PROFILE=custom` is set; the original file is kept as
-  `config.json.v1.bak`. An unknown schema version now falls back to the built-ins
-  with the "Configuração local inválida" warning instead of failing the load.
-- **Saving from Settings keeps schema v2** and changes only the profile in use;
-  before, the save path always wrote v1. `EVIE_MODEL_PROFILE` joins the
-  supported environment variables.
-- **`Scripts/evie-runtime configure` seeds schema v2**: the two built-ins, then
-  the Gemma it serves as `custom`. `evie-runtime start` still serves Gemma, but
-  a freshly seeded Evie uses the PC unless told otherwise.
-
-### Security
-
-- **Screen captures stay in memory and go only to Evie's brains** (loopback, or
-  the PC over the tailnet). They are never written to disk, saved with the
-  conversation, exported or logged; the conversation keeps "📷 captura da tela".
-  Only one picture is in any request. On-screen text arrives marked as data, not
-  instruction, and a look declares no tools. The Screen Recording prompt is
-  shown once; after that a card points to System Settings. A picture pasted from
-  the clipboard is still written to a temporary PNG, and attached pictures are
-  still kept as HEIC with the conversation (`docs/SECURITY.md`).
-
-- **`Scripts/evie-app identity` no longer leaves the signing key behind when a
-  step fails.** The unencrypted private key and the p12 were written to a
-  scratch directory that only the last line removed, so a failed
-  `security import` or a cancelled trust prompt left them under `/var/folders`.
-  An `EXIT` trap now removes the directory however the step ends.
-- **The screen presence indicator keeps its promise in six more cases.** From the
-  2026-10-16 reviews of S6, before anything captures or acts:
-  - a composite report now names the render it is for, so the two ticks of a
-    replaced render can no longer make a newer phase count as on screen;
-  - with several displays, capture is allowed only when the glow is composited
-    on every one of them, and is asked per display (`mayCapture(display:)`);
-  - after a display change the indicator is drawn and composited again before
-    capture is allowed, instead of staying "visible" on panels not yet drawn;
-  - ending a paused session is a stop, which cancels its work;
-  - the hold timer of one look can no longer end the next look or agent
-    session (which also released Esc mid-session);
-  - the Esc stop key can be released while Evie posts input
-    (`postingSyntheticInput`), so her own Esc will not stop her session.
-
-- **Pictures and reasoning never reach a record.** `ChatMessage.images` (new,
-  for screenshots and pasted images sent with one request) is excluded from the
-  message's coding keys, so it is never saved, exported or logged, and existing
-  conversation files decode unchanged. A model's reasoning trace is emitted only
-  as `.reasoningDelta`, shown as "pensando…", and never displayed, spoken, saved
-  or included in the answer. Model requests use an ephemeral session with no URL
-  cache, and a body over 60 MiB is refused before it is sent.
-- **A rejected key is dropped and not retried.** A 401 invalidates the cached
-  token, so the next turn reads the keychain again; the failing turn is not
-  repeated with the same key.
-
-- **The model client may now reach one remote host, under a policy.**
-  `ModelTransportPolicy` replaces the loopback-only check (ADR 0013, superseding
-  ADR 0006 in part): plain `http` only to loopback; any other host only over
-  `https`, on an exact allowlist whose default is the owner's PC gateway
-  `ai-node-3090.tail6146ef.ts.net`, and only with a credential bound to that
-  host. `*.ts.net` is never trusted, URLs carrying a user or password are
-  refused, and an off-list endpoint fails before any request with "Evie refused
-  to send the conversation".
-- **Bearer keys come from the login keychain and stay bound to their host.**
-  Configuration may now hold a `CredentialReference` (keychain service, account,
-  bound host), never a token. The token is attached only over `https` and only
-  to the bound host — never over `http`, loopback included — and a key that
-  applies but is not saved stops the turn before anything is sent.
-- **Redirects are refused.** The client answers every redirect with no request,
-  so the `Authorization` header cannot follow one; the 3xx is reported as an
-  HTTP error.
+Evie v2 (2026-10-16, branch `v2`): the PC's `qwen-daily` is the default brain,
+over an authenticated tailnet transport; LensVLM wakes on the Mac when the PC is
+out; Evie looks at the screen when asked; agent mode controls the Mac under code
+policy and a hand-pressed card; and a screen indicator shows every look and
+action. The design document is `docs/design/2026-10-16-evie-v2-design.md`;
+ADRs 0013–0018 record the decisions.
 
 ### Added
 
@@ -401,7 +97,6 @@ All notable changes to Evie are documented here. Dates use `YYYY-MM-DD`.
 - `evie-shell --presence-excluded [--timing]` checks that Evie's windows stay
   out of her captures (a magenta marker against a control capture) and times a
   capture and a whole look.
-
 - **Internal, no visible change yet: the screen indicator's rules and the screen
   coordinate maths now exist in tested code** (`ScreenPresenceMachine`,
   `ScreenGeometry`).
@@ -434,6 +129,169 @@ All notable changes to Evie are documented here. Dates use `YYYY-MM-DD`.
 
 ### Changed
 
+- **Two corrections measured on Gemma now apply only to Gemma.** The reminder
+  appended to a question that opens with "em uma frase", "resumidamente"… ("Isso
+  diz o tamanho da resposta, não se você deve procurar…") and the retry of a
+  search term the model misspelt (`cluumed` for `cluemed`) were written for the
+  Gemma that used to answer; qwen-daily on the PC and LensVLM on the Mac now
+  get the question as typed and their own search terms as written. A search with
+  the person's own words still tries the nearest word in the notes on every
+  brain. An answer whose server reports no usage now says "Processado no seu
+  PC" or "Processado somente neste Mac" instead of "Processado localmente".
+- **Computer use no longer takes the whole screen for Evie's own window.** The
+  observation listed Evie's full-display, click-through glow panels among her
+  windows, so every click of a session would have been refused as "uma janela
+  da própria Evie". Only her windows that take the mouse count now (found by
+  the S5c live check, before anything shipped).
+- **Asking Evie to look while a session is paused no longer ends it.** A look
+  while the person holds the Mac (a paused session, from S5 on) is refused at
+  once with "A Evie está pausada enquanto você usa o Mac. Toque em Continuar ou
+  Parar e peça de novo para eu olhar a tela." It used to fail to show the glow
+  and, taking it down, stop and cancel the paused session.
+- **One picture per question on the PC.** A question with a capture of the
+  screen and pasted pictures sent them all, and the PC's image reader, which
+  runs on its CPU, paid for each (about a minute for two, while the status line
+  said ~26 s). Now the PC gets the capture, or the first pasted picture, and the
+  other pictures as their recognised text and description. The Mac still gets
+  every picture.
+- **"Agora não" on the wake card is asked once per question.** With the PC out
+  and the fallback on "Perguntar", a no used to send the question to the PC
+  anyway; when that failed, the same card came back in the same turn. Now a no
+  holds until the turn ends, and a question whose PC is already known to be out
+  ends at once with "O PC está fora. O cérebro do Mac continua desligado, como
+  você pediu." instead of waiting on the network. The next question asks again.
+- **Cancelling during "Acordando o cérebro do Mac…" stops the wake.** The start
+  used to run on for up to 90 s and load the ~8 GB anyway; now the server, which
+  has not answered yet, is stopped (unless another turn is still waiting for
+  it). Stopping the Mac brain — after 10 idle minutes or at quit — no longer
+  freezes the overlay for up to 7 s when the server ignores SIGTERM, and quit
+  waits at most the 5 s grace for it.
+- **The first-run guide sets up the brain too.** After the five permissions it
+  has "Chave do PC" — "Salva" or "Sem chave", read from the item's attributes
+  so it never prompts, and "Importar", which copies the PC configuration's key
+  (`local-ai-3090`) into Evie's own Keychain item after the same explanation of
+  the macOS prompt that Configurações › Cérebro shows — and "Cérebro", whose
+  "Testar conexão" shows PC alcançável → Chave aceita → Modelo carregado with
+  times. A first launch can end set up without opening Settings. A failed
+  import says why and can be tried again; a key saved here or in Settings
+  refreshes both and the readiness cache.
+- **The Mac brain now wakes by itself.** When a turn moves to the Mac (after
+  "Acordar o cérebro do Mac?" when the fallback is "Perguntar"), Evie starts
+  LensVLM under `mlx_vlm.server` on 127.0.0.1:38480, shows "Acordando o cérebro
+  do Mac…" while it loads (about 6 s measured), and stops it after 10 minutes
+  without a turn or when she quits, releasing its ~8 GB. It is refused, with the
+  reason on screen, when port 38480 is held by another process ("A porta 38480
+  está ocupada por outro processo."), when `mlx_vlm.server` is not installed, or
+  when less than 8 GiB is free (2.4 GiB more while the voice engine runs). Before
+  "O cérebro do Mac ainda não está instalado nesta versão da Evie." ended every
+  such turn. ADR 0015.
+- **Requests to the Mac brain send `context_management: []`.** mlx-vlm 0.7.8
+  otherwise compacts on its own under `--max-kv-size`: it trims the answer's
+  token cap and, for a prompt that does not fit, summarizes the older messages
+  with the model. An oversized request now fails with a 400 instead.
+- **`Scripts/evie-brain start|stop|status|health`** starts the same server by
+  hand, with the same argv, environment, pid file and log
+  (`~/Library/Application Support/Evie/Runtime/brain.{pid,log}`); Evie takes such
+  a server over at launch or first use. `evie-shell --brain-check [--idle]` runs
+  the real launcher, one question with a picture, and the stop (or waits for the
+  idle unload).
+- **Settings has a "Cérebro" tab, and the PC key can be saved from it.** The tab
+  picks the brain Evie asks first (PC RTX 3090 / Mac local) and what happens when
+  the PC is out (Não usar o Mac / Perguntar / Usar o Mac automaticamente), and
+  edits each profile's address (checked as it is typed against the transport
+  policy), model (typed, or picked from the server's list), context cap — shown
+  as "servidor: 200 704 · Evie usa: 135 168" —, longest answer, default reasoning
+  (Desligado / Baixo / Médio / Máximo) and sampling. "Testar conexão" shows ✓/✗
+  and a time for each step: PC reachable, key accepted, model loaded. The key is
+  pasted into a field that never shows it back ("chave salva ✓" / "sem chave"), or
+  imported once from the PC configuration's keychain item (`local-ai-3090`), with
+  a note before the button that macOS will ask and may ask for the Mac password.
+  Either way it goes into Evie's own keychain item,
+  `com.matheusbgodoi.evie.model` / `pc-3090`, and the next turn uses it. The
+  sampling pane under Avançado › Modelo moved here; Avançado keeps Diagnóstico,
+  Atualizar and Permissões, and Diagnóstico now shows the profile in use instead
+  of a fixed 127.0.0.1:38433.
+- **`Scripts/evie-app import-pc-key`** makes the same copy from a terminal, tied
+  to the installed `~/Applications/Evie.app`. The key travels through a pipe,
+  never as an argument, and is never printed.
+- **The status line and the error card name the brain that answered.** "· somente
+  local" is now "· no seu PC" or "· somente neste Mac", and a failed turn suggests
+  "O PC não respondeu. Abra Configurações › Cérebro e use Testar conexão." (or
+  "O cérebro do Mac não respondeu…") instead of "O modelo local não respondeu…".
+  A note search still says "somente local", which it is. The missing-key notice
+  and a refused key now point to Configurações › Cérebro, the app's own settings,
+  rather than "Ajustes". The persona calls Evie "assistente pessoal", no longer
+  "assistente pessoal local", since only one of her two brains is local.
+- **Each conversation picks its brain before the turn is built, and moves to the
+  Mac when the PC fails before answering.** `EvieBrainResolver` keeps the PC
+  unless its key is missing or the readiness probe finds it unreachable, its key
+  refused or its model unknown; then it takes the next profile in the preference
+  order that can answer. The conversation stays on that brain for the app
+  session. A turn that fails before its first word (server unreachable, a 502, no
+  response headers in time, a refused or missing key) is rebuilt for the next
+  brain — budget, persona, tools, pictures — and tried once more, with "PC
+  indisponível, usando o Mac" on the status line; after the first word an error
+  is shown as before. With "Perguntar" (the default), Evie asks "O PC está fora.
+  Acordar o cérebro do Mac? (~10 s, ~8 GB de memória)" before waking it, and a
+  yes holds until she quits; with "Não usar o Mac" she never moves; a profile set
+  by `EVIE_MODEL_PROFILE` is never moved. This replaces the launch-time move to
+  the Mac when the PC key is missing, which also means Settings now edits the
+  preferred profile again. The Mac brain has no launcher yet (v2 S3): unless
+  `mlx_vlm.server` is already serving on port 38480, a turn sent there says "O
+  cérebro do Mac ainda não está instalado nesta versão da Evie."
+- **On a brain without tools, Evie no longer declares any.** For the Mac
+  profile, folders and the web are searched before the question and the model
+  is asked once with no `tools` key; the persona describes that evidence instead
+  of naming functions, and Mail and Calendar are announced as unavailable there.
+  The persona now says where the answering brain runs: on the PC, "Você roda no
+  PC dele, que este Mac alcança pela rede Tailscale dele, criptografada".
+- **The readiness deadlines are live.** Every turn carries the brain's readiness,
+  so a ready model gets 60 s (120 s with an image) to start answering and a cold
+  one up to 600 s while it loads, instead of the configured request timeout at
+  every stage.
+- **With no saved key for the PC, Evie starts on the Mac profile instead of
+  refusing every question.** At launch, a preferred profile whose key is
+  missing or unreadable is passed over for the next profile in the preference
+  order that the transport policy allows, and the overlay says "Sem a chave do
+  PC — usando o Mac. Importe a chave em Ajustes › Cérebro." Settings then edit
+  the profile in use. Not when `EVIE_MODEL_PROFILE` or an `EVIE_MODEL_*`
+  override chose the profile, nor with the Mac fallback off. Until the Mac
+  launcher (v2 S3) exists, the Mac profile answers only if its server is already
+  running on port 38480.
+- **`Scripts/evie-runtime launch` no longer starts the local Gemma.** The default
+  brain is the PC, which never uses it, and the server holds about 15 GB; `launch`
+  now only opens the installed Evie. The new `Scripts/evie-runtime launch-custom`
+  starts the Gemma and opens Evie on the `custom` profile
+  (`EVIE_MODEL_PROFILE=custom`), and refuses before starting anything when
+  `config.json` has no `custom` profile at `http://127.0.0.1:38433/v1`.
+- **Evie checks whether the brain is ready before she needs it.**
+  `ModelReadinessProbe` reports one of unreachable, key missing, key rejected,
+  model unknown, model cold or ready, using only `GET`s that cannot load a model:
+  the PC gateway's `/health` (no key, 3 s), then `/v1/models` with the key (5 s),
+  then `/running` if the list says nothing about loading; for the Mac brain, its
+  loopback `/health`. Results are kept 30 s and refreshed at launch, when Evie
+  comes to the front and when the network changes. Nothing on the turn path
+  uses them yet; the per-turn resolver (v2 S2c) will.
+- **The PC is the default brain, and the configuration lists profiles.**
+  `config.json` schema v2 holds model profiles (`EvieModelProfile`), a
+  preference order and the Mac-fallback choice. With no file — and whenever the
+  file cannot be used — Evie uses the built-in set: `pc-3090` (`qwen-daily` on
+  the PC gateway, 135168-token client cap of the server's 200704, vision and
+  tools, its key looked up in the keychain item `com.matheusbgodoi.evie.model` /
+  `pc-3090`) first, then `mac-local` (LensVLM on `127.0.0.1:38480`, no tools).
+  Before, every fallback was the loopback Gemma on 38433. Until the key import
+  in S2d exists, a turn on the PC stops with "no saved key".
+- **A v1 configuration is migrated, not refused.** Its endpoint becomes the
+  profile `custom`, after the built-ins and not preferred, so the PC wins unless
+  `EVIE_MODEL_PROFILE=custom` is set; the original file is kept as
+  `config.json.v1.bak`. An unknown schema version now falls back to the built-ins
+  with the "Configuração local inválida" warning instead of failing the load.
+- **Saving from Settings keeps schema v2** and changes only the profile in use;
+  before, the save path always wrote v1. `EVIE_MODEL_PROFILE` joins the
+  supported environment variables.
+- **`Scripts/evie-runtime configure` seeds schema v2**: the two built-ins, then
+  the Gemma it serves as `custom`. `evie-runtime start` still serves Gemma, but
+  a freshly seeded Evie uses the PC unless told otherwise.
 - **Requests carry per-turn options** (`TurnOptions`, `AgentClient.stream(messages:
   tools:options:)`): spoken answers are capped at 1024 tokens and written ones at
   2048, where both used the configured 4096 before. `max_tokens` replaces
@@ -511,8 +369,151 @@ All notable changes to Evie are documented here. Dates use `YYYY-MM-DD`.
   Homebrew's OpenSSL 3 the p12 is refused by `security import`. It now uses
   `/usr/bin/openssl`.
 
+### Security
+
+- **Agent mode asks before Return almost everywhere, before
+  launcher shortcuts and before opening files in the Finder, and judges a click
+  by the window it lands on.** Return (or a typed line break) now asks first in
+  every app except TextEdit, Notas, Stickies, Pages, Numbers and Keynote, since
+  chat apps send on Return without a button saying "Enviar"; every shortcut with
+  Space asks, and so does Return while a launcher's panel is open (found by who
+  owns the window, not by the app in front) or may be, after such a shortcut; a
+  double click or ⌘O / ⌘↓ in the Finder asks, since it can start a script or an
+  app; and a click on a point is refused when the window there belongs to a
+  denied app, or, for a point on the grid, to any app other than the one
+  observed (the Dock, another app's panel). ADR 0016's notes list the everyday
+  flows that now ask.
+- **Text read off a picture is kept away from tools like the
+  picture itself.** On a brain that cannot see, a capture's recognised text and
+  description, and the replayed turn of an earlier look after a switch to such
+  a brain, used to reach the tool-enabled loop and auto-approval as ordinary
+  text. Those messages now carry a flag (in memory only) that counts as a
+  picture, for ordinary questions and for `/web`.
+- **Invisible or lookalike characters no longer open a way out of
+  Evie's fences.** A document or a screen read on a brain without vision could
+  still write a closing marker that the model would read as one: brackets split
+  by zero-width spaces, variation selectors or combining marks, or drawn with
+  lookalikes ("〈〈〈", "⋘"). Those runs are now neutralised like plain `<<<`, and
+  a file's name and warnings, which sit above the fence, are kept to one capped
+  line, so a name with a line break cannot start a line of Evie's.
+- **The PC key is never saved into a keychain item Evie did not
+  create.** Saving over an existing item kept that item's access list, so an
+  item another program had made first under Evie's name could have read the
+  key. Configurações › Cérebro, the first-run guide and `Scripts/evie-app
+  import-pc-key` now delete the item and create a new one that only Evie may
+  read; when the old item cannot be deleted, or reappears, nothing is saved.
+- **A picture in the conversation is never sent with tools.** After
+  a look at the screen, the next questions keep the picture so the PC answers
+  fast; with folders, the web or Mail switched on they used to go to the
+  model with tools declared, where text on the screen could steer a web search
+  or a proposal. While a capture or a pasted picture is in the request, the
+  folders and the web are searched first with the question's own words and the
+  model is asked once with no tools; a change is never applied without a click.
+- **Text on the screen or in a file cannot close Evie's fences.** A
+  page reading `<<<FIM DO CONTEÚDO>>>` used to end the "conteúdo não confiável"
+  block early on a brain without vision, so what followed read as Evie's own
+  context. Runs of `<<<`/`>>>` in recognised text, file names and descriptions
+  are now written `‹‹‹`/`›››`, and the description block says its text is
+  data, not an instruction.
+- **Privacy: Evie looks at the screen only when a sentence clearly asks her
+  to.** "O que fazer com uma mancha na tela do iPhone?", "tenho um risco na
+  tela" and "quero ver em tela grande" used to capture the whole screen and
+  send it to the brain. Now the ask must be a request in one clause ("olha a
+  tela", "pode ler a tela?", "o que tem na minha tela?", "nessa janela"), and a
+  screen that is a topic, a habit ("ler na tela"), a statement ("a criança olha
+  a tela") or another device's ("a tela do meu celular") does not count.
+- **The Mac brain answers only with the key it was started with.**
+  Every start — by Evie or by `Scripts/evie-brain` — makes a random key, keeps it
+  in `Application Support/Evie/Runtime/brain.key` (0600, removed when the server
+  stops) and gives it to `mlx_vlm.server` in its environment, so every route,
+  `/health` included, refuses a request without it: another user on this Mac, or
+  a web page reaching 127.0.0.1 through DNS rebinding, gets a 401. Evie sends it
+  only to 127.0.0.1 on that brain's port — the one key that goes over plain
+  `http` — and uses a server only after seeing it refuse a request without the
+  key. A server started by hand without a key, or by an older script, is no
+  longer used. ADR 0017.
+- **A Mac brain server on every interface is no longer adopted.** A
+  `mlx_vlm.server` started by hand without `--host` listens on `0.0.0.0` with no
+  key, and Evie used to take it for her own because its executable and port
+  matched. Now the last `--host` it was given must be `127.0.0.1` and every
+  socket it listens on must be `127.0.0.1` or `::1`; otherwise it is "A porta
+  38480 está ocupada por outro processo." and `Scripts/evie-brain stop` leaves
+  it alone.
+- **A turn on the Mac brain goes only to the address Evie starts it
+  on.** The check of who listens covered port 38480, but the conversation went
+  to the profile's address, which Configurações › Cérebro, `config.json` or
+  `EVIE_MODEL_ENDPOINT` could move to another loopback port. A Mac profile whose
+  address is not `http://127.0.0.1:<its port>/v1` is now refused as invalid
+  (and an `EVIE_MODEL_ENDPOINT` that moves it fails the load, so the built-ins
+  are used), the address field is locked for it in the tab, and the client is
+  built from the address the launcher returns.
+- **Whatever answers on the Mac brain's port is checked before it gets
+  a turn.** The listener must be the configured executable serving that port
+  (its argv and its executable image, through libproc); after a start it must be
+  the process Evie spawned; a pid is signalled only after the same check. The
+  server is started with `--host 127.0.0.1`, no API key, and a scrubbed, offline
+  environment (`HF_HUB_OFFLINE=1`).
+- **Screen captures stay in memory and go only to Evie's brains** (loopback, or
+  the PC over the tailnet). They are never written to disk, saved with the
+  conversation, exported or logged; the conversation keeps "📷 captura da tela".
+  Only one picture is in any request. On-screen text arrives marked as data, not
+  instruction, and a look declares no tools. The Screen Recording prompt is
+  shown once; after that a card points to System Settings. A picture pasted from
+  the clipboard is still written to a temporary PNG, and attached pictures are
+  still kept as HEIC with the conversation (`docs/SECURITY.md`).
+- **`Scripts/evie-app identity` no longer leaves the signing key behind when a
+  step fails.** The unencrypted private key and the p12 were written to a
+  scratch directory that only the last line removed, so a failed
+  `security import` or a cancelled trust prompt left them under `/var/folders`.
+  An `EXIT` trap now removes the directory however the step ends.
+- **The screen presence indicator keeps its promise in six more cases.** From the
+  2026-10-16 reviews of S6, before anything captures or acts:
+  - a composite report now names the render it is for, so the two ticks of a
+    replaced render can no longer make a newer phase count as on screen;
+  - with several displays, capture is allowed only when the glow is composited
+    on every one of them, and is asked per display (`mayCapture(display:)`);
+  - after a display change the indicator is drawn and composited again before
+    capture is allowed, instead of staying "visible" on panels not yet drawn;
+  - ending a paused session is a stop, which cancels its work;
+  - the hold timer of one look can no longer end the next look or agent
+    session (which also released Esc mid-session);
+  - the Esc stop key can be released while Evie posts input
+    (`postingSyntheticInput`), so her own Esc will not stop her session.
+- **Pictures and reasoning never reach a record.** `ChatMessage.images` (new,
+  for screenshots and pasted images sent with one request) is excluded from the
+  message's coding keys, so it is never saved, exported or logged, and existing
+  conversation files decode unchanged. A model's reasoning trace is emitted only
+  as `.reasoningDelta`, shown as "pensando…", and never displayed, spoken, saved
+  or included in the answer. Model requests use an ephemeral session with no URL
+  cache, and a body over 60 MiB is refused before it is sent.
+- **A rejected key is dropped and not retried.** A 401 invalidates the cached
+  token, so the next turn reads the keychain again; the failing turn is not
+  repeated with the same key.
+- **The model client may now reach one remote host, under a policy.**
+  `ModelTransportPolicy` replaces the loopback-only check (ADR 0013, superseding
+  ADR 0006 in part): plain `http` only to loopback; any other host only over
+  `https`, on an exact allowlist whose default is the owner's PC gateway
+  `ai-node-3090.tail6146ef.ts.net`, and only with a credential bound to that
+  host. `*.ts.net` is never trusted, URLs carrying a user or password are
+  refused, and an off-list endpoint fails before any request with "Evie refused
+  to send the conversation".
+- **Bearer keys come from the login keychain and stay bound to their host.**
+  Configuration may now hold a `CredentialReference` (keychain service, account,
+  bound host), never a token. The token is attached only over `https` and only
+  to the bound host — never over `http`, loopback included — and a key that
+  applies but is not saved stops the turn before anything is sent.
+- **Redirects are refused.** The client answers every redirect with no request,
+  so the `Authorization` header cannot follow one; the 3xx is reported as an
+  HTTP error.
+
 ### Documented
 
+- **The README, the project status and the evals describe Evie v2 as built.**
+  "What she does" covers the two brains, looking at the screen, agent mode with
+  its rules, and the indicator; `docs/PROJECT_STATUS.md` lists what is done, the
+  manual QA the owner still owes and the host-side issues to report;
+  `evals/README.md` maps the v2 checklist to its cases, including the
+  injection page run against the PC.
 - The toolchain section of `AGENTS.md` now records Xcode 27.1 as selected:
   `@State` and `@Observable` compile, and EvieCore still may not use macOS 27
   SDK APIs because CI builds it against the 26.5 SDK.

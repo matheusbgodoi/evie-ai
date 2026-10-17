@@ -2,132 +2,123 @@
 
 Last updated: 2026-10-16
 
-## Evie v2 (in progress)
+## Evie v2 (code complete for this iteration; manual QA owed)
 
-Evie v2 is specified in `docs/design/2026-10-16-evie-v2-design.md`. Slices
-**S6-core** and **S6-shell** are done (2026-10-16, on branch `v2-presence`,
-merged into `v2` the same day). S6-core adds `ScreenPresenceMachine` (the indicator's rules) and
-`ScreenGeometry` (the coordinate maths for capture, computer use and the
-indicator), both pure and tested in `EvieCore`. S6-shell adds the windows and
-layers that draw the indicator (`Sources/EvieShell/ScreenPresence/`), driven by
-the machine, and `evie-shell --presence-demo` to review every state. S4 (screen
-perception, 2026-10-16) is the first caller: every look shows `.seeing` and
-captures only once `mayCapture(display:)` holds for the display captured.
+Evie v2 is specified in `docs/design/2026-10-16-evie-v2-design.md`, whose
+"as implemented" notes under each slice are the detailed record. Every slice in
+its order — S8a, S1a–S1b, S2a–S2d, S3, S4, S5a–S5d, S6-core, S6-shell, S7,
+S8b — is implemented on branch `v2` (2026-10-16), with the review and
+queued-security fixes listed in the WORKLOG. Full `Scripts/test` on 2026-10-16
+(M5 24 GB, macOS 27.2, Xcode 27.1): 1351 tests in 120 suites passed, 1 known
+issue. ADRs 0013–0018 record the durable decisions.
 
-**S4 is done (2026-10-16):** "olha a tela" in his own words, or ⌥⇧O, captures
-the screen under the pointer (or the front window for "janela") with Evie's
-windows left out, in memory only, cut to 1024 px for the PC and 1280 for the Mac
-— chosen by measurement on a synthetic screen: qwen-daily reads 14 pt text at
-1024 (first token 26.0–26.2 s) but not at 768, and needs 56.6 s at 1280;
-LensVLM answers in 3–6 s at 1280. Pasted pictures go as pictures to a brain that
-sees. `evie-shell --presence-excluded` passed (marker 8 → 0 pixels; a capture
-41–49 ms, a whole look with the glow 88 ms). Still owed for S4: the manual QA in
-the running app (Safari plus a PDF, the shortcut, the permission card, the Mac
-profile), which needs the installed app.
+### What is done
 
-**The Mac brain's review fixes are in (2026-10-16):** a turn goes only to
-`http://127.0.0.1:<port>/v1`, the address whose listener was checked; a server is
-adopted only when its last `--host` and every socket are loopback; cancelling
-"Acordando o cérebro do Mac…" stops the wake; stops no longer hold the main
-actor and quit waits at most the 5 s grace; and every start gets a per-launch
-key (ADR 0017) — measured live: 401 without it, 200 with it, a key-less server
-refused.
+- **The PC is the default brain.** `qwen-daily` on the owner's RTX 3090,
+  reached over https on his tailnet through an exact allowlist, with a key bound
+  to that host, kept in Evie's own login-keychain item and never in a file
+  (ADR 0013; `Configurações › Cérebro` or `Scripts/evie-app import-pc-key`).
+  Measured: text in about 2 s with thinking off; a byte-identical history prefix
+  is served from the PC's cache.
+- **The Mac brain is the fallback.** LensVLM 9B under `mlx_vlm.server` 0.7.8 on
+  `127.0.0.1:38480`, started on demand with a per-launch key, only after asking
+  ("O PC está fora. Acordar o cérebro do Mac? (~10 s, ~8 GB de memória)") unless
+  the owner chose automatic, and unloaded after 10 minutes idle (ADRs 0014,
+  0015, 0017). It sees but declares no tools: folders and the web are searched
+  before it is asked. A conversation keeps its brain; it switches only on a
+  failure before the first word.
+- **"Olha a tela".** A clear request in his words, or ⌥⇧O, captures the screen
+  (or the front window) with Evie's windows left out, in memory only, behind the
+  violet glow: 1024 px for the PC (first token ~26 s, the projector runs on the
+  PC's CPU), 1280 px for the Mac (3–6 s). One picture per PC request; a picture,
+  or text read off one, never rides with tools or auto-approves a change.
+- **Agent mode.** "Deixar a Evie controlar o Mac (modo agente)" (Configurações ›
+  Avançado › Controle do Mac, on by default, ADR 0018; `EVIE_COMPUTER_USE=0`
+  forces it off). A session starts only from a typed request, push-to-talk or a
+  click — never the wake word — through a card a hand must press, and runs on
+  the PC only, for at most 15 minutes and 25 actions (ADR 0016, amending 0009).
+  Code refuses the denied apps (System Settings, Keychain Access, terminals,
+  Shortcuts, Script Editor, Automator, Installer, password managers), password
+  fields and secure input, stale observations, Evie's own windows and points on
+  another app's window; it asks before confirm-word buttons, Return almost
+  everywhere, browser buttons, launcher shortcuts, ⌘Q/⌘W-class chords, the
+  delete class, opening links and reading the clipboard. Real input pauses the
+  session; Parar, Esc, ⌥⇧Esc, "para" and the grant's end stop it.
+- **The indicator.** `ScreenPresence` shows every capture and every action:
+  violet glow while seeing, a reticle while observing, amber edge, highlight and
+  ghost cursor while acting, a "Digitando…" chip, gray when paused, and a pill
+  with the brain, the step and Parar. No capture happens before the glow is
+  composited on that display; no setting turns it off.
+- **S8b.** The osascript tests are opt-in integration tests for their exit
+  codes; `EvieBrevityPreamble` and the model-written half of `EvieNearestTerm`
+  apply only to `.gemma` profiles; skill guidance reaches every family as
+  `<system-context>`; the per-brain copy is complete. The checklist's eval cases
+  are in `evals/README.md` § "v2 checklist coverage".
 
-**The turn and picture review fixes are in (2026-10-16):** a "Agora não" on the
-wake card holds for its turn and a PC known to be out is not sent the question
-(#1); the screen is captured only for a clear request (#2, 27 negative and 28
-positive phrases); the stream cancellation test asserts causes, not time (#5);
-the PC gets one picture per request (#6); recognised text cannot close Evie's
-fences (#7); a look during a paused session is refused before the glow (#10);
-the PC key always goes into a new item only Evie may read (pending #3); and no
-request carrying a picture is sent with tools or auto-approves a change
-(pending #5). Open: the tool-result fence (`EvieTool.swift`) still uses fixed
-markers without neutralising; [VERIFY] in the installed app that re-saving over
-an item `import-pc-key` created does not prompt.
+### What needs manual QA by the owner
 
-**S5a is done (2026-10-16, ADR 0016, amending 0009):** the computer-use core in
-`EvieCore/ComputerUse/` — the agent-mode grant (push-to-talk or a click, never
-the wake word; 15 minutes), the broker that turns each action into an ADR 0009
-proposal and commit and revalidates it for the executor, the code policy
-(denylist, https-only links, secure input, stale observation, off-frame, Evie's
-windows, front-app change, confirmations from accessibility data), the budget
-and the nonce-fenced observation text. 75 new tests. Measured: qwen-daily, given
-the six tools and a text observation with an injected line, made the right
-`computer` call (1.87 s warm, 16.6 s uncached). Nothing is wired to the overlay
-yet.
+None of these could be done without the installed app and a person at the Mac
+(no agent launched the app UI, to keep its permission prompts with the owner):
 
-**S5b is done (2026-10-16):** observe-only. The accessibility snapshotter (BFS,
-0.5 s per message, depth 25, 150 elements, Electron's `AXManualAccessibility`,
-boxes on the observed frame's grid, password fields flagged), the
-Accessibility permission (polled, never prompted at launch), the observer
-(glow → capture when needed → list, new `obs-N` id) and the session loop
-`EvieAgentLoop.runComputerUse` (one picture, the newest, as a trailing user
-message; a list-only re-observation with a diff after an action, and a new
-picture only for a meaningful change; older steps become a text log). 53 new
-tests. `evie-shell --cu-observe` prints the list without capturing (13 elements
-in 3 ms on a Terminal window). Grounding measured on the PC: qwen-daily answers
-on the 0–1000 grid at 1024 and 1280 (within 5 steps of the target) and names the
-right element when given the list, so pc-3090 keeps `.normalized1000`. Nothing
-starts a session yet.
+- **Install and permissions (S7):** `Scripts/evie-app install`, rebuild twice
+  and confirm the TCC grants survive; a first run on an empty
+  `~/Library/Application Support/Evie`; the first-run guide's rows, including
+  "Chave do PC" (the import's keychain prompt) and "Cérebro" (Testar conexão).
+  [VERIFY] whether the key item is read without a prompt after a rebuild.
+- **Brains (S2d, S3):** with no key, "sem chave", then the import, then three
+  green rungs; with the PC off, `.ask` shows the wake card and `.automatic`
+  answers from the Mac with a notice; the in-app "Acordando o cérebro do Mac…".
+- **The screen (S4, S6):** Safari plus a PDF answered in one look with Evie's
+  overlay absent; ⌥⇧O; the Screen Recording card; the Mac profile; every
+  indicator state on the internal and an external display, over a full-screen
+  app, with Reduce Motion, and the CPU budget in a release build.
+- **Agent mode (S5d):** eval cases 26–28 — the Notas script, "copia esse
+  parágrafo", Esc and the mouse pause, a real password field, Mail's Send,
+  Spotlight + "Terminal" + Return, and Raycast / Alfred panels where installed;
+  the local `NSEvent` monitor live; whether a VoiceOver user can approve.
 
-**S5c is done (2026-10-16, ADR 0018):** the input executor. `ComputerExecutor`
-(EvieCore) validates each commit with the broker before anything and again
-before every event, acts only in the observed app once it is frontmost, refuses
-a moved window and a grid point over another app's window, presses listed
-elements through `AXPress` after finding them again by position, types through
-the field's value (read back), paste (clipboard saved, transient, restored after
-400 ms only if unchanged) or unicode key events (≤ 20 UTF-16 units, no split
-surrogate), settles 300 ms inside `postingSyntheticInput`, and the loop tells
-the model "Nada mudou" when the list did not change. The shell supplies
-`SyntheticInput` (tag 0xE71E), `AccessibilityActions`, `FocusCoordinator`
-(recorded when the overlay opens), `AppLauncher`/`InstalledApps`,
-`SystemPasteboard`; `MacComputerActor` wires it. Agent mode is a Settings switch,
-on by default (Avançado › Controle do Mac; `EVIE_COMPUTER_USE=0` forces it off).
-`evie-shell --cu-selftest` passed live on TextEdit (all three typing routes,
-exact read-back, closed without saving, focus and clipboard restored) after
-fixing two defects it found: Evie's click-through glow panels counted as her
-windows (every click refused), and a sheet answering the hit test for its
-buttons. 57 new tests.
+### Host-side issues to report (not Evie's to fix)
 
-**S5d is done (2026-10-16):** agent mode reaches the app. A typed request, or one
-said with push-to-talk or after a click on the mark, that is an instruction to
-act ("abre o Notas e escreve…", "clica em…", "cola isso no…", "digita…";
-`ComputerUseIntent`) — or any request after "Controlar o Mac…" in the menu —
-shows an amber session card with the goal; the wake word and call mode never
-do, and the Mac brain says "Controlar o Mac precisa do PC". Começar, clicked by
-a hand, asks the session's permissions and begins it; the first card is the
-one-time consent (injection mitigated by code policy, not eliminated). The
-confirmation card shows the newest picture with the target marked and Fazer /
-Pular, AppKit buttons that ignore Evie's tagged clicks and every key. Untagged
-input pauses the session through `NSEvent` monitors (the tag was verified to
-reach them, so no Input Monitoring); Parar, Esc, ⌥⇧Esc, the overlay's cancel,
-"para" and the grant's end revoke first, cancel the task, take the indicator
-down and give the front back. The end card shows an in-memory log. 40 new
-tests (1323 in 119 suites). Not done: the manual QA in the installed app
-(the Notas script, Esc, mouse pause, password field, Mail's Send, Spotlight +
-Return), which needs a person at the Mac. Next: S8b and the Fix phase (queued
-policy findings #9, #10, #11's Finder half).
+Found during the v2 design pass; rechecked read-only on 2026-10-16 where this Mac
+could see them, without reading any secret:
 
-**Fix phase, security findings #6–#11 (2026-10-16):** the document fences
-neutralise markers split by invisible characters or drawn with lookalikes, and
-a file name stays on one capped line (#6, #7); text read off a picture counts as
-the picture, so it never rides with tools or auto-approves (#8); agent mode asks
-before every chord with Space, before Return and typed newlines everywhere but
-TextEdit, Notas, Stickies, Pages, Numbers and Keynote, while a launcher is open
-(found by its window's owner) or may be, and before a double click or ⌘O/⌘↓ in
-the Finder, and judges a point by the app whose window holds it (#9–#11, policy
-half; ADR 0016 § Notes lists the flows that now ask). Open: the executor's half
-of #11 (11b per-event front-app and secure-input checks, 11c the window owner
-before every CGEvent pointer action, 11d a confirmation for `clipboard_write`);
-the launcher panel size [VERIFY] live.
+- **`THINKING_SAMPLER` has `min_p` 0.0** in the PC stack's `gateway-edge.py`
+  (seen in the local clone `~/Developer/local-ai-3090-stack`), which regresses
+  that stack's ADR-004 sampler guard against long-generation degeneration. The
+  owner's call: `min_p = 0.05`.
+- **Stale `PROFILES`** (`qwen-turbo`, `qwen-quality`) in `local-ai-control.py`
+  (both clones) and in the "Carregar turbo / qualidade" buttons of
+  `iot-home-control/windows/shutdown_server.py`: aliases the gateway no longer
+  serves.
+- **The Pico Wake-on-LAN endpoint** listens on plain HTTP (port 8080 behind a
+  router port-forward, per `pico/config.example.py`) on the public internet with
+  a short key. The real key's length was not re-read.
+- **The `com.crias.omlx` LaunchAgent is broken:** its `ProgramArguments` name
+  `…/Local Studio/runtime/venvs/omlx-latest/bin/omlx`, which no longer exists.
+  A process it started earlier (`omlx-server`, since 08:29 on 2026-10-16) still
+  listens on `127.0.0.1:8477`, so it will fail at the next login. Evie never
+  uses that port. Whether to remove the plist is the owner's choice.
+- The stale 22-character key in the PC stack's `opencode.json` (not re-read).
+- An "Acordar PC" button in Evie is deferred: its credentials and domain are not
+  on this Mac.
 
-Next for this area after S5b: S5
-drives observing, `lookAt`, `willClick`/`didClick` and typing, posts every
-synthetic event inside `postingSyntheticInput { … }` (which releases the Esc
-hot key), and wires `onStop` to `stopEverything` and `broker.revoke`. The six
-presence findings of the 2026-10-16 reviews are fixed (see the WORKLOG). Still open from the S6 manual QA: an external display, a
-full-screen app (the `.screenSaver` level) and WindowServer's share of the cost;
-the `presence-excluded` magenta diagnostic passed with S4.
+### Open engineering items
+
+- The executor's half of queued finding #11: per-event front-app and
+  secure-input checks (11b), the window owner before every CGEvent pointer
+  action (11c), a confirmation for `clipboard_write` (11d).
+- The tool-result fence (`EvieTool.swift`) still uses fixed markers without
+  neutralising.
+- A known timing-sensitive test is being fixed in the Fix phase.
+- `tools-mac-lensvlm-001` (eval case 12) gates tools on the Mac; last measured
+  failing (malformed XML), not rerun.
+- [VERIFY] items left in the design doc: the 160×44-point launcher panel
+  estimate, the scroll direction with natural scrolling, the 300 ms settle in
+  every app, the `.screenSaver` level over full-screen apps.
+
+**Next action:** the Fix phase (11b–11d and the timing test), then the owner's
+manual QA above in the installed app, starting with `Scripts/evie-app install`
+and the first-run guide.
 
 ## Repository hygiene
 
@@ -138,6 +129,9 @@ prepared; remote
 branches and tags still require an explicit force-update after review.
 
 ## Current phase
+
+*Written before v2; where it disagrees with the v2 section above (the brain, the
+loopback port, what leaves the Mac), the v2 section holds.*
 
 **Phase 1 inference validation is still open. Phase 2 native-shell work is far
 past prototyping, and Phase 3 and Phase 4 have been overtaken by working code.**

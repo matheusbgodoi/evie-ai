@@ -6,7 +6,7 @@ supersede rather than silently rewrite them when the decision changes.
 | ADR | Title | Status |
 |---|---|---|
 | [0001](0001-documentation-first.md) | Documentation-first, gate-based delivery | Accepted |
-| [0002](0002-primary-model-and-context.md) | Gemma/TurboFieldfare primary candidate at 64K FP16 KV | Accepted for planning; superseded in part by 0013 |
+| [0002](0002-primary-model-and-context.md) | Gemma/TurboFieldfare primary candidate at 64K FP16 KV | Accepted for planning; superseded in part by 0013 (the primary model is chosen per profile, `qwen-daily` on the PC by default) |
 | [0003](0003-native-overlay.md) | Native macOS overlay inspired by CLUI CC | Accepted for planning |
 | [0004](0004-specialist-workers.md) | On-demand specialist workers | Accepted for planning |
 | [0005](0005-node-red-workflow-plane.md) | Node-RED as visual deterministic workflow plane | Accepted for planning |
@@ -17,9 +17,9 @@ supersede rather than silently rewrite them when the decision changes.
 | [0010](0010-refuse-unseen-mail-recipients.md) | Refuse a recipient the conversation never contained | Accepted for `propose_mail` |
 | [0011](0011-draft-beside-send.md) | A draft button beside the send button | Accepted for `propose_mail` |
 | [0012](0012-fused-local-retrieval.md) | Retrieval by three fused signals over a cached local embedding | Accepted for the shipped retrieval path |
-| [0013](0013-authenticated-tailnet-model-transport.md) | Authenticated tailnet model transport | Accepted for Evie v2; superseded in part by 0017 |
-| [0014](0014-model-profiles-per-turn-resolution-failover.md) | Model profiles, per-turn resolution and per-conversation failover | Accepted for Evie v2; superseded in part by 0015 |
-| [0015](0015-on-demand-local-vlm-brain.md) | On-demand local VLM brain | Accepted for Evie v2; superseded in part by 0017 |
-| [0016](0016-in-process-computer-use-executor-under-agent-mode-grant.md) | An in-process computer-use executor under an agent-mode grant | Accepted for Evie v2 (S5a–S5c implemented) |
-| [0017](0017-per-launch-key-for-the-local-brain.md) | A per-launch key for the local brain | Accepted for Evie v2 |
-| [0018](0018-agent-mode-switch-on-by-default.md) | Agent mode behind a Settings switch, on by default | Accepted for Evie v2 |
+| [0013](0013-authenticated-tailnet-model-transport.md) | Authenticated tailnet model transport | Accepted for Evie v2 (S1a); supersedes 0006 in part, amends 0002 in part; superseded in part by 0017 |
+| [0014](0014-model-profiles-per-turn-resolution-failover.md) | Model profiles, per-turn resolution and per-conversation failover | Accepted for Evie v2 (S2a–S2d); superseded in part by 0015 |
+| [0015](0015-on-demand-local-vlm-brain.md) | On-demand local VLM brain | Accepted for Evie v2 (S3); supersedes 0014 in part; superseded in part by 0017 |
+| [0016](0016-in-process-computer-use-executor-under-agent-mode-grant.md) | An in-process computer-use executor under an agent-mode grant | Accepted for Evie v2 (S5a–S5d implemented; manual QA open); amends 0009 |
+| [0017](0017-per-launch-key-for-the-local-brain.md) | A per-launch key for the local brain | Accepted for Evie v2; supersedes 0013 and 0015 in part |
+| [0018](0018-agent-mode-switch-on-by-default.md) | Agent mode behind a Settings switch, on by default | Accepted for Evie v2 (S5c); amends the design's S5c flag |

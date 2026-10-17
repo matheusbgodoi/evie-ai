@@ -1,5 +1,41 @@
 # Work log
 
+## 2026-10-16 — v2: the documents describe this iteration as built
+
+- Completed:
+  - `README.md`: the tagline and "What she does" for v2 — "Two brains: your PC
+    first, this Mac when it is out", "Looking at your screen", "Agent mode:
+    doing it on the Mac" (the rules as code: never touched, asked first, stopped
+    at once; the injection-page result), "The indicator"; the lines v2 made
+    untrue (what leaves the Mac, the runtime paragraph, the model lifecycle
+    limitation), plus a limitation saying the installed app is not yet QA'd.
+  - `docs/PROJECT_STATUS.md`: the v2 section rewritten as one state — done,
+    manual QA owed by the owner, host-side issues to report, open engineering
+    items, the next action; the v1 "Current phase" marked as older.
+  - `CHANGELOG.md` Unreleased: a v2 summary and one heading each (Added,
+    Changed, Fixed, Security, Documented, Repository); the two Changed lists
+    merged and the "Security:"/"Privacy:" entries moved under Security, order
+    kept. Checked by script: every line of the old section is present (the
+    "Security: " prefixes dropped), nothing below Unreleased changed.
+  - `docs/adr/README.md`: each v2 row names its slice and what it supersedes or
+    amends; ADR 0016's status line records S5d.
+  - Design doc: S8b's host-side list "as reported".
+- Rechecked read-only 2026-10-16 (no secret read): `gateway-edge.py` in
+  `~/Developer/local-ai-3090-stack` has `THINKING_SAMPLER` `min_p` 0.0;
+  `local-ai-control.py` (both clones) lists `qwen-turbo`/`qwen-quality`, and
+  `iot-home-control/windows/shutdown_server.py` offers "Carregar turbo /
+  qualidade"; `pico/config.example.py` serves plain HTTP on 8080 behind a router
+  port-forward; `~/Library/LaunchAgents/com.crias.omlx.plist` names a venv that
+  no longer exists while a process it started at 08:29 still holds
+  `127.0.0.1:8477`.
+- Checks: `swift build` (no warnings); full `Scripts/test` twice: 1351 tests in
+  120 suites passed both times, 1 known issue (the deadline test of "Evie mail
+  and calendar scripts", by design), 2.9–3.9 s of test time; 1344 in 119 before
+  this slice.
+- Open: everything in PROJECT_STATUS § "What needs manual QA by the owner";
+  the executor half of #11 (11b–11d); the timing test in the Fix phase.
+- Next: the Fix phase, then the owner's manual QA in the installed app.
+
 ## 2026-10-16 — v2 S8b: the cross-slice checklist's eval cases
 
 - Completed (`evals/README.md`): case 12 rewritten as the gate for tools on the

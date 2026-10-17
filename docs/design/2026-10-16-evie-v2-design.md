@@ -1205,6 +1205,8 @@ hook is gone; details in `docs/MACOS_RUNTIME.md` § "First-run guide"):
 - The Pico WoL endpoint uses plain HTTP on the public internet with a short key.
 - An "Acordar PC" button is deferred, because its credentials and domain are not on this Mac.
 
+*As reported (2026-10-16):* the list is in `docs/PROJECT_STATUS.md` § "Host-side issues to report", rechecked read-only where this Mac could see it (local clones of the PC stack and `iot-home-control`, the LaunchAgent), with no secret read. One correction: `com.crias.omlx`'s program path is gone, but a process it started earlier still listens on `127.0.0.1:8477`, so the agent fails only at its next start.
+
 ---
 
 ## Cross-slice checklist

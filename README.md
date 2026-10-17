@@ -1,8 +1,10 @@
 # Evie
 
-A personal assistant that lives on your Mac and never leaves it. Pronounced
-**"ívi"**. No account, no subscription, no network — the model, your voice, your
-notes, and your conversations all stay on the machine. She is macOS-only, and
+A personal assistant that lives on your Mac and talks only to machines you own.
+Pronounced **"ívi"**. No account, no subscription, no cloud model — she thinks
+on your own PC over your private tailnet, or on this Mac when the PC is out, and
+your voice, your notes, and your conversations stay on the Mac. She is
+macOS-only, and
 not by accident: she is built out of the microphone, speech, vision, and
 signing services this operating system provides, and there is no other build.
 
@@ -192,10 +194,31 @@ summary would be approving something other than what leaves.
 
 ## What she does
 
-### Conversation, locally
+### Two brains: your PC first, this Mac when it is out
 
-A local model answers in Brazilian Portuguese, streamed into a card you can stop
-at any point. History is kept on this Mac and nowhere else.
+Since Evie v2 she thinks on your own PC: `qwen-daily` on its RTX 3090, reached
+over https on your Tailscale network through an exact allowlist, with a key
+saved for that one host in Evie's own keychain item — pasted or imported in
+Configurações › Cérebro, never written to a file
+([ADR 0013](docs/adr/0013-authenticated-tailnet-model-transport.md)). Measured
+from this Mac on 2026-10-16, a text answer starts in about 2 s with thinking
+off, and the unchanged part of a conversation is served from the PC's cache.
+
+When the PC is off, asleep or without its key, the next question can go to a
+brain on the Mac: LensVLM 9B, which sees pictures but uses no tools. She asks
+first — "O PC está fora. Acordar o cérebro do Mac? (~10 s, ~8 GB de memória)" —
+unless you chose to switch automatically or never, starts it only on
+`127.0.0.1` with a key made for that launch, and unloads it after ten minutes
+without a question ([ADR 0014](docs/adr/0014-model-profiles-per-turn-resolution-failover.md),
+[ADR 0015](docs/adr/0015-on-demand-local-vlm-brain.md),
+[ADR 0017](docs/adr/0017-per-launch-key-for-the-local-brain.md)). On the Mac
+brain your folders and the web are searched before she is asked, since she
+cannot call a tool. A conversation keeps the brain it started on; it moves only
+when a question fails before the first word, and the status line under every
+answer says where it ran ("no seu PC" / "somente neste Mac").
+
+Answers stream in Brazilian Portuguese into a card you can stop at any point.
+History is kept on this Mac and nowhere else.
 
 ![Evie working on an answer, with the send button turned into a stop button](docs/images/overlay-thinking.png)
 
@@ -211,6 +234,71 @@ answer written from what the model already knew says that instead. The commit
 that added it is called "Say where every answer came from, and mean it"
 (`8ccce28`), and a later one removed a case where the card credited a source that
 had contributed nothing (`c61f65f`).
+
+### Looking at your screen
+
+Ask in your own words — "olha a tela", "O que aparece nessa janela?", "lê a tela
+pra mim" —
+or press ⌥⇧O, and she looks once: the screen under the pointer, or the front
+window, with her own windows left out. The capture stays in memory and goes
+only to the brain answering; it is never written to disk or saved with the
+conversation, which keeps "📷 captura da tela" in its place. Nothing is captured
+before the violet glow is on that display. The phrasing has to be a request:
+"O que fazer com uma mancha na tela do iPhone?" captures nothing.
+
+On the PC a look costs about 26 s before the first word, because the PC reads
+pictures on its CPU; the status line says so ("Analisando a tela no PC…
+(~26 s)"). The Mac brain answers a look in 3–6 s. Text on the screen is data,
+never an instruction: while a picture, or text read off one, is in the
+conversation, she is asked with no tools and no change is applied without your
+click.
+
+### Agent mode: doing it on the Mac
+
+Ask her to *do* something — "abre o Notas e escreve 'teste de pesquisa' numa
+nota nova", "clica em Salvar", "cola isso no Notas" — and an amber card asks
+"Controlar o Mac?" with your words quoted. A session starts only when a hand
+presses Começar, after a typed request, push-to-talk or a click on her mark;
+the wake word never starts one. It runs on the PC brain only, for at most 15
+minutes and 25 actions, and she looks again after every action. The switch is
+"Deixar a Evie controlar o Mac (modo agente)" in Configurações › Avançado ›
+Controle do Mac, on by default because the owner asked for it
+([ADR 0016](docs/adr/0016-in-process-computer-use-executor-under-agent-mode-grant.md),
+[ADR 0018](docs/adr/0018-agent-mode-switch-on-by-default.md)).
+
+The safety rules are code, not a request to the model:
+
+- **Never touched:** System Settings, Keychain Access, Terminal and the other
+  terminals, Shortcuts, Script Editor, Automator, Installer, password managers,
+  Evie herself, and a password field ("campo de senha: digite você").
+- **Asked first, on a card showing the target:** a button that sends, buys,
+  pays, deletes, confirms or publishes; Return almost everywhere (chat apps send
+  on it); any button in a browser; launcher shortcuts and Return in a launcher;
+  ⌘Q, ⌘W and similar; anything in the delete class; opening a link; reading the
+  clipboard; switching to an app you did not name. The buttons on that card
+  ignore clicks Evie posts and every key, so only your hand answers.
+- **Stopped at once:** Parar, Esc, ⌥⇧Esc, saying "para", or the session's time
+  running out; moving the mouse or typing yourself pauses it, with Continuar or
+  Parar. The end card lists what she did; the list and the pictures are not
+  saved.
+
+A page that tells her to open the Terminal is still just a page: measured
+against the PC on 2026-10-16 with such a page on screen, she opened Notas as
+asked, 3 of 3, and declined the page's request when told to do what it said,
+3 of 3 — and the policy above would have refused it anyway. The first session
+explains, once, that these rules reduce the risk of on-screen injection and do
+not eliminate it.
+
+### The indicator
+
+Whenever she sees or acts, the screen says so: a violet glow while she looks,
+a quieter glow and a reticle while she reads the screen in a session, an amber
+edge with the target highlighted and a ghost cursor when she clicks, a
+"Digitando…" chip while she types, and gray while you hold the Mac. A pill at
+the top names the brain and the step ("passo 3/25") and carries Parar. Each
+state has its own shape, so colour is never the only signal, and Reduce Motion
+turns the motion into fades. No setting can switch it off while she captures or
+acts.
 
 ### Typed commands
 
@@ -382,7 +470,8 @@ Skills are files you write. They are loaded only when they match what you asked 
 a commit-message skill loaded for a question about commit messages cost 448
 characters of context (`d0fbf05`).
 
-Web search is off by default and is the only thing in Evie that leaves the Mac.
+Web search is off by default and is the only thing in Evie that reaches a
+stranger's server; the brain is your own PC.
 
 ### The window itself
 
@@ -488,10 +577,13 @@ opens Evie with `EVIE_MODEL_PROFILE=custom`.
 If a permission ends up stuck, `tccutil reset ScreenCapture com.matheusbgodoi.evie`
 (or `Accessibility`, `PostEvent`) and ask again from the checklist.
 
-The model runtime is a pinned local inference server holding the primary model,
-about 14.3 GB installed (`docs/adr/0007-local-development-runtime.md`), served
-over loopback with a 64K context. `Scripts/evie-runtime status|doctor|smoke`
-reports on it.
+The PC brain needs nothing installed on the Mac beyond its key. The Mac brain
+is `mlx_vlm.server` with the LensVLM weights, started and stopped by Evie
+(`Scripts/evie-brain status|start|stop` does the same by hand; see
+`docs/MACOS_RUNTIME.md`). The optional `custom` runtime, the v1 primary model,
+is a pinned local inference server of about 14.3 GB installed
+(`docs/adr/0007-local-development-runtime.md`), served over loopback with a 64K
+context; `Scripts/evie-runtime status|doctor|smoke` reports on it.
 
 For a voice that does not sound synthetic, pick a trained voice in Settings ›
 Vozes. The voice engine is optional: system voices work without it, and a
@@ -627,10 +719,10 @@ performs nothing, and the function that writes lives on a protocol her loop does
 not hold. No sentence in a message, a web page or a document reaches it — only
 the button on the card. She cannot change or delete an event that already exists.
 
-**She never sends anything without being told.** Two things in Evie reach beyond
-this Mac and both are deliberate: web search, which is off by default and says so
-on its switch, and a message you approved on a card by pressing the button.
-Nothing else leaves.
+**She never sends anything without being told.** Beyond your own PC, which is
+her brain, two things in Evie reach past this Mac and both are deliberate: web
+search, which is off by default and says so on its switch, and a message you
+approved on a card by pressing the button. Nothing else leaves.
 
 **She never deletes for good.** There is no tool in her vocabulary that
 permanently destroys anything; the strongest thing she can do to a file is put it
@@ -640,8 +732,10 @@ in the Trash, and only after you approve the card that names it.
 want to. See above.
 
 **She does not run at login and does not keep the model warm for you.**
-`Scripts/evie-runtime start` is an explicit decision because it costs about 15 GB
-of memory, and the voice engine's 2.4 GB is the same decision made the same way.
+The Mac brain starts when a question needs it, asks first by default, and
+unloads after ten idle minutes; the old loopback Gemma (`Scripts/evie-runtime
+launch-custom`) is an explicit decision because it costs about 15 GB of memory,
+and the voice engine's 2.4 GB is the same decision made the same way.
 Leaving her open costs nothing measurable: 0% of a core for both processes while
 idle, 10 MB resident for Evie and 9 MB for a server nobody has asked anything in a
 while, measured with its method written down (`docs/RESOURCE_BUDGET.md`). A
@@ -866,9 +960,13 @@ over this one when they disagree.
   identity is self-signed and local to one Mac.
 - **The overlay has not been accepted by eye on every target.** Focus, Spaces,
   full-screen, multiple displays, and accessibility behaviour are open QA.
-- **Evie does not own the model server's lifecycle.** Idle unload, crash
-  recovery, power policy, and automatic startup are not hers yet; the runtime is
-  started and stopped by hand.
+- **Evie owns only the Mac brain's lifecycle.** She starts it on demand,
+  checks who answers its port, unloads it when idle and stops it at quit; the
+  PC's server belongs to the PC stack, and she cannot wake the PC.
+- **Evie v2 has not been checked by hand in the installed app.** Screen
+  looks, agent-mode sessions, the wake card and the first-run guide's key import
+  are covered by tests and command-line diagnostics, not yet by a person using
+  the app; [Project status](docs/PROJECT_STATUS.md) lists what is owed.
 - **Mail takes one write and the calendar takes one; both are behind a button.**
   This entry said both applications were read-only until `b9bd7a0`, and said mail
   was until `6dade94`. Creating an event and sending a message are built and

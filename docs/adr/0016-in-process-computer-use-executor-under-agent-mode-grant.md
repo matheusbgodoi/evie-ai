@@ -3,7 +3,8 @@
 Status: Accepted for Evie v2 (slice S5a implemented 2026-10-16: the grant, the
 broker, the policy, the budget, the tools and the observation fence, all in
 `EvieCore`; the observer (S5b) and the executor (S5c, `ComputerExecutor`) the
-same day; the cards are S5d). Availability: [ADR 0018](0018-agent-mode-switch-on-by-default.md).
+same day; the cards, the takeover monitor and the kill switches (S5d) the same
+day, with the manual QA in the installed app still open). Availability: [ADR 0018](0018-agent-mode-switch-on-by-default.md).
 
 Date: 2026-10-16
 
