@@ -70,12 +70,54 @@ struct EvieOpenToolTests {
     #expect(await opener.opened.isEmpty)
   }
 
+  /// The allowlist, against the launcher types a denylist kept missing.
+  @Test(
+    "only documents open: Terminal files, workflows, scripts and bundles do not",
+    arguments: ["ajuste.terminal", "Automação.workflow", "rotina.scpt", "Extra.bundle", "Pasta"]
+  )
+  func allowlistRefuses(_ name: String) async throws {
+    let (root, toolbox) = try fixture()
+    let item = root.url.appendingPathComponent(name)
+    if name.hasSuffix(".bundle") || name == "Pasta" {
+      try FileFixtures.write("x", to: item.appendingPathComponent("Contents/Info.plist"))
+    } else {
+      try FileFixtures.write("conteúdo", to: item)
+    }
+    let opener = RecordingOpener()
+
+    let (opened, action) = await EvieOpenTool.run(
+      call(.open, name), roots: [root], toolbox: toolbox, opener: opener)
+    #expect(opened.isFailure, "\(name) não deveria abrir")
+    #expect(action == nil)
+    #expect(opened.content.contains("reveal_in_finder"))
+    #expect(await opener.opened.isEmpty)
+
+    // Revealing runs nothing, so a bundle or a folder can still be shown.
+    let (revealed, _) = await EvieOpenTool.run(
+      call(.reveal, name), roots: [root], toolbox: toolbox, opener: opener)
+    #expect(!revealed.isFailure)
+  }
+
+  @Test("a plain PDF, and content the system knows, open; an unknown extension does not")
+  func allowlistAdmits() {
+    let plain = EvieItemStatus(isDirectory: false, byteSize: 1, isExecutable: false)
+    #expect(EvieOpenTool.refusal(forName: "aula.pdf", status: plain) == nil)
+    #expect(EvieOpenTool.refusal(forName: "AULA.PDF", status: plain) == nil)
+    #expect(EvieOpenTool.isOpenableDocument("foto.jpg"))
+    #expect(!EvieOpenTool.isOpenableDocument("coisa.xyzzy"))
+    #expect(!EvieOpenTool.isOpenableDocument("semextensao"))
+    #expect(!EvieOpenTool.isOpenableDocument("tela.saver"))
+    #expect(!EvieOpenTool.isOpenableDocument("servico.xpc"))
+    #expect(!EvieOpenTool.isOpenableDocument("biblioteca.jar"))
+  }
+
   @Test("every listed kind that runs or installs is refused by name")
   func refusedExtensions() {
     let plain = EvieItemStatus(isDirectory: false, byteSize: 1, isExecutable: false)
     for name in [
       "a.app", "a.command", "a.sh", "a.pkg", "a.dmg", "a.terminal", "a.mobileconfig",
-      "a.webloc", "a.SH", "a.scpt",
+      "a.webloc", "a.SH", "a.scpt", "a.terminal", "a.workflow", "a.action", "a.prefPane",
+      "a.saver", "a.bundle", "a.plugin", "a.kext", "a.shortcut", "a.xpc", "a.jar",
     ] {
       #expect(EvieOpenTool.refusal(forName: name, status: plain) != nil, "\(name)")
     }

@@ -331,12 +331,17 @@ actions the model may take without a card, because neither changes a file
 - **Inside a granted folder.** The path goes through
   `EvieScopedFileReader.status` (`openat`, `O_RESOLVE_BENEATH`,
   `O_NOFOLLOW_ANY`, `fstat`) before anything is asked of the system.
-- **Nothing that runs.** `open_file` refuses apps, scripts, installers, disk
-  images, `.command`, `.sh`, `.pkg`, `.dmg`, `.terminal`, workflows,
-  configuration profiles and web shortcuts by extension, and any file with an
-  execute bit that is not a known document — a PDF copied from a USB stick with
-  every bit set still opens. Revealing runs nothing, so it is held only to the
-  first limit.
+- **Only documents.** `open_file` works from an allowlist, not a denylist: it
+  opens a regular file whose extension is a known document (PDF, Word, text,
+  spreadsheets, presentations, images, audio, video), or whose `UTType`
+  conforms to `public.content` and to none of executable, bundle, package,
+  application or script. Behind that a fixed list still refuses the launcher
+  types by name (`.app`, `.command`, `.sh`, `.pkg`, `.dmg`, `.terminal`,
+  `.workflow`, `.scpt`, `.jar`, `.saver`, `.xpc`, profiles, web shortcuts…).
+  Folders, bundles and packages are never opened, only revealed. A file with an
+  execute bit that is not a known document is refused; a PDF copied from a USB
+  stick with every bit set still opens. Revealing runs nothing, so it is held
+  only to the first limit.
 - **On the record.** A status line while it happens ("Abrindo resumo.pdf…") and
   a line in the transcript after (`EvieAgentLoop.Outcome.fileActions`).
 

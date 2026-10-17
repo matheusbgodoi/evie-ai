@@ -1,4 +1,5 @@
 import Foundation
+import UniformTypeIdentifiers
 
 /// Opens a file with its default app, or shows it in the Finder. The shell
 /// implements it with `NSWorkspace`; the loop only ever holds this protocol.
@@ -45,12 +46,15 @@ public struct EvieFileAction: Hashable, Sendable {
 /// - **Inside a granted folder.** The path is resolved through the contained
 ///   reader (`openat`, `O_RESOLVE_BENEATH`, `O_NOFOLLOW_ANY`) before anything is
 ///   opened.
-/// - **Nothing that runs.** An app, a script, an installer, a disk image, a
-///   Terminal file, a configuration profile, a web shortcut, or any file with
-///   an execute bit that is not a known document is refused by `open_file`.
-///   Opening one of those is running something, and a sentence in a PDF must
-///   not be able to cause that. Revealing in the Finder runs nothing, so it is
-///   held only to the first limit.
+/// - **Only documents.** `open_file` opens a regular file whose kind is on an
+///   allowlist — the known document extensions, or a type that conforms to
+///   `public.content` and to none of executable, bundle, package, application
+///   or script — and nothing else. A list of what to refuse always misses the
+///   next launcher type (`.terminal`, `.workflow`, `.saver`, `.xpc`…), and a
+///   sentence in a PDF must not be able to run anything. Folders, bundles and
+///   packages are never opened, only revealed; a file with an execute bit that
+///   is not a known document is refused too. Revealing in the Finder runs
+///   nothing, so it is held only to the first limit.
 /// - **On the record.** Every action is a status line while it happens and a
 ///   line in the transcript after (`EvieFileAction`).
 public enum EvieOpenTool: String, CaseIterable, Sendable {
@@ -93,38 +97,69 @@ public enum EvieOpenTool: String, CaseIterable, Sendable {
     ]
   }
 
-  /// Extensions `open_file` never opens: things that run, install, mount or
-  /// redirect.
+  /// Extensions refused even if their type looked like content: things that
+  /// run, install, mount or redirect. A second fence behind the allowlist,
+  /// never the only one.
   public static let refusedExtensions: Set<String> = [
     "app", "command", "sh", "bash", "zsh", "csh", "tcsh", "ksh", "fish", "tool", "pkg",
     "mpkg", "dmg", "iso", "img", "sparseimage", "sparsebundle", "xip", "terminal",
     "workflow", "wflow", "action", "shortcut", "scpt", "scptd", "applescript", "jxa", "osax",
     "py", "rb", "pl", "php", "js", "jar", "exe", "msi", "bat", "cmd", "ps1", "vbs",
-    "prefpane", "kext", "plugin", "bundle", "framework", "appex", "xpc", "webloc", "inetloc",
-    "url", "fileloc", "mobileconfig", "configprofile", "provisionprofile", "safariextz",
+    "prefpane", "saver", "kext", "plugin", "bundle", "framework", "appex", "xpc", "webloc",
+    "inetloc", "url", "fileloc", "mobileconfig", "configprofile", "provisionprofile",
+    "safariextz", "html", "htm", "svg",
   ]
 
-  /// Formats that are data whatever their permission bits say. Files copied
-  /// from a Windows disk or a USB stick often carry an execute bit on every
-  /// PDF; refusing those would refuse the ordinary case.
+  /// The documents `open_file` opens by extension. Files copied from a Windows
+  /// disk or a USB stick often carry an execute bit on every PDF; these open
+  /// whatever their permission bits say.
   public static let documentExtensions: Set<String> = [
-    "pdf", "doc", "docx", "rtf", "rtfd", "odt", "pages", "txt", "text", "md", "markdown",
-    "csv", "tsv", "xls", "xlsx", "numbers", "ods", "ppt", "pptx", "key", "odp", "epub",
-    "jpg", "jpeg", "png", "heic", "heif", "gif", "webp", "tif", "tiff", "bmp", "svg",
+    "pdf", "doc", "docx", "rtf", "odt", "txt", "text", "md", "markdown",
+    "csv", "tsv", "xls", "xlsx", "ods", "ppt", "pptx", "odp", "epub",
+    "jpg", "jpeg", "png", "heic", "heif", "gif", "webp", "tif", "tiff", "bmp",
     "mp4", "mov", "m4v", "avi", "mkv", "webm", "mp3", "m4a", "wav", "aac", "flac", "ogg",
-    "aiff", "zip",
+    "aiff",
   ]
+
+  /// Types that disqualify a file whatever else it conforms to.
+  static let disqualifyingTypes: [UTType] = [
+    .executable, .bundle, .package, .application, .script, .shellScript, .unixExecutable,
+    .applicationBundle, .applicationExtension, .pluginBundle, .systemPreferencesPane,
+  ]
+
+  /// Whether a regular file's type is one `open_file` may open: a known
+  /// document, or content that is none of the disqualifying types.
+  public static func isOpenableDocument(_ name: String) -> Bool {
+    let extensionName = (name as NSString).pathExtension.lowercased()
+    guard !extensionName.isEmpty, !refusedExtensions.contains(extensionName) else {
+      return false
+    }
+    if documentExtensions.contains(extensionName) {
+      return true
+    }
+    guard let type = UTType(filenameExtension: extensionName), type.conforms(to: .content)
+    else {
+      return false
+    }
+    return !disqualifyingTypes.contains { type.conforms(to: $0) }
+  }
 
   /// Why `open_file` will not open this, or nil when it may.
   public static func refusal(forName name: String, status: EvieItemStatus) -> String? {
-    let extensionName = (name as NSString).pathExtension.lowercased()
-    if refusedExtensions.contains(extensionName) {
+    if status.isDirectory {
       return """
-        \(name) é um app, script, instalador ou atalho — abrir isso executaria \
-        alguma coisa, e isso eu não faço. Posso mostrar no Finder com \
-        reveal_in_finder, e ele abre se quiser.
+        \(name) é uma pasta, um app ou um pacote, e isso eu não abro. Posso mostrar \
+        no Finder com reveal_in_finder.
         """
     }
+    guard isOpenableDocument(name) else {
+      return """
+        \(name) não é um documento que eu abra — pode ser um app, um script, um \
+        instalador ou um atalho, e abrir isso executaria alguma coisa. Posso \
+        mostrar no Finder com reveal_in_finder, e ele abre se quiser.
+        """
+    }
+    let extensionName = (name as NSString).pathExtension.lowercased()
     if status.isExecutable, !documentExtensions.contains(extensionName) {
       return """
         \(name) está marcado como executável, então não abro. Posso mostrar no \

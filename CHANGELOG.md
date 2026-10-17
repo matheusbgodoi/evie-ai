@@ -20,6 +20,11 @@ ADRs 0013–0018 record the decisions.
   diacritics after canonical composition on both sides, and the `.env` prefix
   check with them; the reader, the file writer, the document creator and every
   other caller inherit it.
+- **`open_file` opens from an allowlist.** The first version refused launcher
+  types by extension, and such a list always misses the next one. It now opens
+  only known document extensions or types that conform to `public.content` and
+  to none of executable, bundle, package, application or script; folders,
+  bundles and packages can be revealed in the Finder but never opened.
 
 ### Added
 

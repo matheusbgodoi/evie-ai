@@ -4355,3 +4355,21 @@ nobody but the owner can fetch it.**
 - Checks: `swift build` clean; `Scripts/test --filter
   'EvieAgentLoop|EvieFileRouting|EvieOpenTool|EvieFileToolbox|EviePersona|EvieBrainTurn'`
   — 111 tests passed, including the five routing requests.
+
+## 2026-10-16 — security: open_file from an allowlist
+
+- Finding (reported by the reviewing agent): `EvieOpenTool` refused executables
+  by an extension denylist, which always misses some launcher type (`.saver`,
+  `.xpc`, `.prefPane`, the next one).
+- Fix: `isOpenableDocument` admits only `documentExtensions`, or a `UTType`
+  that conforms to `public.content` and not to executable, bundle, package,
+  application, script, shell script, Unix executable, app extension, plug-in or
+  preference pane; the old list stays as a second fence. Any directory —
+  folder, bundle or package — is reveal-only. HTML and SVG are refused too,
+  since a browser runs their scripts.
+- Regression tests: `.terminal`, `.workflow`, `.scpt`, a `.bundle` directory
+  and a plain folder are refused by `open_file` on disk and revealed by
+  `reveal_in_finder`; a plain `.pdf` (any case) opens; `.saver`, `.xpc`, `.jar`
+  and an unknown extension are not openable.
+- Checks: `swift build` clean; `Scripts/test --filter
+  'EvieOpenTool|EvieAgentLoopFile'` — 15 tests passed.
