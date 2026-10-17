@@ -92,6 +92,12 @@ to authorize the legitimate macOS Keychain prompt.
 
 ### Final validation gates and measured scope
 
+- **Public main checkpoint:** `086c0e58f74062f8881152234f89521fda40f936` is
+  published on main. Its automatic [CI run39007942714](https://github.com/matheusbgodoi/evie-ai/actions/runs/39007942714) passed all three
+  jobs: 1,501 + 55 = 1,556 cases in 7.123 s + 13.512 s, settings, clipboard and
+  voice harnesses, full shell (84.05 s), capture-driver compilation and docs.
+  The v2.0.0 tag/release remains uncut pending the owner-authorized live PC gate.
+
 - **Current hosted gate passed:** [run 39007625804](https://github.com/matheusbgodoi/evie-ai/actions/runs/39007625804) on public
   source `ba17474d11a29aa346377fd75a12dc8ec5712f20`, all three jobs successful.
   Core executed **1,501 + 55 = 1,556 tests** in 9.659 s + 15.292 s, with the same

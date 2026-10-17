@@ -1,5 +1,21 @@
 # Work log
 
+## 2026-10-17 — public main CI passed; owner-only final boundary
+
+- Published the sanitized source/docs candidate to main086c0e5 by fast-forward,
+  with no private v2 ancestor. Main run39007942714 passed all three jobs: all
+  1,556 cases (7.123 s + 13.512 s), settings, clipboard and voice harnesses,
+  strict shell84.05 s, capture-driver compilation and docs.
+- Reverified installed signature and candidate6 executable/archive SHA256; neither
+  changed. The ready ZIP remains local, not a published final release.
+- Raised the existing macOS SecurityAgent alert without reading or filling its
+  fields. Owner action was requested through the input tool; no answer or
+  authorization has been inferred from elapsed time. One alert still exists.
+- This docs-only checkpoint is committed/published to the delivery branch; main
+  remains the tested source candidate. The sole external prerequisite is owner
+  Keychain authorization, then the three live-PC checks and final release cut.
+
+
 ## 2026-10-17 — hosted qualification and public source checkpoint
 
 - Public source ba17474 passed all three jobs in run39007625804. Core ran all

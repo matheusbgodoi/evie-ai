@@ -23,7 +23,7 @@ release from implementation alone.
 | Context budget and automatic compaction | Implemented; core and real-PC synthetic probes passed | [Context](../CONVERSATION_CONTEXT.md), ADR 0026; PC 200,704 tokens |
 | LensVLM context qualification | Passed at 131,072 tokens; client/runtime synchronized | 127,527 input + 38 output tokens, 5/5 target items, 2.4 GiB minimum sampled free and 13.8 GiB MLX-reported peak memory in 392.31 s; [model tuning](../MODEL_TUNING.md) |
 | Local model/memory reconfiguration and pinned public web | Implemented; real process/HTTP/MLX and curl boundaries passed | [Launcher](../LOCAL_BRAIN_VALIDATION.md), [web](../WEB_SEARCH.md), ADR 0027 |
-| Final source freeze, full suite and signed bundle | M5 and hosted full 1,556 cases passed in two resource phases; all three hosted jobs passed in run39007625804; signed candidate6 installed | [PROJECT_STATUS](../PROJECT_STATUS.md), [ADR 0028](../adr/0028-runtime-qualified-core-ci.md) |
+| Final source freeze, full suite and signed bundle | M5 and hosted full 1,556 cases passed in two resource phases; all three public-main CI jobs passed in run39007942714; signed candidate6 installed | [PROJECT_STATUS](../PROJECT_STATUS.md), [ADR 0028](../adr/0028-runtime-qualified-core-ci.md) |
 | Resources and sanitized release | Idle/wake/thermal, real Lens unload and three native Shortcuts passed; final live-PC checks and tag/release require owner Keychain authorization | [Resource method](../RESOURCE_BUDGET.md); root ledger owns final ancestry/artifact/release claims |
 
 ## Status vocabulary
