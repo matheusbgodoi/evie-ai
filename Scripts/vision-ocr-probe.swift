@@ -16,6 +16,10 @@ struct VisionOCRProbe {
     var cpuStages: Int
     var seconds: Double
     var error: String?
+    var errorDomain: String?
+    var errorCode: Int?
+    var errorInfo: [String: String]?
+    var completionError: String?
   }
 
   static func image() throws -> CGImage {
@@ -50,7 +54,11 @@ struct VisionOCRProbe {
   static func main() async throws {
     let image = try image()
     let needles = ["Relatório", "coração", "informação", "exceção", "1.234,56"]
-    for route in ["modern-cpu", "legacy-3-cpu", "legacy-3-auto", "legacy-2-cpu"] {
+    let routes =
+      CommandLine.arguments.dropFirst().isEmpty
+      ? ["modern-cpu", "legacy-3-cpu", "legacy-3-auto", "legacy-2-cpu"]
+      : Array(CommandLine.arguments.dropFirst())
+    for route in routes {
       let start = Date()
       var result = Result(
         route: route, succeeded: false, matchesAll: false,
@@ -78,12 +86,17 @@ struct VisionOCRProbe {
             observation.topCandidates(1).first.map { ($0.string, $0.confidence) }
           }
         } else {
-          let request = VNRecognizeTextRequest()
+          let completion = CompletionError()
+          let request = VNRecognizeTextRequest { _, error in completion.record(error) }
+          defer { result.completionError = completion.description }
           request.revision = route.contains("-2-") ? 2 : VNRecognizeTextRequestRevision3
           request.recognitionLevel = .accurate
           request.recognitionLanguages = ["pt-BR", "en-US"]
           request.usesLanguageCorrection = true
           request.minimumTextHeight = 0
+          // Public legacy switch is deliberately diagnostic: its deprecation
+          // warning remains visible. Production retains warnings-as-errors.
+          if route.contains("global") { request.usesCPUOnly = true }
           if route.hasSuffix("cpu") {
             for (stage, devices) in try request.supportedComputeStageDevices {
               guard
@@ -106,10 +119,33 @@ struct VisionOCRProbe {
         result.matchesAll = needles.allSatisfy { text.contains($0) }
         result.lines = lines.count
         result.minimumConfidence = lines.map(\.1).min()
-      } catch { result.error = String(reflecting: error) }
+      } catch {
+        result.error = String(reflecting: error)
+        let diagnostic = error as NSError
+        result.errorDomain = diagnostic.domain
+        result.errorCode = diagnostic.code
+        result.errorInfo = diagnostic.userInfo.mapValues { String(reflecting: $0) }
+      }
       result.seconds = Date().timeIntervalSince(start)
       print(String(decoding: try JSONEncoder().encode(result), as: UTF8.self))
     }
   }
   enum Failure: Error { case image, cpu }
+}
+
+private final class CompletionError: @unchecked Sendable {
+  private let lock = NSLock()
+  private var value: String?
+  func record(_ error: (any Error)?) {
+    guard let error else { return }
+    lock.lock()
+    defer { lock.unlock() }
+    let nsError = error as NSError
+    value = "\(nsError.domain):\(nsError.code) \(nsError.userInfo)"
+  }
+  var description: String? {
+    lock.lock()
+    defer { lock.unlock() }
+    return value
+  }
 }

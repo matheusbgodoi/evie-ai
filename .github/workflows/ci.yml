@@ -16,5 +16,9 @@ jobs:
           sw_vers
       - name: Compare public OCR routes on synthetic Portuguese content
         run: |
-          xcrun swiftc -swift-version 6 -parse-as-library -warnings-as-errors Scripts/vision-ocr-probe.swift -o "$RUNNER_TEMP/vision-ocr-probe"
-          "$RUNNER_TEMP/vision-ocr-probe"
+          xcrun swiftc -swift-version 6 -parse-as-library Scripts/vision-ocr-probe.swift -o "$RUNNER_TEMP/vision-ocr-probe"
+          # Each route gets a fresh process; one failed framework must not poison
+          # the others. The legacy global CPU flag's warning is diagnostic only.
+          for route in modern-cpu legacy-3-cpu legacy-3-auto legacy-2-cpu legacy-3-global-cpu legacy-2-global-cpu; do
+            "$RUNNER_TEMP/vision-ocr-probe" "$route"
+          done
