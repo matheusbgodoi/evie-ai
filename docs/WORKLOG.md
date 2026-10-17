@@ -1,5 +1,29 @@
 # Work log
 
+## 2026-10-17 — isolate deadline fixtures from unrelated resource contention
+
+- Hosted candidate4 CI run39006928959 passed documentation and strict shell/
+  capture-driver compilation but failed timing tests in the parallel Core run.
+  Recorded errors instead of treating earlier green runs as current evidence.
+- Source review found that the finite test CPU load started even from abandoned
+  setup cleanup, while warm-up/readiness also shared blocking global resources.
+  The fixture correction and its causal regression are tracked separately.
+- Full Scripts/test now covers every test in two disjoint phases: regular
+  parallel coverage and all three timed OS suites with explicit no-parallel.
+  Internal stress and production concurrency remain active; every deadline and
+  assertion is preserved, with no automatic retry. ADR 0030 records the contract.
+- Three actual public Shortcuts remain validated on installed candidate6, and
+  its old direct actions are absent from the public action catalog. No
+  production source or installed executable changed for this test correction.
+  Full plan passed 1,501 regular tests (6.421 s, same intentional Mail fixture)
+  and 55 isolated timed tests (10.662 s), 1,556 total. All prior named test starts
+  appeared once plus the new abandonment case. Focused TTS ten tests passed
+  2.795 s; negative control started twenty workers for 3.021 s, corrected cleanup
+  started zero and joined all workers. Command-boundary checks covered both
+  layouts, fail-fast, selectors and aggregate reports (single serial export).
+  New hosted qualification and owner-authorized PC diagnostics remain gates.
+
+
 ## 2026-10-17 — actual Shortcuts dispatch, public URLs and voice revocation
 
 - Actual Atalhos dispatch exposed a platform boundary missed by metadata/direct

@@ -36,3 +36,4 @@ supersede rather than silently rewrite them when the decision changes.
 | [0028](0028-runtime-qualified-core-ci.md) | Runtime-qualified complete Core tests and shell compilation | Accepted |
 
 | [0029](0029-native-shortcuts-with-stable-local-signing.md) | Native Shortcuts through public URLs with stable local signing | Accepted; supersedes 0023 for local builds |
+| [0030](0030-isolated-deadline-test-resources.md) | Isolated timing-test resources without changed deadlines | Accepted |

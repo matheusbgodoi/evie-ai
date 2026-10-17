@@ -4,7 +4,8 @@ name: CI
 # runtime. The xcode-27 image also compiles the complete shell. Accurate Vision
 # OCR fails in that image's macOS 27 VM even with every public CPU route; the
 # isolated matrix probe and real M5/macOS 27 qualification are documented in
-# docs/MACOS_RUNTIME.md. No behavioral test is filtered or skipped here.
+# docs/MACOS_RUNTIME.md. Scripts/test executes every case in two disjoint
+# resource phases; no test is dropped or retried (ADR 0030).
 on:
   push:
     branches: [main, dev]

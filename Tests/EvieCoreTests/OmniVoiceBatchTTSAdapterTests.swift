@@ -1,5 +1,6 @@
 import Darwin
 import Foundation
+import Synchronization
 import Testing
 
 @testable import EvieCore
@@ -125,25 +126,46 @@ struct OmniVoiceBatchTTSAdapterTests {
     defer { fixture.remove() }
     try fixture.warmUpExecutable()
     let load = FinitePriorityLoad()
+    await load.prepare()
     defer { load.finish() }
-    let adapter = try OmniVoiceBatchTTSAdapter(
-      configuration: fixture.configuration(timeout: 0.5, gracePeriod: 0.05))
-    let task = Task { try await adapter.synthesize(fixture.request()) }
-    defer { task.cancel() }
-    let child = try await fixture.recordedChildIdentifier()
-    try #require(!fixture.hasTerminationReceipt, "The CPU load must begin before SIGTERM.")
-    load.start()
     do {
-      _ = try await task.value
-      Issue.record("Expected a timeout under CPU contention.")
-    } catch let error as EvieTTSError {
-      #expect(error == .timedOut)
+      let adapter = try OmniVoiceBatchTTSAdapter(
+        configuration: fixture.configuration(timeout: 0.5, gracePeriod: 0.05))
+      let task = Task { try await adapter.synthesize(fixture.request()) }
+      defer { task.cancel() }
+      let child = try await fixture.recordedChildIdentifier()
+      try #require(!fixture.hasTerminationReceipt, "The CPU load must begin before SIGTERM.")
+      load.start()
+      do {
+        _ = try await task.value
+        Issue.record("Expected a timeout under CPU contention.")
+      } catch let error as EvieTTSError {
+        #expect(error == .timedOut)
+      }
+      let timing = try await fixture.terminationTiming()
+      #expect(timing.lifetimeBeforeTermination < .seconds(2))
+      #expect(timing.childIdentifier == child)
+      try await fixture.expectChildStopped(child)
+      #expect(try fixture.requestDirectories().isEmpty)
+    } catch {
+      load.finish()
+      await load.waitUntilFinished()
+      throw error
     }
-    let timing = try await fixture.terminationTiming()
-    #expect(timing.lifetimeBeforeTermination < .seconds(2))
-    #expect(timing.childIdentifier == child)
-    try await fixture.expectChildStopped(child)
-    #expect(try fixture.requestDirectories().isEmpty)
+    load.finish()
+    await load.waitUntilFinished()
+    #expect(load.startedWorkerCount > 0)
+    #expect(load.finishedWorkerCount == load.workerCount)
+  }
+
+  @Test("abandoning prepared CPU load never starts work during failure cleanup")
+  func abandonedLoadDoesNotRun() async {
+    let load = FinitePriorityLoad()
+    await load.prepare()
+    load.finish()
+    await load.waitUntilFinished()
+    #expect(load.startedWorkerCount == 0)
+    #expect(load.finishedWorkerCount == load.workerCount)
   }
 
   @Test("task cancellation terminates the isolated child process group")
@@ -602,40 +624,119 @@ private enum FixtureError: Error {
   case childIdentifierMissing
 }
 
-/// A finite, isolated reproduction of the priority inversion seen in CI.
-/// Tasks are prepared before spawning so the measured child is already alive
-/// when higher-priority CPU work starts competing with the deadline timer.
-private final class FinitePriorityLoad {
-  private let workers = min(32, max(4, ProcessInfo.processInfo.activeProcessorCount * 2))
-  private let gate = DispatchSemaphore(value: 0)
-  private let group = DispatchGroup()
-  private var started = false
+/// A finite CPU competitor whose preparation never occupies Swift's cooperative
+/// executor or the global GCD pool. Failure cleanup cancels prepared workers;
+/// it cannot accidentally launch a three-second stress run.
+private final class FinitePriorityLoad: Sendable {
+  private struct State {
+    var prepared = false
+    var released = false
+    var cancelled = false
+    var readyWorkers = 0
+    var startedWorkers = 0
+    var finishedWorkers = 0
+    var readyWaiters: [CheckedContinuation<Void, Never>] = []
+    var finishedWaiters: [CheckedContinuation<Void, Never>] = []
+  }
 
-  init() {
-    let ready = DispatchSemaphore(value: 0)
-    let gate = self.gate
-    let group = self.group
-    for _ in 0..<workers {
-      group.enter()
-      DispatchQueue.global(qos: .userInitiated).async {
-        ready.signal()
-        gate.wait()
-        let finish = DispatchTime.now().uptimeNanoseconds + 3_000_000_000
-        while DispatchTime.now().uptimeNanoseconds < finish {}
-        group.leave()
+  private let workers = min(32, max(4, ProcessInfo.processInfo.activeProcessorCount * 2))
+  private let state = Mutex(State())
+  private let gate = DispatchSemaphore(value: 0)
+  var workerCount: Int { workers }
+  var startedWorkerCount: Int { state.withLock { $0.startedWorkers } }
+  var finishedWorkerCount: Int { state.withLock { $0.finishedWorkers } }
+
+  func prepare() async {
+    let shouldLaunch = state.withLock { state in
+      guard !state.prepared, !state.cancelled else { return false }
+      state.prepared = true
+      return true
+    }
+    if shouldLaunch {
+      for _ in 0..<workers {
+        let thread = Thread { [self] in runWorker() }
+        thread.qualityOfService = .userInitiated
+        thread.start()
       }
     }
-    for _ in 0..<workers { ready.wait() }
+    await withCheckedContinuation { continuation in
+      let ready = state.withLock { state in
+        if !state.prepared || state.readyWorkers == workers { return true }
+        state.readyWaiters.append(continuation)
+        return false
+      }
+      if ready { continuation.resume() }
+    }
   }
 
   func start() {
-    guard !started else { return }
-    started = true
-    for _ in 0..<workers { gate.signal() }
+    let shouldRelease = state.withLock { state in
+      guard state.prepared, state.readyWorkers == workers,
+        !state.cancelled, !state.released
+      else { return false }
+      state.released = true
+      return true
+    }
+    if shouldRelease {
+      for _ in 0..<workers { gate.signal() }
+    }
   }
 
   func finish() {
-    start()
-    group.wait()
+    let shouldRelease = state.withLock { state in
+      state.cancelled = true
+      guard state.prepared, !state.released else { return false }
+      state.released = true
+      return true
+    }
+    if shouldRelease {
+      for _ in 0..<workers { gate.signal() }
+    }
+  }
+
+  func waitUntilFinished() async {
+    await withCheckedContinuation { continuation in
+      let finished = state.withLock { state in
+        if !state.prepared || state.finishedWorkers == workers { return true }
+        state.finishedWaiters.append(continuation)
+        return false
+      }
+      if finished { continuation.resume() }
+    }
+  }
+
+  private func runWorker() {
+    let ready = state.withLock { state in
+      state.readyWorkers += 1
+      guard state.readyWorkers == workers else { return [CheckedContinuation<Void, Never>]() }
+      let waiters = state.readyWaiters
+      state.readyWaiters.removeAll()
+      return waiters
+    }
+    for waiter in ready { waiter.resume() }
+    gate.wait()
+    let shouldRun = state.withLock { state in
+      guard !state.cancelled else { return false }
+      state.startedWorkers += 1
+      return true
+    }
+    if shouldRun {
+      let deadline = DispatchTime.now().uptimeNanoseconds + 3_000_000_000
+      while DispatchTime.now().uptimeNanoseconds < deadline {
+        // One millisecond of real CPU work, then check cancellation. Cleanup
+        // never waits for the remainder of an abandoned three-second phase.
+        let slice = min(deadline, DispatchTime.now().uptimeNanoseconds + 1_000_000)
+        while DispatchTime.now().uptimeNanoseconds < slice {}
+        if state.withLock({ $0.cancelled }) { break }
+      }
+    }
+    let finished = state.withLock { state in
+      state.finishedWorkers += 1
+      guard state.finishedWorkers == workers else { return [CheckedContinuation<Void, Never>]() }
+      let waiters = state.finishedWaiters
+      state.finishedWaiters.removeAll()
+      return waiters
+    }
+    for waiter in finished { waiter.resume() }
   }
 }
