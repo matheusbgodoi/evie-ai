@@ -127,9 +127,15 @@ the capability contracts that already exist in `EvieCapabilityContracts`.
 
 ## What the model is allowed to see
 
-Five flat functions, all read-only:
+Seven flat functions in `EvieFileToolbox`, all read-only:
 
-`list_folder`, `read_file`, `search_files`, `file_info`, `list_roots`.
+`list_roots`, `list_folder`, `read_file`, `search_files`, `search_content`,
+`file_info`, `analyze_folder`.
+
+Writing, opening and revealing are separate types with their own sections below
+(`propose_change`, `propose_document`, `open_file`, `reveal_in_finder`); none of
+them lives in the read-only toolbox, and `EvieFileToolboxTests` asserts that no
+name in it contains a verb that changes anything.
 
 Roots are referred to by opaque identifiers, never paths, so the model cannot
 construct a location it was not given. **There is no commit tool in the schema.**
@@ -216,3 +222,69 @@ disk. `EvieFileToolboxTests` asserts this directly against every tool's output.
 
 Progress messages obey the same rule: the overlay says *Lendo plano.md…*, never
 the folder it lives in and never the identifier.
+
+## Suggested folders — implemented 2026-10-16
+
+`EvieSuggestedRoot` names four well-known folders: **Mesa** (`~/Desktop`),
+**Documentos** (`~/Documents`), **Downloads** (`~/Downloads`) and the
+**Obsidian** vault at
+`~/Library/Mobile Documents/iCloud~md~obsidian/Documents/Obsidian Vault`. The
+list is fixed in code, so a suggestion is never a path a model produced.
+
+- **Never granted silently.** A suggestion is a card, "Permitir que a Evie leia
+  sua Mesa", with one button. The card appears when the person's own message
+  mentions the folder (`EvieSuggestedRoot.mentioned(in:)`), when a tool names its
+  alias before it is granted, from the first-run guide, or from Settings. It says
+  that macOS asks once per folder — Desktop, Documents and Downloads are TCC
+  folders — and the shell touches the folder right after the press so the
+  system's question appears while the person is still looking.
+- **Aliases as `root_id`.** `mesa`, `documentos`, `downloads` and `obsidian`
+  work wherever a root identifier does once the folder is reachable: granted on
+  its own, or inside a granted home folder. Inside a home folder the alias is a
+  narrowed view (`location(in:home:)`) produced only when the canonical path,
+  symlinks resolved, still lies inside the grant and the path between them holds
+  no denied name. A home grant therefore never exposes the vault, which lives
+  under `Library`.
+- **Without a home, no alias.** `EvieFileToolbox.home` is `nil` by default; only
+  the shell's own turn sets it. The schedule runner and the diagnostics see the
+  identifiers they were given and nothing else.
+- `list_roots` lists granted folders, the aliases that reach them, and the
+  well-known folders not granted yet. An ungranted alias fails with a sentence
+  that tells the model a card is on screen, and the loop reports it
+  (`requestedSuggestion`) so the shell can draw the card.
+
+This narrows "grants come only from `NSOpenPanel`": the open panel remains the
+only way to grant an arbitrary folder, and the card adds a one-click way for
+these four fixed ones. ADR 0019 records it.
+
+## Analysing a folder — implemented 2026-10-16
+
+`analyze_folder(root_id, path?, documents?)` answers "analisa a pasta Downloads"
+and "o que tem na minha mesa?" in one call. `EvieFolderAnalyzer` walks the folder
+through the same contained reader and returns, counted by code:
+
+- files and folders, total size, and counts and sizes by kind (PDF, Word and
+  formatted text, text and notes, spreadsheets, presentations, images, videos,
+  audio, archives, installers and apps, other);
+- the five newest and five oldest files, and up to twenty names;
+- the opening (600 characters) of up to four documents, at most eight, newest
+  first: PDF, DOCX, DOC, RTF, ODT, TXT, MD, CSV. PPTX is counted but not read —
+  neither PDFKit nor `NSAttributedString` reads it, and a zip parser is not worth
+  adding for an extract.
+
+Bounded like the searches: three levels below the folder, 4,000 entries, one
+listing page (128) per folder, and "os números são um mínimo" when a ceiling
+stopped it. Hidden files are skipped; credentials are counted as withheld and
+never named. App bundles and other packages count as one item and are never
+walked into. The extracts are introduced as untrusted content.
+
+## Reading documents in a folder — implemented 2026-10-16
+
+`read_file` on a PDF, DOCX, DOC, RTF or ODT returns its text
+(`EvieDocumentText`): PDFKit for a PDF's text layer, `NSAttributedString`'s
+document readers for the rest, at most 60,000 characters and 60 PDF pages. The
+bytes come from `EvieScopedFileReader.readData`, the same `openat` containment as
+every other read, with a 16 MiB ceiling that refuses a larger file whole rather
+than truncating it into a corrupt one. A scanned PDF has no text layer and is
+reported as such; reading its pixels stays `EvieDocumentReader`'s job, on an
+attached file.

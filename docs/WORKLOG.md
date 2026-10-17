@@ -4278,3 +4278,26 @@ nobody but the owner can fetch it.**
   only the handful of words that could be within one edit of it and keeps no text
   at all. Correctness unchanged; the successful-search path measured 64 s before
   and after.
+
+## 2026-10-16 — folders: suggestions, analyze_folder, documents in read_file
+
+- Branch `v2-files` (worktree `evie-ai-files`, from `v2` at `b97686a`). The
+  owner wants Evie to work like a command-line agent for everyday computer
+  tasks — "salvar algo na minha mesa, analisar uma pasta, ver as coisas do meu
+  PC" — inside the existing authority model. This is the read half.
+- `EvieSuggestedRoot`: Mesa, Documentos, Downloads and the iCloud Obsidian vault
+  as fixed suggestions with aliases usable as `root_id`; a granted home folder
+  reaches the first three through a narrowed view and never the vault under
+  `Library`. `EvieFileToolbox.home` (default `nil`) switches aliases on.
+- `analyze_folder` (`EvieFolderAnalyzer`): counts by kind, sizes, newest and
+  oldest, a sample of names and document extracts, bounded at 3 levels, 4,000
+  entries and 8 extracts.
+- `read_file` now returns the text of PDF, DOCX, DOC, RTF and ODT through
+  `EvieDocumentText` and the new `EvieScopedFileReader.readData` (16 MiB,
+  refused whole when larger). `ReaderError.tooLarge` added.
+- The card that grants a suggestion is in the shell, in a later commit on this
+  branch; `docs/FILESYSTEM.md` describes the whole design.
+- Checks: `swift build` clean; `Scripts/test --filter
+  'EvieSuggestedRootTests|EvieFolderAnalysisTests|EvieFileToolboxDocumentTests|EvieFileToolboxTests|EvieScopedFileReader'`
+  — 67 tests passed. Fixtures live under the temporary directory; a stand-in
+  home is a fresh folder, never the real Desktop.

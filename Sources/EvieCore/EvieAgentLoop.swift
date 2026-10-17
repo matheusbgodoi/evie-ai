@@ -604,6 +604,8 @@ extension EvieAgentLoop {
       return "Lendo suas anotações…"
     case .fileInfo:
       return "Conferindo os detalhes…"
+    case .analyzeFolder:
+      return "Analisando a pasta…"
     case nil:
       if call.name == EvieMemoryTool.name {
         return "Anotando uma coisa para te perguntar…"
