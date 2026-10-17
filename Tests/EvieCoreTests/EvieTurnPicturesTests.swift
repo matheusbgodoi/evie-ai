@@ -333,6 +333,59 @@ struct EvieTurnPicturesTests {
     #expect(!EvieTurnPlan.carriesPicture(messages))
   }
 
+  @Test("a picture's recognised text on a brain that cannot see counts as the picture")
+  func derivedTextCountsAsAPicture() {
+    // A brain with tools and no vision, such as a custom profile.
+    var blindWithTools = pcProfile
+    blindWithTools.capabilities.vision = false
+    let plan = EvieTurnPlan(profile: blindWithTools, readiness: .ready)
+    let tail = plan.pictureTail(
+      asking: ChatMessage(role: .user, content: "o que diz aí?"), with: screenPictures)
+
+    // No image goes to this brain; its OCR text and the question do.
+    #expect(!tail.contains { !($0.images ?? []).isEmpty })
+    let everyMessageFlagged = tail.allSatisfy { $0.derivedFromPicture }
+    #expect(everyMessageFlagged)
+    let messages = plan.prefix([ChatMessage(role: .system, content: "Evie")], then: tail)
+    #expect(EvieTurnPlan.carriesPicture(messages))
+    #expect(
+      plan.route(
+        hasRoots: true, searchesTheWeb: true, readsMailAndCalendar: false,
+        carriesPicture: EvieTurnPlan.carriesPicture(messages)) == .agentLoop(offersTools: false))
+  }
+
+  @Test("a replayed picture turn still counts once its picture is a marker")
+  func replayedTurnCountsWithoutItsImage() {
+    let seeing = EvieTurnPlan(profile: pcProfile, readiness: .ready)
+    let question = ChatMessage(role: .user, content: "o que tem na tela?")
+    let sent = seeing.pictureTail(asking: question, with: screenPictures)
+    let history = [
+      ChatMessage(role: .system, content: "Evie"), question,
+      ChatMessage(role: .assistant, content: "Uma fatura."),
+    ]
+    let replayed = EvieSentPictureTurn(questionID: question.id, sent: sent).replay(history)
+
+    // The conversation fails over to a brain that cannot see: the picture
+    // becomes a marker, and what was sent beside it is still the screen's.
+    let blind = EvieTurnPlan(profile: blindProfile, readiness: .ready)
+    let messages = blind.prefix(replayed, then: [ChatMessage(role: .user, content: "procura isso")])
+    #expect(!messages.contains { !($0.images ?? []).isEmpty })
+    #expect(EvieTurnPlan.carriesPicture(messages))
+    #expect(!EvieTurnPlan.autoApprovesChanges(true, carriesPicture: EvieTurnPlan.carriesPicture(messages)))
+  }
+
+  @Test("the picture flag is never saved")
+  func derivedFlagIsNotEncoded() throws {
+    var message = ChatMessage(role: .user, content: "Fatura 58213")
+    message.derivedFromPicture = true
+
+    let json = String(decoding: try JSONEncoder().encode(message), as: UTF8.self)
+    let decoded = try JSONDecoder().decode(ChatMessage.self, from: Data(json.utf8))
+
+    #expect(!json.contains("derived"))
+    #expect(!decoded.derivedFromPicture)
+  }
+
   @Test("changes are never applied without a click while a picture is in context")
   func noAutoApprovalWithAPicture() {
     #expect(!EvieTurnPlan.autoApprovesChanges(true, carriesPicture: true))

@@ -142,11 +142,21 @@ extension EvieTurnPlan {
   /// the screen goes (else the first pasted picture), and the pasted pictures
   /// also go as their text, fenced, before the note. A brain that does not see
   /// gets the pictures' text, fenced, and then the question.
+  ///
+  /// Every message returned is `derivedFromPicture`, so the request counts as
+  /// carrying the picture wherever it goes next: to a brain that gets only the
+  /// text, or replayed after the picture became a marker.
   public func pictureTail(asking question: ChatMessage, with pictures: EvieTurnPictures) -> [ChatMessage] {
     guard !pictures.isEmpty else {
       return [question]
     }
-    let evidence = pictures.textFallback.map { ChatMessage(role: .user, content: $0) }
+    var question = question
+    question.derivedFromPicture = true
+    let evidence = pictures.textFallback.map { text in
+      var message = ChatMessage(role: .user, content: text)
+      message.derivedFromPicture = true
+      return message
+    }
     guard profile.capabilities.vision else {
       return [evidence, question].compactMap { $0 }
     }
@@ -157,11 +167,12 @@ extension EvieTurnPlan {
       sent = Array(screenFirst.prefix(limit))
       dropped = true
     }
-    let note = ChatMessage(
+    var note = ChatMessage(
       role: .system,
       content: sent.contains { $0.origin == .screenshot }
         ? EvieTurnPictures.screenNote : EvieTurnPictures.attachmentNote
     )
+    note.derivedFromPicture = true
     var carrying = question
     carrying.images = sent
     return [dropped ? evidence : nil, note, carrying].compactMap { $0 }

@@ -6,6 +6,12 @@ All notable changes to Evie are documented here. Dates use `YYYY-MM-DD`.
 
 ### Changed
 
+- **Security: text read off a picture is kept away from tools like the
+  picture itself.** On a brain that cannot see, a capture's recognised text and
+  description, and the replayed turn of an earlier look after a switch to such
+  a brain, used to reach the tool-enabled loop and auto-approval as ordinary
+  text. Those messages now carry a flag (in memory only) that counts as a
+  picture, for ordinary questions and for `/web`.
 - **Security: invisible or lookalike characters no longer open a way out of
   Evie's fences.** A document or a screen read on a brain without vision could
   still write a closing marker that the model would read as one: brackets split

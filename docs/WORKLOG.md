@@ -1,5 +1,25 @@
 # Work log
 
+## 2026-10-16 — v2 Fix phase: picture-derived text counts as a picture (queued finding #8)
+
+- Completed: `ChatMessage.derivedFromPicture` (in memory; not in
+  `CodingKeys`), set by `EvieTurnPlan.pictureTail` on the question carrying
+  pictures, the context note and the fenced text it adds; kept through
+  `EvieSentPictureTurn.replay` and `keepingNewestPictures`;
+  `EvieTurnPlan.carriesPicture` checks it as well as `images`. The shell's two
+  callers (`OverlayViewModel.answer(_:on:)`, `runWebOnlyTurn`) already route and
+  auto-approve through `carriesPicture(messages)`; their comments now say so.
+- Tests: "Evie turn pictures" +3 — OCR text on a tool-enabled brain without
+  vision is flagged and routes tool-less; a replayed picture turn still counts
+  after a failover to a blind brain turns its picture into a marker (and keeps
+  auto-approval off); the flag is never encoded. The first two failed before
+  the change (4 issues). "A picture that became a marker no longer counts as
+  one" still passes: the stored question is not flagged.
+- Docs: `docs/SECURITY.md` § Screen captures and pictures, design doc (S4
+  notes), CHANGELOG.
+- Checks: `swift build` (no warnings); `Scripts/test --filter
+  "EvieTurnPicturesTests|EvieBrainTurnTests|OpenAICompatibleClientTests|ChatModelTypesTests"`.
+
 ## 2026-10-16 — v2 Fix phase: document fences against Unicode tricks (queued findings #6, #7)
 
 - Completed: `EvieUntrustedText.neutralized` (`Sources/EvieCore/EvieDocumentReader.swift`)

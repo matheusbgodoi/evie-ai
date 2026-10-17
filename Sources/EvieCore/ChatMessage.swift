@@ -28,6 +28,15 @@ public struct ChatMessage: Identifiable, Codable, Hashable, Sendable {
   /// `CodingKeys`, so they are never saved, exported or logged, and a
   /// conversation file written before they existed decodes unchanged.
   public var images: [EvieImagePart]? = nil
+  /// Set on what a turn with a picture adds beside it — the question that
+  /// carried it, the note about it, its recognised text and description — so
+  /// the request still counts as carrying the picture once the picture is a
+  /// marker or was never sent (a brain that cannot see gets the text only).
+  /// Text read off a screen can say anything, and `EvieTurnPlan.carriesPicture`
+  /// keeps it away from tools and from auto-approval exactly as it does the
+  /// picture. Not in `CodingKeys`, like `images`: it lives for the requests of
+  /// one session.
+  public var derivedFromPicture = false
 
   public init(
     id: UUID = UUID(),

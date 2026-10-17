@@ -1058,8 +1058,9 @@ extension OverlayViewModel {
       onLayoutInvalidated?()
     }
 
-    // A capture replayed from an earlier turn counts, and so does a pasted
-    // picture's text on a brain that cannot see it: none of it rides with tools.
+    // A capture replayed from an earlier turn counts, and so does a picture's
+    // text on a brain that cannot see it — the messages `pictureTail` built
+    // carry `derivedFromPicture`: none of it rides with tools or auto-approves.
     let carriesPicture = !pictures.isEmpty || EvieTurnPlan.carriesPicture(requestMessages)
 
     switch plan.route(

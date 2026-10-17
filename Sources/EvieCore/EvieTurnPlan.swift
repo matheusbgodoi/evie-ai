@@ -77,9 +77,13 @@ public struct EvieTurnPlan: Sendable, Equatable {
     return hasRoots || searchesTheWeb ? .agentLoop(offersTools: false) : .directStream
   }
 
-  /// Whether a picture rides in `messages`. One that became a marker does not.
+  /// Whether a picture rides in `messages`, as pixels or as what was read or
+  /// said about it (`ChatMessage.derivedFromPicture`): the recognised text and
+  /// description a brain without vision gets, or a replayed picture turn
+  /// whose picture became a marker. A marker in a message the conversation
+  /// kept, the question as it was typed, does not count.
   public static func carriesPicture(_ messages: [ChatMessage]) -> Bool {
-    messages.contains { !($0.images ?? []).isEmpty }
+    messages.contains { !($0.images ?? []).isEmpty || $0.derivedFromPicture }
   }
 
   /// Whether a change may be applied without its card being clicked: only when

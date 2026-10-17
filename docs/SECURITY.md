@@ -275,7 +275,13 @@ manager's window — so it is treated as the most sensitive input Evie has.
   card being clicked while a picture is in the request
   (`EvieTurnPlan.autoApprovesChanges`). The S5 computer-use loop is the
   deliberate exception, under its own policy, observation fencing and
-  confirmations.
+  confirmations. What a picture's turn adds beside it — the question that
+  carried it, the note, its recognised text and description — is flagged
+  `ChatMessage.derivedFromPicture` (in memory, never saved) and counts as the
+  picture (queued finding #8, 2026-10-16): a capture's OCR text on a brain
+  without vision, and a replayed picture turn whose picture became a marker
+  after a failover to such a brain, keep the request tool-less too, in an
+  ordinary turn and in `/web`.
 - **Permission.** `CGPreflightScreenCaptureAccess` first; the macOS prompt
   (`CGRequestScreenCaptureAccess`) is shown once, recorded in the first-run
   guide's record, and never again — after that a card offers "Abrir Ajustes"
