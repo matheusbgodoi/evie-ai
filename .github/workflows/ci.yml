@@ -5,7 +5,10 @@ permissions:
   contents: read
 jobs:
   public-vision-routes:
-    runs-on: xcode-27
+    strategy:
+      matrix:
+        runner: [macos-26, xcode-27]
+    runs-on: ${{ matrix.runner }}
     timeout-minutes: 5
     steps:
       - uses: actions/checkout@v4
