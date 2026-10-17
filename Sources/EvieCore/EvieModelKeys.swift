@@ -21,8 +21,9 @@ public struct KeychainItemName: Sendable, Hashable {
 /// A protocol so the key import can be tested without a keychain.
 /// `LoginKeychainItems` is the real one.
 public protocol EvieKeychainItems: Sendable {
-  /// Whether the item exists. Reads attributes only, never the secret, so it
-  /// never shows the macOS access prompt and can run on every refresh.
+  /// Whether the item exists. Reads attributes only, never the secret. The
+  /// Security call can still wait behind an authorization already in progress;
+  /// UI callers must use the background status refresher.
   func contains(_ item: KeychainItemName) throws -> Bool
   /// The item's secret, or `nil` when there is no such item. For an item another
   /// program created, macOS asks the person first and this call waits for the

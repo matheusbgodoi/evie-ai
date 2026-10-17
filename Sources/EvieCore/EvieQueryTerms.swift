@@ -3,7 +3,7 @@ import NaturalLanguage
 
 /// Works out which words of a question are worth searching for.
 ///
-/// This replaces a list of stopwords, and the reason is a failure that was
+/// Uses linguistic analysis with a deterministic grammar filter. The motivating failure was
 /// measured rather than imagined. Asked "o que eu tenho sobre a Cluemed" over a
 /// real vault, the previous version extracted `["tenho", "cluemed"]` — "tenho"
 /// survived because it was not on the list. Worse, because the vault is mostly
@@ -11,12 +11,12 @@ import NaturalLanguage
 /// gave it a **high** weight. Chemistry lessons containing "tenho" outranked the
 /// note actually called Cluemed.
 ///
-/// That is the flaw in stopword lists generally: they assume you can enumerate
-/// the words that carry no meaning, and inverse document frequency assumes rare
-/// means informative. Both are wrong for function words in a specialised corpus.
+/// A stopword list alone misses inflected grammar, while inverse document
+/// frequency assumes rare means informative. Linguistic tags remain the main
+/// selection; deterministic function words supplement hosts without those assets.
 ///
-/// So the part of speech decides instead. macOS ships the tagger; a pronoun is a
-/// pronoun whether or not anybody remembered to list it.
+/// Part of speech supplies the main selection. A small deterministic supplement
+/// also applies when system linguistic assets are absent or return otherWord.
 ///
 /// Lemmatising is the second gain and nearly free once the tagger is running.
 /// Portuguese inflects heavily — "cobro", "cobrei", "cobrava" and "cobrar" are
@@ -36,17 +36,35 @@ public enum EvieQueryTerms {
     "precisar", "conseguir", "deixar", "colocar", "passar", "levar", "pegar",
   ]
 
+  /// Grammar still needs filtering when the OS has no Portuguese tagger assets,
+  /// or reports every word as `.otherWord`. This supplements, rather than guesses,
+  /// inflection: subject verbs keep their original spelling without a real lemma.
+  private static let functionForms: Set<String> = [
+    "quanto", "quanta", "quantos", "quantas", "porque", "tenho", "temos", "tinham",
+    "tivemos", "tive", "teve", "tenha", "tenham", "preciso", "precisa", "precisamos",
+    "posso", "podemos", "quero", "quer", "queremos", "devo", "deve", "devemos",
+    "sou", "somos", "era", "eram", "estou", "estamos", "estava", "vou", "vamos",
+  ]
+
+  private static func isFunctionWord(_ word: String) -> Bool {
+    EviePassageRanker.stopWords.contains(word)
+      || auxiliaryLemmas.contains(word) || functionForms.contains(word)
+  }
+
   /// The classes that carry subject matter.
   static let contentClasses: Set<NLTag> = [.noun, .verb, .adjective, .otherWord, .number]
 
   /// The words worth matching on, lemmatised and folded, with the surface form
   /// kept alongside.
   public static func extract(from question: String) -> [String] {
+    extract(from: question, tagger: NLTagger(tagSchemes: [.lexicalClass, .lemma]))
+  }
+
+  static func extract(from question: String, tagger: NLTagger) -> [String] {
     guard !question.trimmingCharacters(in: .whitespaces).isEmpty else {
       return []
     }
 
-    let tagger = NLTagger(tagSchemes: [.lexicalClass, .lemma])
     tagger.string = question
     tagger.setLanguage(.portuguese, range: question.startIndex..<question.endIndex)
 
@@ -66,7 +84,8 @@ public enum EvieQueryTerms {
         return true
       }
       let surface = fold(String(question[range]))
-      let lemma = tagger
+      let lemma =
+        tagger
         .tag(at: range.lowerBound, unit: .word, scheme: .lemma).0
         .map { fold($0.rawValue) }
 
@@ -76,10 +95,10 @@ public enum EvieQueryTerms {
       // real noun; the benefit is that every question stops carrying grammar into
       // the ranking, where a rare function word gets a high inverse-frequency
       // weight and outranks the thing actually asked about.
-      if let lemma, auxiliaryLemmas.contains(lemma) {
+      if let lemma, isFunctionWord(lemma) {
         return true
       }
-      if auxiliaryLemmas.contains(surface) {
+      if isFunctionWord(surface) {
         return true
       }
       for term in [surface, lemma].compactMap({ $0 })
@@ -98,7 +117,7 @@ public enum EvieQueryTerms {
     // everything are different outcomes and the difference has to be tracked;
     // measured, because the test for dropping auxiliaries failed on exactly this.
     guard sawAnyTag else {
-      return EviePassageRanker.terms(in: question)
+      return EviePassageRanker.terms(in: question).filter { !isFunctionWord($0) }
     }
     return terms
   }

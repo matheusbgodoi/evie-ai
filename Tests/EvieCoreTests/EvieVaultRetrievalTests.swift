@@ -1,4 +1,5 @@
 import Foundation
+import NaturalLanguage
 import Testing
 
 @testable import EvieCore
@@ -56,6 +57,19 @@ struct EvieVaultRetrievalTests {
   func emptyQuestion() {
     #expect(EvieQueryTerms.extract(from: "").isEmpty)
     #expect(EvieQueryTerms.extract(from: "   ").isEmpty)
+  }
+
+  @Test("missing linguistic assets retain subject words without restoring question grammar")
+  func missingLinguisticAssets() {
+    let tagger = NLTagger(tagSchemes: [])
+    let terms = EvieQueryTerms.extract(
+      from: "o que eu tenho sobre a Cluemed e quanto cobro pela consultoria", tagger: tagger)
+    #expect(terms.contains("cluemed"))
+    #expect(terms.contains("cobro"))
+    #expect(terms.contains("consultoria"))
+    for grammar in ["que", "tenho", "sobre", "quanto", "pela"] {
+      #expect(!terms.contains(grammar))
+    }
   }
 
   // MARK: - Cutting a note

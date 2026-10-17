@@ -88,7 +88,7 @@ publication or a release has already occurred.
 
 ### Draft final gates — replace with executed evidence before publishing
 
-- Final full-suite result: **1,545 tests in 146 suites passed (23.913 s), with one intentional known timeout-injection issue**.
+- Final full-suite result: **1,549 tests in 146 suites passed (24.818 s), with one intentional known timeout-injection issue**.
 - Final resource/energy measurements, including conditions: **VALOR_FINAL_A_INSERIR**.
 - LensVLM qualification: completed at 131,072 tokens with the measured controls
   above; the final full-suite run covers the synchronized source defaults.

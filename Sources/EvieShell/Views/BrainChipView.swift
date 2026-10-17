@@ -30,7 +30,8 @@ struct BrainChipView: View {
     Button {
       isExpanded.toggle()
     } label: {
-      Image(systemName: "brain")
+      Label("Cérebro e controles da Evie", systemImage: "brain")
+        .labelStyle(.iconOnly)
         .font(.system(size: 13, weight: .medium))
         .foregroundStyle(model.chip.isAgentModeOn ? BrainChipPalette.agent : .primary)
         .frame(width: 30, height: 30)
@@ -56,6 +57,7 @@ struct BrainChipView: View {
     .focusEffectDisabled()
     .help(model.chip.accessibilityLabel + " · modelo, raciocínio e modo agente")
     .accessibilityLabel("Cérebro e controles da Evie")
+    .accessibilityIdentifier("evie-brain-controls")
     .accessibilityValue(model.chip.accessibilityLabel)
     .accessibilityHint("Abre modelo, raciocínio, modo agente e pesquisa web")
     .popover(isPresented: $isExpanded, attachmentAnchor: .rect(.bounds), arrowEdge: .bottom) {
@@ -66,6 +68,8 @@ struct BrainChipView: View {
 
 struct BrainControlsView: View {
   var model: BrainChipModel
+  private static let width: CGFloat = 330
+  private static let inset: CGFloat = 18
 
   private var isWorking: Bool { model.isBusy || model.isCompacting }
 
@@ -74,7 +78,7 @@ struct BrainControlsView: View {
       controls
     }
     .scrollBounceBehavior(.basedOnSize)
-    .frame(width: 330)
+    .frame(width: Self.width)
     .frame(maxHeight: 680)
   }
 
@@ -117,6 +121,8 @@ struct BrainControlsView: View {
           }
           .buttonStyle(.plain)
           .disabled(!item.isAvailable || isWorking)
+          .accessibilityLabel(item.title)
+          .accessibilityIdentifier("evie-brain-choice-\(item.choice.id)")
           .accessibilityAddTraits(item.isSelected ? [.isSelected] : [])
         }
         Text(
@@ -125,6 +131,7 @@ struct BrainControlsView: View {
             : "A escolha vale para a próxima resposta desta conversa."
         )
         .font(.caption).foregroundStyle(.secondary)
+        .fixedSize(horizontal: false, vertical: true)
       }
       Divider()
       contextSummary
@@ -141,6 +148,7 @@ struct BrainControlsView: View {
             }
           }
           .pickerStyle(.segmented)
+          .controlSize(.small)
           .labelsHidden()
           .disabled(isWorking || model.chip.profile.thinkingStyle == .none)
           Text("Desligado responde mais rápido; Máximo pode levar mais tempo.")
@@ -159,6 +167,7 @@ struct BrainControlsView: View {
             "Habilita sessões de controle do Mac. Só age quando você inicia uma tarefa; não fica controlando o computador o tempo todo."
           )
           .font(.caption).foregroundStyle(.secondary)
+          .fixedSize(horizontal: false, vertical: true)
         }
       }
       if let setWeb = model.onSetWebSearch {
@@ -167,10 +176,15 @@ struct BrainControlsView: View {
             .toggleStyle(.switch)
           Text("Envia termos de busca ao DuckDuckGo e lê páginas públicas.")
             .font(.caption).foregroundStyle(.secondary)
+            .fixedSize(horizontal: false, vertical: true)
         }
       }
     }
-    .padding(18)
+    // A native segmented control has an intrinsic minimum width. Bound the
+    // content as well as the scroll viewport, so it cannot widen and center
+    // the whole stack beyond the popover's readable insets.
+    .frame(width: Self.width - Self.inset * 2, alignment: .leading)
+    .padding(Self.inset)
   }
 
   private var contextSummary: some View {

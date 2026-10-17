@@ -1,4 +1,5 @@
 import CoreGraphics
+import CoreML
 import Foundation
 import PDFKit
 import UniformTypeIdentifiers
@@ -78,6 +79,12 @@ public struct EvieDocumentReader: Sendable {
   public static let renderDotsPerInch: CGFloat = 200
   private static let pdfPointsPerInch: CGFloat = 72
 
+  public enum ComputePolicy: Sendable {
+    case automatic
+    case cpuOnly
+  }
+
+  public var computePolicy: ComputePolicy
   public var languages: [String]
   public var usesLanguageCorrection: Bool
   public var maximumPages: Int
@@ -85,11 +92,13 @@ public struct EvieDocumentReader: Sendable {
   public init(
     languages: [String] = ["pt-BR", "en-US"],
     usesLanguageCorrection: Bool = true,
-    maximumPages: Int = 20
+    maximumPages: Int = 20,
+    computePolicy: ComputePolicy = .automatic
   ) {
     self.languages = languages
     self.usesLanguageCorrection = usesLanguageCorrection
     self.maximumPages = maximumPages
+    self.computePolicy = computePolicy
   }
 
   public enum ReaderError: Error, Equatable, Sendable {
@@ -97,6 +106,7 @@ public struct EvieDocumentReader: Sendable {
     case unreadablePDF(String)
     case emptyDocument(String)
     case unsupportedType(String)
+    case cpuRecognitionUnavailable
   }
 
   // MARK: - Any supported file
@@ -149,17 +159,8 @@ public struct EvieDocumentReader: Sendable {
     sourceName: String,
     pageNumber: Int? = nil
   ) async throws -> EvieDocumentObservation {
-    var request = RecognizeTextRequest()
-    // Accuracy is not optional for Portuguese. The fast level was measured
-    // turning "Emissão" into "Emissào" and "05/08/2026" into "0510812026".
-    request.recognitionLevel = .accurate
-    request.usesLanguageCorrection = usesLanguageCorrection
-    request.recognitionLanguages = languages.map(Locale.Language.init(identifier:))
-    // The default is 1/32 of the image height, which silently returns *nothing*
-    // for ordinary screenshot-sized text. Zero means "recognise what is there".
-    request.minimumTextHeightFraction = 0
-
-    let observations = try await request.perform(on: image)
+    try Task.checkCancellation()
+    let (observations, usedCPUFallback) = try await recognize(image)
     let lines: [EvieRecognizedLine] = observations.compactMap { observation in
       guard let candidate = observation.topCandidates(1).first else {
         return nil
@@ -171,6 +172,9 @@ public struct EvieDocumentReader: Sendable {
     }
 
     var warnings: [String] = []
+    if usedCPUFallback {
+      warnings.append("O acelerador de reconhecimento falhou; o texto foi reconhecido pela CPU.")
+    }
     if lines.isEmpty {
       warnings.append("Nenhum texto foi encontrado nesta imagem.")
     } else if let weakest = lines.map(\.confidence).min(), weakest < 0.35 {
@@ -187,6 +191,70 @@ public struct EvieDocumentReader: Sendable {
       lines: lines,
       warnings: warnings
     )
+  }
+
+  private func textRequest(cpuOnly: Bool) throws -> RecognizeTextRequest {
+    var request = RecognizeTextRequest()
+    // Accuracy is not optional for Portuguese. The fast level was measured
+    // turning "Emissão" into "Emissào" and "05/08/2026" into "0510812026".
+    request.recognitionLevel = .accurate
+    request.usesLanguageCorrection = usesLanguageCorrection
+    request.recognitionLanguages = languages.map(Locale.Language.init(identifier:))
+    // The default is 1/32 of the image height, which silently returns *nothing*
+    // for ordinary screenshot-sized text. Zero means "recognise what is there".
+    request.minimumTextHeightFraction = 0
+
+    if cpuOnly {
+      let devicesByStage = request.supportedComputeStageDevices
+      guard !devicesByStage.isEmpty else { throw ReaderError.cpuRecognitionUnavailable }
+      for (stage, devices) in devicesByStage {
+        guard
+          let cpu = devices.first(where: {
+            if case .cpu = $0 { return true }
+            return false
+          })
+        else {
+          throw ReaderError.cpuRecognitionUnavailable
+        }
+        request.setComputeDevice(cpu, for: stage)
+      }
+    }
+    return request
+  }
+
+  private func recognize(_ image: CGImage) async throws -> ([RecognizedTextObservation], Bool) {
+    try await Self.recognizeWithCPUFallback(policy: computePolicy) { cpuOnly in
+      let request = try textRequest(cpuOnly: cpuOnly)
+      return try await request.perform(on: image)
+    }
+  }
+
+  static func recognizeWithCPUFallback<Result: Sendable>(
+    policy: ComputePolicy,
+    perform: @Sendable (Bool) async throws -> Result
+  ) async throws -> (Result, Bool) {
+    try Task.checkCancellation()
+    do {
+      let result = try await perform(policy == .cpuOnly)
+      try Task.checkCancellation()
+      return (result, false)
+    } catch {
+      try Task.checkCancellation()
+      guard policy == .automatic, allowsCPUFallback(after: error) else { throw error }
+      // One alternative device route, with the same accurate request settings.
+      // A second failure is propagated; it can never become an empty observation.
+      let result = try await perform(true)
+      try Task.checkCancellation()
+      return (result, true)
+    }
+  }
+
+  static func allowsCPUFallback(after error: any Error) -> Bool {
+    if error is CancellationError { return false }
+    if let visionError = error as? VisionError, case .requestCancelled = visionError {
+      return false
+    }
+    return true
   }
 
   // MARK: - PDFs
@@ -311,6 +379,8 @@ extension EvieDocumentReader.ReaderError: LocalizedError {
       "Não consegui abrir o PDF \(name)."
     case .emptyDocument(let name):
       "O arquivo \(name) não tem páginas."
+    case .cpuRecognitionUnavailable:
+      "O reconhecimento de texto pela CPU não está disponível neste sistema."
     case .unsupportedType(let name):
       "Ainda não sei ler \(name). Por enquanto leio imagens e PDFs."
     }

@@ -147,18 +147,32 @@ The corrected diagnostic ran from `/tmp/evie-ui-native/Evie.app`, a copy of
 the release bundle containing the built debug executable, signed and verified
 with the same pinned application identity; no installation was replaced.
 All 18 PNGs were written successfully to `/tmp/evie-ui-native/snapshots/`.
-Reviewed: the six brain statuses, agent outline, idle voice capsule, expanded
+Historically reviewed: the six brain statuses, agent outline, idle voice capsule, expanded
 brain controls, answer card, research consent window, and minimum-size Settings.
 Both appearances contain actual native controls and text with no overlap in
 the input area. The diagnostic windows were displayed without activation, so
 platform inactive-control styling is expected. Permission rows are synthetic
 fixture values, not a statement of this Mac's actual grants. Representative
-corrected captures:
+captures from that compositor correction:
 
 - [Input controls, light](images/apple-visual/integrated-overlay-light.png)
 - [Input controls, dark](images/apple-visual/integrated-overlay-dark.png)
-- [Expanded brain controls, light](images/apple-visual/integrated-brain-controls-light.png)
-- [Expanded brain controls, dark](images/apple-visual/integrated-brain-controls-dark.png)
+- [Legacy expanded brain controls, light](images/apple-visual/integrated-brain-controls-light.png)
+- [Legacy expanded brain controls, dark](images/apple-visual/integrated-brain-controls-dark.png)
+
+The final installed-UI review on 2026-10-17 found a separate layout defect in
+those legacy brain-control images: the unconstrained stack exceeded the
+330-point scroll viewport and clipped its side insets. Their native rendering
+is real, but they are **not approved evidence of the current popover layout**.
+The source now bounds content to 294 points inside the 18-point insets, uses
+the small native segmented picker and wraps explanatory text. A standalone
+Swift 6 build passed warnings-as-errors; its visible owned-window
+[corrected layout capture](images/apple-visual/brain-controls-context-fixed.png)
+shows complete text in normal and compacting states. Inactive gray styling in
+that synthetic capture does not validate active-control colors. The rebuilt
+installed popover, semantic AX controls and regenerated integrated images
+require their own final check; the source correction alone does not prove
+them.
 
 A diagnostic `sandbox_extension_issue_file_to_process` log was emitted for
 the temporary bundle, but its process exited successfully and every expected

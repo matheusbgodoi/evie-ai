@@ -555,3 +555,48 @@ side effects; the installed Evie's own permission audit remains separate
 evidence. Following indentation-only normalization, both Mail programs passed
 `osacompile`, strict Swift formatting and the global whitespace check. The
 Mail/pagination/agent-focused run passed 51 tests in four suites (23.999 seconds).
+
+
+## Recognition without accelerator or linguistic assets
+
+The full-package CI exposed two real host differences: Vision's automatic OCR
+route threw `e5rt_e5_compiler_compile`/11 on the virtual runner, while Portuguese
+linguistic tagging returned insufficient classification and left question grammar
+among retrieval terms. Neither failure was converted into a skipped assertion.
+
+`EvieDocumentReader` keeps accurate recognition, language correction, minimum
+text height and line confidence. It first uses Vision's normal device choice;
+a non-cancellation failure may take one alternative CPU route. The reader asks
+`supportedComputeStageDevices` for each stage and assigns only a reported CPU
+with public `setComputeDevice(_:for:)`. A missing CPU or second failure throws;
+no empty successful page is invented. Cancellation is checked before and after
+recognition and never starts the alternative route. Successful fallback adds
+an observation warning. The explicit `cpuOnly` policy exercises the same public
+CPU path locally and does not change the default's accelerated performance.
+The public API contract is documented by [Apple](https://developer.apple.com/documentation/vision/vnrequest/setcomputedevice(_:for:));
+the Swift `RecognizeTextRequest` signatures were also verified in the macOS 27 SDK.
+
+Retrieval now applies a deterministic grammar supplement to both tagged tokens
+and the missing-tagger fallback. It retains the original subject-word spelling
+when a real lemma is unavailable; it does not guess conjugations or invent
+lemmas. An empty-schemes real `NLTagger` reproduced `tenho`/`quanto` leaking into
+the query before the fix. That regression then passed alongside the existing
+Portuguese question, lemma, plural and auxiliary assertions.
+
+The original OCR assertions now run on both automatic and forced-CPU policies:
+Portuguese accents/currency, per-line confidence, small text, blank pages and
+scanned PDFs. Additional tests force the automatic route to fail and then run
+actual CPU OCR on the same synthetic page, verify one alternative only, preserve
+CPU errors and reject cancellation. These local results validate the CPU route;
+a fresh hosted CI run remains the evidence for the runner's automatic fallback.
+
+For TCC audits, launch the installed bundle with Launch Services:
+`open -n -a ~/Applications/Evie.app --args --permissions-check`. Directly running
+its Mach-O from a terminal can inherit the command-line responsible process and
+report different grants. The fresh Launch Services report matched the normal
+Evie guide: microphone, speech recognition, screen recording, Accessibility and
+post events granted; Mail/Calendar Automation OSStatus 0. The Mail consent was
+accepted through the guide's own request and the OS's Evie→Mail alert. Existing
+Calendar/Speech grants required no new prompt. Calendar was closed normally
+after that audit to restore the original test-host precondition; no privileges
+were granted to the terminal and no mailbox or calendar content was inspected.
