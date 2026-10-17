@@ -10,8 +10,8 @@ records the final installed-runtime check separately before release.
 
 | Brain | Effective context target | Published model context | Output budget |
 | --- | ---: | ---: | --- |
-| PC · `qwen-daily` | **200,704 tokens**, matching the verified OpenCode setup | Qwen3.8-27B: 262,144 native | 16,384 tokens per turn, matching OpenCode and reserved inside the context budget |
-| Mac · LensVLM 9B OptiQ | **131,072 tokens**, largest qualified operational rung on the 24 GiB M5 | 262,144 nominal | 2,048 tokens per turn, reserved inside the context budget |
+| PC · `qwen-daily` | **200,704 tokens**, matching the verified OpenCode setup | Qwen3.8-27B: 262,144 native | Configured ceiling of 16,384 tokens, matching OpenCode and reserved inside the context budget |
+| Mac · LensVLM 9B OptiQ | **131,072 tokens**, largest qualified operational rung on the 24 GiB M5 | 262,144 nominal | Configured ceiling of 2,048 tokens, reserved inside the context budget |
 
 Context includes system text, tools, history, the new message, image tokens
 and generated reasoning/final output. Increasing a display number does not
@@ -76,11 +76,27 @@ and official card distinguish two modes:
 The owner's PC gateway remains authoritative for its qualified dual-mode
 sampler, including any documented departure such as its minimum-probability
 guard. Evie must not accidentally replace that policy with generic defaults.
-Qwen3.8 supports `low`, `medium`, and `xhigh` reasoning effort and defaults to
-preserving previous reasoning in the supported template. Runtime acceptance
-and actual behavior must be verified on the serving stack. Recommendations
-for enormous separated reasoning/final-output caps assume a much larger
-supported context; they do not override this gateway's completion cap.
+Qwen3.8 supports `low`, `medium`, and `xhigh` reasoning effort. The official
+template defaults to `preserve_thinking: true`. Evie deliberately sends
+`preserve_thinking: false` when enabling reasoning through `templateKwargs`;
+its conversation messages store and replay the answer content, not a separate
+reasoning trace. Thus Evie does not claim exact alignment with that recommended
+multi-turn template. Reasoning is off by default in the owner's configuration
+for direct responses and latency; the person can choose an effort per profile.
+Runtime acceptance and actual behavior must be verified on the serving stack.
+Recommendations for enormous separated reasoning/final-output caps assume a
+much larger supported context; they do not override this gateway's completion cap.
+
+The PC's 16,384 tokens are the profile ceiling, not the size requested on every
+call. `TurnOptions` requests 8,192 for low/medium reasoning and 16,384 for
+`xhigh`; its reasoning budget takes at most three quarters of that request,
+leaving room for the final answer. A written turn with reasoning off uses the
+profile cap. A voice turn with reasoning off requests 1,024; enabling reasoning
+uses the corresponding larger thinking cap. Computer-use steps request 1,024,
+with low reasoning on the PC. The client clamps every requested output cap to
+the selected profile's maximum, so the Mac ceiling remains 2,048. Reasoning and
+final output share the completion allowance and total context; these are upper
+bounds, not requested answer lengths or guaranteed token consumption.
 
 LensVLM has no equivalent model-specific general sampling table in the primary
 sources checked. Apple's

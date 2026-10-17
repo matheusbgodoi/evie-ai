@@ -1,0 +1,47 @@
+#!/bin/zsh
+set -euo pipefail
+readonly repository="${0:A:h:h}"
+readonly scratch="$(mktemp -d "${TMPDIR:-/tmp}/evie-capture-consent.XXXXXX")"
+trap 'rm -rf "${scratch}"' EXIT
+readonly mode="${1:---run}"
+if [[ "${mode}" != --run && "${mode}" != --compile-only && "${mode}" != --prove-regression ]]; then
+  print -u2 -- "Usage: Scripts/native-capture-validation [--run|--compile-only|--prove-regression]"
+  exit 2
+fi
+# --run/--prove-regression briefly present only this process's own review UI.
+# Coordinate with any other desktop validation before running. No TCC needed.
+readonly source="${repository}/Sources/EvieShell/NativeCaptureConsentController.swift"
+readonly fixture="${repository}/evals/fixtures/NativeCaptureConsentValidation.swift"
+xcrun swiftc -parse-as-library -swift-version 6 -warnings-as-errors \
+  "${source}" "${fixture}" -o "${scratch}/validate"
+if [[ "${mode}" == --compile-only ]]; then
+  print -- "PASS: actual capture-consent controller and lifecycle driver compile."
+  exit 0
+fi
+if [[ "${mode}" == --prove-regression ]]; then
+  /usr/bin/python3 - "${source}" "${scratch}/OldCaptureConsentController.swift" <<'PY'
+from pathlib import Path
+import sys
+source = Path(sys.argv[1]).read_text()
+marker = "MainActor.assumeIsolated {"
+if source.count(marker) != 1:
+    raise SystemExit("Observer boundary changed; review the regression construction.")
+# Restore only the original deferred revocation. Everything else, including
+# window, callbacks, notification dependency and lifecycle driver, is identical.
+Path(sys.argv[2]).write_text(source.replace(marker, "Task { @MainActor in", 1))
+PY
+  xcrun swiftc -parse-as-library -swift-version 6 -warnings-as-errors \
+    "${scratch}/OldCaptureConsentController.swift" "${fixture}" -o "${scratch}/old"
+  if "${scratch}/old" > "${scratch}/old.log" 2>&1; then
+    cat "${scratch}/old.log"
+    print -u2 -- "FAIL: the original deferred observer unexpectedly passed."
+    exit 1
+  fi
+  cat "${scratch}/old.log"
+  if ! /usr/bin/grep -Fq 'sleep invalidation admitted a stale confirmation.' "${scratch}/old.log"; then
+    print -u2 -- "FAIL: the negative control failed for an unrelated reason."
+    exit 1
+  fi
+  print -- "PASS: the original deferred observer failed for the expected stale-confirmation regression."
+fi
+"${scratch}/validate"

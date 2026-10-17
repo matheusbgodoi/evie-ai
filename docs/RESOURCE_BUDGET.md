@@ -1,16 +1,120 @@
 # Resource and standby budget
 
-Status: targets plus measurements on the base M5/24 GB machine. Idle, single
-question, sustained load, and what this Mac will say about energy and heat are
-all measured; the full worker-by-worker benchmark is still pending.
+Status: installed Evie 2 candidate measurements on the target M5/24 GB Mac,
+followed by dated historical benchmarks and planning targets. Scope and units
+are stated for each measurement; process footprint is not a whole-machine or
+battery-watt measurement.
 
-Three questions a reader usually has, and where each is answered:
+## Installed Evie 2 candidate — 2026-10-17
+
+Measured from the signed installed candidate 5 executable, SHA-256
+`99620b81b290e74f18c9945d37e390fe94d82e0420869eff520b821e3aa31997`.
+Environment: Mac17,2, Apple M5, 10 cores, 24 GB, macOS 27.2 (26B5086k), AC power,
+battery 80%, Low Power Mode off. Other applications/services were preserved.
+These measurements are a dated candidate-5 checkpoint. The later public-URL
+Shortcuts integration changes native dispatch; it does not turn these samples
+into a new binary's energy benchmark. Actual Shortcuts invocation is recorded
+separately in [NATIVE_APPLE](NATIVE_APPLE.md).
+
+The subsequent installed candidate 6 has SHA-256
+`129d1878a0e0b948a35c26ee9e7b25ad989c0152b7102ab875fa57391a34cb7a`.
+It passed the complete 1,555-test / 147-suite package in 14.241 seconds, the
+15 controlled coordinator lifecycle cases, and fresh Launch Services native
+voice and real wake-listener lifecycle checks. Synthesis produced 58,599 frames
+(2.65755 seconds) in 0.371844916 seconds. Those checks qualify native function,
+not themselves CPU/energy measurements. The fresh normal-app sample below is
+separate. The Lens client, worker lifecycle and idle
+policy were unchanged; the resource and 632.480-second actual unload evidence
+below retain candidate 5's hash and measurement scope.
+
+### Candidate 6 normal app
+
+After all three real Shortcuts completed, editors were closed and the normal
+installed process remained in the background with no overlay or capture review.
+A fresh **30.002-second** kernel sample measured **0.4167 CPU-seconds**,
+**1.389% of one core**, **96.39 MiB footprint** and **98.89 MiB lifetime peak**.
+No model request was initiated; the legitimate unresolved Keychain alert was
+left untouched. The same process-accounting limits apply: no attribution of
+shared speech services and no battery-watt or autonomy claim.
+
+### Candidate 5 normal app and native wake listening
+
+The normal app was measured for 30.004 seconds before stopping it for isolated
+checks. Wake listening and the requested enabled defaults remained configured.
+The kernel accounted **0.3762 CPU-seconds**, **1.254% of one core**, a final
+**97.31 MiB physical footprint**, and **97.78 MiB lifetime peak**. These are
+`proc_pid_rusage` deltas and footprint, not `ps` lifetime CPU averages or RSS.
+No model request was initiated during this window. A legitimate unresolved
+Keychain consent was left untouched.
+
+A separate installed diagnostic then compared three phases with 48 kHz mono
+input, without the normal interface/coordinator. Both listening phases were
+confirmed armed. Its memory therefore describes the diagnostic process rather
+than the complete normal app.
+
+| Phase | Wall time | CPU, % of one core | CPU time | Final process footprint |
+| --- | ---: | ---: | ---: | ---: |
+| Nothing armed | 31.4 s | 0.01% | 0.004 s | 15 MiB |
+| Listener without gate | 30.1 s | 1.87% | 0.563 s | 17 MiB |
+| Listener with the default gate | 30.1 s | 1.76% | 0.529 s | 17 MiB |
+
+The gate fed 198/299 buffers (66.2%), with one opening and 100 ms buffers in this
+room. This single window does not establish a general battery-saving ratio;
+background sound, native service caches and phase order affect it. The figures
+are the Evie process's own accounting; shared macOS speech services are outside
+that ledger and cannot be wholly attributed to Evie. Raw recognised text and
+level traces were excluded from published evidence.
+
+### Energy observations
+
+Over a separate 30-second window (29 GPU samples), machine-wide GPU utilization
+was **9–36%, mean 16.2%**. Thermal state stayed **nominal**. These shared GPU
+figures include other applications and are not attributed to Evie. AC battery
+current was 0 A; no total or per-process watt figure was available without
+privileged tooling. No power, fan-speed or temperature reading was invented.
+
+### On-demand local model
+
+After its two synthetic visual requests completed, the owned LensVLM process
+was sampled for 30.009 seconds while waiting for its real idle policy. It used
+**0.0938 CPU-seconds / 0.312% of one core**, with **8,289.15 MiB footprint** and
+**9,230.49 MiB lifetime peak**. This is a short image workload at the configured
+131,072-token capacity, not a full-window memory test. Long-window qualification
+and its different peak are recorded in [MODEL_TUNING](MODEL_TUNING.md).
+
+The same installed bundle then passed the complete `--brain-check --idle`
+sequence in **632.480 seconds**. It started its own worker in **3.684 seconds**,
+answered the synthetic red image exactly in **2.222 seconds**, and read the
+pixel-only `ZEBRA4817` code exactly through the actual client/image preparation.
+The unchanged ten-minute idle policy unloaded the worker after **624.756
+seconds**, including its periodic idle check. Final cleanup took **6.25 ms**;
+both the diagnostic and an independent OS check confirmed that the owned PID
+was gone (ESRCH, not a zombie) and its loopback port was free. The normal app was
+then reopened; unrelated model services were preserved. This verifies actual
+memory-worker release rather than treating a successful HTTP response as unload.
+
+### Boundary checks on that same bundle
+
+In-process App Intents `perform`/bounds and generated 3-action/3-shortcut
+metadata passed. Actual system discovery passed later, but direct system
+dispatch failed for the local signature (ADR 0029); these checks do not
+override that failure. Native synthesis, cancellation,
+SpeechAnalyzer round-trip and temporary calibration passed with the enhanced
+Luciana voice. Wake lifecycle interruption/disarm passed without reopening a
+stale microphone. All five required native grants were present, with Mail and
+Calendar Automation OSStatus 0 via Launch Services. Calendar was closed normally
+after inspection. The real public-web check passed in 3.125 seconds: six search
+results, 12,000 bounded page characters and ten synthetic forbidden destinations
+rejected. No user message, mailbox, calendar entry or raw microphone text was
+included in published evidence.
+
+Historical benchmark questions, and where each is answered:
 
 - **What does it cost to leave her open?** [What it costs to leave her open](#what-it-costs-to-leave-her-open--2026-08-07).
 - **What does it cost to ask her something?** [Ten questions back to back](#ten-questions-back-to-back--2026-08-07).
 - **Does it heat the machine or drain the battery?** [Energy and heat](#energy-and-heat--2026-08-07).
 
-## The machine these numbers come from
+## Historical benchmark machine
 
 Every figure below was taken on one Mac. Nothing here is a claim about Apple
 Silicon in general, and a different machine would produce different numbers.

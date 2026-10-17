@@ -16,6 +16,7 @@ readonly EVIE_BUNDLE_ID="com.matheusbgodoi.evie"
 readonly EVIE_APP_NAME="Evie"
 readonly EVIE_EXECUTABLE="evie-shell"
 readonly EVIE_SHORT_VERSION="2.0.0"
+readonly EVIE_NATIVE_APPLE_MODE="${EVIE_NATIVE_APPLE_MODE:-public-urls}"
 readonly EVIE_SIGNING_IDENTITY_NAME="Evie Dev"
 # The one certificate every TCC grant and every update check on this Mac is tied
 # to, by SHA-1 rather than by name. A name is not an identity: a second
@@ -139,6 +140,38 @@ function verify_signature() {
   fi
 }
 
+# Validate the actual candidate, including when install is invoked after a
+# failed build. Run before stopping the current app or replacing any bundle.
+function verify_native_mode() {
+  local bundle="$1" native_mode native_signature
+  if ! native_mode=$(/usr/bin/plutil -extract EvieNativeAppleMode raw "${bundle}/Contents/Info.plist" 2>/dev/null); then
+    print -u2 "Native Apple mode is missing. Rebuild before installing."
+    return 1
+  fi
+  case "${native_mode}" in
+    public-urls)
+      if [[ -e "${bundle}/Contents/Resources/Metadata.appintents" ]]; then
+        print -u2 "Public URL mode must not publish unsupported direct App Intents."
+        return 1
+      fi
+      ;;
+    app-intents)
+      # The stable self-signed TCC identity cannot authenticate to linkd.
+      # Neither a fabricated entitlement nor a certificate OU is sufficient.
+      if ! codesign --verify --strict -R='anchor apple generic' "${bundle}"; then
+        print -u2 "Direct App Intents require an Apple-issued signing identity."
+        return 1
+      fi
+      native_signature=$(codesign -dv --verbose=4 "${bundle}" 2>&1)
+      if ! print -r -- "${native_signature}" | /usr/bin/grep -Eq '^TeamIdentifier=[A-Za-z0-9]+$'; then
+        print -u2 "Direct App Intents require a real Apple Team Identifier."
+        return 1
+      fi
+      ;;
+    *) print -u2 "Unsupported Native Apple mode in candidate bundle."; return 1 ;;
+  esac
+}
+
 function build() {
   # Before compiling, not after: a missing certificate is a two-minute build
   # thrown away otherwise.
@@ -149,9 +182,15 @@ function build() {
   fi
 
   print "Building the release executable…"
+  local -a native_swift_flags=()
+  case "${EVIE_NATIVE_APPLE_MODE}" in
+    public-urls) ;;
+    app-intents) native_swift_flags=(-Xswiftc -DEVIE_DIRECT_APP_INTENTS) ;;
+    *) print -u2 "EVIE_NATIVE_APPLE_MODE must be public-urls or app-intents."; return 1 ;;
+  esac
   swift build -c release --product "${EVIE_EXECUTABLE}" \
     --package-path "${EVIE_REPOSITORY_DIR}" \
-    -Xswiftc -warnings-as-errors
+    -Xswiftc -warnings-as-errors "${native_swift_flags[@]}"
 
   local executable="${EVIE_BUILD_DIR}/${EVIE_EXECUTABLE}"
   if [[ ! -x "${executable}" ]]; then
@@ -180,9 +219,9 @@ function build() {
   write_info_plist
   plutil -lint -s "${EVIE_APP_DIR}/Contents/Info.plist"
 
-  # SwiftPM does not extract App Intents metadata. The system discovers our
-  # native Shortcuts actions from this signed resource, not from Swift types.
-  "${EVIE_SCRIPT_DIR}/evie-native-metadata" "${EVIE_APP_DIR}"
+  # SwiftPM does not extract direct App Intents metadata. The optional
+  # Apple-signed mode needs that resource; public URL mode removes stale metadata.
+  "${EVIE_SCRIPT_DIR}/evie-native-metadata" "${EVIE_APP_DIR}" "${EVIE_NATIVE_APPLE_MODE}"
 
   # No sandbox and no hardened runtime, on purpose: reading the accessibility
   # tree and posting input events both need the sandbox off, and nothing here
@@ -195,6 +234,7 @@ function build() {
     --identifier "${EVIE_BUNDLE_ID}" \
     "${EVIE_APP_DIR}"
   verify_signature "${EVIE_APP_DIR}"
+  verify_native_mode "${EVIE_APP_DIR}"
 
   print "Signed with ${EVIE_SIGNING_IDENTITY_NAME} (${identity})."
   print "Built ${EVIE_APP_DIR}"
@@ -228,6 +268,19 @@ function write_info_plist() {
   <string>26.0</string>
   <key>LSUIElement</key>
   <true/>
+  <key>EvieNativeAppleMode</key>
+  <string>${EVIE_NATIVE_APPLE_MODE}</string>
+  <key>CFBundleURLTypes</key>
+  <array>
+    <dict>
+      <key>CFBundleURLName</key>
+      <string>${EVIE_BUNDLE_ID}.review</string>
+      <key>CFBundleTypeRole</key>
+      <string>Viewer</string>
+      <key>CFBundleURLSchemes</key>
+      <array><string>evie</string></array>
+    </dict>
+  </array>
   <key>NSHumanReadableCopyright</key>
   <string>Uso pessoal de Matheus Barboza de Godoi.</string>
   <key>NSMicrophoneUsageDescription</key>
@@ -378,6 +431,7 @@ function install_app() {
   # Refused before anything is replaced: installing a bundle TCC would not
   # recognise loses every grant the installed copy holds.
   verify_signature "${EVIE_APP_DIR}"
+  verify_native_mode "${EVIE_APP_DIR}"
 
   stop_running_copies
   mkdir -p "${EVIE_INSTALL_DIR}"

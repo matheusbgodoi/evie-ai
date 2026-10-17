@@ -2,7 +2,8 @@
 
 Research sessions ([ADR 0020](adr/0020-expiring-research-shortcut-sessions.md)),
 current-conversation brain selection (0021), enabled capabilities with real TCC
-requests (0022), generated public AppIntents metadata (0023), local provider
+requests (0022), optional direct App Intents (0023, superseded for local builds
+by [public URL/Shortcuts integration (0029)](adr/0029-native-shortcuts-with-stable-local-signing.md)), local provider
 configuration/private release history (0024), native voice calibration (0025),
 [adaptive context and compaction (0026)](adr/0026-adaptive-conversation-context-and-compaction.md)
 and [pinned public web transport (0027)](adr/0027-pinned-public-web-transport.md)
@@ -44,6 +45,26 @@ and reconciles configuration on next use. The optional allocator bootstrap uses
 public `mlx.core.set_cache_limit` before the unmodified CLI, with one sequence.
 Real boundaries are documented in [settings validation](MODEL_SETTINGS_VALIDATION.md)
 and [launcher validation](LOCAL_BRAIN_VALIDATION.md).
+
+## Native URL and voice lifecycle boundaries
+
+The application delegate parses one bounded cold-launch request or delivers to
+the live coordinator. `evie://open` opens UI; `evie://prepare?text=...` prepares
+a reviewed draft without replacing existing text or submitting; `evie://capture`
+opens single-use capture confirmation. The parser rejects unknown routes and
+extra authority. Native URLs preserve the emergency-stop wake latch. Confirmation
+closes before rechecking live guards and invoking the existing capture path;
+sleep, inactive session, close, cancel, stop and shutdown revoke it synchronously.
+
+Voice input has a generation across device/transcriber preparation, audio startup
+and final transcription. PTT release revokes preparation before an audio tap
+exists; stale continuations stop audio and cannot deliver old text. Preparation
+and capture review exclude competing voice/research admission. A canceled normal
+PTT preparation returns wake listening; emergency stop remains latched. The
+exact coordinator methods have fifteen controlled lifecycle regression cases,
+including two causal negative controls. The real capture controller has its own
+[notification/lifecycle regression](NATIVE_CAPTURE_VALIDATION.md). These fixtures
+complement the installed native microphone and transcription checks.
 
 ## Current capture and web boundaries
 

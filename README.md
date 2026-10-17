@@ -12,7 +12,7 @@ services this operating system provides.
 She is a shortcut away rather than a window you keep open: press `⌥Space`, ask,
 and she goes back to being invisible.
 
-![Evie's overlay, closed and waiting](docs/images/overlay-idle.png)
+![Evie 2: compact brain controls and native input bar](docs/images/apple-visual/installed-brain-controls.png)
 
 ---
 
@@ -48,9 +48,11 @@ remain visible. Stop via ⌥⇧Esc. See [research usage and limits](docs/RESEARC
 and the [real synthetic form validation](docs/RESEARCH_VALIDATION.md).
 
 The native redesign uses Liquid Glass on floating controls, legible cards,
-reduced-motion/transparency support and an original icon. Public AppIntents expose
-opening the chat, preparing a question for review and capturing the screen to
-Shortcuts/Siri; these actions do not silently submit questions or approve tasks.
+reduced-motion/transparency support and an original icon. Three native Shortcuts
+use public URLs to open the chat, prepare a question for review or open a capture
+confirmation. Preparing never submits; a capture URL never captures by itself.
+This works with the stable local signature. Direct App Intents are an optional
+Apple-signed build mode; their discovery alone did not prove actual execution.
 See [native Apple integration](docs/NATIVE_APPLE.md),
 [voice](docs/NATIVE_VOICE.md) and [visual identity](docs/APPLE_VISUAL_IDENTITY.md).
 
@@ -78,7 +80,7 @@ before publication. Reproducible real-boundary regressions also cover
 [local process reconfiguration](docs/LOCAL_BRAIN_VALIDATION.md).
 
 The historical narrative below records earlier versions; current contracts are
-ADRs 0020–0028 and the current project-status entry. Versions distributed with
+ADRs 0020–0029 and the current project-status entry. Versions distributed with
 this repository's proprietary licence require the owner's written permission for
 third-party use; earlier grants and third-party terms remain intact.
 

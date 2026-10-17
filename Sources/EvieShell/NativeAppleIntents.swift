@@ -1,4 +1,5 @@
 import AppIntents
+import EvieCore
 import Foundation
 
 /// These actions open visible UI only. A Shortcut is not approval to submit a
@@ -7,6 +8,7 @@ enum NativeAppleRequest: Equatable {
   case openConversation
   case prepareQuestion(String)
   case captureScreen
+  case requestCaptureConfirmation
 }
 
 enum NativeAppleError: LocalizedError {
@@ -31,12 +33,26 @@ enum NativeAppleError: LocalizedError {
 enum NativeAppleActions {
   static var handle: ((NativeAppleRequest) throws -> Void)?
 
+  static func perform(url: URL) throws {
+    try performURLRequest(EvieNativeURLRequest.parse(url))
+  }
+
+  static func performURLRequest(_ request: EvieNativeURLRequest) throws {
+    switch request {
+    case .openConversation: try perform(.openConversation)
+    case .prepareQuestion(let text): try perform(.prepareQuestion(text))
+    case .requestCaptureConfirmation: try perform(.requestCaptureConfirmation)
+    }
+  }
+
   static func perform(_ request: NativeAppleRequest) throws {
     guard let handle else { throw NativeAppleError.notReady }
     if case .prepareQuestion(let question) = request {
       let trimmed = question.trimmingCharacters(in: .whitespacesAndNewlines)
       guard !trimmed.isEmpty else { throw NativeAppleError.emptyQuestion }
-      guard trimmed.count <= 8_000 else { throw NativeAppleError.questionTooLong }
+      guard trimmed.count <= EvieNativeURLRequest.maximumQuestionCharacters else {
+        throw NativeAppleError.questionTooLong
+      }
       try handle(.prepareQuestion(trimmed))
     } else {
       try handle(request)
@@ -44,75 +60,93 @@ enum NativeAppleActions {
   }
 }
 
-struct OpenEvieIntent: AppIntent {
-  static var title: LocalizedStringResource { "Abrir Evie" }
-  static var description: IntentDescription {
-    IntentDescription("Abre o campo de conversa da Evie.", categoryName: "Evie")
-  }
-  static var supportedModes: IntentModes { .foreground(.immediate) }
-  static var authenticationPolicy: IntentAuthenticationPolicy { .requiresLocalDeviceAuthentication }
+#if EVIE_DIRECT_APP_INTENTS
+  struct OpenEvieIntent: AppIntent {
+    static var title: LocalizedStringResource { "Abrir Evie" }
+    static var description: IntentDescription {
+      IntentDescription("Abre o campo de conversa da Evie.", categoryName: "Evie")
+    }
+    static var supportedModes: IntentModes { .foreground(.immediate) }
+    static var authenticationPolicy: IntentAuthenticationPolicy {
+      .requiresLocalDeviceAuthentication
+    }
 
-  @MainActor
-  func perform() async throws -> some IntentResult {
-    try NativeAppleActions.perform(.openConversation)
-    return .result()
-  }
-}
-
-struct PrepareEvieQuestionIntent: AppIntent {
-  static var title: LocalizedStringResource { "Preparar pergunta na Evie" }
-  static var description: IntentDescription {
-    IntentDescription(
-      "Abre uma pergunta para você revisar e enviar. Não inicia ações automaticamente.",
-      categoryName: "Evie")
-  }
-  static var supportedModes: IntentModes { .foreground(.immediate) }
-  static var authenticationPolicy: IntentAuthenticationPolicy { .requiresLocalDeviceAuthentication }
-
-  @Parameter(title: "Pergunta", description: "Texto para revisar na Evie antes de enviar.")
-  var question: String
-
-  static var parameterSummary: some ParameterSummary {
-    Summary("Preparar \(\.$question) na Evie")
+    @MainActor
+    func perform() async throws -> some IntentResult {
+      try NativeAppleActions.perform(.openConversation)
+      return .result()
+    }
   }
 
-  @MainActor
-  func perform() async throws -> some IntentResult {
-    try NativeAppleActions.perform(.prepareQuestion(question))
-    return .result()
-  }
-}
+  struct PrepareEvieQuestionIntent: AppIntent {
+    static var title: LocalizedStringResource { "Preparar pergunta na Evie" }
+    static var description: IntentDescription {
+      IntentDescription(
+        "Abre uma pergunta para você revisar e enviar. Não inicia ações automaticamente.",
+        categoryName: "Evie")
+    }
+    static var supportedModes: IntentModes { .foreground(.immediate) }
+    static var authenticationPolicy: IntentAuthenticationPolicy {
+      .requiresLocalDeviceAuthentication
+    }
 
-struct CaptureEvieScreenIntent: AppIntent {
-  static var title: LocalizedStringResource { "Olhar tela com a Evie" }
-  static var description: IntentDescription {
-    IntentDescription(
-      "Captura uma vez a tela sob o ponteiro, com indicador visível, para a próxima pergunta. Requer a permissão de gravação de tela do macOS.",
-      categoryName: "Evie")
-  }
-  static var supportedModes: IntentModes { .foreground(.immediate) }
-  static var authenticationPolicy: IntentAuthenticationPolicy { .requiresLocalDeviceAuthentication }
+    @Parameter(title: "Pergunta", description: "Texto para revisar na Evie antes de enviar.")
+    var question: String
 
-  @MainActor
-  func perform() async throws -> some IntentResult {
-    try NativeAppleActions.perform(.captureScreen)
-    return .result()
-  }
-}
+    static var parameterSummary: some ParameterSummary {
+      Summary("Preparar \(\.$question) na Evie")
+    }
 
-struct EvieAppShortcuts: AppShortcutsProvider {
-  static var appShortcuts: [AppShortcut] {
-    AppShortcut(
-      intent: OpenEvieIntent(),
-      phrases: ["Abrir \(.applicationName)", "Conversar com \(.applicationName)"],
-      shortTitle: "Conversar", systemImageName: "bubble.left.and.bubble.right")
-    AppShortcut(
-      intent: PrepareEvieQuestionIntent(),
-      phrases: ["Preparar pergunta na \(.applicationName)"],
-      shortTitle: "Preparar pergunta", systemImageName: "text.bubble")
-    AppShortcut(
-      intent: CaptureEvieScreenIntent(),
-      phrases: ["Olhar tela com \(.applicationName)"],
-      shortTitle: "Olhar tela", systemImageName: "viewfinder")
+    @MainActor
+    func perform() async throws -> some IntentResult {
+      try NativeAppleActions.perform(.prepareQuestion(question))
+      return .result()
+    }
   }
+
+  struct CaptureEvieScreenIntent: AppIntent {
+    static var title: LocalizedStringResource { "Olhar tela com a Evie" }
+    static var description: IntentDescription {
+      IntentDescription(
+        "Captura uma vez a tela sob o ponteiro, com indicador visível, para a próxima pergunta. Requer a permissão de gravação de tela do macOS.",
+        categoryName: "Evie")
+    }
+    static var supportedModes: IntentModes { .foreground(.immediate) }
+    static var authenticationPolicy: IntentAuthenticationPolicy {
+      .requiresLocalDeviceAuthentication
+    }
+
+    @MainActor
+    func perform() async throws -> some IntentResult {
+      try NativeAppleActions.perform(.captureScreen)
+      return .result()
+    }
+  }
+
+  struct EvieAppShortcuts: AppShortcutsProvider {
+    static var appShortcuts: [AppShortcut] {
+      AppShortcut(
+        intent: OpenEvieIntent(),
+        phrases: ["Abrir \(.applicationName)", "Conversar com \(.applicationName)"],
+        shortTitle: "Conversar", systemImageName: "bubble.left.and.bubble.right")
+      AppShortcut(
+        intent: PrepareEvieQuestionIntent(),
+        phrases: ["Preparar pergunta na \(.applicationName)"],
+        shortTitle: "Preparar pergunta", systemImageName: "text.bubble")
+      AppShortcut(
+        intent: CaptureEvieScreenIntent(),
+        phrases: ["Olhar tela com \(.applicationName)"],
+        shortTitle: "Olhar tela", systemImageName: "viewfinder")
+    }
+  }
+#endif
+
+enum NativeAppleCapability {
+  static let mode: String = {
+    #if EVIE_DIRECT_APP_INTENTS
+      "app-intents"
+    #else
+      "public-urls"
+    #endif
+  }()
 }

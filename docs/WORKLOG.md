@@ -1,5 +1,34 @@
 # Work log
 
+## 2026-10-17 — actual Shortcuts dispatch, public URLs and voice revocation
+
+- Actual Atalhos dispatch exposed a platform boundary missed by metadata/direct
+  calls: linkd refused the stable self-signed identity without a TeamIdentifier.
+  No Apple-issued identity is installed. Preserved signing/TCC and implemented
+  public URL workflows; direct App Intents now require an explicit legitimate
+  Apple-signed mode. ADR 0029 records evidence and alternatives.
+- Added exact-route bounded URL parsing and single pending cold-launch delivery.
+  External URLs prepare drafts or open single-use capture review, never grant
+  capture/control/send. Emergency-stop wake suppression stays latched.
+- Reproduced deferred sleep revocation admitting stale capture confirmation;
+  synchronous main-queue revocation passed the actual controller lifecycle
+  fixture. Generation guards reject late voice/audio/final transcription after
+  PTT release or stop. Exact coordinator source passed fifteen scenarios and
+  two causal negative controls, including returning normal wake after cancel.
+- Current full package passed 1,555 tests / 147 suites in 14.241 s, with the same
+  intentional known timeout fixture. Signed release compiled in 17.91 s, strict
+  signature and four-file artifact privacy scan passed; candidate6 installed.
+  Fresh LaunchServices public-URL/voice/wake diagnostics passed.
+- Actual three canonical Shortcuts completed exit0 after their public workflow
+  privacy prompts. Dynamic accented/ampersand/emoji input arrived exactly as a
+  draft without submission. Capture opened review and cancel closed it, without
+  capturing. Latest hosted CI and owner-authorized PC diagnostics remain
+  separate gates; no tag/release claim yet. Fresh normal-app candidate6 kernel
+  sample: 30.002 s, 0.4167 CPU-s / 1.389% of one core, 96.39 MiB footprint
+  (98.89 MiB lifetime peak), background with no model request or overlay.
+  Keychain alert remained untouched.
+
+
 ## 2026-10-17 — process deadlines and qualified CI runtime
 
 - Reproduced an actual SIGTERM receipt delayed to 3.040 s under finite shared

@@ -19,12 +19,12 @@ release from implementation alone.
 | --- | --- | --- |
 | Compact brain, same-conversation model/effort, provider names and key persistence | Implemented; focused regressions passed | [Settings boundary](../MODEL_SETTINGS_VALIDATION.md) |
 | Revocable research, executor and two shortcuts | Implemented; checkpoint real-model form run passed | [Research methods](../RESEARCH_VALIDATION.md); rerun latest policy in final signed bundle |
-| Native speech, five-call calibration, AppIntents and original glass/icon | Implemented; native probes executed | [Native voice](../NATIVE_VOICE.md), [AppIntents](../NATIVE_APPLE.md) |
+| Native speech, five-call calibration, public URL Shortcuts and original glass/icon | Implemented; native probes and all three real Shortcuts invocations passed | [Native voice](../NATIVE_VOICE.md), [Apple integration](../NATIVE_APPLE.md), ADR 0029 |
 | Context budget and automatic compaction | Implemented; core and real-PC synthetic probes passed | [Context](../CONVERSATION_CONTEXT.md), ADR 0026; PC 200,704 tokens |
 | LensVLM context qualification | Passed at 131,072 tokens; client/runtime synchronized | 127,527 input + 38 output tokens, 5/5 target items, 2.4 GiB minimum sampled free and 13.8 GiB MLX-reported peak memory in 392.31 s; [model tuning](../MODEL_TUNING.md) |
 | Local model/memory reconfiguration and pinned public web | Implemented; real process/HTTP/MLX and curl boundaries passed | [Launcher](../LOCAL_BRAIN_VALIDATION.md), [web](../WEB_SEARCH.md), ADR 0027 |
-| Final source freeze, full suite and signed bundle | Integrated candidate; final suite running | Update [PROJECT_STATUS](../PROJECT_STATUS.md) with actual results after completion |
-| Energy, installation/open-state and sanitized release | Final evidence not yet recorded complete | Root ledger owns release/install claims and final private-ancestry/artifact scan |
+| Final source freeze, full suite and signed bundle | M5 full 1,555/147 and voice/capture lifecycle regressions passed; candidate6 installed; prior candidate hosted CI passed, new CI required | [PROJECT_STATUS](../PROJECT_STATUS.md), [ADR 0028](../adr/0028-runtime-qualified-core-ci.md) |
+| Resources and sanitized release | Idle/wake/thermal and real ten-minute Lens unload measured; final PC/Shortcuts and publication gates in progress | [Resource method](../RESOURCE_BUDGET.md); root ledger owns final ancestry/artifact/release claims |
 
 ## Status vocabulary
 
