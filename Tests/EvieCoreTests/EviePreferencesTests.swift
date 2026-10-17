@@ -406,18 +406,18 @@ struct EviePreferencesStoreTests {
     #expect(relaunched.preferences == preferences)
   }
 
-  @Test("the agent-mode switch starts on, and off survives a relaunch")
+  @Test("the agent-mode switch starts off, and on survives a relaunch")
   func computerUseSwitchPersists() throws {
-    #expect(EviePreferences().computerUseEnabled)
+    #expect(!EviePreferences().computerUseEnabled)
     let fileURL = temporaryFileURL()
     var preferences = EviePreferences()
-    preferences.computerUseEnabled = false
+    preferences.computerUseEnabled = true
 
     try EviePreferencesStore(fileURL: fileURL).save(preferences)
     let relaunched = EviePreferencesStore(fileURL: fileURL).loadWithDiagnostics()
 
     #expect(relaunched.failure == nil)
-    #expect(!relaunched.preferences.computerUseEnabled)
+    #expect(relaunched.preferences.computerUseEnabled)
     #expect(relaunched.preferences == preferences)
   }
 
@@ -436,7 +436,7 @@ struct EviePreferencesStoreTests {
     #expect(relaunched.preferences == preferences)
   }
 
-  @Test("a file written before the agent-mode switch existed reads it as on")
+  @Test("a file written before the agent-mode switch existed reads it as off")
   func computerUseSwitchDefaultsOnInOlderFiles() throws {
     let fileURL = temporaryFileURL()
     try FileManager.default.createDirectory(
@@ -447,7 +447,7 @@ struct EviePreferencesStoreTests {
 
     #expect(loaded.failure == nil)
     #expect(loaded.preferences.webSearchEnabled)
-    #expect(loaded.preferences.computerUseEnabled)
+    #expect(!loaded.preferences.computerUseEnabled)
   }
 
   @Test("EVIE_COMPUTER_USE=0 turns agent mode off whatever the switch says; nothing turns it on")

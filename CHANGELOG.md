@@ -129,6 +129,8 @@ ADRs 0013–0018 record the decisions.
 
 ### Changed
 
+- Agent mode ("Deixar a Evie controlar o Mac") is off by default, including for older preference files; turn it on in Settings.
+
 - **Two corrections measured on Gemma now apply only to Gemma.** The reminder
   appended to a question that opens with "em uma frase", "resumidamente"… ("Isso
   diz o tamanho da resposta, não se você deve procurar…") and the retry of a

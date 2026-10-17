@@ -1,5 +1,18 @@
 # Work log
 
+## 2026-10-16 — agent mode ships off
+
+- Completed: the "Deixar a Evie controlar o Mac (modo agente)" switch now defaults
+  to off, and so does a preferences file written before the switch existed. The
+  owner wants Evie for documents, screenshots, attachments and quick answers first.
+  The second round of agent-mode policy findings (launcher detection, Finder menu
+  items, element fallback to CGEvent) is not fixed yet.
+- Files/components: `EviePreferences.swift`, `EviePreferencesStore.swift`,
+  `EviePreferencesTests.swift`.
+- Checks: `swift build`; full `Scripts/test` — 1351 tests in 120 suites passed,
+  1 known issue.
+- Next action: install, then the owner's first-run QA.
+
 ## 2026-10-16 — v2: the documents describe this iteration as built
 
 - Completed:

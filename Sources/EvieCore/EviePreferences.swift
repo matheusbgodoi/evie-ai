@@ -42,8 +42,9 @@ public struct EviePreferences: Codable, Hashable, Sendable {
   /// Whether Evie may control the Mac in agent mode (clicks, typing, opening
   /// apps), as "Deixar a Evie controlar o Mac (modo agente)".
   ///
-  /// On by default, unlike the switches above, because the owner asked for
-  /// it. The switch is not the permission: every session still begins only
+  /// Off by default, like the switches above. The owner asked for agent mode
+  /// but chose, on 2026-10-16, to ship it off until the second round of policy
+  /// findings (docs/PROJECT_STATUS.md) is fixed. The switch is not the permission: every session still begins only
   /// with push-to-talk or a click and a confirm on the session card, under a
   /// grant of at most 15 minutes, with the code policy, the confirmations and
   /// the kill switches of ADR 0016. Off means no session can begin at all.
@@ -63,7 +64,7 @@ public struct EviePreferences: Codable, Hashable, Sendable {
     autoApproveChanges: Bool = false,
     webSearchEnabled: Bool = false,
     mailAndCalendarEnabled: Bool = false,
-    computerUseEnabled: Bool = true,
+    computerUseEnabled: Bool = false,
     computerUseConsentGiven: Bool = false
   ) {
     self.appearance = appearance

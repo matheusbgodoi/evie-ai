@@ -64,7 +64,7 @@ public struct EviePreferencesStore: Sendable {
       autoApproveChanges: document.autoApproveChanges ?? false,
       webSearchEnabled: document.webSearchEnabled ?? false,
       mailAndCalendarEnabled: document.mailAndCalendarEnabled ?? false,
-      computerUseEnabled: document.computerUseEnabled ?? true,
+      computerUseEnabled: document.computerUseEnabled ?? false,
       computerUseConsentGiven: document.computerUseConsentGiven ?? false
     )
 
