@@ -84,11 +84,19 @@ enum ResearchValidation {
         await focus.bringToFront(
           ComputerAppIdentity(bundleID: bundleID, name: "Evie Research Fixture", processID: pid))
       else { throw Failure.stopped("A fixture não ficou na frente.") }
-      let initial = try await waitForState(stateURL, nonce: nonce, pid: pid)
+      let locator = ComputerScreenLocator()
+      let initial = try await waitForState(
+        stateURL, nonce: nonce, pid: pid,
+        matching: { _ in
+          guard let front = locator.frontApp(),
+            front.processID == pid, front.bundleID == bundleID,
+            let frame = locator.frontWindowFrame(ofProcess: pid)
+          else { return false }
+          return !frame.isEmpty
+        })
       guard initial.answer.isEmpty, initial.selected.isEmpty else {
         throw Failure.stopped("A fixture não começou vazia.")
       }
-      let locator = ComputerScreenLocator()
       let observer = ComputerObserver(
         capturer: ResearchValidationCapture(processID: pid), locator: locator,
         accessibility: AccessibilitySnapshotter(), indicator: presence,

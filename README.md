@@ -16,7 +16,7 @@ and she goes back to being invisible.
 
 ---
 
-## Evie 2 — release candidate behavior (2026-10-17)
+## Evie 2.0.0 (2026-10-17)
 
 The input bar has a compact brain button with a gold outline when agent mode is
 allowed. Its popover selects PC, Mac or automatic routing, reasoning effort and
@@ -71,14 +71,17 @@ may lose details, and estimated tokens remain labeled as estimates. See
 [hardware qualification](docs/MODEL_TUNING.md) and
 [current release gates](docs/PROJECT_STATUS.md).
 
-The signed candidate is installed on the target Mac. All **1,556 behavioral
-tests** and all three [hosted CI jobs](https://github.com/matheusbgodoi/evie-ai/actions/runs/39007942714)
-passed; native voice, real Shortcuts and measured resource results are documented.
-This public source is a release candidate. Final live-PC verification needs the
-owner to authorize the legitimate macOS Keychain prompt; a final tag/release is
-not claimed before that gate. The [release notes draft](docs/releases/2.0.0.md)
-keeps the evidence and its scope. Reproducible real-boundary regressions also cover
-[settings persistence](docs/MODEL_SETTINGS_VALIDATION.md) and
+The signed 2.0.0 bundle is installed on the target Mac. All **1,556 behavioral
+tests** and all three [hosted CI jobs](https://github.com/matheusbgodoi/evie-ai/actions/runs/39037863984)
+passed, including the real permission-guide state machine. In the installed final
+bundle, real-PC compaction preserved the question and synthetic fact; both
+field/radio diagnostics passed, including autonomous model planning with
+independent readback. The Calendar permission button was also verified in the
+real UI: closed target → one click → background launch → authorized.
+[Release notes](docs/releases/2.0.0.md) record timing, resource evidence and scope.
+Reproducible real-boundary regressions also cover
+[settings persistence](docs/MODEL_SETTINGS_VALIDATION.md),
+[Automation permission requests](docs/AUTOMATION_PERMISSION_VALIDATION.md) and
 [local process reconfiguration](docs/LOCAL_BRAIN_VALIDATION.md).
 
 The historical narrative below records earlier versions; current contracts are
